@@ -31,7 +31,7 @@ import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventstreaming.EventCriteria;
 import org.axonframework.messaging.eventstreaming.Tag;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -119,5 +119,4 @@ class RunningWorkflowsRepositoryIntegrationTest extends AbstractEventSourcedEnti
             stream.close();
         }
     }
-
 }

@@ -18,8 +18,6 @@
  */
 package io.axoniq.framework.workflow.dsl.api;
 
-import io.axoniq.framework.workflow.runtime.api.payload.PayloadReducer;
-
 /**
  * Reusable payload mapping shared by primitive specs.
  *

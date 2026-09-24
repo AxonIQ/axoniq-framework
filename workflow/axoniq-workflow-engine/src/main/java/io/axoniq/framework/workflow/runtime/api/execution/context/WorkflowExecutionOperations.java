@@ -18,10 +18,7 @@
  */
 package io.axoniq.framework.workflow.runtime.api.execution.context;
 
-import io.axoniq.framework.workflow.runtime.api.execution.state.AllMatchCombinator;
-import io.axoniq.framework.workflow.runtime.api.execution.state.AnyMatchCombinator;
-import io.axoniq.framework.workflow.runtime.api.execution.state.NoneMatchCombinator;
-import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.infra.DescribableComponent;
 

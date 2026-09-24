@@ -18,16 +18,16 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
-import io.axoniq.framework.workflow.dsl.api.WorkflowContext;
-import io.axoniq.framework.workflow.runtime.api.execution.context.Version;
+import io.axoniq.framework.workflow.dsl.api.StepRetryInfo;
 import io.axoniq.framework.workflow.dsl.api.WorkflowCancelledException;
+import io.axoniq.framework.workflow.dsl.api.WorkflowContext;
+import io.axoniq.framework.workflow.dsl.api.WorkflowError;
 import io.axoniq.framework.workflow.dsl.api.WorkflowFailedException;
+import io.axoniq.framework.workflow.dsl.api.WorkflowState;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStep;
+import io.axoniq.framework.workflow.runtime.api.execution.context.Version;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowStatusChangeListener;
-import io.axoniq.framework.workflow.runtime.api.execution.state.StepRetryInfo;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowError;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowState;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowStep;
-import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.execution.payload.PayloadReducerRegistry;
 import io.axoniq.framework.workflow.runtime.util.MetadataUtils;
 import io.axoniq.framework.workflow.runtime.util.WorkflowStateUtils;
@@ -71,12 +71,11 @@ public class EventSourcedWorkflowState implements WorkflowState {
     private final static Logger logger = LoggerFactory.getLogger(EventSourcedWorkflowState.class);
 
     private final String workflowId;
-    private Map<String, @Nullable Object> payload;
-    private volatile VersionedType workflowDefinition;
     private final WorkflowStateListenerSupport listenerSupport;
-
     private final Map<String, WorkflowStep> steps = new ConcurrentHashMap<>();
     private final Map<String, String> versions = new ConcurrentHashMap<>();
+    private Map<String, @Nullable Object> payload;
+    private volatile VersionedType workflowDefinition;
     private WorkflowStatus status = WorkflowStatus.NONE;
     private volatile Throwable terminationCause;
 
@@ -146,22 +145,6 @@ public class EventSourcedWorkflowState implements WorkflowState {
     }
 
     /**
-     * Returns the event sourced workflow state.
-     *
-     * @param state workflow state
-     * @return event sourced workflow state or throws an exception if the given state is not an event sourced state
-     * @throws IllegalArgumentException if the given state is not an event sourced state
-     */
-    public static EventSourcedWorkflowState requireEventSourcedState(WorkflowState state) {
-        if (!(state instanceof EventSourcedWorkflowState sourcedState)) {
-            throw new IllegalArgumentException(
-                    "Currently only EventSourcedWorkflowState is supported, but you passed an instance of %s.".formatted(
-                            state.getClass().getName()));
-        }
-        return sourcedState;
-    }
-
-    /**
      * Creates a live workflow state from sourced durable state.
      *
      * @param sourcedState sourced durable workflow state
@@ -186,9 +169,20 @@ public class EventSourcedWorkflowState implements WorkflowState {
         this.terminationCause = sourcedState.terminationCause;
     }
 
-    @Override
-    public String workflowId() {
-        return workflowId;
+    /**
+     * Returns the event sourced workflow state.
+     *
+     * @param state workflow state
+     * @return event sourced workflow state or throws an exception if the given state is not an event sourced state
+     * @throws IllegalArgumentException if the given state is not an event sourced state
+     */
+    public static EventSourcedWorkflowState requireEventSourcedState(WorkflowState state) {
+        if (!(state instanceof EventSourcedWorkflowState sourcedState)) {
+            throw new IllegalArgumentException(
+                    "Currently only EventSourcedWorkflowState is supported, but you passed an instance of %s.".formatted(
+                            state.getClass().getName()));
+        }
+        return sourcedState;
     }
 
     /**
@@ -199,6 +193,11 @@ public class EventSourcedWorkflowState implements WorkflowState {
      */
     public static EventCriteria criteriaBuilder(String workflowId) {
         return EventCriteria.havingTags(Tag.of(WorkflowEventTags.TAG_WORKFLOW_ID, workflowId));
+    }
+
+    @Override
+    public String workflowId() {
+        return workflowId;
     }
 
     @Override
@@ -526,6 +525,16 @@ public class EventSourcedWorkflowState implements WorkflowState {
         descriptor.describeProperty("workflowDefinitionId", workflowDefinition);
     }
 
+    public String toString() {
+        return "WorkflowState{" +
+                "workflowId='" + workflowId + '\'' +
+                ", workflowDefinitionId=" + workflowDefinition +
+                ", status=" + status +
+                ", steps=" + steps +
+                ", payload=" + payload +
+                '}';
+    }
+
     /**
      * Offload the safe usage of listeners from the state implementation and makes it safe to operate with.
      *
@@ -556,15 +565,5 @@ public class EventSourcedWorkflowState implements WorkflowState {
                 }
             }
         }
-    }
-
-    public String toString() {
-        return "WorkflowState{" +
-                "workflowId='" + workflowId + '\'' +
-                ", workflowDefinitionId=" + workflowDefinition +
-                ", status=" + status +
-                ", steps=" + steps +
-                ", payload=" + payload +
-                '}';
     }
 }

@@ -18,9 +18,10 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations;
-
 import io.axoniq.framework.workflow.dsl.api.WorkflowContext;
+import io.axoniq.framework.workflow.dsl.api.WorkflowFailedException;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStepResult;
 import io.axoniq.framework.workflow.runtime.api.execution.context.ExecutePrimitive;
 import io.axoniq.framework.workflow.runtime.api.execution.context.PayloadPrimitive;
 import io.axoniq.framework.workflow.runtime.api.execution.context.PrimitiveCommands;
@@ -29,11 +30,9 @@ import io.axoniq.framework.workflow.runtime.api.execution.context.VersionPrimiti
 import io.axoniq.framework.workflow.runtime.api.execution.context.WaitForPrimitive;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
-import io.axoniq.framework.workflow.dsl.api.WorkflowFailedException;
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowLifecycleControl;
-import io.axoniq.framework.workflow.runtime.api.execution.state.CombinatorWorkflowStepResult;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowStepResult;
-import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
+import io.axoniq.framework.workflow.dsl.api.CombinatorWorkflowStepResult;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.eventsourcing.eventstore.EventStore;
@@ -53,8 +52,8 @@ import static io.axoniq.framework.workflow.configuration.WorkflowConfigurationDe
 import static io.axoniq.framework.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.merge;
 
 /**
- * Implementation of {@link WorkflowExecutionOperations} that delegates all operations to the underlying {@link WorkflowExecution}
- * and primitive implementations.
+ * Implementation of {@link WorkflowExecutionOperations} that delegates all operations to the underlying
+ * {@link WorkflowExecution} and primitive implementations.
  *
  * @author Simon Zambrovski
  * @since 5.4.0
@@ -93,7 +92,7 @@ public class WorkflowExecutionOperationsDelegation implements WorkflowExecutionO
      * Creates the context delegation.
      *
      * @param workflowConfiguration workflow configuration
-     * @param workflowContext           author-facing context created by the factory
+     * @param workflowContext       author-facing context created by the factory
      * @param workflowExecution     workflow execution
      * @param runningSteps          running step registry
      * @param eventWaitConditions   event wait condition registry
@@ -264,6 +263,7 @@ public class WorkflowExecutionOperationsDelegation implements WorkflowExecutionO
     }
 
     // delegation
+
     /**
      * Executes the step described by the given command.
      *
@@ -355,7 +355,7 @@ public class WorkflowExecutionOperationsDelegation implements WorkflowExecutionO
      * Combines step results when all results satisfy the predicate.
      *
      * @param predicate predicate each result must satisfy
-     * @param results results to combine
+     * @param results   results to combine
      * @return the combined step result
      */
     @Override
@@ -368,7 +368,7 @@ public class WorkflowExecutionOperationsDelegation implements WorkflowExecutionO
      * Combines step results when any result satisfies the predicate.
      *
      * @param predicate predicate at least one result must satisfy
-     * @param results results to combine
+     * @param results   results to combine
      * @return the combined step result
      */
     @Override
@@ -381,7 +381,7 @@ public class WorkflowExecutionOperationsDelegation implements WorkflowExecutionO
      * Combines step results when no result satisfies the predicate.
      *
      * @param predicate predicate no result may satisfy
-     * @param results results to combine
+     * @param results   results to combine
      * @return the combined step result
      */
     @Override

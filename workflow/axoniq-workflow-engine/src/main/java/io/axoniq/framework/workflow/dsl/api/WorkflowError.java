@@ -16,10 +16,10 @@
  * For licensing information and to register, visit:
  *  https://www.axoniq.io/pricing
  */
-package io.axoniq.framework.workflow.runtime.api.execution.state;
+package io.axoniq.framework.workflow.dsl.api;
 
-import org.jspecify.annotations.Nullable;
 import org.axonframework.common.annotation.Internal;
+import org.jspecify.annotations.Nullable;
 
 import java.util.IdentityHashMap;
 
@@ -27,15 +27,14 @@ import java.util.IdentityHashMap;
  * Compact, serialization-friendly representation of a {@link Throwable} stored in workflow events.
  * <p>
  * Captures only the exception class name and message — the stack trace is deliberately omitted to keep event-store
- * payloads small and avoid bytecode-incompatibility issues across JVM versions. The full stack trace is still
- * available through the executor logs when the failure occurs.
+ * payloads small and avoid bytecode-incompatibility issues across JVM versions. The full stack trace is still available
+ * through the executor logs when the failure occurs.
  * <p>
  *
  * @param type    fully-qualified name of the originating throwable's class.
  * @param message message of the originating throwable, truncated to {@link #TRUNCATED_MESSAGE_SIZE} characters, or
  *                {@code null}.
  * @param cause   compacted cause, or {@code null}.
- *
  * @author Stefan Dragisic
  * @since 5.4.0
  */
@@ -56,7 +55,7 @@ public record WorkflowError(String type,
 
     /**
      * Compacts the given throwable and its cause chain (up to {@link #MAX_CAUSE_DEPTH} levels) into a
-     * {@link WorkflowError}. Messages longer than {@link #TRUNCATED_MESSAGE_SIZE} are truncated. Cycles are broken via
+     * . Messages longer than {@link #TRUNCATED_MESSAGE_SIZE} are truncated. Cycles are broken via
      * identity tracking.
      *
      * @param throwable throwable to compact, may be {@code null}.

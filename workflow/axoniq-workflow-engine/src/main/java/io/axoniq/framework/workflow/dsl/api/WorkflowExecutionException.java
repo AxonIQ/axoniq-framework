@@ -16,16 +16,16 @@
  * For licensing information and to register, visit:
  *  https://www.axoniq.io/pricing
  */
-package io.axoniq.framework.workflow.runtime.api.execution.state;
+package io.axoniq.framework.workflow.dsl.api;
 
-import org.jspecify.annotations.Nullable;
 import org.axonframework.common.annotation.Internal;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Stackless {@link RuntimeException} produced when a {@link WorkflowError} is rehydrated from an event payload.
  * <p>
- * Carries the fully-qualified class name of the originating throwable via {@link #type()}
- * {@link #fillInStackTrace()} is overridden to avoid capturing a stack trace at the reconstruction site
+ * Carries the fully-qualified class name of the originating throwable via {@link #type()} {@link #fillInStackTrace()}
+ * is overridden to avoid capturing a stack trace at the reconstruction site
  *
  * @author Stefan Dragisic
  * @since 5.4.0

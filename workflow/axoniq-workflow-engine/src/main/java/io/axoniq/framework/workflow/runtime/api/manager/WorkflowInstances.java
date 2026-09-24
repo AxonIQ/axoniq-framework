@@ -18,8 +18,8 @@
  */
 package io.axoniq.framework.workflow.runtime.api.manager;
 
+import io.axoniq.framework.workflow.dsl.api.WorkflowState;
 import io.axoniq.framework.workflow.query.api.WorkflowStateQuery;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowState;
 import org.jspecify.annotations.Nullable;
 import org.reactivestreams.Publisher;
 
@@ -65,8 +65,8 @@ public interface WorkflowInstances extends WorkflowInstanceOperator {
          * Resolves the detached state of the single workflow instance in this collection.
          *
          * @return a future completing with the detached state, or {@code null} when no instance matches. If more than
-         * one instance matches, {@link CompletableFuture#join()} throws a
-         * {@link CompletionException} whose cause is a {@link NonUniqueWorkflowInstanceMatchException}.
+         * one instance matches, {@link CompletableFuture#join()} throws a {@link CompletionException} whose cause is a
+         * {@link NonUniqueWorkflowInstanceMatchException}.
          */
         CompletableFuture<@Nullable WorkflowState> singleState();
     }

@@ -18,14 +18,13 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
-import org.jspecify.annotations.Nullable;
-
 import io.axoniq.framework.workflow.dsl.api.EventNameCustomizer;
-import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
-import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
+import io.axoniq.framework.workflow.dsl.api.StepStatus;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
 import org.axonframework.common.StringUtils;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.QualifiedName;
+import org.jspecify.annotations.Nullable;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -53,7 +52,7 @@ public class DefaultEventNameCustomizer implements EventNameCustomizer {
                                                                                                          pc.localNameTemplate);
 
     /**
-     * Constructs new event name customizer. Use {@link DefaultEventNameCustomizer} static factory methods instead.
+     * Constructs new event name customizer. Use  static factory methods instead.
      */
     DefaultEventNameCustomizer() {
         stepStarted("Started");
@@ -260,8 +259,8 @@ public class DefaultEventNameCustomizer implements EventNameCustomizer {
 
     /**
      * Sets the suffix appended to the {@code changeId} for version-marker events produced by
-     * {@code ctx.migrateVersion(changeId, newVersion)}. Defaults to {@code ".Versioned"} so the wire-level
-     * event name is e.g. {@code Payment-redesign.Versioned}.
+     * {@code ctx.migrateVersion(changeId, newVersion)}. Defaults to {@code ".Versioned"} so the wire-level event name
+     * is e.g. {@code Payment-redesign.Versioned}.
      *
      * @param versioned non-null suffix appended to the {@code changeId} for version-marker events.
      * @return current instance for fluent API.
@@ -582,7 +581,7 @@ public class DefaultEventNameCustomizer implements EventNameCustomizer {
 
                 @Override
                 public QualifiedName versionMigrationEventName(String changeId,
-                                                            Map<String, @Nullable Object> parameters) {
+                                                               Map<String, @Nullable Object> parameters) {
                     var defaultName = defaultCustomizer.versionMigrationEventName(changeId, parameters);
                     var parentName = parent.versionMigrationEventName(changeId, parameters);
                     var childName = child.versionMigrationEventName(changeId, parameters);

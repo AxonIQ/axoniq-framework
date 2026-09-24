@@ -18,7 +18,7 @@
  */
 package io.axoniq.framework.workflow.configuration;
 
-import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.execution.DefaultEventNameCustomizer;
 import io.axoniq.framework.workflow.runtime.execution.EventSourcedWorkflowState;
 import io.axoniq.framework.workflow.runtime.util.EventMessageUtils;
@@ -29,7 +29,7 @@ import org.junit.jupiter.api.*;
 
 import java.util.Map;
 
-import static io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus.COMPLETED;
+import static io.axoniq.framework.workflow.dsl.api.StepStatus.COMPLETED;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**

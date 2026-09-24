@@ -21,13 +21,13 @@ package io.axoniq.framework.workflow.runtime.execution;
 
 import io.axoniq.framework.workflow.dsl.api.EventCondition;
 import io.axoniq.framework.workflow.dsl.api.EventNameCustomizer;
-import io.axoniq.framework.workflow.runtime.api.payload.PayloadReducer;
-import org.jspecify.annotations.Nullable;
+import io.axoniq.framework.workflow.dsl.api.PayloadReducer;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.common.infra.DescribableComponent;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
+import org.jspecify.annotations.Nullable;
 
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
@@ -43,23 +43,6 @@ import static io.axoniq.framework.workflow.runtime.execution.DefaultEventNameCus
 final class EventWaitConditions implements DescribableComponent {
 
     private final ConcurrentHashMap<String, EventConditionWithStepNameCustomizer> waitConditions = new ConcurrentHashMap<>();
-
-    /**
-     * Internal representation.
-     *
-     * @param eventCondition       condition to match.
-     * @param resultPayloadReducer payload reducer to combine payload delivered by the event (result of the step) with
-     *                             the workflow payload.
-     * @param eventNameCustomizer  customizer.
-     */
-    @Internal
-    record EventConditionWithStepNameCustomizer(
-            EventCondition eventCondition,
-            PayloadReducer resultPayloadReducer,
-            EventNameCustomizer eventNameCustomizer
-    ) {
-
-    }
 
     /**
      *
@@ -125,6 +108,39 @@ final class EventWaitConditions implements DescribableComponent {
     }
 
     /**
+     * Clears all event wait conditions.
+     */
+    public void clear() {
+        this.waitConditions.clear();
+    }
+
+    @Override
+    public void describeTo(ComponentDescriptor descriptor) {
+        var conditions = waitConditions.entrySet().stream()
+                                       .map(e -> new EventWaitConditionDescriptor(e.getKey(),
+                                                                                  e.getValue().eventCondition))
+                                       .toList();
+        descriptor.describeProperty("waitConditions", conditions);
+    }
+
+    /**
+     * Internal representation.
+     *
+     * @param eventCondition       condition to match.
+     * @param resultPayloadReducer payload reducer to combine payload delivered by the event (result of the step) with
+     *                             the workflow payload.
+     * @param eventNameCustomizer  customizer.
+     */
+    @Internal
+    record EventConditionWithStepNameCustomizer(
+            EventCondition eventCondition,
+            PayloadReducer resultPayloadReducer,
+            EventNameCustomizer eventNameCustomizer
+    ) {
+
+    }
+
+    /**
      * Expresses the arrival of the event message passed to the
      * {@link #evaluateAndApply(EventMessage, ProcessingContext, Consumer)}.
      *
@@ -142,23 +158,6 @@ final class EventWaitConditions implements DescribableComponent {
             EventNameCustomizer eventNameCustomizer
     ) {
 
-    }
-
-    /**
-     * Clears all event wait conditions.
-     */
-    public void clear() {
-        this.waitConditions.clear();
-    }
-
-
-    @Override
-    public void describeTo(ComponentDescriptor descriptor) {
-        var conditions = waitConditions.entrySet().stream()
-                                       .map(e -> new EventWaitConditionDescriptor(e.getKey(),
-                                                                                  e.getValue().eventCondition))
-                                       .toList();
-        descriptor.describeProperty("waitConditions", conditions);
     }
 
     private record EventWaitConditionDescriptor(String stepName,

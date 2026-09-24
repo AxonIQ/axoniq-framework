@@ -18,15 +18,14 @@
  */
 package io.axoniq.framework.workflow.runtime.execution.payload;
 
+import io.axoniq.framework.workflow.dsl.api.PayloadReducer;
 import org.jspecify.annotations.Nullable;
-
-import io.axoniq.framework.workflow.runtime.api.payload.PayloadReducer;
 
 import java.util.Map;
 
 /**
- * Simple {@code PayloadReducer} that will only pass along the {@code global} payload, ignoring the {@code local} payload, without
- * modification.
+ * Simple {@code PayloadReducer} that will only pass along the {@code global} payload, ignoring the {@code local}
+ * payload, without modification.
  *
  * @author Simon Zambrovski
  * @since 5.4.0
@@ -45,7 +44,7 @@ public class GlobalOnlyPayloadReducer implements PayloadReducer {
 
     @Override
     public Map<String, @Nullable Object> apply(Map<String, @Nullable Object> global,
-                                     Map<String, @Nullable Object> local) {
+                                               Map<String, @Nullable Object> local) {
         return global;
     }
 

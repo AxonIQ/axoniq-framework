@@ -16,32 +16,20 @@
  * For licensing information and to register, visit:
  *  https://www.axoniq.io/pricing
  */
-package io.axoniq.framework.workflow.runtime.api.execution.status;
+package io.axoniq.framework.workflow.dsl.api;
+
+import org.axonframework.common.annotation.Internal;
 
 /**
- * Status of the workflow execution.
+ * Payload for the RETRYING event. Contains retry state for event sourcing and crash recovery.
  *
+ * @param attempt    current retry attempt number (1-based).
+ * @param maxRetries maximum number of retries configured.
+ * @param error      the error that triggered the retry.
  * @author Stefan Dragisic
- * @author Simon Zambrovski
  * @since 5.4.0
  */
-public enum WorkflowStatus {
-    NONE,
-    STARTED,
-    COMPLETED,
-    FAILED,
-    CANCELLED,
-    TIMED_OUT;
+@Internal
+public record StepRetryInfo(int attempt, int maxRetries, WorkflowError error) {
 
-    /**
-     * Checks if the status a terminal.
-     *
-     * @return true, if terminal.
-     */
-    public boolean isTerminal() {
-        return switch (this) {
-            case NONE, STARTED -> false;
-            case COMPLETED, FAILED, CANCELLED, TIMED_OUT -> true;
-        };
-    }
 }

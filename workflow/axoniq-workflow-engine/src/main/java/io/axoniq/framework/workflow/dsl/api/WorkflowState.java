@@ -16,13 +16,11 @@
  * For licensing information and to register, visit:
  *  https://www.axoniq.io/pricing
  */
-package io.axoniq.framework.workflow.runtime.api.execution.state;
+package io.axoniq.framework.workflow.dsl.api;
 
-import org.jspecify.annotations.Nullable;
-
-import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
 import org.axonframework.common.infra.DescribableComponent;
 import org.axonframework.messaging.core.VersionedType;
+import org.jspecify.annotations.Nullable;
 
 import java.util.List;
 import java.util.Map;

@@ -16,7 +16,7 @@
  * For licensing information and to register, visit:
  *  https://www.axoniq.io/pricing
  */
-package io.axoniq.framework.workflow.runtime.api.execution.state;
+package io.axoniq.framework.workflow.dsl.api;
 
 import org.axonframework.common.annotation.Internal;
 
@@ -40,10 +40,9 @@ public interface Cause {
     String message();
 
     /**
-     * Returns {@code true} when {@link #type()} matches the fully-qualified name of {@code clazz}.
-     * Use this instead of {@code instanceof} when branching on the originating throwable's class —
-     * {@code instanceof} does not match because the runtime cause is always
-     * {@link WorkflowExecutionException}, regardless of the originating type.
+     * Returns {@code true} when {@link #type()} matches the fully-qualified name of {@code clazz}. Use this instead of
+     * {@code instanceof} when branching on the originating throwable's class — {@code instanceof} does not match
+     * because the runtime cause is always {@link WorkflowExecutionException}, regardless of the originating type.
      */
     default boolean isType(Class<? extends Throwable> clazz) {
         return clazz.getName().equals(type());

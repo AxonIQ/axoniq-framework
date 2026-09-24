@@ -16,23 +16,34 @@
  * For licensing information and to register, visit:
  *  https://www.axoniq.io/pricing
  */
-package io.axoniq.framework.workflow.runtime.api.payload;
+package io.axoniq.framework.workflow.dsl.api;
 
 import org.jspecify.annotations.Nullable;
 
-import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 
 import java.util.Map;
 import java.util.function.BiFunction;
 
 /**
- * Action executed consuming payload and returning payload as a result run in a provided processing context.
+ * Payload reducer to combine two payloads into one. In general, there is a global payload (part of the state of the
+ * workflow instance) and a local payload (part of the step execution). On the step invocation, the global and local
+ * form the invocation parameters. After the step execution, the local result and global payload form the resulting
+ * workflow instance payload.
  *
  * @author Simon Zambrovski
  * @author Stefan Dragisic
  * @since 5.4.0
  */
 @FunctionalInterface
-public interface PayloadProcessor extends BiFunction<ProcessingContext, Map<String, @Nullable Object>, Map<String, @Nullable Object>> {
+public interface PayloadReducer extends
+        BiFunction<Map<String, @Nullable Object>, Map<String, @Nullable Object>, Map<String, @Nullable Object>> {
 
+    /**
+     * Retrieves the name of the reducer.
+     *
+     * @return reducer name.
+     */
+    default String name() {
+        return this.getClass().getName();
+    }
 }

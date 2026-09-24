@@ -16,7 +16,7 @@
  * For licensing information and to register, visit:
  *  https://www.axoniq.io/pricing
  */
-package io.axoniq.framework.workflow.runtime.api.payload;
+package io.axoniq.framework.workflow.dsl.api;
 
 import org.jspecify.annotations.Nullable;
 

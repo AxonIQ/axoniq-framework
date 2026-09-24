@@ -20,9 +20,9 @@ package io.axoniq.framework.workflow.runtime.test.fixture;
 
 import io.axoniq.framework.workflow.history.api.WorkflowHistory;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
-import io.axoniq.framework.workflow.runtime.api.execution.state.StepFailedException;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowState;
-import io.axoniq.framework.workflow.runtime.api.payload.PayloadProcessor;
+import io.axoniq.framework.workflow.dsl.api.StepFailedException;
+import io.axoniq.framework.workflow.dsl.api.WorkflowState;
+import io.axoniq.framework.workflow.dsl.api.PayloadProcessor;
 import org.awaitility.core.ThrowingRunnable;
 import org.axonframework.common.FutureUtils;
 import org.axonframework.common.annotation.Internal;

@@ -19,11 +19,11 @@
 
 package io.axoniq.framework.workflow.runtime.execution;
 
-import io.axoniq.framework.workflow.runtime.association.Associations;
 import io.axoniq.framework.workflow.dsl.api.EventCondition;
 import io.axoniq.framework.workflow.dsl.api.EventConditions;
+import io.axoniq.framework.workflow.dsl.api.PayloadReducer;
 import io.axoniq.framework.workflow.runtime.api.execution.context.Version;
-import io.axoniq.framework.workflow.runtime.api.payload.PayloadReducer;
+import io.axoniq.framework.workflow.runtime.association.Associations;
 import io.axoniq.framework.workflow.runtime.execution.payload.PayloadReducerRegistry;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.common.infra.DescribableComponent;
@@ -37,9 +37,9 @@ import org.mockito.*;
 import java.util.Collection;
 import java.util.concurrent.atomic.AtomicReference;
 
+import static io.axoniq.framework.workflow.runtime.association.PayloadPropertyValueRetriever.payloadProperty;
 import static io.axoniq.framework.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.defaults;
 import static io.axoniq.framework.workflow.runtime.execution.payload.GlobalOnlyPayloadReducer.NAME;
-import static io.axoniq.framework.workflow.runtime.association.PayloadPropertyValueRetriever.payloadProperty;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
@@ -49,9 +49,9 @@ import static org.mockito.Mockito.*;
  */
 class EventWaitConditionsTest {
 
-    private EventWaitConditions eventWaitConditions;
     private final PayloadReducerRegistry registry = new PayloadReducerRegistry();
     private final PayloadReducer globalOnly = registry.get(NAME).orElseThrow();
+    private EventWaitConditions eventWaitConditions;
 
     @BeforeEach
     void setUp() {

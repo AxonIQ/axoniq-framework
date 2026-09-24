@@ -18,13 +18,6 @@
  */
 package io.axoniq.framework.workflow.dsl.api;
 
-import io.axoniq.framework.workflow.dsl.api.EventCondition;
-import io.axoniq.framework.workflow.dsl.api.EventNameCustomizer;
-import io.axoniq.framework.workflow.dsl.api.PayloadMapping;
-import io.axoniq.framework.workflow.dsl.api.PrimitiveMetadata;
-import io.axoniq.framework.workflow.dsl.api.Timing;
-import io.axoniq.framework.workflow.runtime.api.payload.PayloadReducer;
-
 import java.time.Duration;
 
 /**

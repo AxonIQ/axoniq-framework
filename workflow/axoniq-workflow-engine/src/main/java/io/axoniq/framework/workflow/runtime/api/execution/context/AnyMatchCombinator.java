@@ -16,8 +16,11 @@
  * For licensing information and to register, visit:
  *  https://www.axoniq.io/pricing
  */
-package io.axoniq.framework.workflow.runtime.api.execution.state;
+package io.axoniq.framework.workflow.runtime.api.execution.context;
 
+
+import io.axoniq.framework.workflow.dsl.api.CombinatorWorkflowStepResult;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStepResult;
 
 import java.util.function.Predicate;
 
@@ -82,5 +85,4 @@ public interface AnyMatchCombinator {
      * @return a composite result that resolves to the first matching result, or fallback to first completed.
      */
     CombinatorWorkflowStepResult anyMatch(Predicate<WorkflowStepResult> predicate, WorkflowStepResult... results);
-
 }

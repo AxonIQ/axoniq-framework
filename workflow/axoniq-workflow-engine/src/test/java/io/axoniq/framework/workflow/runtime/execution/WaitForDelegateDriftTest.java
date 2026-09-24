@@ -18,17 +18,16 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations;
-
 import io.axoniq.framework.workflow.dsl.api.EventCondition;
 import io.axoniq.framework.workflow.dsl.api.EventNameCustomizer;
+import io.axoniq.framework.workflow.dsl.api.StepStatus;
+import io.axoniq.framework.workflow.dsl.api.WorkflowState;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStep;
 import io.axoniq.framework.workflow.runtime.api.execution.context.PrimitiveCommands;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WaitForPrimitive;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowReplayDriftException;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowState;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowStep;
-import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.framework.workflow.runtime.execution.payload.GlobalOnlyPayloadReducer;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventSink;
@@ -42,10 +41,7 @@ import java.util.concurrent.Executor;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-import static org.mockito.Mockito.doCallRealMethod;
-import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.*;
 
 /**
  * Tests for the replay-drift guard in {@link WaitForDelegate}.
@@ -54,11 +50,11 @@ import static org.mockito.ArgumentMatchers.anyString;
  */
 class WaitForDelegateDriftTest {
 
+    private final ReachedSteps reachedSteps = new ReachedSteps();
     private WorkflowExecutionOperations workflowExecutionOperations;
     private WorkflowExecution workflowExecution;
     private WorkflowState state;
     private WaitForDelegate delegate;
-    private final ReachedSteps reachedSteps = new ReachedSteps();
 
     @BeforeEach
     void setUp() {
@@ -77,8 +73,14 @@ class WaitForDelegateDriftTest {
         when(workflowExecution.hasTasks()).thenReturn(false);
 
         delegate = new WaitForDelegate(
-                workflowExecutionOperations, workflowExecution, new RunningSteps(), new EventWaitConditions(), reachedSteps, parent,
-                Clock.systemUTC(), new ControllableWorkflowScheduler()
+                workflowExecutionOperations,
+                workflowExecution,
+                new RunningSteps(),
+                new EventWaitConditions(),
+                reachedSteps,
+                parent,
+                Clock.systemUTC(),
+                new ControllableWorkflowScheduler()
         );
     }
 
@@ -122,8 +124,8 @@ class WaitForDelegateDriftTest {
     }
 
     /**
-     * Asserts the call does not throw {@link WorkflowReplayDriftException}. Any other exception
-     * (e.g. NPE from incomplete mock setup after the guard) is fine — the guard let us through.
+     * Asserts the call does not throw {@link WorkflowReplayDriftException}. Any other exception (e.g. NPE from
+     * incomplete mock setup after the guard) is fine — the guard let us through.
      */
     private void assertNoDriftThrown(Runnable r) {
         try {

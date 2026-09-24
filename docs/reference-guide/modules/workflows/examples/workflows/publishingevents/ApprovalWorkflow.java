@@ -21,7 +21,7 @@ package workflows.publishingevents;
 
 import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.framework.workflow.runtime.api.annotation.Workflow;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowStepResult;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStepResult;
 
 import java.util.Map;
 

@@ -18,24 +18,22 @@
  */
 package io.axoniq.framework.workflow.runtime.util;
 
-import org.jspecify.annotations.Nullable;
-
 import io.axoniq.framework.workflow.dsl.api.EventNameCustomizer;
+import io.axoniq.framework.workflow.dsl.api.StepRetryInfo;
+import io.axoniq.framework.workflow.dsl.api.StepStatus;
+import io.axoniq.framework.workflow.dsl.api.WorkflowError;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.api.execution.context.Version;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowEventPublicationContext;
-import io.axoniq.framework.workflow.runtime.api.execution.state.StepRetryInfo;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowError;
-import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
-import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
 import org.axonframework.common.TypeReference;
 import org.axonframework.conversion.jackson.JacksonConverter;
-import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.VersionedType;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.conversion.DelegatingEventConverter;
 import org.axonframework.messaging.eventhandling.conversion.EventConverter;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.*;
 
 import java.lang.reflect.Constructor;
@@ -57,12 +55,11 @@ class EventMessageUtilsTest {
 
     private static final TypeReference<Map<String, @Nullable Object>> MAP_TYPE = new TypeReference<>() {
     };
-
+    private final String workflowId = "wf123";
+    private final Map<String, @Nullable Object> payload = Map.of("key", "value");
     private WorkflowEventPublicationContext context;
     private EventNameCustomizer customizer;
     private VersionedType workflowDefinitionId;
-    private final String workflowId = "wf123";
-    private final Map<String, @Nullable Object> payload = Map.of("key", "value");
 
     @BeforeEach
     void setUp() {

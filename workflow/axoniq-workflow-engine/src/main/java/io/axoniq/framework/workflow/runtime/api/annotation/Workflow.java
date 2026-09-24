@@ -65,16 +65,16 @@ public @interface Workflow {
     String workflowNamespace() default "";
 
     /**
-     * Specifies the qualified name of the event to be used as a starting trigger.
-     * If this property is set, the {@link #startOnEventClass()} property must not be set.
+     * Specifies the qualified name of the event to be used as a starting trigger. If this property is set, the
+     * {@link #startOnEventClass()} property must not be set.
      *
      * @return qualified name of the event, defaults to empty string.
      */
     String startOnEventName() default "";
 
     /**
-     * Specifies the class of the event to be used as a starting trigger.
-     * If this property is set, the {@link #startOnEventName()} property must not be set.
+     * Specifies the class of the event to be used as a starting trigger. If this property is set, the
+     * {@link #startOnEventName()} property must not be set.
      *
      * @return class of the event, defaults to Void.class.
      */
@@ -104,8 +104,8 @@ public @interface Workflow {
     Class<? extends WorkflowIdProvider> idPropertyProvider() default PayloadPropertyWorkflowIdProvider.class;
 
     /**
-     * Workflow definition version (semver, e.g. {@code "0.0.2"}). New instances start on the highest
-     * registered version; in-flight instances replay on the version they were started under.
+     * Workflow definition version (semver, e.g. {@code "0.0.2"}). New instances start on the highest registered
+     * version; in-flight instances replay on the version they were started under.
      * <p>
      * Defaults to {@link Version#DEFAULT_VERSION} ({@code "0.0.1"}).
      *

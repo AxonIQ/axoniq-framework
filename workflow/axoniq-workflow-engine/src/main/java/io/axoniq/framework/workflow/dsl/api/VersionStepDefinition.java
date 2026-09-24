@@ -18,14 +18,11 @@
  */
 package io.axoniq.framework.workflow.dsl.api;
 
-import io.axoniq.framework.workflow.dsl.api.EventNameCustomizer;
-import io.axoniq.framework.workflow.dsl.api.PrimitiveMetadata;
-
 import java.util.Objects;
 
 /**
- * Specification for a {@code ctx.migrateVersion(changeId, newVersion)} call. The {@code changeId} is carried
- * on {@link PrimitiveMetadata#stepName()}; {@code newVersion} is the value being recorded.
+ * Specification for a {@code ctx.migrateVersion(changeId, newVersion)} call. The {@code changeId} is carried on
+ * {@link PrimitiveMetadata#stepName()}; {@code newVersion} is the value being recorded.
  *
  * @param primitiveMetadata metadata of the primitive ({@code stepName == changeId}).
  * @param newVersion        new workflow version to record (semver string).
@@ -38,8 +35,8 @@ public record VersionStepDefinition(
 ) {
 
     /**
-     * Fails fast when a mandatory component is {@code null}; the package's null-marked contract alone is
-     * not enforced at runtime, so a user ignoring it is detected here at construction.
+     * Fails fast when a mandatory component is {@code null}; the package's null-marked contract alone is not enforced
+     * at runtime, so a user ignoring it is detected here at construction.
      */
     public VersionStepDefinition {
         Objects.requireNonNull(primitiveMetadata, "primitiveMetadata must not be null");
@@ -54,8 +51,8 @@ public record VersionStepDefinition(
     }
 
     /**
-     * Returns a copy of this definition with the provided step name. For migration steps the
-     * step name carries the developer-chosen {@code changeId}.
+     * Returns a copy of this definition with the provided step name. For migration steps the step name carries the
+     * developer-chosen {@code changeId}.
      */
     public VersionStepDefinition stepName(String stepName) {
         return primitiveMetadata(primitiveMetadata.stepName(stepName));

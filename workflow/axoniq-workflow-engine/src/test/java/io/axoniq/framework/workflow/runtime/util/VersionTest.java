@@ -20,20 +20,17 @@
 package io.axoniq.framework.workflow.runtime.util;
 
 import io.axoniq.framework.workflow.runtime.api.execution.context.Version;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.CsvSource;
-import org.junit.jupiter.params.provider.ValueSource;
+import org.junit.jupiter.api.*;
+import org.junit.jupiter.params.*;
+import org.junit.jupiter.params.provider.*;
 
 import java.util.List;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatCode;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.*;
 
 /**
- * Tests for {@link Version}, the workflow version value type (semver parsing, ordering and the
- * closest-sibling routing helpers). Supersedes the former {@code WorkflowVersionComparator} tests.
+ * Tests for {@link Version}, the workflow version value type (semver parsing, ordering and the closest-sibling routing
+ * helpers). Supersedes the former {@code WorkflowVersionComparator} tests.
  *
  * @author Stefan Dragisic
  */

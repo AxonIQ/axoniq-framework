@@ -19,13 +19,11 @@
 package io.axoniq.framework.workflow.runtime.api.execution.context;
 
 import io.axoniq.framework.workflow.dsl.api.EventNameCustomizer;
-
-import org.jspecify.annotations.Nullable;
-
+import io.axoniq.framework.workflow.dsl.api.PayloadProcessor;
+import io.axoniq.framework.workflow.dsl.api.PayloadReducer;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStepResult;
 import io.axoniq.framework.workflow.dsl.api.retry.RetryPolicy;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowStepResult;
-import io.axoniq.framework.workflow.runtime.api.payload.PayloadProcessor;
-import io.axoniq.framework.workflow.runtime.api.payload.PayloadReducer;
+import org.jspecify.annotations.Nullable;
 
 import java.time.Duration;
 import java.util.Map;
@@ -112,5 +110,4 @@ public interface ExecutePrimitive {
             return NONE;
         }
     }
-
 }

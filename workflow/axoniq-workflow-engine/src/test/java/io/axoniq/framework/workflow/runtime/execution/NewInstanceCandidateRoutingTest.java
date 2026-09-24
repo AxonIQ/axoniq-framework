@@ -18,17 +18,15 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations;
-
 import io.axoniq.framework.workflow.dsl.api.EventCondition;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowConfiguration;
+import io.axoniq.framework.workflow.dsl.api.StepStatus;
 import io.axoniq.framework.workflow.dsl.api.WorkflowContext;
+import io.axoniq.framework.workflow.dsl.api.WorkflowState;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContextFactory;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionFactory;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowState;
-import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
-import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.util.MetadataUtils;
 import org.axonframework.common.TypeReference;
 import org.axonframework.messaging.core.MessageType;
@@ -96,13 +94,6 @@ class NewInstanceCandidateRoutingTest {
      * Far ahead of any segment's position, so no segment reaches live mode and no body is started.
      */
     private static final long STARTUP_LATEST_POSITION = 1_000;
-
-    private SimpleWorkflowConfigurationRegistry registry;
-    private WorkflowEngineSequencingPolicy routing;
-    private WorkflowEngine engine;
-    private InMemoryWorkflowExecutionRepository repository;
-    private WorkflowEngineCheckpointingSupport checkpointingSupport;
-
     /**
      * Workflow ids the engine created an instance for, one entry per start it actually performed.
      */
@@ -112,6 +103,133 @@ class NewInstanceCandidateRoutingTest {
      */
     private final List<WorkflowExecution> startedExecutions = new ArrayList<>();
     private final Map<WorkflowContext, String> idOfContext = new IdentityHashMap<>();
+    private SimpleWorkflowConfigurationRegistry registry;
+    private WorkflowEngineSequencingPolicy routing;
+    private WorkflowEngine engine;
+    private InMemoryWorkflowExecutionRepository repository;
+    private WorkflowEngineCheckpointingSupport checkpointingSupport;
+
+    /**
+     * Two ids owned by different segments, found by scanning rather than assumed: {@code String.hashCode} is specified
+     * by the JLS, so this is deterministic, and a scenario that happened to pick two ids on the same segment would pass
+     * while testing nothing.
+     */
+    private static List<String> twoIdsOnDifferentSegments() {
+        var first = "impure-0";
+        var second = IntStream.rangeClosed(1, 1_000)
+                              .mapToObj(index -> "impure-" + index)
+                              .filter(id -> owningSegment(id).getSegmentId() != owningSegment(first).getSegmentId())
+                              .findFirst()
+                              .orElseThrow(() -> new AssertionError("No second id landed on another segment"));
+        return List.of(first, second);
+    }
+
+    // ---------------------------------------------------------------------------------------------------------
+    // several candidates
+    // ---------------------------------------------------------------------------------------------------------
+
+    private static String idOnAnotherSegmentThan(String workflowId) {
+        return IntStream.rangeClosed(1, 1_000)
+                        .mapToObj(index -> "publisher-" + index)
+                        .filter(id -> owningSegment(id).getSegmentId() != owningSegment(workflowId).getSegmentId())
+                        .findFirst()
+                        .orElseThrow(() -> new AssertionError("No id landed on another segment"));
+    }
+
+    // ---------------------------------------------------------------------------------------------------------
+    // several definitions, one id
+    // ---------------------------------------------------------------------------------------------------------
+
+    /**
+     * A business event published by the given workflow through the publish primitive: the start event's type, carrying
+     * the publisher's step metadata.
+     */
+    private static EventMessage publishedEvent(String publisherId) {
+        var eventMessage = businessEvent(START_EVENT);
+        when(eventMessage.metadata()).thenReturn(
+                MetadataUtils.create(publisherId, "notify", StepStatus.COMPLETED)
+                             .and(MetadataUtils.METADATA_KEY_STEP_PRIMITIVE, MetadataUtils.STEP_PRIMITIVE_PUBLISH)
+        );
+        return eventMessage;
+    }
+
+    // ---------------------------------------------------------------------------------------------------------
+    // no candidate
+    // ---------------------------------------------------------------------------------------------------------
+
+    private static BiPredicate<EventMessage, ProcessingContext> always() {
+        return (event, pc) -> true;
+    }
+
+    // ---------------------------------------------------------------------------------------------------------
+    // a derivation that throws
+    // ---------------------------------------------------------------------------------------------------------
+
+    /**
+     * Built with {@code doReturn} rather than {@code when}: these mocks are created from inside a Mockito answer (the
+     * engine asks the factories while a stub is being served), and a nested {@code when} corrupts the ongoing
+     * stubbing.
+     */
+    private static WorkflowContext workflowContext() {
+        return mock(WorkflowContext.class);
+    }
+
+    private static io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations workflowExecutionOperations() {
+        var workflowExecutionOperations = mock(io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations.class);
+        var bodyContext = mock(ProcessingContext.class);
+        doReturn(bodyContext).when(workflowExecutionOperations).processingContext();
+        doAnswer(invocation -> {
+            invocation.<Consumer<ProcessingContext>>getArgument(0).accept(bodyContext);
+            return bodyContext;
+        }).when(bodyContext).whenComplete(any());
+        return workflowExecutionOperations;
+    }
+
+    private static WorkflowExecution execution(String workflowId) {
+        var execution = mock(WorkflowExecutionFixture.CancellationCapableExecution.class);
+        var state = mock(WorkflowState.class);
+        doReturn(WorkflowStatus.STARTED).when(state).workflowStatus();
+        doReturn(workflowId).when(execution).workflowId();
+        doReturn(state).when(execution).state();
+        doReturn(workflowExecutionOperations()).when(execution).workflowExecutionOperations();
+        doReturn(mock(WorkflowCancellation.class)).when(execution).workflowCancellation();
+        return execution;
+    }
+
+    // ---------------------------------------------------------------------------------------------------------
+    // a workflowIdProvider that derives no id
+    // ---------------------------------------------------------------------------------------------------------
+
+    private static EventMessage startEvent() {
+        return businessEvent(START_EVENT);
+    }
+
+    private static EventMessage unregisteredEvent() {
+        return businessEvent(UNREGISTERED_EVENT);
+    }
+
+    private static EventMessage businessEvent(QualifiedName name) {
+        var eventMessage = mock(EventMessage.class);
+        when(eventMessage.metadata()).thenReturn(Metadata.emptyInstance());
+        when(eventMessage.type()).thenReturn(new MessageType(name));
+        when(eventMessage.payloadAs(any(TypeReference.class))).thenReturn(Map.of("id", "1"));
+        return eventMessage;
+    }
+
+    // ---------------------------------------------------------------------------------------------------------
+    // a derivation that does not agree with itself
+    // ---------------------------------------------------------------------------------------------------------
+
+    private static TrackingToken token(long position) {
+        return new GlobalSequenceTrackingToken(position);
+    }
+
+    private static Segment owningSegment(String workflowId) {
+        return SEGMENTS.stream()
+                       .filter(segment -> WorkflowSegmentOwnership.ownedBy(segment, workflowId))
+                       .findFirst()
+                       .orElseThrow();
+    }
 
     @BeforeEach
     void setUp() {
@@ -126,10 +244,6 @@ class NewInstanceCandidateRoutingTest {
         checkpointingSupport = new WorkflowEngineCheckpointingSupport(engine);
         engine.setCheckpointingSupport(checkpointingSupport);
     }
-
-    // ---------------------------------------------------------------------------------------------------------
-    // several candidates
-    // ---------------------------------------------------------------------------------------------------------
 
     @Test
     void twoDefinitionsNamingTwoIdsAreBroadcastAndEachStartsOnItsOwnSegmentOnly() {
@@ -155,7 +269,7 @@ class NewInstanceCandidateRoutingTest {
     }
 
     // ---------------------------------------------------------------------------------------------------------
-    // several definitions, one id
+    // several registered versions
     // ---------------------------------------------------------------------------------------------------------
 
     @Test
@@ -176,10 +290,6 @@ class NewInstanceCandidateRoutingTest {
         assertThat(decision).isNotEqualTo(java.util.Optional.of(SequencingPolicy.BROADCAST));
     }
 
-    // ---------------------------------------------------------------------------------------------------------
-    // no candidate
-    // ---------------------------------------------------------------------------------------------------------
-
     @Test
     void anEventNoDefinitionStartsOnIsBroadcastAndStillWakesAWaitingInstance() {
         register("Alpha", "1.0.0", always(), event -> "alpha-1");
@@ -198,7 +308,7 @@ class NewInstanceCandidateRoutingTest {
     }
 
     // ---------------------------------------------------------------------------------------------------------
-    // a derivation that throws
+    // events published by a workflow through the publish primitive
     // ---------------------------------------------------------------------------------------------------------
 
     @Test
@@ -241,10 +351,6 @@ class NewInstanceCandidateRoutingTest {
                             rare.""")
                 .contains(SequencingPolicy.BROADCAST);
     }
-
-    // ---------------------------------------------------------------------------------------------------------
-    // a workflowIdProvider that derives no id
-    // ---------------------------------------------------------------------------------------------------------
 
     /**
      * An {@code idProperty} naming a field the event does not have makes {@code PayloadPropertyWorkflowIdProvider}
@@ -321,10 +427,6 @@ class NewInstanceCandidateRoutingTest {
                             + "protects against is segment-specific")
                 .doesNotThrowAnyException();
     }
-
-    // ---------------------------------------------------------------------------------------------------------
-    // a derivation that does not agree with itself
-    // ---------------------------------------------------------------------------------------------------------
 
     /**
      * The start condition and the {@code workflowIdProvider} of a definition are evaluated twice per event: once here
@@ -416,25 +518,6 @@ class NewInstanceCandidateRoutingTest {
                            .containsExactly("alpha-1");
     }
 
-    /**
-     * Two ids owned by different segments, found by scanning rather than assumed: {@code String.hashCode} is specified
-     * by the JLS, so this is deterministic, and a scenario that happened to pick two ids on the same segment would pass
-     * while testing nothing.
-     */
-    private static List<String> twoIdsOnDifferentSegments() {
-        var first = "impure-0";
-        var second = IntStream.rangeClosed(1, 1_000)
-                              .mapToObj(index -> "impure-" + index)
-                              .filter(id -> owningSegment(id).getSegmentId() != owningSegment(first).getSegmentId())
-                              .findFirst()
-                              .orElseThrow(() -> new AssertionError("No second id landed on another segment"));
-        return List.of(first, second);
-    }
-
-    // ---------------------------------------------------------------------------------------------------------
-    // several registered versions
-    // ---------------------------------------------------------------------------------------------------------
-
     @Test
     void onlyTheHighestRegisteredVersionOfADefinitionContributesACandidate() {
         register("Alpha", "1.0.0", always(), event -> "alpha-v1");
@@ -465,10 +548,6 @@ class NewInstanceCandidateRoutingTest {
                 .containsExactlyInAnyOrder("alpha-v2", "beta-v2");
     }
 
-    // ---------------------------------------------------------------------------------------------------------
-    // events published by a workflow through the publish primitive
-    // ---------------------------------------------------------------------------------------------------------
-
     @Test
     void aPublishedEventWithOneStartCandidateOnAnotherSegmentIsBroadcastSoThePublisherStillObservesIt() {
         register("Alpha", "1.0.0", always(), event -> "alpha-1");
@@ -485,31 +564,6 @@ class NewInstanceCandidateRoutingTest {
 
         assertThat(started).as("the published event starts the candidate exactly once").containsExactly("alpha-1");
         verify(publisher, times(1)).onEvent(any(), any());
-    }
-
-    private static String idOnAnotherSegmentThan(String workflowId) {
-        return IntStream.rangeClosed(1, 1_000)
-                        .mapToObj(index -> "publisher-" + index)
-                        .filter(id -> owningSegment(id).getSegmentId() != owningSegment(workflowId).getSegmentId())
-                        .findFirst()
-                        .orElseThrow(() -> new AssertionError("No id landed on another segment"));
-    }
-
-    /**
-     * A business event published by the given workflow through the publish primitive: the start event's type, carrying
-     * the publisher's step metadata.
-     */
-    private static EventMessage publishedEvent(String publisherId) {
-        var eventMessage = businessEvent(START_EVENT);
-        when(eventMessage.metadata()).thenReturn(
-                MetadataUtils.create(publisherId, "notify", StepStatus.COMPLETED)
-                             .and(MetadataUtils.METADATA_KEY_STEP_PRIMITIVE, MetadataUtils.STEP_PRIMITIVE_PUBLISH)
-        );
-        return eventMessage;
-    }
-
-    private static BiPredicate<EventMessage, ProcessingContext> always() {
-        return (event, pc) -> true;
     }
 
     /**
@@ -557,68 +611,10 @@ class NewInstanceCandidateRoutingTest {
         }, configuration);
     }
 
-    /**
-     * Built with {@code doReturn} rather than {@code when}: these mocks are created from inside a Mockito answer (the
-     * engine asks the factories while a stub is being served), and a nested {@code when} corrupts the ongoing
-     * stubbing.
-     */
-    private static WorkflowContext workflowContext() {
-        return mock(WorkflowContext.class);
-    }
-
-    private static io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations workflowExecutionOperations() {
-        var workflowExecutionOperations = mock(io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations.class);
-        var bodyContext = mock(ProcessingContext.class);
-        doReturn(bodyContext).when(workflowExecutionOperations).processingContext();
-        doAnswer(invocation -> {
-            invocation.<Consumer<ProcessingContext>>getArgument(0).accept(bodyContext);
-            return bodyContext;
-        }).when(bodyContext).whenComplete(any());
-        return workflowExecutionOperations;
-    }
-
-    private static WorkflowExecution execution(String workflowId) {
-        var execution = mock(WorkflowExecutionFixture.CancellationCapableExecution.class);
-        var state = mock(WorkflowState.class);
-        doReturn(WorkflowStatus.STARTED).when(state).workflowStatus();
-        doReturn(workflowId).when(execution).workflowId();
-        doReturn(state).when(execution).state();
-        doReturn(workflowExecutionOperations()).when(execution).workflowExecutionOperations();
-        doReturn(mock(WorkflowCancellation.class)).when(execution).workflowCancellation();
-        return execution;
-    }
-
     private ProcessingContext context(Segment segment) {
         var context = new StubProcessingContext();
         context.putResource(Segment.RESOURCE_KEY, segment);
         context.putResource(TrackingToken.RESOURCE_KEY, token(1));
         return context;
-    }
-
-    private static EventMessage startEvent() {
-        return businessEvent(START_EVENT);
-    }
-
-    private static EventMessage unregisteredEvent() {
-        return businessEvent(UNREGISTERED_EVENT);
-    }
-
-    private static EventMessage businessEvent(QualifiedName name) {
-        var eventMessage = mock(EventMessage.class);
-        when(eventMessage.metadata()).thenReturn(Metadata.emptyInstance());
-        when(eventMessage.type()).thenReturn(new MessageType(name));
-        when(eventMessage.payloadAs(any(TypeReference.class))).thenReturn(Map.of("id", "1"));
-        return eventMessage;
-    }
-
-    private static TrackingToken token(long position) {
-        return new GlobalSequenceTrackingToken(position);
-    }
-
-    private static Segment owningSegment(String workflowId) {
-        return SEGMENTS.stream()
-                       .filter(segment -> WorkflowSegmentOwnership.ownedBy(segment, workflowId))
-                       .findFirst()
-                       .orElseThrow();
     }
 }

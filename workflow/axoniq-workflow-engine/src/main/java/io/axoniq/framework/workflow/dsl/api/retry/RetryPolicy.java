@@ -22,27 +22,31 @@ package io.axoniq.framework.workflow.dsl.api.retry;
 import java.util.function.Predicate;
 
 /**
- * Retry policy for execute steps. {@code maxRetries} is the number of retry attempts
- * (not counting the initial attempt). {@code maxRetries=3} means up to 4 total executions.
+ * Retry policy for execute steps. {@code maxRetries} is the number of retry attempts (not counting the initial
+ * attempt). {@code maxRetries=3} means up to 4 total executions.
  *
- * @param maxRetries     maximum number of retry attempts.
- * @param onRetryHandler handler invoked before each retry event is published.
+ * @param maxRetries      maximum number of retry attempts.
+ * @param onRetryHandler  handler invoked before each retry event is published.
  * @param backoffStrategy backoff strategy between retry attempts.
- * @param retryPredicate predicate evaluated on each retry; returns {@code true} to continue retrying,
- *                       {@code false} to stop. Checked in addition to {@code maxRetries}.
- *
+ * @param retryPredicate  predicate evaluated on each retry; returns {@code true} to continue retrying, {@code false} to
+ *                        stop. Checked in addition to {@code maxRetries}.
  * @author Stefan Dragisic
  * @since 5.4.0
  */
 public record RetryPolicy(int maxRetries, RetryHandler onRetryHandler,
-                           BackoffStrategy backoffStrategy,
-                           Predicate<RetryContext> retryPredicate) {
+                          BackoffStrategy backoffStrategy,
+                          Predicate<RetryContext> retryPredicate) {
+
+    /**
+     * Constant retry policy that disables retries entirely.
+     */
+    public static final RetryPolicy NONE = new RetryPolicy(0, RetryHandler.NOOP);
 
     /**
      * Creates a retry policy with explicit retry count, retry hook, and backoff strategy.
      *
-     * @param maxRetries maximum number of retry attempts
-     * @param onRetryHandler handler invoked before each retry event is published
+     * @param maxRetries      maximum number of retry attempts
+     * @param onRetryHandler  handler invoked before each retry event is published
      * @param backoffStrategy backoff strategy between retry attempts
      */
     public RetryPolicy(int maxRetries, RetryHandler onRetryHandler,
@@ -53,17 +57,12 @@ public record RetryPolicy(int maxRetries, RetryHandler onRetryHandler,
     /**
      * Creates a retry policy with explicit retry count and retry hook, using no backoff.
      *
-     * @param maxRetries maximum number of retry attempts
+     * @param maxRetries     maximum number of retry attempts
      * @param onRetryHandler handler invoked before each retry event is published
      */
     public RetryPolicy(int maxRetries, RetryHandler onRetryHandler) {
         this(maxRetries, onRetryHandler, BackoffStrategy.NONE, ctx -> true);
     }
-
-    /**
-     * Constant retry policy that disables retries entirely.
-     */
-    public static final RetryPolicy NONE = new RetryPolicy(0, RetryHandler.NOOP);
 
     /**
      * Creates a retry policy with the provided retry count and no-op retry handling.

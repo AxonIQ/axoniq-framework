@@ -19,18 +19,16 @@
 package io.axoniq.framework.workflow.runtime.execution;
 
 import io.axoniq.framework.workflow.dsl.api.EventNameCustomizer;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.framework.workflow.dsl.api.WorkflowContext;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContextFactory;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowDefinition;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionFactory;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowIdProvider;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowStatusChangeListener;
-import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
 import org.axonframework.messaging.core.QualifiedName;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 
 import java.util.Map;
 
@@ -38,13 +36,13 @@ import static io.axoniq.framework.workflow.runtime.execution.DefaultEventNameCus
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Walk-through tests for {@link WorkflowConfigurationRegistry#resolveDefinitionForReplay}. One test
- * per row in the routing table below, in the same order so a reader can pattern-match a routing
- * decision in production logs to the scenario that triggers it.
+ * Walk-through tests for {@link WorkflowConfigurationRegistry#resolveDefinitionForReplay}. One test per row in the
+ * routing table below, in the same order so a reader can pattern-match a routing decision in production logs to the
+ * scenario that triggers it.
  *
  * <p>{@code start} is the engine's default pick before routing thinks about it (typically the
- * highest registered version for this workflow name). {@code target} is what routing chose instead
- * after looking at {@code state}.
+ * highest registered version for this workflow name). {@code target} is what routing chose instead after looking at
+ * {@code state}.
  *
  * <pre>
  * | state          | registered          | start  | → target | tier
@@ -190,7 +188,9 @@ class WorkflowReplayRoutingTest {
         assertThat(picked.workflowVersion()).isEqualTo("5.0.0");
     }
 
-    /** Minimal {@link WorkflowConfiguration} carrying just a name + version for routing tests. */
+    /**
+     * Minimal {@link WorkflowConfiguration} carrying just a name + version for routing tests.
+     */
     private static final class TestConfig implements WorkflowConfiguration<WorkflowContext> {
 
         private final String name;

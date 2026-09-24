@@ -19,13 +19,11 @@
 
 package io.axoniq.framework.workflow.configuration;
 
-import org.jspecify.annotations.Nullable;
-
+import io.axoniq.framework.workflow.dsl.api.EventCondition;
+import io.axoniq.framework.workflow.dsl.api.EventConditions;
 import io.axoniq.framework.workflow.history.inmemory.InMemoryWorkflowHistoryRepository;
 import io.axoniq.framework.workflow.history.inmemory.MutableWorkflowHistoryRepository;
 import io.axoniq.framework.workflow.history.inmemory.WorkflowHistoryProjector;
-import io.axoniq.framework.workflow.dsl.api.EventCondition;
-import io.axoniq.framework.workflow.dsl.api.EventConditions;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowDefinition;
 import io.axoniq.framework.workflow.runtime.execution.AbstractWorkflowContext;
@@ -37,6 +35,7 @@ import io.axoniq.framework.workflow.runtime.execution.WorkflowExecutionRepositor
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.*;
 
 import java.util.Map;

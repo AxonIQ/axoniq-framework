@@ -18,9 +18,9 @@
  */
 package io.axoniq.framework.workflow.configuration;
 
-import io.axoniq.framework.workflow.history.inmemory.WorkflowHistoryProjector;
 import io.axoniq.framework.workflow.dsl.api.EventCondition;
 import io.axoniq.framework.workflow.dsl.api.WorkflowContext;
+import io.axoniq.framework.workflow.history.inmemory.WorkflowHistoryProjector;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContextFactory;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowDefinition;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowConfigurationRegistry;
@@ -37,8 +37,8 @@ import java.util.function.Function;
  * same {@link WorkflowContext} type defined by the generic {@code C}.
  * <p>
  * When constructed, the module registers its workflow configurations in the {@link WorkflowConfigurationRegistry},
- * which in turn is used by the
- * {@link io.axoniq.framework.workflow.runtime.execution.WorkflowEngine WorkflowEngine} to manage and execute workflows.
+ * which in turn is used by the {@link io.axoniq.framework.workflow.runtime.execution.WorkflowEngine WorkflowEngine} to
+ * manage and execute workflows.
  *
  * <h2>Default configuration</h2>
  * Modules created through {@link #defaults(String, Class)} use sensible defaults for infrastructure components (such as
@@ -85,21 +85,6 @@ import java.util.function.Function;
 public interface WorkflowModule<C extends WorkflowContext> extends Module {
 
     /**
-     * Adds an additional workflow definition to a module that has already had one or more definitions
-     * registered via the fluent {@link WorkflowDefinitionPhase#definition(Function)} entry point. Use this to
-     * register multiple workflow definitions of the same workflow context type into a SINGLE module so they
-     * share one {@link WorkflowConfigurationRegistry} and
-     * {@link io.axoniq.framework.workflow.runtime.execution.WorkflowEngine WorkflowEngine}.
-     *
-     * @param definition function returning a {@link WorkflowDefinitionPhase.FinalizedPhase} for an additional
-     *                   workflow.
-     * @return this module, for chaining.
-     */
-    WorkflowModule<C> definition(
-            Function<WorkflowDefinitionPhase.DetectionPhase<C>, WorkflowDefinitionPhase.FinalizedPhase<C>> definition
-    );
-
-    /**
      * Creates a new workflow module using default infrastructure settings.
      * <p>
      * The returned builder starts at the {@link LanguagePhase.WorkflowContextFactoryPhase}, skipping the configuration
@@ -132,8 +117,7 @@ public interface WorkflowModule<C extends WorkflowContext> extends Module {
      * @param name        name of the workflow module
      * @param contextType the {@link WorkflowContext} type used by the workflows in this module
      * @param <C>         the type of {@link WorkflowContext} used by the workflows in this module
-     * @return the {@link ConfigurationPhase.WorkflowConfigurationRegistryPhase} phase of this builder, for a fluent
-     * API
+     * @return the {@link ConfigurationPhase.WorkflowConfigurationRegistryPhase} phase of this builder, for a fluent API
      */
     static <C extends WorkflowContext> ConfigurationPhase.WorkflowConfigurationRegistryPhase<C> configure(
             String name,
@@ -141,6 +125,21 @@ public interface WorkflowModule<C extends WorkflowContext> extends Module {
     ) {
         return new SimpleWorkflowModule<>(name, contextType);
     }
+
+    /**
+     * Adds an additional workflow definition to a module that has already had one or more definitions registered via
+     * the fluent {@link WorkflowDefinitionPhase#definition(Function)} entry point. Use this to register multiple
+     * workflow definitions of the same workflow context type into a SINGLE module so they share one
+     * {@link WorkflowConfigurationRegistry} and
+     * {@link io.axoniq.framework.workflow.runtime.execution.WorkflowEngine WorkflowEngine}.
+     *
+     * @param definition function returning a {@link WorkflowDefinitionPhase.FinalizedPhase} for an additional
+     *                   workflow.
+     * @return this module, for chaining.
+     */
+    WorkflowModule<C> definition(
+            Function<WorkflowDefinitionPhase.DetectionPhase<C>, WorkflowDefinitionPhase.FinalizedPhase<C>> definition
+    );
 
     /**
      * Returns the {@link WorkflowContext} type used by the workflows configured in this module.
@@ -166,8 +165,8 @@ public interface WorkflowModule<C extends WorkflowContext> extends Module {
          * <p>
          * The registry stores workflow configurations together with their corresponding
          * {@link EventCondition start conditions}, and is used by the
-         * {@link io.axoniq.framework.workflow.runtime.execution.WorkflowEngine WorkflowEngine} to look up which workflow to
-         * start for a given event.
+         * {@link io.axoniq.framework.workflow.runtime.execution.WorkflowEngine WorkflowEngine} to look up which
+         * workflow to start for a given event.
          *
          * @param <C> the type of {@link WorkflowContext} used by the workflows in this module
          */
@@ -188,7 +187,8 @@ public interface WorkflowModule<C extends WorkflowContext> extends Module {
         }
 
         /**
-         * Phase of the module's building process in which a custom {@link WorkflowExecutionRepository} can be provided.
+         * Phase of the module's building process in which a custom {@link WorkflowExecutionRepository} can be
+         * provided.
          * <p>
          * The repository is responsible for persisting and retrieving workflow instances, where each instance is
          * identified by a unique workflow identifier and bundles configuration, context, and execution state.
@@ -294,8 +294,8 @@ public interface WorkflowModule<C extends WorkflowContext> extends Module {
         /**
          * Defines the workflow definitions for this module.
          * <p>
-         * The provided function receives a {@link DetectionPhase} and should return a {@link FinalizedPhase},
-         * allowing users to chain one or more workflow definitions in a fluent manner.
+         * The provided function receives a {@link DetectionPhase} and should return a {@link FinalizedPhase}, allowing
+         * users to chain one or more workflow definitions in a fluent manner.
          *
          * @param definition a function that defines one or more workflows via the {@link DetectionPhase}
          * @return the completed {@link WorkflowModule}
@@ -305,8 +305,8 @@ public interface WorkflowModule<C extends WorkflowContext> extends Module {
         /**
          * Phase of the workflow definition process in which the detection strategy is chosen.
          * <p>
-         * The detection strategy determines how the workflow definition and its trigger conditions are derived,
-         * either automatically from annotations or manually through a declarative builder.
+         * The detection strategy determines how the workflow definition and its trigger conditions are derived, either
+         * automatically from annotations or manually through a declarative builder.
          *
          * @param <C> the type of {@link WorkflowContext} used by the workflows in this module
          */

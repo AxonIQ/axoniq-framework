@@ -16,8 +16,11 @@
  * For licensing information and to register, visit:
  *  https://www.axoniq.io/pricing
  */
-package io.axoniq.framework.workflow.runtime.api.execution.state;
+package io.axoniq.framework.workflow.runtime.api.execution.context;
 
+
+import io.axoniq.framework.workflow.dsl.api.CombinatorWorkflowStepResult;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStepResult;
 
 import java.util.function.Predicate;
 

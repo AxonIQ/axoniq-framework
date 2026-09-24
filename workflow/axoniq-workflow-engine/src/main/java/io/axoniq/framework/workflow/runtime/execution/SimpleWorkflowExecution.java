@@ -18,22 +18,20 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations;
-
-import io.axoniq.framework.workflow.dsl.api.WorkflowContext;
-import io.axoniq.framework.workflow.runtime.api.execution.FutureResolutionTimeoutException;
+import io.axoniq.framework.workflow.dsl.api.StepInterruptedException;
 import io.axoniq.framework.workflow.dsl.api.WorkflowCancelledException;
+import io.axoniq.framework.workflow.dsl.api.WorkflowContext;
+import io.axoniq.framework.workflow.dsl.api.WorkflowFailedException;
+import io.axoniq.framework.workflow.dsl.api.WorkflowState;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
+import io.axoniq.framework.workflow.runtime.api.execution.FutureResolutionTimeoutException;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
-import io.axoniq.framework.workflow.dsl.api.WorkflowFailedException;
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowReplayDriftException;
-import io.axoniq.framework.workflow.runtime.api.execution.state.StepFailedException;
-import io.axoniq.framework.workflow.runtime.api.execution.state.StepInterruptedException;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowState;
-import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowExecutionCheckpointingSupport.ExecutionTaskQueue;
-import io.axoniq.framework.workflow.runtime.util.ProcessingContextUtils;
 import io.axoniq.framework.workflow.runtime.util.MetadataUtils;
+import io.axoniq.framework.workflow.runtime.util.ProcessingContextUtils;
 import org.axonframework.common.ExceptionUtils;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.eventsourcing.eventstore.AppendCondition;
@@ -75,14 +73,10 @@ import static java.lang.Thread.currentThread;
 public final class SimpleWorkflowExecution implements WorkflowExecution, WorkflowCancellationProvider {
 
     private static final Logger logger = LoggerFactory.getLogger(SimpleWorkflowExecution.class);
-
-    // State variables
-    private volatile EventSourcedWorkflowState workflowState;
     // Attributes
     private final String workflowId;
     private final String workflowName;
     private final WorkflowConfiguration<?> workflowConfiguration;
-
     // Execution
     private final WorkflowExecutionOperationsDelegation contextDelegate;
 
@@ -124,6 +118,12 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
             );
     private final SequencedAppender appender = new SequencedAppender();
     private final WorkflowEventPublisher workflowEventPublisher;
+    // State variables
+    private volatile EventSourcedWorkflowState workflowState;
+    // Runtime
+    private boolean running = false;
+    private boolean stoppedForRecovery = false;
+    private volatile Thread workflowThread;
 
     /**
      * Constructs a new instance.
@@ -132,7 +132,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
      * @param initial               initial payload of workflow instance.
      * @param processingContext     processing context.
      * @param workflowConfiguration workflow configuration.
-     * @param workflowContext           author-facing context created by the factory
+     * @param workflowContext       author-facing context created by the factory
      */
     public SimpleWorkflowExecution(String workflowId,
                                    Map<String, @Nullable Object> initial,
@@ -201,13 +201,17 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
         );
     }
 
+    @SuppressWarnings("unchecked")
+    private static <T extends Throwable> void throwUnchecked(Throwable failure) throws T {
+        throw (T) failure;
+    }
 
     /**
      * {@inheritDoc}
      * <p>
      * The body runs inside a unit of work spanning the instance's entire lifetime. It is created from the
-     * non-transactional {@link WorkflowExecutionOperationsDelegation#workflowBodyUnitOfWorkFactory()} so that no transactional
-     * resources are held while the instance is parked.
+     * non-transactional {@link WorkflowExecutionOperationsDelegation#workflowBodyUnitOfWorkFactory()} so that no
+     * transactional resources are held while the instance is parked.
      */
     @Override
     public CompletableFuture<Void> execute(Consumer<WorkflowExecution> terminationHandler) {
@@ -260,7 +264,6 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
                 )
                 .thenApply(ignored -> null);
     }
-
 
     /**
      * Skips the body of an instance that is already terminal.
@@ -322,7 +325,8 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
                                                  workflowState.workflowDefinitionId(), eventNameCustomizer), ctx);
             });
         }
-        logger.info("Workflow executed. Resulting workflow payload {}.", this.workflowExecutionOperations().workflowPayload());
+        logger.info("Workflow executed. Resulting workflow payload {}.",
+                    this.workflowExecutionOperations().workflowPayload());
     }
 
     /**
@@ -437,12 +441,6 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
         cancellation.callback().complete(null);
         return true;
     }
-
-    @SuppressWarnings("unchecked")
-    private static <T extends Throwable> void throwUnchecked(Throwable failure) throws T {
-        throw (T) failure;
-    }
-
 
     /**
      * Finish the workflow execution, clean up everything, and call the termination handler.
@@ -638,7 +636,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
     /**
      * Appends a workflow-owned event and waits for its durable publication through the context's future resolver.
      *
-     * @param event event to append
+     * @param event   event to append
      * @param context context used for the append and its resolution policy
      */
     private void publishAndWait(EventMessage event, ProcessingContext context) {

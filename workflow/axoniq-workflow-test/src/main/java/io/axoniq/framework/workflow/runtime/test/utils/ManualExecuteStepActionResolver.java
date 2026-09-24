@@ -21,8 +21,8 @@ package io.axoniq.framework.workflow.runtime.test.utils;
 import io.axoniq.framework.workflow.runtime.api.execution.context.ExecutePrimitive;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
-import io.axoniq.framework.workflow.runtime.api.execution.state.StepCancellationException;
-import io.axoniq.framework.workflow.runtime.api.payload.PayloadProcessor;
+import io.axoniq.framework.workflow.dsl.api.StepCancellationException;
+import io.axoniq.framework.workflow.dsl.api.PayloadProcessor;
 import io.axoniq.framework.workflow.runtime.execution.ExecuteStepActionResolver;
 
 import java.util.concurrent.CompletableFuture;

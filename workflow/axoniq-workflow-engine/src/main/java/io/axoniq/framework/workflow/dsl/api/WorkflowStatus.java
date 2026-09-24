@@ -16,11 +16,32 @@
  * For licensing information and to register, visit:
  *  https://www.axoniq.io/pricing
  */
+package io.axoniq.framework.workflow.dsl.api;
+
 /**
- * Lifecycle status enumerations for workflow executions and workflow steps.
+ * Status of the workflow execution.
+ *
+ * @author Stefan Dragisic
+ * @author Simon Zambrovski
  * @since 5.4.0
  */
-@NullMarked
-package io.axoniq.framework.workflow.runtime.api.execution.status;
+public enum WorkflowStatus {
+    NONE,
+    STARTED,
+    COMPLETED,
+    FAILED,
+    CANCELLED,
+    TIMED_OUT;
 
-import org.jspecify.annotations.NullMarked;
+    /**
+     * Checks if the status a terminal.
+     *
+     * @return true, if terminal.
+     */
+    public boolean isTerminal() {
+        return switch (this) {
+            case NONE, STARTED -> false;
+            case COMPLETED, FAILED, CANCELLED, TIMED_OUT -> true;
+        };
+    }
+}

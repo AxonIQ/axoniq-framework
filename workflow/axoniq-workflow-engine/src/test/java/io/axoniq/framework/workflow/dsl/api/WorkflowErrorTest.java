@@ -16,7 +16,7 @@
  * For licensing information and to register, visit:
  *  https://www.axoniq.io/pricing
  */
-package io.axoniq.framework.workflow.runtime.api.execution.state;
+package io.axoniq.framework.workflow.dsl.api;
 
 import org.axonframework.conversion.jackson.JacksonConverter;
 import org.junit.jupiter.api.*;

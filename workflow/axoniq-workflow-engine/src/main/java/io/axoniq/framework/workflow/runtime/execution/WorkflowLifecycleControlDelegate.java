@@ -18,18 +18,17 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations;
-
-import io.axoniq.framework.workflow.runtime.api.execution.FutureResolutionTimeoutException;
+import io.axoniq.framework.workflow.dsl.api.StepCancellationException;
 import io.axoniq.framework.workflow.dsl.api.WorkflowCancelledException;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.framework.workflow.dsl.api.WorkflowFailedException;
+import io.axoniq.framework.workflow.runtime.api.execution.FutureResolutionTimeoutException;
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowLifecycleControl;
-import io.axoniq.framework.workflow.runtime.api.execution.state.StepCancellationException;
 import io.axoniq.framework.workflow.runtime.util.FutureResolver;
 import io.axoniq.framework.workflow.runtime.util.WorkflowStateUtils;
-import org.jspecify.annotations.Nullable;
 import org.axonframework.common.annotation.Internal;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -71,10 +70,10 @@ public class WorkflowLifecycleControlDelegate implements WorkflowLifecycleContro
      * Constructs a lifecycle-control delegate.
      *
      * @param workflowExecutionOperations runtime primitive-operation surface
-     * @param workflowExecution  workflow execution
-     * @param runningSteps       running step registry
-     * @param reachedSteps       reached steps tracker
-     * @param terminalTransition owner of workflow terminal-transition execution mechanics
+     * @param workflowExecution           workflow execution
+     * @param runningSteps                running step registry
+     * @param reachedSteps                reached steps tracker
+     * @param terminalTransition          owner of workflow terminal-transition execution mechanics
      */
     @Internal
     public WorkflowLifecycleControlDelegate(
@@ -85,12 +84,23 @@ public class WorkflowLifecycleControlDelegate implements WorkflowLifecycleContro
             WorkflowTerminalTransition terminalTransition
     ) {
         this.workflowExecutionOperations = Objects.requireNonNull(workflowExecutionOperations,
-                                                                   "Workflow execution operations are mandatory");
+                                                                  "Workflow execution operations are mandatory");
         this.workflowExecution = Objects.requireNonNull(workflowExecution, "Workflow execution is mandatory");
         this.runningSteps = Objects.requireNonNull(runningSteps, "Running steps are mandatory");
         this.reachedSteps = Objects.requireNonNull(reachedSteps, "Reached steps tracker is mandatory");
         this.terminalTransition = Objects.requireNonNull(terminalTransition, "Terminal transition is mandatory");
         this.workflowName = Objects.requireNonNull(workflowExecution.workflowName(), "Workflow name is mandatory");
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <T extends Throwable> void rethrowUnchecked(Throwable exception) throws T {
+        throw (T) exception;
+    }
+
+    private static Exception getException(@Nullable Throwable cause) {
+        return cause instanceof Exception
+                ? (Exception) cause
+                : cause != null ? new RuntimeException(cause) : new RuntimeException("Workflow failed");
     }
 
     @Override
@@ -213,16 +223,5 @@ public class WorkflowLifecycleControlDelegate implements WorkflowLifecycleContro
                          workflowExecution.workflowId(), exception);
             rethrowUnchecked(exception);
         }
-    }
-
-    @SuppressWarnings("unchecked")
-    private static <T extends Throwable> void rethrowUnchecked(Throwable exception) throws T {
-        throw (T) exception;
-    }
-
-    private static Exception getException(@Nullable Throwable cause) {
-        return cause instanceof Exception
-                ? (Exception) cause
-                : cause != null ? new RuntimeException(cause) : new RuntimeException("Workflow failed");
     }
 }

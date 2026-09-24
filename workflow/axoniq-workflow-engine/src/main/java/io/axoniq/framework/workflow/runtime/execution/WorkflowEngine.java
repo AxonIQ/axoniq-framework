@@ -18,11 +18,11 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
-import io.axoniq.license.entitlement.EntitlementManager;
+import io.axoniq.framework.workflow.dsl.api.WorkflowState;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.framework.workflow.runtime.util.MetadataUtils;
 import io.axoniq.framework.workflow.runtime.util.ProcessingContextUtils;
+import io.axoniq.license.entitlement.EntitlementManager;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.configuration.ComponentNotFoundException;
 import org.axonframework.eventsourcing.eventstore.ConsistencyMarker;
@@ -67,8 +67,6 @@ public class WorkflowEngine implements
         EventHandler,
         WorkflowEngineCheckpointingSupport.CheckpointLatchCoordinator {
 
-    private static final Logger logger = LoggerFactory.getLogger(WorkflowEngine.class);
-
     /**
      * Time {@link #restoreWorkflowsFor(Segment, TrackingToken, ProcessingContext, ProcessingContext)} is given to load
      * a segment's durable state before it fails the claim.
@@ -78,18 +76,18 @@ public class WorkflowEngine implements
      * release needs no such bound: the processor already caps it at its claim extension threshold.
      */
     static final Duration DEFAULT_RESTORE_TIMEOUT = Duration.ofSeconds(30);
-
+    private static final Logger logger = LoggerFactory.getLogger(WorkflowEngine.class);
     private final WorkflowConfigurationRegistry<?> workflowConfigurationRegistry;
     private final WorkflowExecutionRepository workflowExecutionRepository;
     private final WorkflowCancellationService workflowCancellationService;
     private final WorkflowStore workflowStore;
     private final UnitOfWorkFactory unitOfWorkFactory;
-    private WorkflowEngineCheckpointingSupport checkpointingSupport;
     private final WorkflowEngineCatchUpSupport catchUpSupport = new WorkflowEngineCatchUpSupport();
     private final WorkflowEngineSequencingPolicy segmentedRouting;
     private final UnsafeCheckpointWorkIndex checkpointWorkIndex = new UnsafeCheckpointWorkIndex();
     // Package-private so a test can shrink it instead of waiting out the production timeout.
     Duration restoreTimeout = DEFAULT_RESTORE_TIMEOUT;
+    private WorkflowEngineCheckpointingSupport checkpointingSupport;
 
     /**
      * Creates a new workflow engine. Be sure to follow-up construction of a {@code WorkflowEngine} with an invocation
@@ -129,6 +127,26 @@ public class WorkflowEngine implements
         this.unitOfWorkFactory = requireNonNull(unitOfWorkFactory, "The UnitOfWorkFactory must not be null.");
         this.segmentedRouting = new WorkflowEngineSequencingPolicy(workflowConfigurationRegistry);
         EntitlementManager.INSTANCE.registerAddon(WorkflowAxoniqAddon.class);
+    }
+
+    /**
+     * Returns the position the given context's sourcing ended at.
+     * <p>
+     * The current Event Store does not add its append position to the processing context when sourcing. Retrieve it
+     * from the context-bound transaction until {@link ConsistencyMarker} provides a corresponding context accessor. The
+     * missing-component path keeps focused engine tests that construct an engine without a full workflow configuration
+     * independent of the Event Store.
+     *
+     * @param sourcingContext context used to source the workflow state
+     * @return the marker at which sourcing ended
+     */
+    @Nullable
+    private static ConsistencyMarker sourcedAt(ProcessingContext sourcingContext) {
+        try {
+            return sourcingContext.component(EventStore.class).transaction(sourcingContext).appendPosition();
+        } catch (ComponentNotFoundException e) {
+            return null;
+        }
     }
 
     /**
@@ -466,10 +484,10 @@ public class WorkflowEngine implements
     /**
      * Sources one instance in a unit of work of its own and restores it at the position that read ended at.
      * <p>
-     * The position has to be the instance's own: a transaction shared by every instance of the claim ends at the
-     * lowest of its reads, and a previous owner appending while the claim is still reading leaves that position before
-     * an event the claim itself sourced. The restored execution would then be rejected by its own history and stop,
-     * even though its state is current. Reading one instance per transaction leaves each position at or after that
+     * The position has to be the instance's own: a transaction shared by every instance of the claim ends at the lowest
+     * of its reads, and a previous owner appending while the claim is still reading leaves that position before an
+     * event the claim itself sourced. The restored execution would then be rejected by its own history and stop, even
+     * though its state is current. Reading one instance per transaction leaves each position at or after that
      * instance's last event, so only a write that lands after this read rejects the execution, which is a foreign
      * writer and exactly what should stop it.
      *
@@ -494,26 +512,6 @@ public class WorkflowEngine implements
                                                                  sourcedAt(sourcingContext)));
                 })
                 .thenApply(ignored -> null);
-    }
-
-    /**
-     * Returns the position the given context's sourcing ended at.
-     *
-     * The current Event Store does not add its append position to the processing context when sourcing. Retrieve it
-     * from the context-bound transaction until {@link ConsistencyMarker} provides a corresponding context accessor.
-     * The missing-component path keeps focused engine tests that construct an engine without a full workflow
-     * configuration independent of the Event Store.
-     *
-     * @param sourcingContext context used to source the workflow state
-     * @return the marker at which sourcing ended
-     */
-    @Nullable
-    private static ConsistencyMarker sourcedAt(ProcessingContext sourcingContext) {
-        try {
-            return sourcingContext.component(EventStore.class).transaction(sourcingContext).appendPosition();
-        } catch (ComponentNotFoundException e) {
-            return null;
-        }
     }
 
     private void restoreWorkflow(String workflowId,

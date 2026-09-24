@@ -18,22 +18,18 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations;
-
-import org.jspecify.annotations.Nullable;
-
-import io.axoniq.framework.workflow.runtime.api.execution.FutureResolutionTimeoutException;
 import io.axoniq.framework.workflow.dsl.api.EventCondition;
 import io.axoniq.framework.workflow.dsl.api.EventNameCustomizer;
+import io.axoniq.framework.workflow.dsl.api.StepStatus;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStepResult;
+import io.axoniq.framework.workflow.runtime.api.execution.FutureResolutionTimeoutException;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WaitForPrimitive;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowStepResult;
-import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations;
 import io.axoniq.framework.workflow.runtime.util.FutureResolver;
 import io.axoniq.framework.workflow.runtime.util.WorkflowStateUtils;
 import org.axonframework.common.annotation.Internal;
-import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
-import org.axonframework.messaging.eventhandling.EventSink;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -43,7 +39,6 @@ import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.Executor;
 
 
 /**
@@ -63,16 +58,16 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
      * Constructs the delegate.
      *
      * @param workflowExecutionOperations runtime primitive-operation surface
-     * @param workflowExecution          workflow state.
-     * @param runningSteps              running step registry
-     * @param eventWaitConditions       event wait condition registry
-     * @param reachedSteps              reached steps tracker
-     * @param parentEventNameCustomizer parent event name customizer.
-     * @param clock                     clock for time calculations.
-     * @param unitOfWorkFactory         unit of work factory for creation of new process contexts.
-     * @param eventSink                 event sink to publish events.
-     * @param executor                  executor to offload threads from main thread.
-     * @param timeoutScheduler          scheduler for workflow step timeouts
+     * @param workflowExecution           workflow state.
+     * @param runningSteps                running step registry
+     * @param eventWaitConditions         event wait condition registry
+     * @param reachedSteps                reached steps tracker
+     * @param parentEventNameCustomizer   parent event name customizer.
+     * @param clock                       clock for time calculations.
+     * @param unitOfWorkFactory           unit of work factory for creation of new process contexts.
+     * @param eventSink                   event sink to publish events.
+     * @param executor                    executor to offload threads from main thread.
+     * @param timeoutScheduler            scheduler for workflow step timeouts
      */
     @Internal
     public WaitForDelegate(
@@ -140,13 +135,13 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
                 eventWaitConditions.add(stepName, eventCondition, resultPayloadReducer, eventNameCustomizer);
                 var timeoutTask = timeoutScheduler.schedule(timeoutDeadline);
                 timeoutTask.completion().thenRun(() -> workflowExecution.appendTask(i -> {
-                            eventWaitConditions.remove(stepName);
-                            runningSteps.remove(stepName);
-                            if (WorkflowStateUtils.isStepActive(i.state(), stepName)) {
-                                // Only timeout if the event has not already completed the step.
-                                timedOutWaitForEvent(stepName, eventNameCustomizer);
-                            }
-                        }));
+                    eventWaitConditions.remove(stepName);
+                    runningSteps.remove(stepName);
+                    if (WorkflowStateUtils.isStepActive(i.state(), stepName)) {
+                        // Only timeout if the event has not already completed the step.
+                        timedOutWaitForEvent(stepName, eventNameCustomizer);
+                    }
+                }));
                 registerParkedStep(stepName, timeoutTask.completion(), timeoutTask::cancel, eventNameCustomizer,
                                    () -> eventWaitConditions.remove(stepName));
             }
@@ -184,8 +179,8 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
     }
 
     private Map<String, @Nullable Object> startedPayload(EventCondition eventCondition,
-                                               Instant startedAt,
-                                               Duration timeout) {
+                                                         Instant startedAt,
+                                                         Duration timeout) {
         var payload = new LinkedHashMap<String, @Nullable Object>();
         payload.put("startTime", startedAt);
         payload.put("eventName", eventCondition.qualifiedName().toString());

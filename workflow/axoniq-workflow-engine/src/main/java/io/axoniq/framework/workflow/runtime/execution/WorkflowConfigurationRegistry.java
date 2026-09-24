@@ -51,6 +51,42 @@ import java.util.stream.Collectors;
 public interface WorkflowConfigurationRegistry<W extends WorkflowConfigurationRegistry<W>>
         extends DescribableComponent {
 
+    /**
+     * Convenience helper that resolves the {@link WorkflowConfiguration} for an in-flight workflow's body against the
+     * registry available on the given {@link ProcessingContext}. When the registry is unavailable (e.g. tests that wire
+     * the execution directly without a registry component), logs a {@code [registry-missing]} routing line and falls
+     * back to {@code startConfig}.
+     */
+    static WorkflowConfiguration<?> resolveOrFallback(
+            ProcessingContext ctx,
+            String workflowName,
+            String workflowId,
+            String stateVersion,
+            WorkflowConfiguration<?> startConfig
+    ) {
+        WorkflowConfigurationRegistry<?> registry = ctx.component(WorkflowConfigurationRegistry.class);
+        if (registry == null) {
+            RoutingLog.LOGGER.warn(
+                    "Workflow {} ({}) routing: state='{}' definitions=<registry unavailable> -> target='{}' "
+                            + "[registry-missing] (cannot look up siblings; falling back to start-time definition)",
+                    workflowName, workflowId, stateVersion, startConfig.workflowVersion());
+            return startConfig;
+        }
+        return registry.resolveDefinitionForReplay(workflowName, workflowId, stateVersion, startConfig);
+    }
+
+    private static void logRoutingDecision(String workflowName,
+                                           String workflowId,
+                                           String stateVersion,
+                                           List<String> registeredVersions,
+                                           String targetVersion,
+                                           String decision,
+                                           String reason) {
+        RoutingLog.LOGGER.info("Workflow {} ({}) routing: state='{}' definitions={} -> target='{}' [{}] ({})",
+                               workflowName, workflowId, stateVersion, registeredVersions, targetVersion,
+                               decision, reason);
+    }
+
     default W register(
             QualifiedName qualifiedName,
             WorkflowConfiguration<?> workflowConfiguration
@@ -338,42 +374,6 @@ public interface WorkflowConfigurationRegistry<W extends WorkflowConfigurationRe
                         + "step names diverge)",
                 workflowName, workflowId, stateVersion, registered, configVersion);
         return startConfig;
-    }
-
-    /**
-     * Convenience helper that resolves the {@link WorkflowConfiguration} for an in-flight workflow's body against the
-     * registry available on the given {@link ProcessingContext}. When the registry is unavailable (e.g. tests that wire
-     * the execution directly without a registry component), logs a {@code [registry-missing]} routing line and falls
-     * back to {@code startConfig}.
-     */
-    static WorkflowConfiguration<?> resolveOrFallback(
-            ProcessingContext ctx,
-            String workflowName,
-            String workflowId,
-            String stateVersion,
-            WorkflowConfiguration<?> startConfig
-    ) {
-        WorkflowConfigurationRegistry<?> registry = ctx.component(WorkflowConfigurationRegistry.class);
-        if (registry == null) {
-            RoutingLog.LOGGER.warn(
-                    "Workflow {} ({}) routing: state='{}' definitions=<registry unavailable> -> target='{}' "
-                            + "[registry-missing] (cannot look up siblings; falling back to start-time definition)",
-                    workflowName, workflowId, stateVersion, startConfig.workflowVersion());
-            return startConfig;
-        }
-        return registry.resolveDefinitionForReplay(workflowName, workflowId, stateVersion, startConfig);
-    }
-
-    private static void logRoutingDecision(String workflowName,
-                                           String workflowId,
-                                           String stateVersion,
-                                           List<String> registeredVersions,
-                                           String targetVersion,
-                                           String decision,
-                                           String reason) {
-        RoutingLog.LOGGER.info("Workflow {} ({}) routing: state='{}' definitions={} -> target='{}' [{}] ({})",
-                               workflowName, workflowId, stateVersion, registeredVersions, targetVersion,
-                               decision, reason);
     }
 
     /**

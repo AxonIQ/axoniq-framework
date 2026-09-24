@@ -35,14 +35,6 @@ public interface BackoffStrategy {
     BackoffStrategy NONE = attempt -> Duration.ZERO;
 
     /**
-     * Computes the delay before the given retry attempt.
-     *
-     * @param attempt the retry attempt number (1-based).
-     * @return the duration to wait before executing the attempt.
-     */
-    Duration delay(int attempt);
-
-    /**
      * Fixed delay between every retry attempt.
      *
      * @param delay constant delay duration.
@@ -63,8 +55,8 @@ public interface BackoffStrategy {
     }
 
     /**
-     * Exponential backoff: {@code min(base * 2^(attempt-1), max)}, clamped to {@code max} at large attempt counts so the
-     * factor/multiply can never overflow, go negative, or wrap.
+     * Exponential backoff: {@code min(base * 2^(attempt-1), max)}, clamped to {@code max} at large attempt counts so
+     * the factor/multiply can never overflow, go negative, or wrap.
      *
      * @param base base delay for the first attempt.
      * @param max  maximum delay cap.
@@ -81,4 +73,12 @@ public interface BackoffStrategy {
             return computed.compareTo(max) > 0 ? max : computed;
         };
     }
+
+    /**
+     * Computes the delay before the given retry attempt.
+     *
+     * @param attempt the retry attempt number (1-based).
+     * @return the duration to wait before executing the attempt.
+     */
+    Duration delay(int attempt);
 }

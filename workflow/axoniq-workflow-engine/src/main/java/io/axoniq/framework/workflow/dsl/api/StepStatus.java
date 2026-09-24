@@ -16,7 +16,7 @@
  * For licensing information and to register, visit:
  *  https://www.axoniq.io/pricing
  */
-package io.axoniq.framework.workflow.runtime.api.execution.status;
+package io.axoniq.framework.workflow.dsl.api;
 
 /**
  * Step status.
@@ -32,8 +32,8 @@ public enum StepStatus {
      */
     STARTED,
     /**
-     * An attempt failed and the retry policy allows another one. The step waits for the backoff before the next
-     * attempt starts.
+     * An attempt failed and the retry policy allows another one. The step waits for the backoff before the next attempt
+     * starts.
      */
     RETRYING,
     /**

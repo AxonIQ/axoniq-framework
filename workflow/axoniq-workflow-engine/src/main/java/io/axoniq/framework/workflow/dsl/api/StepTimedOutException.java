@@ -16,17 +16,16 @@
  * For licensing information and to register, visit:
  *  https://www.axoniq.io/pricing
  */
-package io.axoniq.framework.workflow.runtime.api.execution.state;
+package io.axoniq.framework.workflow.dsl.api;
 
 
 /**
  * Exception thrown when an individual step reaches its configured timeout before completing.
  * <p>
- * Surfaced by DSL helpers (e.g. {@code awaitEvent}, {@code awaitExecute}) when the step ends
- * in the {@code TIMED_OUT} state. A subtype of {@link StepFailedException}: callers that want
- * to handle any step-level failure can catch the parent; callers that need to distinguish a
- * timeout specifically can catch this type. Distinct from {@link StepCancellationException}
- * (explicit cancellation).
+ * Surfaced by DSL helpers (e.g. {@code awaitEvent}, {@code awaitExecute}) when the step ends in the {@code TIMED_OUT}
+ * state. A subtype of {@link StepFailedException}: callers that want to handle any step-level failure can catch the
+ * parent; callers that need to distinguish a timeout specifically can catch this type. Distinct from
+ * {@link StepCancellationException} (explicit cancellation).
  *
  * @author Stefan Dragisic
  * @since 5.4.0

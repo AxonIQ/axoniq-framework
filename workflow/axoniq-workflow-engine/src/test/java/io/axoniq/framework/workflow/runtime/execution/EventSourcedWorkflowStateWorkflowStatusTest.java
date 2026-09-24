@@ -18,11 +18,9 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
-import org.jspecify.annotations.Nullable;
-
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowError;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowExecutionException;
-import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
+import io.axoniq.framework.workflow.dsl.api.WorkflowError;
+import io.axoniq.framework.workflow.dsl.api.WorkflowExecutionException;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.execution.payload.PayloadReducerRegistry;
 import io.axoniq.framework.workflow.runtime.util.MetadataUtils;
 import org.axonframework.conversion.jackson.JacksonConverter;
@@ -62,7 +60,7 @@ class EventSourcedWorkflowStateWorkflowStatusTest {
     void testEvolvePayloadSuccess() {
         Metadata metadata = MetadataUtils.create("wfId", WorkflowStatus.STARTED)
                                          .and(MetadataUtils.METADATA_KEY_MODIFY_PAYLOAD,
-                                           NAME);
+                                              NAME);
         EventMessage eventMessage = new GenericEventMessage(new MessageType("evolve"),
                                                             Map.of("newKey", "newValue"),
                                                             metadata);
@@ -77,7 +75,7 @@ class EventSourcedWorkflowStateWorkflowStatusTest {
     void testEvolvePayloadWithNonMapPayloadDoesNotThrow() {
         Metadata metadata = MetadataUtils.create("wfId", WorkflowStatus.STARTED)
                                          .and(MetadataUtils.METADATA_KEY_MODIFY_PAYLOAD,
-                                           NAME);
+                                              NAME);
         // String payload cannot be converted to Map<String, @Nullable Object> via Jackson as a root object if it is not a JSON object
         EventMessage eventMessage = new GenericEventMessage(new MessageType("evolve"),
                                                             "Not a Map",

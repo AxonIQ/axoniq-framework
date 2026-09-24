@@ -18,9 +18,6 @@
  */
 package io.axoniq.framework.workflow.dsl.api;
 
-import io.axoniq.framework.workflow.dsl.api.EventNameCustomizer;
-import io.axoniq.framework.workflow.dsl.api.PrimitiveMetadata;
-
 /**
  * Specification for terminating a workflow with failure.
  *

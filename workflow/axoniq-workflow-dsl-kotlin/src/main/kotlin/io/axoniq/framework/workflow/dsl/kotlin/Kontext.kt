@@ -20,15 +20,14 @@ package io.axoniq.framework.workflow.dsl.kotlin
 
 import io.axoniq.framework.workflow.dsl.api.Payload
 import io.axoniq.framework.workflow.dsl.api.*
-import io.axoniq.framework.workflow.runtime.api.execution.context.*
 import io.axoniq.framework.workflow.dsl.api.retry.RetryPolicy
-import io.axoniq.framework.workflow.runtime.api.execution.state.CombinatorWorkflowStepResult
-import io.axoniq.framework.workflow.runtime.api.execution.state.StepCancellationException
-import io.axoniq.framework.workflow.runtime.api.execution.state.StepTimedOutException
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowStepResult
-import io.axoniq.framework.workflow.runtime.api.payload.PayloadModification
-import io.axoniq.framework.workflow.runtime.api.payload.PayloadProcessor
-import io.axoniq.framework.workflow.runtime.api.payload.PayloadReducer
+import io.axoniq.framework.workflow.dsl.api.CombinatorWorkflowStepResult
+import io.axoniq.framework.workflow.dsl.api.StepCancellationException
+import io.axoniq.framework.workflow.dsl.api.StepTimedOutException
+import io.axoniq.framework.workflow.dsl.api.WorkflowStepResult
+import io.axoniq.framework.workflow.dsl.api.PayloadModification
+import io.axoniq.framework.workflow.dsl.api.PayloadProcessor
+import io.axoniq.framework.workflow.dsl.api.PayloadReducer
 import io.axoniq.framework.workflow.runtime.association.Associations
 import io.axoniq.framework.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.defaults
 import io.axoniq.framework.workflow.runtime.execution.payload.GlobalOnlyPayloadReducer
@@ -624,7 +623,7 @@ class Kontext(
 
     /**
      * Cancels a single running step by name without terminating the workflow.
-     * The step's future is completed exceptionally with a [io.axoniq.framework.workflow.runtime.api.execution.state.StepCancellationException].
+     * The step's future is completed exceptionally with a [StepCancellationException].
      *
      * @param stepName the name of the step to cancel
      * @param eventNameCustomizer customizer for the published event name
@@ -635,7 +634,7 @@ class Kontext(
     /**
      * Cancels a single running step by name without terminating the workflow.
      * The step's future is completed exceptionally with the given cause, wrapped in a
-     * [io.axoniq.framework.workflow.runtime.api.execution.state.StepCancellationException] if it isn't one already.
+     * [StepCancellationException] if it isn't one already.
      *
      * @param stepName the name of the step to cancel
      * @param cause the exception that caused the step cancellation
@@ -646,7 +645,7 @@ class Kontext(
 
     /**
      * Cancels a single running step by name without terminating the workflow.
-     * The step's future is completed exceptionally with a [io.axoniq.framework.workflow.runtime.api.execution.state.StepCancellationException]
+     * The step's future is completed exceptionally with a [StepCancellationException]
      * carrying the given reason.
      *
      * @param stepName the name of the step to cancel

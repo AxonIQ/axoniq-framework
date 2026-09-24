@@ -18,9 +18,6 @@
  */
 package io.axoniq.framework.workflow.dsl.api;
 
-import io.axoniq.framework.workflow.runtime.api.execution.state.CombinatorWorkflowStepResult;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowStepResult;
-import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
 import org.jspecify.annotations.Nullable;
 
 import java.util.List;

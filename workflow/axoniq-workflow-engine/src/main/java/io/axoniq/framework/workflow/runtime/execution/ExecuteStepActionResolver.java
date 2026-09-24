@@ -18,11 +18,10 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations;
-
+import io.axoniq.framework.workflow.dsl.api.PayloadProcessor;
 import io.axoniq.framework.workflow.runtime.api.execution.context.ExecutePrimitive;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
-import io.axoniq.framework.workflow.runtime.api.payload.PayloadProcessor;
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations;
 import org.axonframework.common.annotation.Internal;
 
 /**
@@ -42,8 +41,8 @@ public interface ExecuteStepActionResolver {
      * Resolve the action for the given execute command.
      *
      * @param workflowExecutionOperations runtime primitive-operation surface
-     * @param workflowExecution workflow execution.
-     * @param command           execute command.
+     * @param workflowExecution           workflow execution.
+     * @param command                     execute command.
      * @return action to invoke.
      */
     PayloadProcessor resolve(WorkflowExecutionOperations workflowExecutionOperations,

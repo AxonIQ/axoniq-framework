@@ -18,16 +18,16 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
-import io.axoniq.framework.workflow.runtime.api.execution.context.Version;
+import io.axoniq.framework.workflow.dsl.api.StepIndeterminateException;
+import io.axoniq.framework.workflow.dsl.api.StepRetryInfo;
+import io.axoniq.framework.workflow.dsl.api.StepStatus;
 import io.axoniq.framework.workflow.dsl.api.WorkflowContext;
+import io.axoniq.framework.workflow.dsl.api.WorkflowError;
+import io.axoniq.framework.workflow.dsl.api.WorkflowExecutionException;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStep;
+import io.axoniq.framework.workflow.runtime.api.execution.context.Version;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowStatusChangeListener;
-import io.axoniq.framework.workflow.runtime.api.execution.state.StepIndeterminateException;
-import io.axoniq.framework.workflow.runtime.api.execution.state.StepRetryInfo;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowError;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowExecutionException;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowStep;
-import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
-import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.execution.payload.PayloadReducerRegistry;
 import io.axoniq.framework.workflow.runtime.util.MetadataUtils;
 import org.axonframework.common.TypeReference;
@@ -55,6 +55,14 @@ class EventSourcedWorkflowStateTest {
 
     private EventSourcedWorkflowState state;
     private ProcessingContext processingContext;
+
+    private static EventMessage stepEvent(String stepName, StepStatus status, StepRetryInfo retryInfo) {
+        EventMessage eventMessage = mock(EventMessage.class);
+        when(eventMessage.metadata()).thenReturn(MetadataUtils.create("workflowId", stepName, status));
+        when(eventMessage.timestamp()).thenReturn(Instant.now());
+        when(eventMessage.payloadAs(StepRetryInfo.class)).thenReturn(retryInfo);
+        return eventMessage;
+    }
 
     @BeforeEach
     void setUp() {
@@ -220,14 +228,6 @@ class EventSourcedWorkflowStateTest {
         assertThat(step.result()).isEqualTo(attemptTwo);
         assertThat(step.error()).isInstanceOfSatisfying(WorkflowExecutionException.class, e ->
                 assertThat(e.getMessage()).isEqualTo("retry error"));
-    }
-
-    private static EventMessage stepEvent(String stepName, StepStatus status, StepRetryInfo retryInfo) {
-        EventMessage eventMessage = mock(EventMessage.class);
-        when(eventMessage.metadata()).thenReturn(MetadataUtils.create("workflowId", stepName, status));
-        when(eventMessage.timestamp()).thenReturn(Instant.now());
-        when(eventMessage.payloadAs(StepRetryInfo.class)).thenReturn(retryInfo);
-        return eventMessage;
     }
 
     @Test

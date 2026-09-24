@@ -16,16 +16,16 @@
  * For licensing information and to register, visit:
  *  https://www.axoniq.io/pricing
  */
-package io.axoniq.framework.workflow.runtime.api.execution.state;
+package io.axoniq.framework.workflow.dsl.api;
 
 import org.jspecify.annotations.Nullable;
 
 /**
  * Base exception type for individual step failures surfaced by the DSL.
  * <p>
- * Catch {@code StepFailedException} to handle any abnormal step termination — failure,
- * timeout, or cancellation. {@link StepTimedOutException} and {@link StepCancellationException}
- * are subtypes for callers that need to distinguish those cases.
+ * Catch {@code StepFailedException} to handle any abnormal step termination — failure, timeout, or cancellation.
+ * {@link StepTimedOutException} and {@link StepCancellationException} are subtypes for callers that need to distinguish
+ * those cases.
  *
  * @author Stefan Dragisic
  * @since 5.4.0

@@ -28,7 +28,7 @@ import static io.axoniq.framework.workflow.runtime.util.WorkflowReflectionUtils.
  * Workflow execution factory adopting an author-facing context implementing {@link AbstractWorkflowContext}.
  *
  * @param <C> type of the implementation.
- * @author Simon Zambrovki
+ * @author Simon Zambrovski
  * @since 5.4.0
  */
 public class WorkflowContextAdoptingExecutionFactory<C extends WorkflowContext> implements

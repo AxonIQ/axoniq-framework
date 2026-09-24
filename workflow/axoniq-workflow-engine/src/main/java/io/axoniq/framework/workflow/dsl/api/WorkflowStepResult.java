@@ -16,12 +16,11 @@
  * For licensing information and to register, visit:
  *  https://www.axoniq.io/pricing
  */
-package io.axoniq.framework.workflow.runtime.api.execution.state;
-
-import org.jspecify.annotations.Nullable;
+package io.axoniq.framework.workflow.dsl.api;
 
 import org.axonframework.common.TypeReference;
 import org.axonframework.conversion.Converter;
+import org.jspecify.annotations.Nullable;
 
 import java.lang.reflect.Type;
 import java.util.Map;
@@ -29,6 +28,7 @@ import java.util.Optional;
 
 /**
  * Represents a result of a step execution.
+ *
  * @since 5.4.0
  */
 public interface WorkflowStepResult {

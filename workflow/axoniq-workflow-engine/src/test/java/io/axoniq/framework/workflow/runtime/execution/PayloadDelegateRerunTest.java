@@ -18,41 +18,34 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations;
-
 import io.axoniq.framework.workflow.dsl.api.EventNameCustomizer;
+import io.axoniq.framework.workflow.dsl.api.PayloadModification;
+import io.axoniq.framework.workflow.dsl.api.StepStatus;
+import io.axoniq.framework.workflow.dsl.api.WorkflowState;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStep;
 import io.axoniq.framework.workflow.runtime.api.execution.context.PrimitiveCommands;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowState;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowStep;
-import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
-import io.axoniq.framework.workflow.runtime.api.payload.PayloadModification;
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventSink;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Map;
 import java.util.concurrent.Executor;
 
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
 
 /**
  * Regression test for the replay-skip gate in {@link PayloadDelegate#modifyPayload}.
  * <p>
- * {@code modifyPayload} publishes a COMPLETED terminal step event directly. On a post-crash live re-run
- * (replay) the step is already present in the event-sourced {@link WorkflowState}, so re-publishing it would
- * produce a duplicate terminal step record. The fix gates the {@code appendTask}/publish on
- * {@code !state().containsStep(stepName)} — the same replay-skip gate the other primitives have — so the
- * terminal step is published exactly once across a re-run.
+ * {@code modifyPayload} publishes a COMPLETED terminal step event directly. On a post-crash live re-run (replay) the
+ * step is already present in the event-sourced {@link WorkflowState}, so re-publishing it would produce a duplicate
+ * terminal step record. The fix gates the {@code appendTask}/publish on {@code !state().containsStep(stepName)} — the
+ * same replay-skip gate the other primitives have — so the terminal step is published exactly once across a re-run.
  *
  * @author Stefan Dragisic
  */
@@ -88,9 +81,9 @@ class PayloadDelegateRerunTest {
     }
 
     /**
-     * Post-crash live re-run: the step already exists in the event-sourced state as a COMPLETED terminal
-     * step. {@code modifyPayload} must NOT append a publishing task again, otherwise a duplicate terminal
-     * step record would be produced. With the gate, exactly zero new tasks are appended on the re-run.
+     * Post-crash live re-run: the step already exists in the event-sourced state as a COMPLETED terminal step.
+     * {@code modifyPayload} must NOT append a publishing task again, otherwise a duplicate terminal step record would
+     * be produced. With the gate, exactly zero new tasks are appended on the re-run.
      */
     @Test
     void modifyPayloadDoesNotRepublishWhenStepAlreadyInStateOnRerun() {
@@ -110,9 +103,8 @@ class PayloadDelegateRerunTest {
     }
 
     /**
-     * First live run: the step is not yet in state, so {@code modifyPayload} appends exactly one publishing
-     * task (after passing the drift guard). This is the sole publish that, on a subsequent re-run, must not
-     * be repeated.
+     * First live run: the step is not yet in state, so {@code modifyPayload} appends exactly one publishing task (after
+     * passing the drift guard). This is the sole publish that, on a subsequent re-run, must not be repeated.
      */
     @Test
     void modifyPayloadPublishesOnceOnFirstLiveRun() {

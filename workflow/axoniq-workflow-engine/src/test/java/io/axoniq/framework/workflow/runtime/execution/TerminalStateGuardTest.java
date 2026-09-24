@@ -18,14 +18,11 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations;
-
-import org.jspecify.annotations.Nullable;
-
 import io.axoniq.framework.workflow.dsl.api.EventNameCustomizer;
 import io.axoniq.framework.workflow.dsl.api.WorkflowContext;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
-import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations;
 import io.axoniq.framework.workflow.runtime.execution.payload.PayloadReducerRegistry;
 import io.axoniq.framework.workflow.runtime.util.EventMessageUtils;
 import org.axonframework.conversion.jackson.JacksonConverter;
@@ -38,6 +35,7 @@ import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.EventSink;
 import org.axonframework.messaging.eventhandling.conversion.DelegatingEventConverter;
 import org.axonframework.messaging.eventhandling.conversion.EventConverter;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.*;
 
 import java.time.Clock;
@@ -71,35 +69,6 @@ class TerminalStateGuardTest {
     private UnitOfWorkFactory unitOfWorkFactory;
     private Executor executor;
     private EventNameCustomizer eventNameCustomizer = defaults();
-
-    /**
-     * Concrete subclass to expose the protected methods for testing.
-     */
-    private static class TestableStepExecutor extends AbstractStepExecutor {
-
-        TestableStepExecutor(WorkflowExecutionOperations workflowExecutionOperations, WorkflowExecution workflowExecution,
-                             EventNameCustomizer parentEventNameCustomizer, Clock clock,
-                             UnitOfWorkFactory unitOfWorkFactory, EventSink eventSink, Executor executor) {
-            super(workflowExecutionOperations, workflowExecution, new RunningSteps(), new ReachedSteps(), parentEventNameCustomizer,
-                  clock, new ControllableWorkflowScheduler());
-        }
-
-        CompletableFuture<Void> testCompleted(String stepName, Map<String, @Nullable Object> payload,
-                                              EventNameCustomizer eventNameCustomizer) {
-            return completed(stepName, payload, eventNameCustomizer);
-        }
-
-        CompletableFuture<Void> testFailed(String stepName, Throwable ex,
-                                           EventNameCustomizer eventNameCustomizer) {
-            return failed(stepName, ex, eventNameCustomizer);
-        }
-
-        CompletableFuture<Void> testStarted(String stepName, Map<String, @Nullable Object> payload,
-                                            EventNameCustomizer eventNameCustomizer) {
-            return started(stepName, payload, eventNameCustomizer);
-        }
-    }
-
     private TestableStepExecutor stepExecutor;
 
     @SuppressWarnings("unchecked")
@@ -221,5 +190,39 @@ class TerminalStateGuardTest {
                 .isInstanceOf(CompletionException.class)
                 .hasCauseInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("my-step");
+    }
+
+    /**
+     * Concrete subclass to expose the protected methods for testing.
+     */
+    private static class TestableStepExecutor extends AbstractStepExecutor {
+
+        TestableStepExecutor(WorkflowExecutionOperations workflowExecutionOperations,
+                             WorkflowExecution workflowExecution,
+                             EventNameCustomizer parentEventNameCustomizer, Clock clock,
+                             UnitOfWorkFactory unitOfWorkFactory, EventSink eventSink, Executor executor) {
+            super(workflowExecutionOperations,
+                  workflowExecution,
+                  new RunningSteps(),
+                  new ReachedSteps(),
+                  parentEventNameCustomizer,
+                  clock,
+                  new ControllableWorkflowScheduler());
+        }
+
+        CompletableFuture<Void> testCompleted(String stepName, Map<String, @Nullable Object> payload,
+                                              EventNameCustomizer eventNameCustomizer) {
+            return completed(stepName, payload, eventNameCustomizer);
+        }
+
+        CompletableFuture<Void> testFailed(String stepName, Throwable ex,
+                                           EventNameCustomizer eventNameCustomizer) {
+            return failed(stepName, ex, eventNameCustomizer);
+        }
+
+        CompletableFuture<Void> testStarted(String stepName, Map<String, @Nullable Object> payload,
+                                            EventNameCustomizer eventNameCustomizer) {
+            return started(stepName, payload, eventNameCustomizer);
+        }
     }
 }

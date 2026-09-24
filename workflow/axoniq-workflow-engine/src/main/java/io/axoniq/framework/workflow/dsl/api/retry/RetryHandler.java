@@ -19,8 +19,8 @@
 package io.axoniq.framework.workflow.dsl.api.retry;
 
 /**
- * Callback invoked on each retry attempt, before publishing the RETRYING event.
- * Use for logging, metrics, or other side effects. Not called during replay.
+ * Callback invoked on each retry attempt, before publishing the RETRYING event. Use for logging, metrics, or other side
+ * effects. Not called during replay.
  *
  * @author Stefan Dragisic
  * @since 5.4.0
@@ -31,7 +31,8 @@ public interface RetryHandler {
     /**
      * Retry handler that performs no side effects.
      */
-    RetryHandler NOOP = context -> {};
+    RetryHandler NOOP = context -> {
+    };
 
     /**
      * Invoked when a retry attempt is about to be published and executed.

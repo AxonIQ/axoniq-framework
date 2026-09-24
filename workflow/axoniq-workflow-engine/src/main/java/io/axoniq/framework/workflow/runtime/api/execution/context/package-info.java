@@ -20,10 +20,11 @@
  * Internal runtime contracts for workflow execution, command dispatch, configuration, and event publication.
  * Author-facing step definitions and event conditions reside in {@link WorkflowContext}'s DSL package and are
  * translated into these runtime contracts.
+ *
  * @since 5.4.0
  */
 @NullMarked
 package io.axoniq.framework.workflow.runtime.api.execution.context;
 
-import org.jspecify.annotations.NullMarked;
 import io.axoniq.framework.workflow.dsl.api.WorkflowContext;
+import org.jspecify.annotations.NullMarked;

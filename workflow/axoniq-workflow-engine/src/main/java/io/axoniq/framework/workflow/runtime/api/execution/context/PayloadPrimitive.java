@@ -19,9 +19,8 @@
 package io.axoniq.framework.workflow.runtime.api.execution.context;
 
 import io.axoniq.framework.workflow.dsl.api.EventNameCustomizer;
-
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowStepResult;
-import io.axoniq.framework.workflow.runtime.api.payload.PayloadModification;
+import io.axoniq.framework.workflow.dsl.api.PayloadModification;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStepResult;
 
 /**
  * Primitive modifying the workflow instance payload allowing durable data flow support.
@@ -41,25 +40,29 @@ public interface PayloadPrimitive {
 
     /**
      * Base payload modification command.
-     * @since 5.4.0
+     *
      * @author Simon Zambrovski
+     * @since 5.4.0
      */
     interface ModifyPayloadCommand {
 
         /**
          * Retrieves the step name.
+         *
          * @return step name
          */
         String stepName();
 
         /**
          * Retrieves payload modification function.
+         *
          * @return modification function
          */
         PayloadModification payloadModification();
 
         /**
          * Retrieves event name customizer for the step.
+         *
          * @return event name customizer
          */
         EventNameCustomizer eventNameCustomizer();

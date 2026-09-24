@@ -57,7 +57,7 @@ public class Payload {
      * Constructs a new payload around the given value, converting it using the given processing context.
      *
      * @param processingContext processing context for the current workflow invocation
-     * @param value   payload value.
+     * @param value             payload value.
      * @return payload representation of the given value.
      */
     public static Payload payload(
@@ -160,7 +160,7 @@ public class Payload {
         Object value = payload.get(key);
         if (value instanceof Map) {
             //noinspection unchecked
-            return (T) converter.apply((Map<String, @Nullable Object>) value);
+            return converter.apply((Map<String, @Nullable Object>) value);
         }
         return (T) value;
     }

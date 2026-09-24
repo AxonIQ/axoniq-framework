@@ -18,16 +18,15 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations;
-
 import io.axoniq.framework.workflow.dsl.api.EventNameCustomizer;
-import io.axoniq.framework.workflow.runtime.api.execution.context.PrimitiveCommands;
+import io.axoniq.framework.workflow.dsl.api.StepCancellationException;
+import io.axoniq.framework.workflow.dsl.api.StepRetryInfo;
 import io.axoniq.framework.workflow.dsl.api.WorkflowCancelledException;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.framework.workflow.dsl.api.WorkflowFailedException;
-import io.axoniq.framework.workflow.runtime.api.execution.state.StepCancellationException;
-import io.axoniq.framework.workflow.runtime.api.execution.state.StepRetryInfo;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowStepResult;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStepResult;
+import io.axoniq.framework.workflow.runtime.api.execution.context.PrimitiveCommands;
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations;
 import io.axoniq.framework.workflow.runtime.util.WorkflowStateUtils;
 import org.axonframework.common.FutureUtils;
 import org.axonframework.common.TypeReference;
@@ -70,12 +69,12 @@ public abstract class AbstractStepExecutor {
      * Constructs the abstract step executor.
      *
      * @param workflowExecutionOperations runtime primitive-operation surface
-     * @param workflowExecution         workflow execution
-     * @param runningSteps              running step registry
-     * @param reachedSteps              reached steps tracker
-     * @param parentEventNameCustomizer parent event name customizer
-     * @param clock                     clock for time calculations
-     * @param timeoutScheduler          timeout scheduler
+     * @param workflowExecution           workflow execution
+     * @param runningSteps                running step registry
+     * @param reachedSteps                reached steps tracker
+     * @param parentEventNameCustomizer   parent event name customizer
+     * @param clock                       clock for time calculations
+     * @param timeoutScheduler            timeout scheduler
      */
     @Internal
     public AbstractStepExecutor(
@@ -89,13 +88,53 @@ public abstract class AbstractStepExecutor {
     ) {
         this.clock = Objects.requireNonNull(clock, "Clock is mandatory");
         this.workflowExecutionOperations = Objects.requireNonNull(workflowExecutionOperations,
-                                                                   "Workflow execution operations are mandatory");
+                                                                  "Workflow execution operations are mandatory");
         this.workflowExecution = Objects.requireNonNull(workflowExecution, "Workflow state is mandatory");
         this.runningSteps = Objects.requireNonNull(runningSteps, "Running steps are mandatory");
         this.reachedSteps = Objects.requireNonNull(reachedSteps, "Reached steps tracker is mandatory");
         this.parentEventNameCustomizer = Objects.requireNonNull(parentEventNameCustomizer,
                                                                 "Event name customizer is mandatory");
         this.timeoutScheduler = Objects.requireNonNull(timeoutScheduler, "Timeout scheduler is mandatory");
+    }
+
+    /**
+     * Determines whether an exceptional step completion represents cancellation rather than failure or interruption.
+     *
+     * @param error completion error to classify
+     * @return {@code true} when the error represents step or workflow cancellation
+     */
+    public static boolean isCancellation(Throwable error) {
+        var cause = unwrapCompletionException(error);
+        return cause instanceof StepCancellationException
+                || cause instanceof WorkflowCancelledException
+                || cause instanceof WorkflowFailedException;
+    }
+
+    protected static Throwable unwrapCancellation(Throwable e) {
+        return unwrapCompletionException(e);
+    }
+
+    protected static Throwable unwrapCompletionException(Throwable e) {
+        return FutureUtils.unwrap(e);
+    }
+
+    /**
+     * Creates a durable result handle for a step while retaining its event-name customizer for later cancellation.
+     *
+     * @param stepName            logical name of the step
+     * @param eventNameCustomizer customizer originally supplied for the step primitive
+     * @param workflowExecution   execution providing state access and cancellation delegation
+     * @return state-backed step result handle
+     */
+    public static WorkflowStepResult stateBased(String stepName,
+                                                EventNameCustomizer eventNameCustomizer,
+                                                WorkflowExecution workflowExecution) {
+        return new StateBasedWorkflowStepResult(stepName, () -> {
+            workflowExecution.awaitStateChange(s -> true);
+            return null;
+        }, cause -> workflowExecution.workflowExecutionOperations().cancelStep(PrimitiveCommands.cancelStep(
+                stepName, cause, eventNameCustomizer
+        )), workflowExecution);
     }
 
     protected void acceptAllPendingTasksForStep(String stepName) {
@@ -326,45 +365,5 @@ public abstract class AbstractStepExecutor {
         return sanitize(eventMessage.payloadAs(new TypeReference<>() {
                         })
         );
-    }
-
-    /**
-     * Determines whether an exceptional step completion represents cancellation rather than failure or interruption.
-     *
-     * @param error completion error to classify
-     * @return {@code true} when the error represents step or workflow cancellation
-     */
-    public static boolean isCancellation(Throwable error) {
-        var cause = unwrapCompletionException(error);
-        return cause instanceof StepCancellationException
-                || cause instanceof WorkflowCancelledException
-                || cause instanceof WorkflowFailedException;
-    }
-
-    protected static Throwable unwrapCancellation(Throwable e) {
-        return unwrapCompletionException(e);
-    }
-
-    protected static Throwable unwrapCompletionException(Throwable e) {
-        return FutureUtils.unwrap(e);
-    }
-
-    /**
-     * Creates a durable result handle for a step while retaining its event-name customizer for later cancellation.
-     *
-     * @param stepName            logical name of the step
-     * @param eventNameCustomizer customizer originally supplied for the step primitive
-     * @param workflowExecution   execution providing state access and cancellation delegation
-     * @return state-backed step result handle
-     */
-    public static WorkflowStepResult stateBased(String stepName,
-                                                EventNameCustomizer eventNameCustomizer,
-                                                WorkflowExecution workflowExecution) {
-        return new StateBasedWorkflowStepResult(stepName, () -> {
-            workflowExecution.awaitStateChange(s -> true);
-            return null;
-        }, cause -> workflowExecution.workflowExecutionOperations().cancelStep(PrimitiveCommands.cancelStep(
-                stepName, cause, eventNameCustomizer
-        )), workflowExecution);
     }
 }

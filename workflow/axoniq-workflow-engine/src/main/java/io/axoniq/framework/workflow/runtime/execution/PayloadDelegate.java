@@ -18,22 +18,18 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations;
-
 import io.axoniq.framework.workflow.dsl.api.EventNameCustomizer;
+import io.axoniq.framework.workflow.dsl.api.StepStatus;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStepResult;
 import io.axoniq.framework.workflow.runtime.api.execution.context.PayloadPrimitive;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowStepResult;
-import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations;
 import io.axoniq.framework.workflow.runtime.util.FutureResolver;
 import io.axoniq.framework.workflow.runtime.util.WorkflowStateUtils;
 import org.axonframework.common.annotation.Internal;
-import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
-import org.axonframework.messaging.eventhandling.EventSink;
 import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 
 import java.time.Clock;
-import java.util.concurrent.Executor;
 
 import static io.axoniq.framework.workflow.runtime.execution.payload.LocalOnlyPayloadReducer.NAME;
 
@@ -50,12 +46,12 @@ public class PayloadDelegate extends AbstractStepExecutor implements PayloadPrim
      * Constructs the primitive implementation.
      *
      * @param workflowExecutionOperations runtime primitive-operation surface
-     * @param workflowExecution          workflow execution
-     * @param runningSteps              running step registry
-     * @param reachedSteps              reached steps tracker
-     * @param parentEventNameCustomizer parent event name customizer
-     * @param clock                     clock for time calculations
-     * @param timeoutScheduler          scheduler for step timeouts
+     * @param workflowExecution           workflow execution
+     * @param runningSteps                running step registry
+     * @param reachedSteps                reached steps tracker
+     * @param parentEventNameCustomizer   parent event name customizer
+     * @param clock                       clock for time calculations
+     * @param timeoutScheduler            scheduler for step timeouts
      */
     @Internal
     public PayloadDelegate(
@@ -89,7 +85,8 @@ public class PayloadDelegate extends AbstractStepExecutor implements PayloadPrim
             reachedSteps.assertNoReplayDrift(workflowExecution.workflowId(), workflowExecution.state(), stepName);
             workflowExecution.appendTask(e -> {
                                              // apply modification right away
-                                             var newPayload = payloadModification.apply(workflowExecution.workflowExecutionOperations().workflowPayload());
+                                             var newPayload = payloadModification.apply(workflowExecution.workflowExecutionOperations()
+                                                                                                         .workflowPayload());
                                              FutureResolver.resolve(
                                                      workflowExecution.processingContext(),
                                                      completed(stepName,

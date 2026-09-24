@@ -18,18 +18,17 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.framework.workflow.dsl.api.WorkflowContext;
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContextFactory;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowDefinition;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionFactory;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowIdProvider;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.Test;
 import org.axonframework.eventsourcing.eventstore.EventStore;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.SimpleUnitOfWorkFactory;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
+import org.junit.jupiter.api.*;
 
 import java.time.Clock;
 import java.util.ArrayList;
@@ -45,18 +44,27 @@ import java.util.concurrent.TimeUnit;
 import static io.axoniq.framework.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.defaults;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
 
 /**
  * Test for {@link DefaultWorkflowCancellation}
+ *
  * @author Simon Zambrovski
  */
 class DefaultWorkflowCancellationTest {
 
     private final List<ExecutorService> executorServices = new ArrayList<>();
+
+    private static CompletableFuture<Void> requestWhenBothCallersAreReady(
+            DefaultWorkflowCancellation cancellation,
+            CountDownLatch callersReady,
+            CyclicBarrier startTogether
+    ) throws Exception {
+        callersReady.countDown();
+        startTogether.await(5, TimeUnit.SECONDS);
+        return cancellation.requestWorkflowCancellation(null);
+    }
 
     @AfterEach
     void shutDownExecutors() {
@@ -71,7 +79,9 @@ class DefaultWorkflowCancellationTest {
 
         try (var callers = Executors.newFixedThreadPool(2)) {
             var first = callers.submit(() -> requestWhenBothCallersAreReady(cancellation, callersReady, startTogether));
-            var second = callers.submit(() -> requestWhenBothCallersAreReady(cancellation, callersReady, startTogether));
+            var second = callers.submit(() -> requestWhenBothCallersAreReady(cancellation,
+                                                                             callersReady,
+                                                                             startTogether));
 
             assertThat(callersReady.await(5, TimeUnit.SECONDS)).isTrue();
             assertThat(first.get(5, TimeUnit.SECONDS)).isSameAs(second.get(5, TimeUnit.SECONDS));
@@ -99,19 +109,10 @@ class DefaultWorkflowCancellationTest {
         assertThat(cancellation.hasPendingWorkflowCancellation()).isFalse();
     }
 
-    private static CompletableFuture<Void> requestWhenBothCallersAreReady(
-            DefaultWorkflowCancellation cancellation,
-            CountDownLatch callersReady,
-            CyclicBarrier startTogether
-    ) throws Exception {
-        callersReady.countDown();
-        startTogether.await(5, TimeUnit.SECONDS);
-        return cancellation.requestWorkflowCancellation(null);
-    }
-
     private DefaultWorkflowCancellation requestForRealExecution() {
         var processingContext = mock(ProcessingContext.class);
-        when(processingContext.component(UnitOfWorkFactory.class)).thenReturn(new SimpleUnitOfWorkFactory(processingContext));
+        when(processingContext.component(UnitOfWorkFactory.class)).thenReturn(new SimpleUnitOfWorkFactory(
+                processingContext));
         when(processingContext.component(Clock.class)).thenReturn(Clock.systemUTC());
         when(processingContext.component(EventStore.class)).thenReturn(mock(EventStore.class));
         when(processingContext.component(WorkflowScheduler.class)).thenReturn(new ControllableWorkflowScheduler());
@@ -163,5 +164,4 @@ class DefaultWorkflowCancellationTest {
             return defaults();
         }
     }
-
 }

@@ -16,28 +16,30 @@
  * For licensing information and to register, visit:
  *  https://www.axoniq.io/pricing
  */
-package io.axoniq.framework.workflow.runtime.api.execution.state;
+package io.axoniq.framework.workflow.dsl.api;
 
+
+import io.axoniq.framework.workflow.runtime.api.execution.context.AllMatchCombinator;
+import io.axoniq.framework.workflow.runtime.api.execution.context.AnyMatchCombinator;
+import io.axoniq.framework.workflow.runtime.api.execution.context.NoneMatchCombinator;
 
 import java.util.List;
 
 /**
- * Result type that all combinator methods ({@link AnyMatchCombinator#anyMatch},
- * {@link NoneMatchCombinator#noneMatch}, {@link AllMatchCombinator#allMatch})
- * are required to return.
+ * Result type that all combinator methods ({@link AnyMatchCombinator#anyMatch}, {@link NoneMatchCombinator#noneMatch},
+ * {@link AllMatchCombinator#allMatch}) are required to return.
  *
  * <p>In addition to the standard {@link WorkflowStepResult} queries ({@code success()},
- * {@code failure()}, {@code result()}, etc.), this interface exposes the categorized
- * sub-results split by the combinator's predicate.</p>
+ * {@code failure()}, {@code result()}, etc.), this interface exposes the categorized sub-results split by the
+ * combinator's predicate.</p>
  *
  * <p>Both {@code matched()} and {@code unmatched()} block until the combinator has resolved
- * (consistent with {@code success()}/{@code failure()}). The returned lists are unmodifiable.
- * Together they always cover <b>all</b> input results:
- * {@code matched().size() + unmatched().size() == all input results}.</p>
+ * (consistent with {@code success()}/{@code failure()}). The returned lists are unmodifiable. Together they always
+ * cover <b>all</b> input results: {@code matched().size() + unmatched().size() == all input results}.</p>
  *
  * <p>{@code matched()} is sorted by event-sourced timestamps (earliest first) and contains only
- * completed sub-results. {@code unmatched()} lists completed results (sorted by timestamp) first,
- * followed by not-yet-completed results in their original array order.</p>
+ * completed sub-results. {@code unmatched()} lists completed results (sorted by timestamp) first, followed by
+ * not-yet-completed results in their original array order.</p>
  *
  * <h3>How {@code matched()} and {@code unmatched()} apply to each combinator</h3>
  *
@@ -89,9 +91,9 @@ import java.util.List;
 public interface CombinatorWorkflowStepResult extends WorkflowStepResult {
 
     /**
-     * Returns all completed sub-results that satisfy the combinator's predicate at the time of
-     * this call. For {@code anyMatch}, this may include more than just the winner if other results
-     * completed and matched between resolution and this call — the winner is always the first element.
+     * Returns all completed sub-results that satisfy the combinator's predicate at the time of this call. For
+     * {@code anyMatch}, this may include more than just the winner if other results completed and matched between
+     * resolution and this call — the winner is always the first element.
      * <p>Blocks until the combinator has resolved. The returned list is unmodifiable
      * and sorted by event-sourced timestamps (earliest first).</p>
      *
@@ -100,14 +102,13 @@ public interface CombinatorWorkflowStepResult extends WorkflowStepResult {
     List<WorkflowStepResult> matched();
 
     /**
-     * Returns all other sub-results that are not in {@link #matched()}.
-     * This may include results that have not yet completed, as well as completed results
-     * that did not satisfy the predicate. In short-circuit scenarios, a result may appear here
-     * even if its status would technically satisfy the predicate — it simply was not the one
-     * that triggered the combinator's resolution.
+     * Returns all other sub-results that are not in {@link #matched()}. This may include results that have not yet
+     * completed, as well as completed results that did not satisfy the predicate. In short-circuit scenarios, a result
+     * may appear here even if its status would technically satisfy the predicate — it simply was not the one that
+     * triggered the combinator's resolution.
      * <p>Blocks until the combinator has resolved. The returned list is unmodifiable.
-     * Completed results appear first (sorted by event-sourced timestamps), followed by
-     * not-yet-completed results in their original array order.</p>
+     * Completed results appear first (sorted by event-sourced timestamps), followed by not-yet-completed results in
+     * their original array order.</p>
      *
      * @return an unmodifiable list of non-matching sub-results.
      */

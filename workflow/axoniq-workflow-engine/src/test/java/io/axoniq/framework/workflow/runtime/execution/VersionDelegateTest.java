@@ -18,16 +18,15 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations;
-
 import io.axoniq.framework.workflow.dsl.api.EventNameCustomizer;
+import io.axoniq.framework.workflow.dsl.api.StepStatus;
+import io.axoniq.framework.workflow.dsl.api.WorkflowState;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStep;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStepResult;
 import io.axoniq.framework.workflow.runtime.api.execution.context.PrimitiveCommands;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowState;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowStep;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowStepResult;
-import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
-import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations;
 import io.axoniq.framework.workflow.runtime.util.MetadataUtils;
 import org.axonframework.messaging.core.VersionedType;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
@@ -49,14 +48,8 @@ import java.util.function.Function;
 import java.util.function.Predicate;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
 
 /**
  * Tests for {@link VersionDelegate}, including the downstream-steps guard correctness invariant.
@@ -65,6 +58,7 @@ import static org.mockito.Mockito.when;
  */
 class VersionDelegateTest {
 
+    private final ReachedSteps reachedSteps = new ReachedSteps();
     private WorkflowExecutionOperations workflowExecutionOperations;
     private WorkflowExecution workflowExecution;
     private WorkflowState state;
@@ -74,8 +68,6 @@ class VersionDelegateTest {
     private Executor executor;
     private EventNameCustomizer parentCustomizer;
     private VersionDelegate delegate;
-
-    private final ReachedSteps reachedSteps = new ReachedSteps();
 
     @SuppressWarnings("unchecked")
     @BeforeEach
@@ -120,8 +112,8 @@ class VersionDelegateTest {
     }
 
     /**
-     * Test helper: invoke the primitive and resolve the version it committed to (read from state after
-     * the call completes, mirroring how the DSL layer surfaces the value).
+     * Test helper: invoke the primitive and resolve the version it committed to (read from state after the call
+     * completes, mirroring how the DSL layer surfaces the value).
      */
     private String invokeVersion(String stepName, String newVersion) {
         WorkflowStepResult r = delegate.version(
@@ -184,9 +176,12 @@ class VersionDelegateTest {
         givenWorkflowDefinitionVersion("0.0.5");
 
         org.assertj.core.api.Assertions.assertThatThrownBy(() ->
-                delegate.version(PrimitiveCommands.version("payment-redesign", "0.0.2", parentCustomizer))
-        ).isInstanceOf(IllegalArgumentException.class)
-         .hasMessageContaining("not strictly greater");
+                                                                   delegate.version(PrimitiveCommands.version(
+                                                                           "payment-redesign",
+                                                                           "0.0.2",
+                                                                           parentCustomizer))
+           ).isInstanceOf(IllegalArgumentException.class)
+                                       .hasMessageContaining("not strictly greater");
 
         verify(workflowExecution, never()).appendWorkflowEvent(any(EventMessage.class), any(ProcessingContext.class));
     }
@@ -224,9 +219,9 @@ class VersionDelegateTest {
 
     /**
      * Worked example A from ADR 005: an old workflow with terminal steps {A, B, C}; new code inserts
-     * `ctx.migrateVersion("x", "0.0.2")` between A and B. At the version call, the body has referenced only A
-     * but state contains B and C terminal — the downstream-steps guard must block emission and return
-     * the current version unchanged.
+     * `ctx.migrateVersion("x", "0.0.2")` between A and B. At the version call, the body has referenced only A but state
+     * contains B and C terminal — the downstream-steps guard must block emission and return the current version
+     * unchanged.
      */
     @Test
     void downstreamStepsGuardBlocksEmissionWhenLaterStepsArePresentInState() {
@@ -246,9 +241,9 @@ class VersionDelegateTest {
     }
 
     /**
-     * Worked example C from ADR 005: workflow stopped at A (state has {A} terminal only), new code
-     * inserts `ctx.migrateVersion("x", "0.0.2")` between A and B. Body has referenced A; nothing is
-     * downstream yet — guard allows emission, workflow adopts v0.0.2.
+     * Worked example C from ADR 005: workflow stopped at A (state has {A} terminal only), new code inserts
+     * `ctx.migrateVersion("x", "0.0.2")` between A and B. Body has referenced A; nothing is downstream yet — guard
+     * allows emission, workflow adopts v0.0.2.
      */
     @Test
     void downstreamStepsGuardAllowsEmissionWhenAllStateStepsReferenced() throws InterruptedException {
@@ -283,8 +278,8 @@ class VersionDelegateTest {
     }
 
     /**
-     * A non-terminal step ahead of the cursor (e.g. a STARTED step the old code was still working on)
-     * should NOT block emission — only terminal steps prove old-code execution committed past this point.
+     * A non-terminal step ahead of the cursor (e.g. a STARTED step the old code was still working on) should NOT block
+     * emission — only terminal steps prove old-code execution committed past this point.
      */
     @Test
     void downstreamStepsGuardIgnoresNonTerminalStepsAhead() throws InterruptedException {

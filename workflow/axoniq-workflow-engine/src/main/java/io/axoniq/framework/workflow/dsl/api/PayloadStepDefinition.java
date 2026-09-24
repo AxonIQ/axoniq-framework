@@ -18,10 +18,6 @@
  */
 package io.axoniq.framework.workflow.dsl.api;
 
-import io.axoniq.framework.workflow.dsl.api.EventNameCustomizer;
-import io.axoniq.framework.workflow.dsl.api.PrimitiveMetadata;
-import io.axoniq.framework.workflow.runtime.api.payload.PayloadModification;
-
 /**
  * Specification for modifying of payload within a workflow.
  *

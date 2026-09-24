@@ -19,6 +19,7 @@
 /**
  * {@code PayloadReducer} implementations and their registry, combining or selecting between the global (workflow
  * context) and local payloads passed to and returned from workflow steps.
+ *
  * @since 5.4.0
  */
 @NullMarked

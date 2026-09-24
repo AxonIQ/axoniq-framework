@@ -23,7 +23,7 @@ import com.tngtech.archunit.junit.ArchTest;
 import com.tngtech.archunit.lang.ArchRule;
 import com.tngtech.archunit.library.DependencyRules;
 import io.axoniq.framework.workflow.dsl.api.EventNameCustomizer;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations;
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowEventPublicationContext;
 import io.axoniq.framework.workflow.runtime.execution.DefaultEventNameCustomizer;
 import io.axoniq.framework.workflow.runtime.util.EventMessageUtils;
 import org.axonframework.common.archunit.MainArchUnitConventions;
@@ -71,7 +71,7 @@ public class WorkflowArchUnitConventionTests implements MainArchUnitConventions 
             EventNameCustomizer stepCustomizer = DefaultEventNameCustomizer.Builder.defaults();
             EventNameCustomizer merged = merge(workflowCustomizer, stepCustomizer);
 
-            WorkflowExecutionOperations ctx = mock(WorkflowExecutionOperations.class);
+            WorkflowEventPublicationContext ctx = mock(WorkflowEventPublicationContext.class);
             when(ctx.workflowId()).thenReturn("wf-1");
             when(ctx.workflowPayload()).thenReturn(Map.of());
             ProcessingContext processingContext = mock(ProcessingContext.class);
@@ -98,7 +98,7 @@ public class WorkflowArchUnitConventionTests implements MainArchUnitConventions 
             EventNameCustomizer stepCustomizer = DefaultEventNameCustomizer.Builder.namespace("step.ns");
             EventNameCustomizer merged = merge(workflowCustomizer, stepCustomizer);
 
-            WorkflowExecutionOperations ctx = mock(WorkflowExecutionOperations.class);
+            WorkflowEventPublicationContext ctx = mock(WorkflowEventPublicationContext.class);
             when(ctx.workflowId()).thenReturn("wf-1");
             when(ctx.workflowPayload()).thenReturn(Map.of());
             ProcessingContext processingContext = mock(ProcessingContext.class);

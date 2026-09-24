@@ -18,13 +18,12 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations;
-
 import io.axoniq.framework.workflow.dsl.api.EventNameCustomizer;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStepResult;
 import io.axoniq.framework.workflow.runtime.api.execution.context.Version;
 import io.axoniq.framework.workflow.runtime.api.execution.context.VersionPrimitive;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowStepResult;
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations;
 import io.axoniq.framework.workflow.runtime.util.EventMessageUtils;
 import io.axoniq.framework.workflow.runtime.util.FutureResolver;
 import org.axonframework.common.annotation.Internal;
@@ -61,10 +60,10 @@ public class VersionDelegate implements VersionPrimitive {
      * Constructs the delegate.
      *
      * @param workflowExecutionOperations runtime primitive-operation surface
-     * @param workflowExecution          workflow execution
-     * @param reachedSteps              reached steps tracker
-     * @param parentEventNameCustomizer parent event name customizer
-     * @param clock                     clock for time calculations
+     * @param workflowExecution           workflow execution
+     * @param reachedSteps                reached steps tracker
+     * @param parentEventNameCustomizer   parent event name customizer
+     * @param clock                       clock for time calculations
      */
     public VersionDelegate(WorkflowExecutionOperations workflowExecutionOperations,
                            WorkflowExecution workflowExecution,
@@ -72,7 +71,7 @@ public class VersionDelegate implements VersionPrimitive {
                            EventNameCustomizer parentEventNameCustomizer,
                            Clock clock) {
         this.workflowExecutionOperations = Objects.requireNonNull(workflowExecutionOperations,
-                                                                   "Workflow execution operations are mandatory");
+                                                                  "Workflow execution operations are mandatory");
         this.workflowExecution = Objects.requireNonNull(workflowExecution, "Workflow execution is mandatory");
         this.reachedSteps = Objects.requireNonNull(reachedSteps, "Reached steps tracker is mandatory");
         this.parentEventNameCustomizer = Objects.requireNonNull(parentEventNameCustomizer,

@@ -18,19 +18,19 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
+import io.axoniq.framework.workflow.dsl.api.WorkflowState;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
 import io.axoniq.framework.workflow.history.api.WorkflowHistory;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.framework.workflow.history.api.WorkflowHistoryRepository;
 import io.axoniq.framework.workflow.query.api.WorkflowStateQuery;
 import io.axoniq.framework.workflow.query.utils.WorkflowStateQueryMatcher;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
-import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.api.manager.NonUniqueWorkflowInstanceMatchException;
 import io.axoniq.framework.workflow.runtime.api.manager.WorkflowInstance;
-import org.axonframework.messaging.core.VersionedType;
 import org.axonframework.messaging.core.EmptyApplicationContext;
-import org.axonframework.messaging.core.unitofwork.SimpleUnitOfWorkFactory;
+import org.axonframework.messaging.core.VersionedType;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.axonframework.messaging.core.unitofwork.SimpleUnitOfWorkFactory;
 import org.junit.jupiter.api.*;
 import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscriber;
@@ -44,11 +44,135 @@ import java.util.concurrent.CompletionException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 
 class SimpleWorkflowManagerTest {
+
+    private static SimpleWorkflowManager manager(WorkflowHistoryRepository history) {
+        return manager(history, new InMemoryWorkflowExecutionRepository());
+    }
+
+    private static SimpleWorkflowManager manager(WorkflowHistoryRepository history,
+                                                 WorkflowExecutionRepository executions) {
+        return manager(history, executions, new WorkflowCancellationService());
+    }
+
+    private static SimpleWorkflowManager manager(WorkflowHistoryRepository history,
+                                                 WorkflowExecutionRepository executions,
+                                                 WorkflowCancellationService cancellations) {
+        return new SimpleWorkflowManager(history,
+                                         executions,
+                                         cancellations,
+                                         storeMirroring(history),
+                                         new SimpleUnitOfWorkFactory(EmptyApplicationContext.INSTANCE),
+                                         Runnable::run);
+    }
+
+    /**
+     * A store that answers what the history projection holds, and an empty state for anything else — the shape of a
+     * store whose projection is fully caught up, so the tests keep judging the merge rules rather than the sourcing.
+     */
+    private static WorkflowStore storeMirroring(WorkflowHistoryRepository history) {
+        return new WorkflowStore() {
+            @Override
+            public CompletableFuture<RunningWorkflows> loadRunningWorkflows(ProcessingContext processingContext) {
+                throw new UnsupportedOperationException("not used by the manager");
+            }
+
+            @Override
+            public CompletableFuture<WorkflowState> loadWorkflow(String workflowId,
+                                                                 ProcessingContext processingContext) {
+                return findWorkflow(workflowId, processingContext).thenApply(state -> state.orElseGet(
+                        () -> new EventSourcedWorkflowState(workflowId, VersionedType.of("none", "0.0.1"))));
+            }
+
+            @Override
+            public CompletableFuture<Optional<WorkflowState>> findWorkflow(String workflowId,
+                                                                           ProcessingContext processingContext) {
+                return history.findById(workflowId).thenApply(entry -> entry.map(WorkflowHistory::state));
+            }
+        };
+    }
+
+    private static WorkflowExecution execution(String workflowId, String workflowName) {
+        var execution = mock(WorkflowExecution.class);
+        when(execution.state()).thenReturn(state(workflowId, workflowName));
+        return execution;
+    }
+
+    private static WorkflowCancellation cancellation(boolean stepCancellationResult, int cancelledSteps) {
+        var cancellation = mock(WorkflowCancellation.class);
+        when(cancellation.requestStepCancellation("reserve-funds", null))
+                .thenReturn(CompletableFuture.completedFuture(stepCancellationResult));
+        when(cancellation.requestCancellationOfAllSteps(null))
+                .thenReturn(CompletableFuture.completedFuture(cancelledSteps));
+        when(cancellation.requestWorkflowCancellation(null)).thenReturn(CompletableFuture.completedFuture(null));
+        return cancellation;
+    }
+
+    private static WorkflowHistoryRepository history(WorkflowHistory... histories) {
+        var entries = List.of(histories);
+        return new WorkflowHistoryRepository() {
+            @Override
+            public CompletableFuture<List<WorkflowHistory>> findAll(
+                    WorkflowStateQuery query
+            ) {
+                return CompletableFuture.completedFuture(entries.stream()
+                                                                .filter(history -> WorkflowStateQueryMatcher.matches(
+                                                                        query, history.state()
+                                                                ))
+                                                                .toList());
+            }
+
+            @Override
+            public CompletableFuture<Optional<WorkflowHistory>> findById(String workflowId) {
+                for (WorkflowHistory history : entries) {
+                    if (history.workflowId().equals(workflowId)) {
+                        return CompletableFuture.completedFuture(Optional.of(history));
+                    }
+                }
+                return CompletableFuture.completedFuture(Optional.empty());
+            }
+        };
+    }
+
+    private static CompletableFuture<WorkflowInstance> first(
+            Publisher<WorkflowInstance> publisher
+    ) {
+        var result = new CompletableFuture<WorkflowInstance>();
+        publisher.subscribe(new Subscriber<>() {
+            @Override
+            public void onSubscribe(Subscription subscription) {
+                subscription.request(1);
+            }
+
+            @Override
+            public void onNext(WorkflowInstance instance) {
+                result.complete(instance);
+            }
+
+            @Override
+            public void onError(Throwable throwable) {
+                result.completeExceptionally(throwable);
+            }
+
+            @Override
+            public void onComplete() {
+                if (!result.isDone()) {
+                    result.completeExceptionally(new IllegalStateException("Expected a workflow instance."));
+                }
+            }
+        });
+        return result;
+    }
+
+    private static EventSourcedWorkflowState state(String workflowId, String workflowName) {
+        return new EventSourcedWorkflowState(
+                workflowId,
+                Map.of("orderId", workflowId),
+                VersionedType.of(workflowName, "1.0")
+        );
+    }
 
     @Test
     void readsTheStateOfTheSingleHistoryEntryMatchingTheCriteria() {
@@ -59,7 +183,7 @@ class SimpleWorkflowManagerTest {
         var manager = manager(history);
 
         var state = manager.findOne(WorkflowStateQuery.byWorkflowDefinitionId(
-                                           VersionedType.of("PaymentWorkflow", "1.0")))
+                                   VersionedType.of("PaymentWorkflow", "1.0")))
                            .singleState()
                            .join();
         assertThat(state).isNotNull();
@@ -77,8 +201,8 @@ class SimpleWorkflowManagerTest {
         var manager = manager(history);
 
         assertThatThrownBy(() -> manager.findOne(WorkflowStateQuery.byWorkflowDefinitionId(
-                                                                   VersionedType.of("PaymentWorkflow", "1.0")
-                                                           ))
+                                                VersionedType.of("PaymentWorkflow", "1.0")
+                                        ))
                                         .singleState()
                                         .join())
                 .isInstanceOf(CompletionException.class)
@@ -95,7 +219,7 @@ class SimpleWorkflowManagerTest {
         var manager = manager(history);
 
         var count = manager.findMany(WorkflowStateQuery.byWorkflowDefinitionId(
-                                           VersionedType.of("PaymentWorkflow", "1.0")))
+                                   VersionedType.of("PaymentWorkflow", "1.0")))
                            .size()
                            .join();
 
@@ -224,131 +348,5 @@ class SimpleWorkflowManagerTest {
         var instance = first(manager.findMany(WorkflowStateQuery.all()).instances()).join();
 
         assertThat(instance.state().join().workflowId()).isEqualTo("order-42");
-    }
-
-    private static SimpleWorkflowManager manager(WorkflowHistoryRepository history) {
-        return manager(history, new InMemoryWorkflowExecutionRepository());
-    }
-
-    private static SimpleWorkflowManager manager(WorkflowHistoryRepository history,
-                                                 WorkflowExecutionRepository executions) {
-        return manager(history, executions, new WorkflowCancellationService());
-    }
-
-    private static SimpleWorkflowManager manager(WorkflowHistoryRepository history,
-                                                 WorkflowExecutionRepository executions,
-                                                 WorkflowCancellationService cancellations) {
-        return new SimpleWorkflowManager(history,
-                                         executions,
-                                         cancellations,
-                                         storeMirroring(history),
-                                         new SimpleUnitOfWorkFactory(EmptyApplicationContext.INSTANCE),
-                                         Runnable::run);
-    }
-
-    /**
-     * A store that answers what the history projection holds, and an empty state for anything else — the shape of a
-     * store whose projection is fully caught up, so the tests keep judging the merge rules rather than the sourcing.
-     */
-    private static WorkflowStore storeMirroring(WorkflowHistoryRepository history) {
-        return new WorkflowStore() {
-            @Override
-            public CompletableFuture<RunningWorkflows> loadRunningWorkflows(ProcessingContext processingContext) {
-                throw new UnsupportedOperationException("not used by the manager");
-            }
-
-            @Override
-            public CompletableFuture<WorkflowState> loadWorkflow(String workflowId,
-                                                                 ProcessingContext processingContext) {
-                return findWorkflow(workflowId, processingContext).thenApply(state -> state.orElseGet(
-                        () -> new EventSourcedWorkflowState(workflowId, VersionedType.of("none", "0.0.1"))));
-            }
-
-            @Override
-            public CompletableFuture<Optional<WorkflowState>> findWorkflow(String workflowId,
-                                                                           ProcessingContext processingContext) {
-                return history.findById(workflowId).thenApply(entry -> entry.map(WorkflowHistory::state));
-            }
-        };
-    }
-
-    private static WorkflowExecution execution(String workflowId, String workflowName) {
-        var execution = mock(WorkflowExecution.class);
-        when(execution.state()).thenReturn(state(workflowId, workflowName));
-        return execution;
-    }
-
-    private static WorkflowCancellation cancellation(boolean stepCancellationResult, int cancelledSteps) {
-        var cancellation = mock(WorkflowCancellation.class);
-        when(cancellation.requestStepCancellation("reserve-funds", null))
-                .thenReturn(CompletableFuture.completedFuture(stepCancellationResult));
-        when(cancellation.requestCancellationOfAllSteps(null))
-                .thenReturn(CompletableFuture.completedFuture(cancelledSteps));
-        when(cancellation.requestWorkflowCancellation(null)).thenReturn(CompletableFuture.completedFuture(null));
-        return cancellation;
-    }
-
-    private static WorkflowHistoryRepository history(WorkflowHistory... histories) {
-        var entries = List.of(histories);
-        return new WorkflowHistoryRepository() {
-            @Override
-            public CompletableFuture<List<WorkflowHistory>> findAll(
-                    WorkflowStateQuery query
-            ) {
-                return CompletableFuture.completedFuture(entries.stream()
-                                                                 .filter(history -> WorkflowStateQueryMatcher.matches(
-                                                                         query, history.state()
-                                                                 ))
-                                                                 .toList());
-            }
-
-            @Override
-            public CompletableFuture<Optional<WorkflowHistory>> findById(String workflowId) {
-                for (WorkflowHistory history : entries) {
-                    if (history.workflowId().equals(workflowId)) {
-                        return CompletableFuture.completedFuture(Optional.of(history));
-                    }
-                }
-                return CompletableFuture.completedFuture(Optional.empty());
-            }
-        };
-    }
-
-    private static CompletableFuture<WorkflowInstance> first(
-            Publisher<WorkflowInstance> publisher
-    ) {
-        var result = new CompletableFuture<WorkflowInstance>();
-        publisher.subscribe(new Subscriber<>() {
-            @Override
-            public void onSubscribe(Subscription subscription) {
-                subscription.request(1);
-            }
-
-            @Override
-            public void onNext(WorkflowInstance instance) {
-                result.complete(instance);
-            }
-
-            @Override
-            public void onError(Throwable throwable) {
-                result.completeExceptionally(throwable);
-            }
-
-            @Override
-            public void onComplete() {
-                if (!result.isDone()) {
-                    result.completeExceptionally(new IllegalStateException("Expected a workflow instance."));
-                }
-            }
-        });
-        return result;
-    }
-
-    private static EventSourcedWorkflowState state(String workflowId, String workflowName) {
-        return new EventSourcedWorkflowState(
-                workflowId,
-                Map.of("orderId", workflowId),
-                VersionedType.of(workflowName, "1.0")
-        );
     }
 }

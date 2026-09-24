@@ -30,6 +30,7 @@ import java.util.Map;
  * <p>This internal contract deliberately excludes execution primitives. It lets event-message construction depend on
  * the values it needs without depending on the runtime's primitive-operation surface.</p>
  *
+ * @author Simon Zambrovski
  * @since 5.4.0
  */
 @Internal

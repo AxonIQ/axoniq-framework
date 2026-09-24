@@ -16,15 +16,15 @@
  * For licensing information and to register, visit:
  *  https://www.axoniq.io/pricing
  */
-package io.axoniq.framework.workflow.runtime.api.execution.state;
+package io.axoniq.framework.workflow.dsl.api;
 
 
 /**
  * Exception thrown when an individual step is cancelled.
  * <p>
- * A subtype of {@link StepFailedException}: callers that want to handle any step-level
- * failure can catch the parent; callers that need to distinguish a cancellation specifically
- * can catch this type. Distinct from {@link StepTimedOutException} (timeout).
+ * A subtype of {@link StepFailedException}: callers that want to handle any step-level failure can catch the parent;
+ * callers that need to distinguish a cancellation specifically can catch this type. Distinct from
+ * {@link StepTimedOutException} (timeout).
  *
  * @author Stefan Dragisic
  * @since 5.4.0

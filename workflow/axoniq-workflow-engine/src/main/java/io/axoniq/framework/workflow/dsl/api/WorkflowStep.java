@@ -16,9 +16,8 @@
  * For licensing information and to register, visit:
  *  https://www.axoniq.io/pricing
  */
-package io.axoniq.framework.workflow.runtime.api.execution.state;
+package io.axoniq.framework.workflow.dsl.api;
 
-import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
 import org.axonframework.messaging.core.Context;
 
 import java.time.Instant;
@@ -32,7 +31,6 @@ import java.time.Instant;
  * @param error     error of the execution, may be null.
  * @param timestamp timestamp of step start.
  * @param context   processing context.
- *
  * @author Allard Buijze
  * @author Stefan Dragisic
  * @author Simon Zambrovski
@@ -73,8 +71,8 @@ public record WorkflowStep(
     }
 
     /**
-     * A retry attempt that the store accepted and that is now running. {@code retryInfo.attempt()} is the attempt
-     * being started; the error is the one that triggered this retry.
+     * A retry attempt that the store accepted and that is now running. {@code retryInfo.attempt()} is the attempt being
+     * started; the error is the one that triggered this retry.
      *
      * @param name      name of the step
      * @param retryInfo retry state of the attempt being started

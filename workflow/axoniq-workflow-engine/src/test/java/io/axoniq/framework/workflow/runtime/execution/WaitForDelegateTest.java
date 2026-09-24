@@ -18,27 +18,24 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations;
-
-import org.jspecify.annotations.Nullable;
-
-import io.axoniq.framework.workflow.runtime.api.execution.FutureResolutionTimeoutException;
 import io.axoniq.framework.workflow.dsl.api.EventCondition;
 import io.axoniq.framework.workflow.dsl.api.EventNameCustomizer;
+import io.axoniq.framework.workflow.dsl.api.StepCancellationException;
+import io.axoniq.framework.workflow.dsl.api.WorkflowState;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStep;
+import io.axoniq.framework.workflow.runtime.api.execution.FutureResolutionTimeoutException;
 import io.axoniq.framework.workflow.runtime.api.execution.context.PrimitiveCommands;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
-import io.axoniq.framework.workflow.runtime.api.execution.state.StepCancellationException;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowState;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowStep;
-import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations;
 import io.axoniq.framework.workflow.runtime.execution.payload.GlobalOnlyPayloadReducer;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWork;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventMessage;
-import org.axonframework.messaging.eventhandling.EventSink;
 import org.axonframework.messaging.eventhandling.conversion.EventConverter;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.*;
 import org.mockito.*;
 
@@ -231,17 +228,17 @@ class WaitForDelegateTest {
     private void stubEventPublishing() {
         when(workflowExecution.appendWorkflowEvent(any(EventMessage.class), any(ProcessingContext.class)))
                 .thenAnswer(invocation -> {
-            EventMessage message = invocation.getArgument(0);
-            if (message.payload() instanceof Map<?, ?> payload) {
-                @SuppressWarnings("unchecked")
-                Map<String, @Nullable Object> startPayload = (Map<String, @Nullable Object>) payload;
-                startedStep.set(WorkflowStep.started(
-                        "awaitPayment",
-                        startPayload,
-                        (Instant) startPayload.get("startTime"),
-                        processingContext
-                ));
-            }
+                    EventMessage message = invocation.getArgument(0);
+                    if (message.payload() instanceof Map<?, ?> payload) {
+                        @SuppressWarnings("unchecked")
+                        Map<String, @Nullable Object> startPayload = (Map<String, @Nullable Object>) payload;
+                        startedStep.set(WorkflowStep.started(
+                                "awaitPayment",
+                                startPayload,
+                                (Instant) startPayload.get("startTime"),
+                                processingContext
+                        ));
+                    }
                     return CompletableFuture.completedFuture(null);
                 });
     }

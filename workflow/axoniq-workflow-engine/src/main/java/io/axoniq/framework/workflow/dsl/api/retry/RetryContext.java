@@ -27,7 +27,6 @@ package io.axoniq.framework.workflow.dsl.api.retry;
  * @param maxRetries maximum number of retries configured.
  * @param error      the error that triggered the retry.
  * @param delay      the computed backoff delay before this retry attempt.
- *
  * @author Stefan Dragisic
  * @since 5.4.0
  */
@@ -37,10 +36,10 @@ public record RetryContext(String stepName, int attempt, int maxRetries, Throwab
     /**
      * Creates a retry context with no backoff delay.
      *
-     * @param stepName name of the step being retried
-     * @param attempt current retry attempt number (1-based)
+     * @param stepName   name of the step being retried
+     * @param attempt    current retry attempt number (1-based)
      * @param maxRetries maximum number of configured retries
-     * @param error error that triggered the retry
+     * @param error      error that triggered the retry
      */
     public RetryContext(String stepName, int attempt, int maxRetries, Throwable error) {
         this(stepName, attempt, maxRetries, error, java.time.Duration.ZERO);

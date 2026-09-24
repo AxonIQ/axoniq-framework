@@ -16,21 +16,21 @@
  * For licensing information and to register, visit:
  *  https://www.axoniq.io/pricing
  */
-package io.axoniq.framework.workflow.runtime.api.execution.state;
+package io.axoniq.framework.workflow.dsl.api;
 
 
 /**
  * Exception thrown into the workflow body when a step's blocking wait is interrupted because the
  * <em>workflow itself</em> reached a terminal state (cancelled, failed, timed out) or the engine is shutting down.
  * <p>
- * A subtype of {@link StepFailedException}: callers that want to handle any step-level failure can catch the
- * parent; callers that need to distinguish this specific case can catch this type. Distinct from
- * {@link StepCancellationException}, which is a per-step cancellation with its own durable
- * {@code <step>:CANCELLED} record.
+ * A subtype of {@link StepFailedException}: callers that want to handle any step-level failure can catch the parent;
+ * callers that need to distinguish this specific case can catch this type. Distinct from
+ * {@link StepCancellationException}, which is a per-step cancellation with its own durable {@code <step>:CANCELLED}
+ * record.
  * <p>
- * No durable event backs this exception: the step's last recorded event-log state stays {@code STARTED}. This is
- * purely an in-body signal so the workflow body can run compensation or cleanup logic around its blocking wait; it
- * carries no bearing on what gets persisted.
+ * No durable event backs this exception: the step's last recorded event-log state stays {@code STARTED}. This is purely
+ * an in-body signal so the workflow body can run compensation or cleanup logic around its blocking wait; it carries no
+ * bearing on what gets persisted.
  *
  * @author Stefan Dragisic
  * @since 5.4.0

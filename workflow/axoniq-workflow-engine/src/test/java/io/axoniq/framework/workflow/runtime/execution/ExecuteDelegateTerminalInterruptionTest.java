@@ -18,27 +18,25 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations;
-
+import io.axoniq.framework.workflow.dsl.api.PayloadProcessor;
+import io.axoniq.framework.workflow.dsl.api.StepInterruptedException;
+import io.axoniq.framework.workflow.dsl.api.StepRetryInfo;
+import io.axoniq.framework.workflow.dsl.api.StepStatus;
+import io.axoniq.framework.workflow.dsl.api.WorkflowError;
+import io.axoniq.framework.workflow.dsl.api.WorkflowState;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStep;
+import io.axoniq.framework.workflow.dsl.api.retry.RetryPolicy;
 import io.axoniq.framework.workflow.runtime.api.execution.context.ExecutePrimitive;
 import io.axoniq.framework.workflow.runtime.api.execution.context.PrimitiveCommands;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
-import io.axoniq.framework.workflow.dsl.api.retry.RetryPolicy;
-import io.axoniq.framework.workflow.runtime.api.execution.state.StepInterruptedException;
-import io.axoniq.framework.workflow.runtime.api.execution.state.StepRetryInfo;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowError;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowState;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowStep;
-import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
-import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
-import io.axoniq.framework.workflow.runtime.api.payload.PayloadProcessor;
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations;
 import io.axoniq.framework.workflow.runtime.execution.payload.GlobalOnlyPayloadReducer;
 import io.axoniq.framework.workflow.runtime.execution.payload.LocalOnlyPayloadReducer;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWork;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventMessage;
-import org.axonframework.messaging.eventhandling.EventSink;
 import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 import org.junit.jupiter.api.*;
 
@@ -63,6 +61,25 @@ import static org.mockito.Mockito.*;
 class ExecuteDelegateTerminalInterruptionTest {
 
     private static final String STEP_NAME = "running-step";
+
+    private static WorkflowStep retryingStep() {
+        var retryInfo = new StepRetryInfo(1, 2, WorkflowError.from(new IllegalStateException("first attempt failed")));
+        return WorkflowStep.retrying(STEP_NAME, retryInfo, Instant.now(), null);
+    }
+
+    private static ExecutePrimitive.ExecuteCommand command() {
+        PayloadProcessor action = (context, payload) -> Map.of();
+        return new PrimitiveCommands.WorkflowStepResultExecuteCommand(
+                STEP_NAME,
+                Map.of(),
+                action,
+                LocalOnlyPayloadReducer.INSTANCE,
+                GlobalOnlyPayloadReducer.INSTANCE,
+                Duration.ofMinutes(1),
+                DefaultEventNameCustomizer.Builder.defaults(),
+                RetryPolicy.NONE
+        );
+    }
 
     @Test
     void terminalInterruptionDoesNotAppendFailureTask() throws InterruptedException {
@@ -135,24 +152,5 @@ class ExecuteDelegateTerminalInterruptionTest {
         });
 
         assertThat(queuedTasks).isEmpty();
-    }
-
-    private static WorkflowStep retryingStep() {
-        var retryInfo = new StepRetryInfo(1, 2, WorkflowError.from(new IllegalStateException("first attempt failed")));
-        return WorkflowStep.retrying(STEP_NAME, retryInfo, Instant.now(), null);
-    }
-
-    private static ExecutePrimitive.ExecuteCommand command() {
-        PayloadProcessor action = (context, payload) -> Map.of();
-        return new PrimitiveCommands.WorkflowStepResultExecuteCommand(
-                STEP_NAME,
-                Map.of(),
-                action,
-                LocalOnlyPayloadReducer.INSTANCE,
-                GlobalOnlyPayloadReducer.INSTANCE,
-                Duration.ofMinutes(1),
-                DefaultEventNameCustomizer.Builder.defaults(),
-                RetryPolicy.NONE
-        );
     }
 }

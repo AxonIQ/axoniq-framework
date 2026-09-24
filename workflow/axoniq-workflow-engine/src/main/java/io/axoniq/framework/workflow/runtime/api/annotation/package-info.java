@@ -19,6 +19,7 @@
 /**
  * Annotations for declaring workflow definition methods and registering lifecycle listeners for workflow start,
  * completion, failure, cancellation, timeout, and status changes.
+ *
  * @since 5.4.0
  */
 @NullMarked

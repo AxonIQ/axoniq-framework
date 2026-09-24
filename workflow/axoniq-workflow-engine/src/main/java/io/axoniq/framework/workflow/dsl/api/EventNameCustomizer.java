@@ -18,11 +18,8 @@
  */
 package io.axoniq.framework.workflow.dsl.api;
 
-import org.jspecify.annotations.Nullable;
-
-import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
-import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
 import org.axonframework.messaging.core.QualifiedName;
+import org.jspecify.annotations.Nullable;
 
 import java.util.Map;
 
@@ -59,23 +56,23 @@ public interface EventNameCustomizer {
 
     /**
      * Returns a customized event name for a migration step produced by
-     * {@code ctx.migrateVersion(changeId, newVersion)}. The {@code changeId} is the semantic anchor; the
-     * resulting wire-level name describes <em>what</em> changed (default suffix {@code .Versioned}, e.g.
+     * {@code ctx.migrateVersion(changeId, newVersion)}. The {@code changeId} is the semantic anchor; the resulting
+     * wire-level name describes <em>what</em> changed (default suffix {@code .Versioned}, e.g.
      * {@code Payment-redesign.Versioned}).
      * <p>
      * The interface default derives a name from {@link #getEventName(String, Map, StepStatus)} with
-     * {@link StepStatus#COMPLETED} and appends a {@code .Versioned} marker so a migration event stays
-     * distinguishable on the wire from an ordinary completed-step event (which matters in an
-     * event-sourced engine — colliding names risk replay drift). {@link DefaultEventNameCustomizer}
-     * overrides this with the canonical {@code <changeId>.Versioned} form; custom customizers that do not
-     * override it still get a distinct name from this default.
+     * {@link StepStatus#COMPLETED} and appends a {@code .Versioned} marker so a migration event stays distinguishable
+     * on the wire from an ordinary completed-step event (which matters in an event-sourced engine — colliding names
+     * risk replay drift). {@link DefaultEventNameCustomizer} overrides this with the canonical
+     * {@code <changeId>.Versioned} form; custom customizers that do not override it still get a distinct name from this
+     * default.
      *
      * @param changeId   developer-chosen identifier of the code change.
      * @param parameters parameters associated with the event.
      * @return the customized event name.
      */
     default QualifiedName versionMigrationEventName(String changeId,
-                                             Map<String, @Nullable Object> parameters) {
+                                                    Map<String, @Nullable Object> parameters) {
         var completed = getEventName(changeId, parameters, StepStatus.COMPLETED);
         return new QualifiedName(completed.namespace(), completed.localName() + ".Versioned");
     }

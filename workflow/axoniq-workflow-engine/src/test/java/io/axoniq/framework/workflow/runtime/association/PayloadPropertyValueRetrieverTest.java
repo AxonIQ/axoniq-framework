@@ -18,10 +18,9 @@
  */
 package io.axoniq.framework.workflow.runtime.association;
 
-import org.jspecify.annotations.Nullable;
-
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.*;
 import org.mockito.*;
 

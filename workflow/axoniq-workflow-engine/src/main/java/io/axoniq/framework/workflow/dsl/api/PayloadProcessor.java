@@ -16,19 +16,23 @@
  * For licensing information and to register, visit:
  *  https://www.axoniq.io/pricing
  */
-package io.axoniq.framework.workflow.runtime.api.execution.state;
+package io.axoniq.framework.workflow.dsl.api;
 
-import org.axonframework.common.annotation.Internal;
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.jspecify.annotations.Nullable;
+
+import java.util.Map;
+import java.util.function.BiFunction;
 
 /**
- * Payload for the RETRYING event. Contains retry state for event sourcing and crash recovery.
+ * Action executed consuming payload and returning payload as a result run in a provided processing context.
  *
- * @param attempt    current retry attempt number (1-based).
- * @param maxRetries maximum number of retries configured.
- * @param error      the error that triggered the retry.
- *
+ * @author Simon Zambrovski
  * @author Stefan Dragisic
  * @since 5.4.0
  */
-@Internal
-public record StepRetryInfo(int attempt, int maxRetries, WorkflowError error) {}
+@FunctionalInterface
+public interface PayloadProcessor
+        extends BiFunction<ProcessingContext, Map<String, @Nullable Object>, Map<String, @Nullable Object>> {
+
+}

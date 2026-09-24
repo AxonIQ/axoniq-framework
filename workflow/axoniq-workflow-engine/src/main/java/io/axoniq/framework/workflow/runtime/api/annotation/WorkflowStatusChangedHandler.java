@@ -18,7 +18,7 @@
  */
 package io.axoniq.framework.workflow.runtime.api.annotation;
 
-import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
 
 import java.lang.annotation.Documented;
 import java.lang.annotation.ElementType;

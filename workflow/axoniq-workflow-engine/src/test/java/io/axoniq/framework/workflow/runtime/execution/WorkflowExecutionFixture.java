@@ -18,14 +18,13 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations;
-
+import io.axoniq.framework.workflow.dsl.api.WorkflowContext;
+import io.axoniq.framework.workflow.dsl.api.WorkflowState;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContextFactory;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionFactory;
-import io.axoniq.framework.workflow.dsl.api.WorkflowContext;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowState;
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 
 import java.util.concurrent.CompletableFuture;
@@ -40,8 +39,8 @@ import static org.mockito.Mockito.*;
  * plumbing between them.
  * <p>
  * {@link #mockExecution(String, WorkflowState, boolean)} wires the part every engine test needs identically: a
- * {@link WorkflowExecutionOperations} whose {@link ProcessingContext#whenComplete(Consumer)} invokes its callback synchronously,
- * exactly as a real body context does when it has nothing pending.
+ * {@link WorkflowExecutionOperations} whose {@link ProcessingContext#whenComplete(Consumer)} invokes its callback
+ * synchronously, exactly as a real body context does when it has nothing pending.
  * {@link #mockConfiguration(String, WorkflowExecution)} wires the factory chain that hands that execution back for the
  * given workflow id. What varies per test - registering the configuration on the registry, and stubbing
  * {@code execute(...)} to observe body starts - stays in the test, where the difference is the point.
@@ -51,9 +50,14 @@ import static org.mockito.Mockito.*;
  */
 final class WorkflowExecutionFixture {
 
+    private WorkflowExecutionFixture() {
+        // Utility class
+    }
+
     /**
-     * Builds a {@link WorkflowExecution} mock for {@code workflowId}, with its {@link WorkflowExecutionOperations} wired so that
-     * {@code workflowExecutionOperations().processingContext().whenComplete(...)} invokes the callback immediately.
+     * Builds a {@link WorkflowExecution} mock for {@code workflowId}, with its {@link WorkflowExecutionOperations}
+     * wired so that {@code workflowExecutionOperations().processingContext().whenComplete(...)} invokes the callback
+     * immediately.
      * <p>
      * Callers add their own {@code execute(any())} stubbing, since what a test wants to observe about a body start -
      * counting it, capturing its termination handler, or nothing at all - is specific to that test.
@@ -116,10 +120,6 @@ final class WorkflowExecutionFixture {
             bodyStarts.accept(workflowId);
             return CompletableFuture.completedFuture(null);
         }).when(execution).execute(any());
-    }
-
-    private WorkflowExecutionFixture() {
-        // Utility class
     }
 
     interface CancellationCapableExecution extends WorkflowExecution, WorkflowCancellationProvider {

@@ -18,33 +18,30 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations;
-
-import io.axoniq.framework.workflow.runtime.api.execution.context.ExecutePrimitive;
-import io.axoniq.framework.workflow.runtime.api.execution.context.PrimitiveCommands;
+import io.axoniq.framework.workflow.dsl.api.PayloadProcessor;
+import io.axoniq.framework.workflow.dsl.api.StepIndeterminateException;
+import io.axoniq.framework.workflow.dsl.api.StepInterruptedException;
+import io.axoniq.framework.workflow.dsl.api.StepRetryInfo;
+import io.axoniq.framework.workflow.dsl.api.StepStatus;
 import io.axoniq.framework.workflow.dsl.api.WorkflowCancelledException;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
+import io.axoniq.framework.workflow.dsl.api.WorkflowError;
+import io.axoniq.framework.workflow.dsl.api.WorkflowState;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStep;
 import io.axoniq.framework.workflow.dsl.api.retry.BackoffStrategy;
 import io.axoniq.framework.workflow.dsl.api.retry.RetryPolicy;
-import io.axoniq.framework.workflow.runtime.api.execution.state.StepIndeterminateException;
-import io.axoniq.framework.workflow.runtime.api.execution.state.StepInterruptedException;
-import io.axoniq.framework.workflow.runtime.api.execution.state.StepRetryInfo;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowError;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowState;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowStep;
-import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
-import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
-import io.axoniq.framework.workflow.runtime.api.payload.PayloadProcessor;
+import io.axoniq.framework.workflow.runtime.api.execution.context.ExecutePrimitive;
+import io.axoniq.framework.workflow.runtime.api.execution.context.PrimitiveCommands;
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations;
 import io.axoniq.framework.workflow.runtime.execution.payload.GlobalOnlyPayloadReducer;
 import io.axoniq.framework.workflow.runtime.execution.payload.LocalOnlyPayloadReducer;
 import io.axoniq.framework.workflow.runtime.util.MetadataUtils;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
-import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventMessage;
-import org.axonframework.messaging.eventhandling.EventSink;
 import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 import org.junit.jupiter.api.*;
-import org.mockito.ArgumentCaptor;
+import org.mockito.*;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -73,6 +70,90 @@ class RetryableExecuteDelegateTest {
 
     private static final Instant NOW = Instant.parse("2026-08-18T10:00:00Z");
     private static final String STEP_NAME = "retrying-step";
+
+    private static Fixture fixture() {
+        return fixture(retryingStep());
+    }
+
+    private static Fixture fixture(WorkflowStep recoveredStep) {
+        var workflowExecutionOperations = mock(WorkflowExecutionOperations.class);
+        var workflowExecution = mock(WorkflowExecution.class);
+        var state = mock(WorkflowState.class);
+        var executeDelegate = mock(ExecuteDelegate.class);
+        var queuedTasks = new ArrayDeque<Consumer<WorkflowExecution>>();
+        var publishedEvents = new ArrayList<EventMessage>();
+        var runningSteps = new RunningSteps();
+        var executor = Executors.newSingleThreadExecutor();
+        var scheduler = new ControllableWorkflowScheduler();
+
+        var processingContext = mock(ProcessingContext.class);
+        when(processingContext.component(EventConverter.class)).thenReturn(mock(EventConverter.class));
+        when(workflowExecutionOperations.processingContext()).thenReturn(processingContext);
+        when(workflowExecutionOperations.workflowStatus()).thenReturn(WorkflowStatus.STARTED);
+        when(workflowExecution.state()).thenReturn(state);
+        when(state.containsStep(STEP_NAME)).thenReturn(true);
+        when(state.getStep(STEP_NAME)).thenReturn(recoveredStep);
+        when(state.workflowStatus()).thenReturn(WorkflowStatus.STARTED);
+        doAnswer(invocation -> {
+            queuedTasks.add(invocation.getArgument(0));
+            return null;
+        }).when(workflowExecution).appendTask(any());
+        when(workflowExecution.appendWorkflowEvent(any(), any())).thenAnswer(invocation -> {
+            publishedEvents.add(invocation.getArgument(0));
+            return CompletableFuture.completedFuture(null);
+        });
+
+        var delegate = new RetryableExecuteDelegate(
+                executeDelegate,
+                workflowExecutionOperations,
+                workflowExecution,
+                runningSteps,
+                new ReachedSteps(),
+                DefaultEventNameCustomizer.Builder.defaults(),
+                Clock.fixed(NOW, ZoneOffset.UTC),
+                scheduler
+        );
+        return new Fixture(delegate,
+                           executeDelegate,
+                           workflowExecution,
+                           runningSteps,
+                           queuedTasks,
+                           publishedEvents,
+                           executor,
+                           scheduler);
+    }
+
+    private static WorkflowStep retryingStep() {
+        var retryInfo = new StepRetryInfo(1, 2, WorkflowError.from(new IllegalStateException("first attempt failed")));
+        return WorkflowStep.retrying(STEP_NAME, retryInfo, NOW, null);
+    }
+
+    private static WorkflowStep retryStartedStep(int attempt) {
+        var retryInfo = new StepRetryInfo(attempt, 2, WorkflowError.from(new IllegalStateException("attempt failed")));
+        return WorkflowStep.retryStarted(STEP_NAME, retryInfo, NOW, null);
+    }
+
+    private static ExecutePrimitive.ExecuteCommand command() {
+        return command(RetryPolicy.maxRetries(2));
+    }
+
+    private static ExecutePrimitive.ExecuteCommand commandWithBackoff() {
+        return command(RetryPolicy.maxRetries(2).withBackoff(BackoffStrategy.fixed(Duration.ofSeconds(1))));
+    }
+
+    private static ExecutePrimitive.ExecuteCommand command(RetryPolicy retryPolicy) {
+        PayloadProcessor action = (context, payload) -> Map.of();
+        return new PrimitiveCommands.WorkflowStepResultExecuteCommand(
+                STEP_NAME,
+                Map.of(),
+                action,
+                LocalOnlyPayloadReducer.INSTANCE,
+                GlobalOnlyPayloadReducer.INSTANCE,
+                Duration.ofSeconds(5),
+                DefaultEventNameCustomizer.Builder.defaults(),
+                retryPolicy
+        );
+    }
 
     @Test
     void recoveredImmediateRetryIsParkedAndCancellationPreventsTheNextAttempt() {
@@ -159,90 +240,6 @@ class RetryableExecuteDelegateTest {
                 assertThat(event.payloadAs(StepRetryInfo.class).attempt()).isEqualTo(2);
             });
         }
-    }
-
-    private static Fixture fixture() {
-        return fixture(retryingStep());
-    }
-
-    private static Fixture fixture(WorkflowStep recoveredStep) {
-        var workflowExecutionOperations = mock(WorkflowExecutionOperations.class);
-        var workflowExecution = mock(WorkflowExecution.class);
-        var state = mock(WorkflowState.class);
-        var executeDelegate = mock(ExecuteDelegate.class);
-        var queuedTasks = new ArrayDeque<Consumer<WorkflowExecution>>();
-        var publishedEvents = new ArrayList<EventMessage>();
-        var runningSteps = new RunningSteps();
-        var executor = Executors.newSingleThreadExecutor();
-        var scheduler = new ControllableWorkflowScheduler();
-
-        var processingContext = mock(ProcessingContext.class);
-        when(processingContext.component(EventConverter.class)).thenReturn(mock(EventConverter.class));
-        when(workflowExecutionOperations.processingContext()).thenReturn(processingContext);
-        when(workflowExecutionOperations.workflowStatus()).thenReturn(WorkflowStatus.STARTED);
-        when(workflowExecution.state()).thenReturn(state);
-        when(state.containsStep(STEP_NAME)).thenReturn(true);
-        when(state.getStep(STEP_NAME)).thenReturn(recoveredStep);
-        when(state.workflowStatus()).thenReturn(WorkflowStatus.STARTED);
-        doAnswer(invocation -> {
-            queuedTasks.add(invocation.getArgument(0));
-            return null;
-        }).when(workflowExecution).appendTask(any());
-        when(workflowExecution.appendWorkflowEvent(any(), any())).thenAnswer(invocation -> {
-            publishedEvents.add(invocation.getArgument(0));
-            return CompletableFuture.completedFuture(null);
-        });
-
-        var delegate = new RetryableExecuteDelegate(
-                executeDelegate,
-                workflowExecutionOperations,
-                workflowExecution,
-                runningSteps,
-                new ReachedSteps(),
-                DefaultEventNameCustomizer.Builder.defaults(),
-                Clock.fixed(NOW, ZoneOffset.UTC),
-                scheduler
-        );
-        return new Fixture(delegate,
-                           executeDelegate,
-                           workflowExecution,
-                           runningSteps,
-                           queuedTasks,
-                           publishedEvents,
-                           executor,
-                           scheduler);
-    }
-
-    private static WorkflowStep retryingStep() {
-        var retryInfo = new StepRetryInfo(1, 2, WorkflowError.from(new IllegalStateException("first attempt failed")));
-        return WorkflowStep.retrying(STEP_NAME, retryInfo, NOW, null);
-    }
-
-    private static WorkflowStep retryStartedStep(int attempt) {
-        var retryInfo = new StepRetryInfo(attempt, 2, WorkflowError.from(new IllegalStateException("attempt failed")));
-        return WorkflowStep.retryStarted(STEP_NAME, retryInfo, NOW, null);
-    }
-
-    private static ExecutePrimitive.ExecuteCommand command() {
-        return command(RetryPolicy.maxRetries(2));
-    }
-
-    private static ExecutePrimitive.ExecuteCommand commandWithBackoff() {
-        return command(RetryPolicy.maxRetries(2).withBackoff(BackoffStrategy.fixed(Duration.ofSeconds(1))));
-    }
-
-    private static ExecutePrimitive.ExecuteCommand command(RetryPolicy retryPolicy) {
-        PayloadProcessor action = (context, payload) -> Map.of();
-        return new PrimitiveCommands.WorkflowStepResultExecuteCommand(
-                STEP_NAME,
-                Map.of(),
-                action,
-                LocalOnlyPayloadReducer.INSTANCE,
-                GlobalOnlyPayloadReducer.INSTANCE,
-                Duration.ofSeconds(5),
-                DefaultEventNameCustomizer.Builder.defaults(),
-                retryPolicy
-        );
     }
 
     private record Fixture(RetryableExecuteDelegate delegate,

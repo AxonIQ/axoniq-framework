@@ -22,8 +22,8 @@ import io.axoniq.framework.workflow.dsl.api.EventNameCustomizer;
 import org.axonframework.common.annotation.Internal;
 
 /**
- * Callback invoked by {@link ExecuteDelegate} when an execute attempt times out.
- * The handler decides the step outcome (e.g. publish TIMED_OUT or RETRYING).
+ * Callback invoked by {@link ExecuteDelegate} when an execute attempt times out. The handler decides the step outcome
+ * (e.g. publish TIMED_OUT or RETRYING).
  *
  * @author Stefan Dragisic
  * @since 5.4.0

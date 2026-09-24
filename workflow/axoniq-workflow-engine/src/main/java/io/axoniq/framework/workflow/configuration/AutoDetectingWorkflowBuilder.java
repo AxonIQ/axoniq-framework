@@ -50,7 +50,7 @@ class AutoDetectingWorkflowBuilder<C extends WorkflowContext>
         implements WorkflowModule.WorkflowDefinitionPhase.FinalizedPhase<C> {
 
     /**
-     * Constructs an {@link AutoDetectingWorkflowBuilder} for the given {@code parent} module.
+     * Constructs an  for the given {@code parent} module.
      * <p>
      * The given {@code instanceBuilder} is used to create the component instance at build time, which is then inspected
      * for annotated workflow methods via {@link AutoDetectionUtils}.

@@ -18,29 +18,20 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations;
-
-import io.axoniq.framework.workflow.dsl.api.EventNameCustomizer;
-import io.axoniq.framework.workflow.runtime.api.execution.context.ExecutePrimitive;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
+import io.axoniq.framework.workflow.dsl.api.*;
 import io.axoniq.framework.workflow.dsl.api.retry.RetryContext;
 import io.axoniq.framework.workflow.dsl.api.retry.RetryPolicy;
-import io.axoniq.framework.workflow.runtime.api.execution.state.StepRetryInfo;
-import io.axoniq.framework.workflow.runtime.api.execution.state.StepTimedOutException;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowError;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowStepResult;
-import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
+import io.axoniq.framework.workflow.runtime.api.execution.context.ExecutePrimitive;
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations;
 import io.axoniq.framework.workflow.runtime.util.WorkflowStateUtils;
-import org.jspecify.annotations.Nullable;
 import org.axonframework.common.annotation.Internal;
-import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
-import org.axonframework.messaging.eventhandling.EventSink;
+import org.jspecify.annotations.Nullable;
 
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
 
 /**
  * Decorator that adds retry behavior to an {@link ExecuteDelegate}.
@@ -59,14 +50,15 @@ public class RetryableExecuteDelegate extends AbstractStepExecutor implements Ex
 
     /**
      * Constructs the delegate.
-     * @param delegate executoion delegate.
+     *
+     * @param delegate                    executoion delegate.
      * @param workflowExecutionOperations runtime primitive-operation surface
-     * @param workflowExecution workflow execution.
-     * @param runningSteps running step registry
-     * @param reachedSteps reached steps tracker
-     * @param parentEventNameCustomizer parent event name customizer.
-     * @param clock clock for time calculations.
-     * @param timeoutScheduler scheduler for workflow step timeouts
+     * @param workflowExecution           workflow execution.
+     * @param runningSteps                running step registry
+     * @param reachedSteps                reached steps tracker
+     * @param parentEventNameCustomizer   parent event name customizer.
+     * @param clock                       clock for time calculations.
+     * @param timeoutScheduler            scheduler for workflow step timeouts
      */
     @Internal
     public RetryableExecuteDelegate(
@@ -235,9 +227,8 @@ public class RetryableExecuteDelegate extends AbstractStepExecutor implements Ex
             }));
             registerParkedStep(stepName, scheduledRetry.completion(), scheduledRetry::cancel,
                                command.eventNameCustomizer(), () -> {
-                // nothing to clean up here
-            });
+                        // nothing to clean up here
+                    });
         }
     }
-
 }
