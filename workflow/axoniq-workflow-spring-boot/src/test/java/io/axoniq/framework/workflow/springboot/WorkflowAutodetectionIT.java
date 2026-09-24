@@ -20,7 +20,7 @@ package io.axoniq.framework.workflow.springboot;
 
 import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContextFactory;
-import io.axoniq.framework.workflow.runtime.api.annotation.Workflow;
+import io.axoniq.framework.workflow.dsl.annotation.Workflow;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowConfigurationRegistry;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;

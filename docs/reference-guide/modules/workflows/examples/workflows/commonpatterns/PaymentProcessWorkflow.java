@@ -20,7 +20,7 @@
 package workflows.commonpatterns;
 
 import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContext;
-import io.axoniq.framework.workflow.runtime.api.annotation.Workflow;
+import io.axoniq.framework.workflow.dsl.annotation.Workflow;
 
 public class PaymentProcessWorkflow {
 

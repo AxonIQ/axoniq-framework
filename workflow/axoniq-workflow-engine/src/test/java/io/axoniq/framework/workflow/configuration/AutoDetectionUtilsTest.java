@@ -35,7 +35,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Supplier;
 
-import static io.axoniq.framework.workflow.runtime.api.annotation.Workflow.*;
+import static io.axoniq.framework.workflow.dsl.annotation.Workflow.*;
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 

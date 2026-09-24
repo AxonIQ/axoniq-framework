@@ -20,7 +20,7 @@ package io.axoniq.framework.workflow.springboot.kotlin
 
 import io.axoniq.framework.workflow.dsl.api.StepStatus
 import io.axoniq.framework.workflow.dsl.kotlin.Kontext
-import io.axoniq.framework.workflow.runtime.api.annotation.Workflow
+import io.axoniq.framework.workflow.dsl.annotation.Workflow
 import io.axoniq.framework.workflow.runtime.util.MetadataUtils.METADATA_KEY_STEP_NAME
 import io.axoniq.framework.workflow.runtime.util.MetadataUtils.METADATA_KEY_TYPE
 import io.axoniq.framework.workflow.runtime.util.MetadataUtils.METADATA_KEY_WORKFLOW_ID

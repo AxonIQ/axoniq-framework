@@ -16,7 +16,8 @@
  * For licensing information and to register, visit:
  *  https://www.axoniq.io/pricing
  */
-package io.axoniq.framework.workflow.runtime.api.annotation;
+package io.axoniq.framework.workflow.dsl.annotation;
+
 
 import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
 
@@ -27,7 +28,7 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * Method marker to register a workflow lifecycle completed successfully listener.
+ * Method marker to register a workflow lifecycle timeout listener.
  *
  * @author Simon Zambrovski
  * @since 5.4.0
@@ -35,8 +36,8 @@ import java.lang.annotation.Target;
 @Documented
 @Retention(RetentionPolicy.RUNTIME)
 @Target({ElementType.METHOD, ElementType.ANNOTATION_TYPE})
-@WorkflowStatusChangedHandler(workflowStatus = WorkflowStatus.COMPLETED)
-public @interface WorkflowCompletedHandler {
+@WorkflowStatusChangedHandler(workflowStatus = WorkflowStatus.TIMED_OUT)
+public @interface WorkflowTimedOutHandler {
 
     /**
      * Specifies the name of the workflow.

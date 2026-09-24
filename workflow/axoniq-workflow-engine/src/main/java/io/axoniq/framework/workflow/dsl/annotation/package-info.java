@@ -23,6 +23,6 @@
  * @since 5.4.0
  */
 @NullMarked
-package io.axoniq.framework.workflow.runtime.api.annotation;
+package io.axoniq.framework.workflow.dsl.annotation;
 
 import org.jspecify.annotations.NullMarked;
