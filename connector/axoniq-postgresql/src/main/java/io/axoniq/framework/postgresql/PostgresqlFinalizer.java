@@ -55,6 +55,11 @@ final class PostgresqlFinalizer {
     private static final Logger LOGGER = LoggerFactory.getLogger(PostgresqlFinalizer.class);
 
     /*
+     * SELECT pg_advisory_xact_lock(42) must be its own statement, not a WITH clause: PostgreSQL
+     * silently prunes an unreferenced SELECT CTE from the plan, so the lock would never be
+     * acquired. Sending it together with the query below, in the same round trip and transaction,
+     * still releases it automatically on commit or rollback.
+     *
      * The finalization statement assigns permanent global_index values to any unfinalized events,
      * regardless of which process inserted them, and always returns the current highest global index.
      *
@@ -88,10 +93,9 @@ final class PostgresqlFinalizer {
      */
     private static final String FINALIZE_STATEMENT =
         """
-        WITH lock AS (
-          SELECT pg_advisory_xact_lock(42)
-        ),
-        unfinalized_events AS (
+        SELECT pg_advisory_xact_lock(42);
+
+        WITH unfinalized_events AS (
           SELECT global_index AS old_val, NEXTVAL('events_monotonic_seq') AS new_val
           FROM events
           WHERE global_index < 0
@@ -272,21 +276,32 @@ final class PostgresqlFinalizer {
              * conflicting tags can be appended.
              */
 
-            try (
-                PreparedStatement ps = connection.prepareStatement(FINALIZE_STATEMENT);
-                ResultSet resultSet = ps.executeQuery();
-            ) {
-                resultSet.next();  // query always returns a single row
-
-                long globalIndex = resultSet.getLong(1);
-
-                connection.commit();
-
-                if (LOGGER.isDebugEnabled()) {
-                    LOGGER.debug("finalizePositions completed with latest global index: " + globalIndex);
+            try (PreparedStatement ps = connection.prepareStatement(FINALIZE_STATEMENT)) {
+                if (!ps.execute()) {
+                    throw new IllegalStateException("A ResultSet is expected");
                 }
 
-                return globalIndex;
+                try (ResultSet lockResult = ps.getResultSet()) {
+                    lockResult.next();  // consumes the lock statement's single (void) row
+                }
+
+                if (!ps.getMoreResults()) {
+                    throw new IllegalStateException("A second ResultSet is expected");
+                }
+
+                try (ResultSet resultSet = ps.getResultSet()) {
+                    resultSet.next();  // query always returns a single row
+
+                    long globalIndex = resultSet.getLong(1);
+
+                    connection.commit();
+
+                    if (LOGGER.isDebugEnabled()) {
+                        LOGGER.debug("finalizePositions completed with latest global index: " + globalIndex);
+                    }
+
+                    return globalIndex;
+                }
             }
         }
     }
