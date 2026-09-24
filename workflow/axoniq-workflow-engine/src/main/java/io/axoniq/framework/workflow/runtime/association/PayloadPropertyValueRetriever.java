@@ -18,12 +18,11 @@
  */
 package io.axoniq.framework.workflow.runtime.association;
 
-import org.jspecify.annotations.Nullable;
-
 import com.fasterxml.jackson.core.type.TypeReference;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
+import org.jspecify.annotations.Nullable;
 
 import java.util.Map;
 import java.util.Objects;
@@ -49,16 +48,6 @@ public class PayloadPropertyValueRetriever implements ValueRetriever {
     private final String payloadPropertyName;
 
     /**
-     * Creates a value retriever based on the given payload property.
-     *
-     * @param payloadPropertyName property to read from the message payload.
-     * @return value retriever.
-     */
-    public static ValueRetriever payloadProperty(String payloadPropertyName) {
-        return new PayloadPropertyValueRetriever(payloadPropertyName);
-    }
-
-    /**
      * Constructs a new instance reading a specified payload property.
      *
      * @param payloadPropertyName property to read from the message payload.
@@ -67,6 +56,16 @@ public class PayloadPropertyValueRetriever implements ValueRetriever {
     public PayloadPropertyValueRetriever(String payloadPropertyName) {
         this.payloadPropertyName = Objects.requireNonNull(payloadPropertyName,
                                                           "Payload property name must not be null");
+    }
+
+    /**
+     * Creates a value retriever based on the given payload property.
+     *
+     * @param payloadPropertyName property to read from the message payload.
+     * @return value retriever.
+     */
+    public static ValueRetriever payloadProperty(String payloadPropertyName) {
+        return new PayloadPropertyValueRetriever(payloadPropertyName);
     }
 
     @Override

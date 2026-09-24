@@ -21,6 +21,15 @@ Axon Framework is a framework for building evolutionary, event-driven microservi
 5.  **Elegance**: For non-trivial changes, pause and ask "is there a more elegant way?" Skip for simple fixes.
 6.  **Autonomous bug fixing**: When given a bug report, just fix it. Point at logs/errors, then resolve. Zero hand-holding.
 
+### Working Agreement
+
+- **Preserve Git history during refactorings**: Use Git-aware moves for renamed or relocated tracked files. Before
+  handing off a refactoring, stage only its explicit old/new file pairs and verify `git diff --cached --summary -M`
+  reports them as renames. Do not leave a refactoring as deleted tracked files plus untracked replacements.
+- **Keep ADRs immutable**: Never edit, rename, or delete an accepted ADR to reflect a later decision. Create a new ADR
+  that references the earlier decision. Mark the earlier ADR as superseded or deprecated only when the new decision
+  fundamentally replaces it; otherwise state that the original decision remains accepted.
+
 ### Key Architectural Principles
 
 - **JDK 21 Base**: Framework requires Java 21. During implementation use Java 21 features like sealed classes.

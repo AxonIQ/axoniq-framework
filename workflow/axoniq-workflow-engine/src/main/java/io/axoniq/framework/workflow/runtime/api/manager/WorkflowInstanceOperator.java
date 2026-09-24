@@ -18,8 +18,8 @@
  */
 package io.axoniq.framework.workflow.runtime.api.manager;
 
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowCancelledException;
-import io.axoniq.framework.workflow.runtime.api.execution.state.StepCancellationException;
+import io.axoniq.framework.workflow.dsl.api.StepCancellationException;
+import io.axoniq.framework.workflow.dsl.api.WorkflowCancelledException;
 import org.jspecify.annotations.Nullable;
 
 import java.util.concurrent.CompletableFuture;
@@ -29,9 +29,9 @@ import java.util.concurrent.CompletableFuture;
  * <p>
  * Cancellation is cooperative: a request does not forcibly terminate user code. Cancelling a step makes its pending
  * result complete with a {@link StepCancellationException}. Cancelling a workflow wakes its execution, which then
- * terminates with a {@link WorkflowCancelledException}. Workflow code can catch these signals to release resources,
- * but should let cancellation continue rather than treating it as successful completion. User code that does not reach
- * a framework-controlled cancellation point is not forcibly stopped.
+ * terminates with a {@link WorkflowCancelledException}. Workflow code can catch these signals to release resources, but
+ * should let cancellation continue rather than treating it as successful completion. User code that does not reach a
+ * framework-controlled cancellation point is not forcibly stopped.
  *
  * @author Simon Zambrovski
  * @since 5.4.0
@@ -42,9 +42,9 @@ public interface WorkflowInstanceOperator {
      * Requests cooperative cancellation of one workflow step.
      *
      * @param stepName name of the step to cancel
-     * @param cause optional reason for the cancellation
-     * @return future completing with {@code true} when a terminal step cancellation was recorded, or {@code false}
-     * when the step was unknown or already terminal
+     * @param cause    optional reason for the cancellation
+     * @return future completing with {@code true} when a terminal step cancellation was recorded, or {@code false} when
+     * the step was unknown or already terminal
      */
     CompletableFuture<Boolean> requestStepCancellation(String stepName, @Nullable Throwable cause);
 

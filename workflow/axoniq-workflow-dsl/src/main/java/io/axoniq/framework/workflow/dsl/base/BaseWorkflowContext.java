@@ -22,28 +22,28 @@ package io.axoniq.framework.workflow.dsl.base;
 import org.jspecify.annotations.Nullable;
 
 import io.axoniq.framework.workflow.dsl.api.EventAssociationsUtils;
-import io.axoniq.framework.workflow.runtime.api.execution.context.CancelStepDefinition;
-import io.axoniq.framework.workflow.runtime.api.execution.context.CancelWorkflowDefinition;
-import io.axoniq.framework.workflow.runtime.api.execution.context.EventCondition;
-import io.axoniq.framework.workflow.runtime.api.execution.context.EventConditions;
-import io.axoniq.framework.workflow.runtime.api.execution.context.ExecuteStepDefinition;
-import io.axoniq.framework.workflow.runtime.api.execution.context.FailWorkflowDefinition;
-import io.axoniq.framework.workflow.runtime.api.execution.context.PayloadMapping;
-import io.axoniq.framework.workflow.runtime.api.execution.context.PayloadStepDefinition;
-import io.axoniq.framework.workflow.runtime.api.execution.context.PrimitiveMetadata;
-import io.axoniq.framework.workflow.runtime.api.execution.context.PublishStepDefinition;
-import io.axoniq.framework.workflow.runtime.api.execution.context.Timing;
-import io.axoniq.framework.workflow.runtime.api.execution.context.VersionStepDefinition;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WaitForStepDefinition;
+import io.axoniq.framework.workflow.dsl.api.CancelStepDefinition;
+import io.axoniq.framework.workflow.dsl.api.CancelWorkflowDefinition;
+import io.axoniq.framework.workflow.dsl.api.EventCondition;
+import io.axoniq.framework.workflow.dsl.api.EventConditions;
+import io.axoniq.framework.workflow.dsl.api.ExecuteStepDefinition;
+import io.axoniq.framework.workflow.dsl.api.FailWorkflowDefinition;
+import io.axoniq.framework.workflow.dsl.api.PayloadMapping;
+import io.axoniq.framework.workflow.dsl.api.PayloadStepDefinition;
+import io.axoniq.framework.workflow.dsl.api.PrimitiveMetadata;
+import io.axoniq.framework.workflow.dsl.api.PublishStepDefinition;
+import io.axoniq.framework.workflow.dsl.api.Timing;
+import io.axoniq.framework.workflow.dsl.api.VersionStepDefinition;
+import io.axoniq.framework.workflow.dsl.api.WaitForStepDefinition;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowConfiguration;
-import io.axoniq.framework.workflow.runtime.api.execution.context.retry.RetryPolicy;
-import io.axoniq.framework.workflow.runtime.api.execution.state.StepCancellationException;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowStepResult;
-import io.axoniq.framework.workflow.runtime.api.payload.PayloadModification;
-import io.axoniq.framework.workflow.runtime.api.payload.PayloadProcessor;
+import io.axoniq.framework.workflow.dsl.api.retry.RetryPolicy;
+import io.axoniq.framework.workflow.dsl.api.StepCancellationException;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStepResult;
+import io.axoniq.framework.workflow.dsl.api.PayloadModification;
+import io.axoniq.framework.workflow.dsl.api.PayloadProcessor;
 import io.axoniq.framework.workflow.runtime.association.Associations;
 import io.axoniq.framework.workflow.runtime.association.ValueRetriever;
-import io.axoniq.framework.workflow.runtime.execution.AbstractDSLWorkflowContext;
+import io.axoniq.framework.workflow.runtime.execution.AbstractWorkflowContext;
 import io.axoniq.framework.workflow.runtime.execution.payload.GlobalOnlyPayloadReducer;
 import io.axoniq.framework.workflow.runtime.execution.payload.LocalOnlyPayloadReducer;
 import io.axoniq.framework.workflow.runtime.api.execution.context.Version;
@@ -74,7 +74,7 @@ import static io.axoniq.framework.workflow.runtime.execution.DefaultEventNameCus
  * @author Steven van Beelen
  * @since 5.4.0
  */
-public class BaseWorkflowContext extends AbstractDSLWorkflowContext {
+public class BaseWorkflowContext extends AbstractWorkflowContext {
 
     private final MessageTypeResolver messageTypeResolver;
 

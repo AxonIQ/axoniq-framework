@@ -20,7 +20,7 @@
 package workflows.publishingevents;
 
 import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContext;
-import io.axoniq.framework.workflow.runtime.api.annotation.Workflow;
+import io.axoniq.framework.workflow.annotation.Workflow;
 
 public class ShipmentWorkflow {
 
@@ -29,8 +29,8 @@ public class ShipmentWorkflow {
     @Workflow(idProperty = "orderId",
               startOnEventClass = OrderApproved.class,
               workflowNamespace = "io.myapp.shipping")
-    public void execute(SimpleWorkflowContext ctx) {
-        ctx.awaitExecute("prepareShipment", Boolean.class, () -> true);
+    public void execute(SimpleWorkflowContext workflowContext) {
+        workflowContext.awaitExecute("prepareShipment", Boolean.class, () -> true);
     }
     // end::workflow-to-workflow[]
 }

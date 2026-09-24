@@ -52,6 +52,7 @@ import static org.mockito.Mockito.eq;
 
 /**
  * Unit test class for the {@code ProcessingContextUtils} utility class.
+ *
  * @author Simon Zambrovski
  */
 class ProcessingContextUtilsTest {
@@ -146,7 +147,8 @@ class ProcessingContextUtilsTest {
 
     @Test
     void testExecuteWithResultNoId() {
-        Function<ProcessingContext, CompletableFuture<String>> action = ctx -> CompletableFuture.completedFuture("completion");
+        Function<ProcessingContext, CompletableFuture<String>> action = ctx -> CompletableFuture.completedFuture(
+                "completion");
 
         CompletableFuture<String> resultFuture = ProcessingContextUtils.executeWithResult(
                 null, unitOfWorkFactory, executor, parentContext, action
@@ -163,7 +165,8 @@ class ProcessingContextUtilsTest {
 
     @Test
     void testExecuteWithResultWithId() {
-        Function<ProcessingContext, CompletableFuture<String>> action = ctx -> CompletableFuture.completedFuture("completion");
+        Function<ProcessingContext, CompletableFuture<String>> action = ctx -> CompletableFuture.completedFuture(
+                "completion");
 
         CompletableFuture<String> resultFuture = ProcessingContextUtils.executeWithResult(
                 "myId", unitOfWorkFactory, executor, parentContext, action
@@ -182,7 +185,8 @@ class ProcessingContextUtilsTest {
             return null;
         }).when(executorService).execute(any(Runnable.class));
 
-        Function<ProcessingContext, CompletableFuture<String>> action = ctx -> CompletableFuture.completedFuture("completion");
+        Function<ProcessingContext, CompletableFuture<String>> action = ctx -> CompletableFuture.completedFuture(
+                "completion");
 
         var result = ProcessingContextUtils.executeWithResultInSeparateThread(
                 "myId", unitOfWorkFactory, executorService, parentContext, action

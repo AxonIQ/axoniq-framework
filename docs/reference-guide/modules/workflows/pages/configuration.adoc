@@ -13,7 +13,7 @@ The `@Workflow` annotation is the simplest way to define a workflow:
 @Workflow(idProperty = "orderId",
           startOnEventClass = OrderPlacedEvent.class,
           workflowNamespace = "io.myapp.orders")
-public void execute(SimpleWorkflowContext ctx) { /* ... */ }
+public void execute(SimpleWorkflowContext workflowContext) { /* ... */ }
 ----
 
 The start trigger can be declared in two ways:
@@ -40,7 +40,7 @@ configurer.componentRegistry(r -> r.registerEnhancer(registry ->
                         .usingContext(SimpleWorkflowContext.class)
                         .workflowContextFactory(c -> new SimpleWorkflowContextFactory())
                         .workflowExecutionFactory(c ->
-                                new DSLAdoptingExecutionFactory<>(SimpleWorkflowContext.class))
+                                new WorkflowContextAdoptingExecutionFactory<>(SimpleWorkflowContext.class))
                         .definitions(d -> d
                                 .declarative(c -> new OrderFulfillmentWorkflow()::execute)
                                 .workflowName("OrderFulfillment")
@@ -79,7 +79,8 @@ WorkflowModule
 WorkflowModule.usingContext(SimpleWorkflowContext.class)
 ----
 
-Specifies the workflow context type. Use `SimpleWorkflowContext.class` for the built-in context, or your own custom context class.
+Specifies the author-facing workflow context type. Use `SimpleWorkflowContext.class` for the built-in context, or your
+own custom context class. Both implement `WorkflowContext`, the contract supplied to workflow bodies.
 
 === Step 2: Context factory
 
@@ -94,10 +95,19 @@ Provides a factory that creates new context instances for each workflow executio
 
 [source,java]
 ----
-.workflowExecutionFactory(c -> new DSLAdoptingExecutionFactory<>(SimpleWorkflowContext.class))
+.workflowExecutionFactory(c -> new WorkflowContextAdoptingExecutionFactory<>(SimpleWorkflowContext.class))
 ----
 
-`DSLAdoptingExecutionFactory` is the standard execution factory for DSL-based contexts (anything extending `AbstractDSLWorkflowContext`). It bridges the context to the engine's execution model.
+`WorkflowContextAdoptingExecutionFactory` is the standard execution factory for author-facing workflow contexts
+(anything extending `AbstractWorkflowContext`). It bridges a `WorkflowContext` to the engine's internal
+`WorkflowExecutionOperations` runtime contract. Workflow definitions should depend on the author-facing context, not
+on the runtime contract.
+
+Import `WorkflowContextAdoptingExecutionFactory` and `AbstractWorkflowContext` from
+`io.axoniq.framework.workflow.runtime.execution`. The author-facing `WorkflowContext`, step definitions,
+`EventCondition`, `EventConditions`, and workflow lifecycle exceptions reside in
+`io.axoniq.framework.workflow.dsl.api`; retry configuration resides in
+`io.axoniq.framework.workflow.dsl.api.retry`.
 
 === Step 4: Workflow definitions
 
@@ -420,7 +430,7 @@ Wire it all together:
 WorkflowModule
     .usingContext(ApprovalWorkflowContext.class)
     .workflowContextFactory(c -> new ApprovalWorkflowContextFactory())
-    .workflowExecutionFactory(c -> new DSLAdoptingExecutionFactory<>(ApprovalWorkflowContext.class))
+    .workflowExecutionFactory(c -> new WorkflowContextAdoptingExecutionFactory<>(ApprovalWorkflowContext.class))
     .definitions(d -> d
             .declarative(c -> new PurchaseApprovalWorkflow()::execute)
             .workflowName("PurchaseApproval")
@@ -433,11 +443,11 @@ Your workflow then reads like plain business logic—no engine primitives in sig
 
 [source,java]
 ----
-public void execute(ApprovalWorkflowContext ctx) {
-    if (!ctx.requestApproval("team-lead", Duration.ofDays(3))) {
-        ctx.escalate("department-head");
+public void execute(ApprovalWorkflowContext workflowContext) {
+    if (!workflowContext.requestApproval("team-lead", Duration.ofDays(3))) {
+        workflowContext.escalate("department-head");
     }
-    ctx.notifyOutcome(ctx.requester(), "approved");
+    workflowContext.notifyOutcome(workflowContext.requester(), "approved");
 }
 ----
 

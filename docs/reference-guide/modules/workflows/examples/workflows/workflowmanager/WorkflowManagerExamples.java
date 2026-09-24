@@ -20,8 +20,8 @@
 package workflows.workflowmanager;
 
 import io.axoniq.framework.workflow.query.api.WorkflowStateQuery;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowState;
-import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
+import io.axoniq.framework.workflow.dsl.api.WorkflowState;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.api.manager.WorkflowInstance;
 import io.axoniq.framework.workflow.runtime.api.manager.WorkflowManager;
 import org.axonframework.common.configuration.Configuration;

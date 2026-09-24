@@ -18,13 +18,13 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
+import io.axoniq.framework.workflow.dsl.api.StepStatus;
+import io.axoniq.framework.workflow.dsl.api.WorkflowState;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStep;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStepResult;
 import io.axoniq.framework.workflow.runtime.api.execution.context.PrimitiveCommands;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowReplayDriftException;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowState;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowStep;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowStepResult;
-import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.Metadata;
 import org.axonframework.messaging.core.QualifiedName;
@@ -45,8 +45,9 @@ import java.util.function.Predicate;
 import static io.axoniq.framework.workflow.runtime.util.MetadataUtils.*;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.eq;
 
 /**
  * Tests for {@link PublishDelegate}: the user's event is appended once, enriched with workflow metadata, and never
@@ -59,12 +60,15 @@ class PublishDelegateTest {
     private static final String WORKFLOW_ID = "wf-1";
     private static final String STEP_NAME = "notifyApproved";
     private static final MessageType USER_TYPE = new MessageType(new QualifiedName("io.acme", "OrderApproved"));
-
+    private final ReachedSteps reachedSteps = new ReachedSteps();
     private WorkflowExecution workflowExecution;
     private WorkflowState state;
     private ProcessingContext processingContext;
-    private final ReachedSteps reachedSteps = new ReachedSteps();
     private PublishDelegate delegate;
+
+    private static EventMessage userEvent(Metadata metadata) {
+        return new GenericEventMessage(USER_TYPE, Map.of("orderId", "order-1"), metadata);
+    }
 
     @BeforeEach
     void setUp() {
@@ -80,10 +84,6 @@ class PublishDelegateTest {
                 .thenReturn(CompletableFuture.completedFuture(null));
 
         delegate = new PublishDelegate(workflowExecution, reachedSteps);
-    }
-
-    private static EventMessage userEvent(Metadata metadata) {
-        return new GenericEventMessage(USER_TYPE, Map.of("orderId", "order-1"), metadata);
     }
 
     @SuppressWarnings("unchecked")
@@ -147,7 +147,8 @@ class PublishDelegateTest {
         @SuppressWarnings("unchecked")
         void waitsUntilThePublishedStepIsCompletedInState() throws InterruptedException {
             // when
-            WorkflowStepResult result = delegate.publish(PrimitiveCommands.publish(STEP_NAME, userEvent(Metadata.emptyInstance())));
+            WorkflowStepResult result = delegate.publish(PrimitiveCommands.publish(STEP_NAME,
+                                                                                   userEvent(Metadata.emptyInstance())));
 
             // then
             assertThat(result.getStepName()).isEqualTo(STEP_NAME);
@@ -176,7 +177,8 @@ class PublishDelegateTest {
             when(state.containsStep(STEP_NAME)).thenReturn(true);
 
             // when
-            WorkflowStepResult result = delegate.publish(PrimitiveCommands.publish(STEP_NAME, userEvent(Metadata.emptyInstance())));
+            WorkflowStepResult result = delegate.publish(PrimitiveCommands.publish(STEP_NAME,
+                                                                                   userEvent(Metadata.emptyInstance())));
 
             // then
             verify(workflowExecution, never()).appendTask(any());
@@ -198,7 +200,8 @@ class PublishDelegateTest {
             when(state.containsStep(STEP_NAME)).thenReturn(false);
 
             // when / then
-            assertThatThrownBy(() -> delegate.publish(PrimitiveCommands.publish(STEP_NAME, userEvent(Metadata.emptyInstance()))))
+            assertThatThrownBy(() -> delegate.publish(PrimitiveCommands.publish(STEP_NAME,
+                                                                                userEvent(Metadata.emptyInstance()))))
                     .isInstanceOf(WorkflowReplayDriftException.class)
                     .satisfies(ex -> {
                         var drift = (WorkflowReplayDriftException) ex;
@@ -223,7 +226,8 @@ class PublishDelegateTest {
             doThrow(new InterruptedException()).when(workflowExecution).awaitStateChange(any());
 
             // when
-            WorkflowStepResult result = delegate.publish(PrimitiveCommands.publish(STEP_NAME, userEvent(Metadata.emptyInstance())));
+            WorkflowStepResult result = delegate.publish(PrimitiveCommands.publish(STEP_NAME,
+                                                                                   userEvent(Metadata.emptyInstance())));
 
             // then
             assertThat(result.canceled()).isTrue();

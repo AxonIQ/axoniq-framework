@@ -18,23 +18,39 @@
  */
 package io.axoniq.framework.workflow.query;
 
+import io.axoniq.framework.workflow.dsl.api.StepStatus;
+import io.axoniq.framework.workflow.dsl.api.WorkflowState;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStep;
 import io.axoniq.framework.workflow.query.api.WorkflowStateQuery;
 import io.axoniq.framework.workflow.query.utils.WorkflowStateQueryMatcher;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowState;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowStep;
-import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
-import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
 import org.axonframework.messaging.core.VersionedType;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 
 import java.time.Instant;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 
 class WorkflowStateQueryMatcherTest {
+
+    private static WorkflowState matchingState() {
+        WorkflowState state = mock(WorkflowState.class);
+        when(state.workflowId()).thenReturn("order-42");
+        when(state.workflowDefinitionId()).thenReturn(VersionedType.of("PaymentWorkflow", "1.0"));
+        when(state.workflowStatus()).thenReturn(WorkflowStatus.STARTED);
+        when(state.containsStep("reserve-funds")).thenReturn(true);
+        when(state.getStep("reserve-funds")).thenReturn(step(StepStatus.COMPLETED));
+        when(state.payload()).thenReturn(Map.of("orderId", "order-42"));
+        when(state.versionFor("payment-retry")).thenReturn("2.0");
+        when(state.hasVersionMigrationStep("payment-retry")).thenReturn(true);
+        return state;
+    }
+
+    private static WorkflowStep step(StepStatus status) {
+        return new WorkflowStep("reserve-funds", status, null, null, Instant.EPOCH, null);
+    }
 
     @Test
     void matchesEverySupportedCriterion() {
@@ -88,7 +104,8 @@ class WorkflowStateQueryMatcherTest {
         WorkflowState state = matchingState();
         when(state.workflowStatus()).thenReturn(WorkflowStatus.COMPLETED);
 
-        assertThat(WorkflowStateQueryMatcher.matches(WorkflowStateQuery.byWorkflowStatus(WorkflowStatus.STARTED), state))
+        assertThat(WorkflowStateQueryMatcher.matches(WorkflowStateQuery.byWorkflowStatus(WorkflowStatus.STARTED),
+                                                     state))
                 .isFalse();
     }
 
@@ -158,22 +175,5 @@ class WorkflowStateQueryMatcherTest {
         assertThat(WorkflowStateQueryMatcher.matches(
                 WorkflowStateQuery.byVersionMigration("payment-retry"), state
         )).isFalse();
-    }
-
-    private static WorkflowState matchingState() {
-        WorkflowState state = mock(WorkflowState.class);
-        when(state.workflowId()).thenReturn("order-42");
-        when(state.workflowDefinitionId()).thenReturn(VersionedType.of("PaymentWorkflow", "1.0"));
-        when(state.workflowStatus()).thenReturn(WorkflowStatus.STARTED);
-        when(state.containsStep("reserve-funds")).thenReturn(true);
-        when(state.getStep("reserve-funds")).thenReturn(step(StepStatus.COMPLETED));
-        when(state.payload()).thenReturn(Map.of("orderId", "order-42"));
-        when(state.versionFor("payment-retry")).thenReturn("2.0");
-        when(state.hasVersionMigrationStep("payment-retry")).thenReturn(true);
-        return state;
-    }
-
-    private static WorkflowStep step(StepStatus status) {
-        return new WorkflowStep("reserve-funds", status, null, null, Instant.EPOCH, null);
     }
 }

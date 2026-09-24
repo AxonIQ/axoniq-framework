@@ -28,14 +28,14 @@ import java.util.concurrent.CompletionException;
  * administrative code. Use {@link #findOne(WorkflowStateQuery)} when the query must select at most one instance, or
  * {@link #findMany(WorkflowStateQuery)} to operate on every matching instance.
  * <p>
- * Cancellation requests are asynchronous and affect live workflow executions only. For example, to request
- * cancellation of a workflow identified by its workflow ID:
+ * Cancellation requests are asynchronous and affect live workflow executions only. For example, to request cancellation
+ * of a workflow identified by its workflow ID:
  * <pre>{@code
  * workflowManager.findOne(WorkflowStateQuery.byWorkflowId(workflowId))
  *                .requestWorkflowCancellation(null);
  * }</pre>
- * The returned future completes after the cancellation event is durable and the workflow body has been woken. Use
- * the workflow execution context to initiate cancellation from inside a workflow definition.
+ * The returned future completes after the cancellation event is durable and the workflow body has been woken. Use the
+ * workflow execution context to initiate cancellation from inside a workflow definition.
  *
  * @author Simon Zambrovski
  * @since 5.4.0

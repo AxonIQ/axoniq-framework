@@ -18,10 +18,11 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
+import io.axoniq.framework.workflow.dsl.api.StepStatus;
+import io.axoniq.framework.workflow.dsl.api.WorkflowState;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStepResult;
 import io.axoniq.framework.workflow.runtime.api.execution.context.PublishPrimitive;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowStepResult;
-import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.framework.workflow.runtime.util.FutureResolver;
 import io.axoniq.framework.workflow.runtime.util.MetadataUtils;
 import io.axoniq.framework.workflow.runtime.util.WorkflowStateUtils;
@@ -38,10 +39,10 @@ import static io.axoniq.framework.workflow.runtime.util.MetadataUtils.STEP_PRIMI
  * Implements the {@link PublishPrimitive}.
  * <p>
  * The delegate publishes the user's event enriched with workflow metadata directly through
- * {@link WorkflowExecution#appendWorkflowEvent}, bypassing the step guards of {@link AbstractStepExecutor}: there is
- * no started/completed pair, the single event is the completed step. The replay-skip gate
- * ({@link io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowState#containsStep}) and the drift guard
- * ({@link ReachedSteps#assertNoReplayDrift}) mirror {@link PayloadDelegate}.
+ * {@link WorkflowExecution#appendWorkflowEvent}, bypassing the step guards of {@link AbstractStepExecutor}: there is no
+ * started/completed pair, the single event is the completed step. The replay-skip gate
+ * ({@link WorkflowState#containsStep}) and the drift guard ({@link ReachedSteps#assertNoReplayDrift}) mirror
+ * {@link PayloadDelegate}.
  *
  * @author Stefan Dragisic
  * @since 5.4.0

@@ -30,11 +30,11 @@ import java.util.concurrent.TimeoutException;
  * Resolves a {@link CompletableFuture} according to a configurable waiting policy.
  * <p>
  * Applications can provide one implementation through Java's {@link java.util.ServiceLoader} mechanism or a
- * configuration component to replace the default resolver. The configured resolver is used wherever workflow code
- * waits for a future. When no component is present, {@link DefaultTimeoutFutureResolver} applies a 30-second
- * safety-net timeout. This is sufficient for
- * synchronous in-memory, local database, and unit-of-work operations while surfacing hung dependencies before they
- * exhaust workflow threads. Callers that legitimately expect a longer wait must configure a resolver with that bound.
+ * configuration component to replace the default resolver. The configured resolver is used wherever workflow code waits
+ * for a future. When no component is present, {@link DefaultTimeoutFutureResolver} applies a 30-second safety-net
+ * timeout. This is sufficient for synchronous in-memory, local database, and unit-of-work operations while surfacing
+ * hung dependencies before they exhaust workflow threads. Callers that legitimately expect a longer wait must configure
+ * a resolver with that bound.
  *
  * @author Simon Zambrovski
  * @since 5.4.0
@@ -72,19 +72,19 @@ public interface FutureResolver {
         }
     }
 
+    @SuppressWarnings("unchecked")
+    private static <T extends Throwable> void throwUnchecked(Throwable failure) throws T {
+        throw (T) failure;
+    }
+
     /**
      * Resolves the given future according to this resolver's policy.
      * <p>
-     * Implementations should throw {@link FutureResolutionTimeoutException} when their resolution timeout expires.
-     * The context-based {@link #resolve(ProcessingContext, CompletableFuture)} overload also normalizes a raw
+     * Implementations should throw {@link FutureResolutionTimeoutException} when their resolution timeout expires. The
+     * context-based {@link #resolve(ProcessingContext, CompletableFuture)} overload also normalizes a raw
      * {@link TimeoutException} for implementations that cannot yet do so.
      *
      * @param future future to resolve
      */
     void resolve(CompletableFuture<?> future);
-
-    @SuppressWarnings("unchecked")
-    private static <T extends Throwable> void throwUnchecked(Throwable failure) throws T {
-        throw (T) failure;
-    }
 }

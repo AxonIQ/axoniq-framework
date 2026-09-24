@@ -18,15 +18,15 @@
  */
 package io.axoniq.framework.workflow.runtime.api.execution.context;
 
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowState;
-import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
-import org.jspecify.annotations.Nullable;
+import io.axoniq.framework.workflow.dsl.api.WorkflowState;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.infra.DescribableComponent;
+import org.axonframework.eventsourcing.eventstore.ConsistencyMarker;
 import org.axonframework.messaging.core.Context;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
-import org.axonframework.eventsourcing.eventstore.ConsistencyMarker;
+import org.jspecify.annotations.Nullable;
 
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
@@ -57,11 +57,11 @@ public interface WorkflowExecution extends DescribableComponent {
     CompletableFuture<Void> execute(Consumer<WorkflowExecution> terminationHandler);
 
     /**
-     * Returns the workflow context of the current execution.
+     * Returns the runtime operations for the current execution.
      *
-     * @return workflow context facing the user
+     * @return runtime operations for the current execution
      */
-    WorkflowContext workflowContext();
+    WorkflowExecutionOperations workflowExecutionOperations();
 
     /**
      * Applies queued tasks until the condition is satisfied.
@@ -96,7 +96,7 @@ public interface WorkflowExecution extends DescribableComponent {
     /**
      * Appends a workflow-owned event from the given parent context.
      *
-     * @param event event to append
+     * @param event         event to append
      * @param parentContext context the append unit of work derives from
      * @return a future that completes when the event has been appended
      */
@@ -147,35 +147,6 @@ public interface WorkflowExecution extends DescribableComponent {
      * @param listener listener to notify when checkpoint work becomes safe or unsafe
      */
     void registerCheckpointWorkStateListener(CheckpointWorkStateListener listener);
-
-    /**
-     * Receives transitions of checkpoint-relevant workflow work.
-     */
-    interface CheckpointWorkStateListener {
-
-        CheckpointWorkStateListener NO_OP = new CheckpointWorkStateListener() {
-
-            @Override
-            public void onMarkedUnsafe() {
-                // No-op
-            }
-
-            @Override
-            public void onMarkedSafe() {
-                // No-op
-            }
-        };
-
-        /**
-         * Invoked when the workflow execution has checkpoint-relevant work.
-         */
-        void onMarkedUnsafe();
-
-        /**
-         * Invoked when the workflow execution no longer has checkpoint-relevant work.
-         */
-        void onMarkedSafe();
-    }
 
     /**
      * Interrupt all running steps without producing any step/workflow cancellation events. This method is for abrupt
@@ -238,4 +209,33 @@ public interface WorkflowExecution extends DescribableComponent {
      * @param position position observed while restoring the workflow
      */
     void restoreAppendPosition(@Nullable ConsistencyMarker position);
+
+    /**
+     * Receives transitions of checkpoint-relevant workflow work.
+     */
+    interface CheckpointWorkStateListener {
+
+        CheckpointWorkStateListener NO_OP = new CheckpointWorkStateListener() {
+
+            @Override
+            public void onMarkedUnsafe() {
+                // No-op
+            }
+
+            @Override
+            public void onMarkedSafe() {
+                // No-op
+            }
+        };
+
+        /**
+         * Invoked when the workflow execution has checkpoint-relevant work.
+         */
+        void onMarkedUnsafe();
+
+        /**
+         * Invoked when the workflow execution no longer has checkpoint-relevant work.
+         */
+        void onMarkedSafe();
+    }
 }

@@ -40,16 +40,6 @@ public class PayloadPropertyWorkflowIdProvider implements WorkflowIdProvider {
     private final String attributeName;
     private final Function<String, String> idProcessor;
 
-    public static PayloadPropertyWorkflowIdProvider fromPayloadAttribute(
-            Configuration configuration,
-            String attributeName,
-            UnaryOperator<String> customizer) {
-        return new PayloadPropertyWorkflowIdProvider(
-                attributeName,
-                customizer
-        );
-    }
-
     /**
      * Constructs id provider.
      *
@@ -72,6 +62,16 @@ public class PayloadPropertyWorkflowIdProvider implements WorkflowIdProvider {
     ) {
         this.attributeName = Objects.requireNonNull(attributeName, "Attribute name must not be null");
         this.idProcessor = idProcessor;
+    }
+
+    public static PayloadPropertyWorkflowIdProvider fromPayloadAttribute(
+            Configuration configuration,
+            String attributeName,
+            UnaryOperator<String> customizer) {
+        return new PayloadPropertyWorkflowIdProvider(
+                attributeName,
+                customizer
+        );
     }
 
     @Override
