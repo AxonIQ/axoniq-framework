@@ -18,13 +18,15 @@
  */
 package io.axoniq.framework.workflow.configuration;
 
-import io.axoniq.framework.workflow.runtime.api.execution.context.EventCondition;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
+import io.axoniq.framework.workflow.dsl.api.EventCondition;
+import io.axoniq.framework.workflow.dsl.api.WorkflowContext;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContextFactory;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowDefinition;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowIdProvider;
+import io.axoniq.framework.workflow.runtime.api.execution.context.RecoverableWorkflowExceptionPolicy;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowStatusChangeListener;
-import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
+import io.axoniq.framework.workflow.runtime.execution.AbstractWorkflowContext;
 import io.axoniq.framework.workflow.runtime.execution.DefaultEventNameCustomizer;
 import io.axoniq.framework.workflow.runtime.util.FutureResolver;
 import org.axonframework.common.AxonConfigurationException;
@@ -64,7 +66,7 @@ import static io.axoniq.framework.workflow.configuration.WorkflowMethodParameter
  * {@link SimpleWorkflowModule.ConditionedWorkflowConfiguration} for each. The resulting configurations are registered
  * on the parent {@link SimpleWorkflowModule} during construction.
  * <p>
- * Every {@link io.axoniq.framework.workflow.runtime.api.annotation.Workflow} method on the detected component is built
+ * Every {@link io.axoniq.framework.workflow.annotation.Workflow} method on the detected component is built
  * once, at construction time, into an {@link AnnotatedHandlerInspector}-managed, enhancer-wrapped
  * {@link MessageHandlingMember}.
  *
@@ -124,7 +126,7 @@ class AutoDetectingWorkflowBuilder<C extends WorkflowContext>
      * recognizers (including {@code AnnotatedMessageHandlingMemberDefinition}, needed so that
      * {@code @MessageHandlerInterceptor} methods declared on the same class are recognized and chained) — with
      * {@link AnnotatedWorkflowStatusChangedHandlerDefinition} (for
-     * {@link io.axoniq.framework.workflow.runtime.api.annotation.WorkflowStatusChangedHandler} methods), which is
+     * {@link io.axoniq.framework.workflow.annotation.WorkflowStatusChangedHandler} methods), which is
      * <b>not</b> classpath-discovered, as it recognizes methods by the generic {@link EventMessage} type and must
      * remain scoped to workflow autodetection only. Mirrors how {@code AnnotatedCommandHandlingComponent} itself is
      * built.
@@ -193,7 +195,7 @@ class AutoDetectingWorkflowBuilder<C extends WorkflowContext>
 
         WorkflowDefinition<C> workflowDefinition = workflowContext -> {
             WorkflowTriggerMessage trigger = new WorkflowTriggerMessage(messageType, workflowContext);
-            ProcessingContext processingContext = workflowContext.processingContext()
+            ProcessingContext processingContext = ((AbstractWorkflowContext) workflowContext).processingContext()
                                                                  .withResource(WORKFLOW_CONTEXT_RESOURCE_KEY,
                                                                                workflowContext)
                                                                  .withResource(WORKFLOW_INSTANCE_RESOURCE_KEY,
@@ -220,7 +222,11 @@ class AutoDetectingWorkflowBuilder<C extends WorkflowContext>
                         workflowContextFactoryBuilder.build(config),
                         workflowIdProviderComponentBuilder.build(config),
                         namespaceCustomizer,
-                        statusChangeListeners
+                        statusChangeListeners,
+                        config.getComponent(
+                                RecoverableWorkflowExceptionPolicy.class,
+                                () -> RecoverableWorkflowExceptionPolicy.DEFAULT
+                        )
                 )
         );
     }

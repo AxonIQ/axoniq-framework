@@ -19,21 +19,22 @@
 
 package io.axoniq.framework.workflow.configuration;
 
-import io.axoniq.framework.workflow.runtime.api.annotation.Workflow;
-import io.axoniq.framework.workflow.runtime.api.annotation.WorkflowCompletedHandler;
-import io.axoniq.framework.workflow.runtime.api.execution.context.EventCondition;
-import io.axoniq.framework.workflow.runtime.api.execution.context.EventConditions;
-import io.axoniq.framework.workflow.runtime.api.execution.context.EventNameCustomizer;
+import io.axoniq.framework.workflow.annotation.Workflow;
+import io.axoniq.framework.workflow.annotation.WorkflowCompletedHandler;
+import io.axoniq.framework.workflow.dsl.api.EventCondition;
+import io.axoniq.framework.workflow.dsl.api.EventConditions;
+import io.axoniq.framework.workflow.dsl.api.EventNameCustomizer;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowConfiguration;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
+import io.axoniq.framework.workflow.dsl.api.WorkflowContext;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContextFactory;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowDefinition;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionFactory;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowIdProvider;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowStatusChangeListener;
-import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.association.ValueComparisonOperatorRegistry;
 import io.axoniq.framework.workflow.runtime.execution.DefaultEventNameCustomizer;
+import io.axoniq.framework.workflow.runtime.execution.AbstractWorkflowContext;
 import io.axoniq.framework.workflow.runtime.execution.PayloadPropertyWorkflowIdProvider;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowConfigurationRegistry;
 import io.axoniq.framework.workflow.runtime.util.DefaultTimeoutFutureResolver;
@@ -60,6 +61,7 @@ import org.junit.jupiter.api.*;
 import org.mockito.*;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -391,7 +393,16 @@ class WorkflowModuleTest {
                 .hasMessageContaining("run");
     }
 
-    interface TestWorkflowContext extends WorkflowContext {
+    abstract static class TestWorkflowContext extends AbstractWorkflowContext {
+
+        TestWorkflowContext(
+                String workflowId,
+                Map<String, Object> payload,
+                ProcessingContext processingContext,
+                WorkflowConfiguration<?> workflowConfiguration
+        ) {
+            super(workflowId, payload, processingContext, workflowConfiguration);
+        }
 
     }
 

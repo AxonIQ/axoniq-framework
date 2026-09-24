@@ -18,12 +18,10 @@
  */
 package io.axoniq.framework.workflow.configuration;
 
-import org.jspecify.annotations.Nullable;
-
-import io.axoniq.framework.workflow.runtime.api.execution.context.EventConditions;
+import io.axoniq.framework.workflow.dsl.api.EventConditions;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowConfiguration;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
-import io.axoniq.framework.workflow.runtime.execution.AbstractDSLWorkflowContext;
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations;
+import io.axoniq.framework.workflow.runtime.execution.AbstractWorkflowContext;
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.eventsourcing.eventstore.EventStore;
 import org.axonframework.messaging.core.QualifiedName;
@@ -32,6 +30,7 @@ import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 import org.axonframework.modelling.repository.Repository;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.*;
 
 import java.util.Map;
@@ -90,12 +89,12 @@ abstract class AbstractEventSourcedEntityRepositoryTestBase {
                             .orElseThrow();
     }
 
-    protected WorkflowContext workflowContext(String workflowId) {
-        return workflowContext(workflowId, "0.0.1");
+    protected WorkflowExecutionOperations workflowExecutionOperations(String workflowId) {
+        return workflowExecutionOperations(workflowId, "0.0.1");
     }
 
-    protected WorkflowContext workflowContext(String workflowId, String version) {
-        var context = mock(WorkflowContext.class);
+    protected WorkflowExecutionOperations workflowExecutionOperations(String workflowId, String version) {
+        var context = mock(WorkflowExecutionOperations.class);
         when(context.workflowId()).thenReturn(workflowId);
         when(context.workflowPayload()).thenReturn(Map.of("orderId", workflowId));
         when(context.workflowVersion()).thenReturn(version);
@@ -105,7 +104,7 @@ abstract class AbstractEventSourcedEntityRepositoryTestBase {
         return context;
     }
 
-    static class TestContext extends AbstractDSLWorkflowContext {
+    static class TestContext extends AbstractWorkflowContext {
 
         TestContext(Map<String, @Nullable Object> payload,
                     String workflowId,

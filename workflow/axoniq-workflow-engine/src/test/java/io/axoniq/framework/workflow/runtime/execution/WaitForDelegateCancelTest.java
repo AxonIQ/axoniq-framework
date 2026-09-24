@@ -18,10 +18,10 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowCancelledException;
+import io.axoniq.framework.workflow.dsl.api.StepCancellationException;
+import io.axoniq.framework.workflow.dsl.api.WorkflowCancelledException;
+import io.axoniq.framework.workflow.dsl.api.WorkflowFailedException;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowFailedException;
-import io.axoniq.framework.workflow.runtime.api.execution.state.StepCancellationException;
 import org.junit.jupiter.api.*;
 
 import java.util.concurrent.CompletableFuture;
@@ -30,8 +30,8 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 /**
- * Proves that only cancellation exceptions trigger a step cancelled event,
- * while {@link InterruptedException} (thread interrupt / shutdown) does not.
+ * Proves that only cancellation exceptions trigger a step cancelled event, while {@link InterruptedException} (thread
+ * interrupt / shutdown) does not.
  * <p>
  * This mirrors the {@code .exceptionally()} handler pattern used in {@link WaitForDelegate}.
  *

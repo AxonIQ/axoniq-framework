@@ -18,12 +18,12 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
-import io.axoniq.framework.workflow.runtime.api.execution.context.EventNameCustomizer;
+import io.axoniq.framework.workflow.dsl.api.EventNameCustomizer;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStepResult;
 import io.axoniq.framework.workflow.runtime.api.execution.context.Version;
 import io.axoniq.framework.workflow.runtime.api.execution.context.VersionPrimitive;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowStepResult;
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations;
 import io.axoniq.framework.workflow.runtime.util.EventMessageUtils;
 import io.axoniq.framework.workflow.runtime.util.FutureResolver;
 import org.axonframework.common.annotation.Internal;
@@ -50,7 +50,7 @@ public class VersionDelegate implements VersionPrimitive {
 
     private static final Logger logger = LoggerFactory.getLogger(VersionDelegate.class);
 
-    private final WorkflowContext workflowContext;
+    private final WorkflowExecutionOperations workflowExecutionOperations;
     private final WorkflowExecution workflowExecution;
     private final ReachedSteps reachedSteps;
     private final EventNameCustomizer parentEventNameCustomizer;
@@ -59,18 +59,19 @@ public class VersionDelegate implements VersionPrimitive {
     /**
      * Constructs the delegate.
      *
-     * @param workflowContext            workflow context
-     * @param workflowExecution          workflow execution
-     * @param reachedSteps              reached steps tracker
-     * @param parentEventNameCustomizer parent event name customizer
-     * @param clock                     clock for time calculations
+     * @param workflowExecutionOperations runtime primitive-operation surface
+     * @param workflowExecution           workflow execution
+     * @param reachedSteps                reached steps tracker
+     * @param parentEventNameCustomizer   parent event name customizer
+     * @param clock                       clock for time calculations
      */
-    public VersionDelegate(WorkflowContext workflowContext,
+    public VersionDelegate(WorkflowExecutionOperations workflowExecutionOperations,
                            WorkflowExecution workflowExecution,
                            ReachedSteps reachedSteps,
                            EventNameCustomizer parentEventNameCustomizer,
                            Clock clock) {
-        this.workflowContext = Objects.requireNonNull(workflowContext, "Workflow context is mandatory");
+        this.workflowExecutionOperations = Objects.requireNonNull(workflowExecutionOperations,
+                                                                  "Workflow execution operations are mandatory");
         this.workflowExecution = Objects.requireNonNull(workflowExecution, "Workflow execution is mandatory");
         this.reachedSteps = Objects.requireNonNull(reachedSteps, "Reached steps tracker is mandatory");
         this.parentEventNameCustomizer = Objects.requireNonNull(parentEventNameCustomizer,
@@ -122,7 +123,7 @@ public class VersionDelegate implements VersionPrimitive {
         //    returning so a subsequent ctx.migrateVersion() call later in the same invocation sees the
         //    recorded value.
         var eventNameCustomizer = merge(parentEventNameCustomizer, command.eventNameCustomizer());
-        var event = EventMessageUtils.versionMigrationStep(workflowContext,
+        var event = EventMessageUtils.versionMigrationStep(workflowExecutionOperations,
                                                            stepName,
                                                            requestedRaw,
                                                            eventNameCustomizer);

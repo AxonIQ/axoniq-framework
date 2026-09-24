@@ -18,7 +18,7 @@
  */
 package io.axoniq.framework.workflow.configuration;
 
-import io.axoniq.framework.workflow.runtime.api.annotation.WorkflowStatusChangedHandler;
+import io.axoniq.framework.workflow.annotation.WorkflowStatusChangedHandler;
 import org.axonframework.common.annotation.AnnotationUtils;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.MessageStream;

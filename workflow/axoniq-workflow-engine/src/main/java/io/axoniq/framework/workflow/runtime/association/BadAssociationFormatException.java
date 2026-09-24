@@ -24,8 +24,9 @@ import java.util.Set;
 
 /**
  * Exception thrown when an association string is in the wrong format or uses unsupported operators.
- * @since 5.4.0
+ *
  * @author Simon Zambrovski
+ * @since 5.4.0
  */
 public class BadAssociationFormatException extends RuntimeException {
 

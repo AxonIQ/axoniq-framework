@@ -31,7 +31,7 @@ import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventstreaming.EventCriteria;
 import org.axonframework.messaging.eventstreaming.Tag;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -56,8 +56,8 @@ class RunningWorkflowsRepositoryIntegrationTest extends AbstractEventSourcedEnti
 
         var customizer = DefaultEventNameCustomizer.Builder.defaults();
         var definitionId = VersionedType.of(new QualifiedName("OrderWorkflow"), "0.0.1");
-        var first = workflowContext("wf-1");
-        var second = workflowContext("wf-2");
+        var first = workflowExecutionOperations("wf-1");
+        var second = workflowExecutionOperations("wf-2");
 
         publish(EventMessageUtils.startedWorkflow(first, "OrderWorkflow", definitionId, customizer));
         publish(EventMessageUtils.startedWorkflow(second, "OrderWorkflow", definitionId, customizer));
@@ -119,5 +119,4 @@ class RunningWorkflowsRepositoryIntegrationTest extends AbstractEventSourcedEnti
             stream.close();
         }
     }
-
 }

@@ -18,10 +18,10 @@
  */
 package io.axoniq.framework.workflow.configuration;
 
-import io.axoniq.framework.workflow.runtime.api.annotation.Workflow;
-import io.axoniq.framework.workflow.runtime.api.annotation.WorkflowStatusChangedHandler;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
-import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
+import io.axoniq.framework.workflow.annotation.Workflow;
+import io.axoniq.framework.workflow.annotation.WorkflowStatusChangedHandler;
+import io.axoniq.framework.workflow.dsl.api.WorkflowContext;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
 import org.axonframework.messaging.core.annotation.ParameterResolver;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.StubProcessingContext;

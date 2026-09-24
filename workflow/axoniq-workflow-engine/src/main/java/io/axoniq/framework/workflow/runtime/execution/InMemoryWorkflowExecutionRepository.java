@@ -47,7 +47,7 @@ public class InMemoryWorkflowExecutionRepository implements WorkflowExecutionRep
     private final ConcurrentHashMap<String, WorkflowExecution> workflowExecutions = new ConcurrentHashMap<>();
 
     /**
-     * Creates a new instance of {@link InMemoryWorkflowExecutionRepository}.
+     * Creates a new instance of .
      */
     public InMemoryWorkflowExecutionRepository() {
         logger.info("Using in-memory workflow execution repository.");

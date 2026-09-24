@@ -18,7 +18,7 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowState;
+import io.axoniq.framework.workflow.dsl.api.WorkflowState;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.modelling.repository.ManagedEntity;
@@ -71,6 +71,6 @@ public class EventSourcedWorkflowStore implements WorkflowStore {
     public CompletableFuture<Optional<WorkflowState>> findWorkflow(String workflowId,
                                                                    ProcessingContext processingContext) {
         return workflowStateRepository.load(workflowId, processingContext)
-                                      .thenApply(managed -> Optional.<WorkflowState>ofNullable(managed.entity()));
+                                      .thenApply(managed -> Optional.ofNullable(managed.entity()));
     }
 }

@@ -18,13 +18,15 @@
  */
 package io.axoniq.framework.workflow.runtime.api.execution.context;
 
-import io.axoniq.framework.workflow.runtime.api.execution.context.retry.RetryPolicy;
-import io.axoniq.framework.workflow.runtime.api.payload.PayloadModification;
-import io.axoniq.framework.workflow.runtime.api.payload.PayloadProcessor;
-import io.axoniq.framework.workflow.runtime.api.payload.PayloadReducer;
-import org.jspecify.annotations.Nullable;
+import io.axoniq.framework.workflow.dsl.api.EventCondition;
+import io.axoniq.framework.workflow.dsl.api.EventNameCustomizer;
+import io.axoniq.framework.workflow.dsl.api.PayloadModification;
+import io.axoniq.framework.workflow.dsl.api.PayloadProcessor;
+import io.axoniq.framework.workflow.dsl.api.PayloadReducer;
+import io.axoniq.framework.workflow.dsl.api.retry.RetryPolicy;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.eventhandling.EventMessage;
+import org.jspecify.annotations.Nullable;
 
 import java.time.Duration;
 import java.util.Map;
@@ -252,6 +254,7 @@ public class PrimitiveCommands {
             Duration timeout,
             EventNameCustomizer eventNameCustomizer
     ) implements WaitForPrimitive.WaitForCommand {
+
     }
 
     /**
@@ -268,6 +271,7 @@ public class PrimitiveCommands {
             PayloadModification payloadModification,
             EventNameCustomizer eventNameCustomizer
     ) implements PayloadPrimitive.ModifyPayloadCommand {
+
     }
 
     /**
@@ -283,6 +287,7 @@ public class PrimitiveCommands {
             String newVersion,
             EventNameCustomizer eventNameCustomizer
     ) implements VersionPrimitive.VersionCommand {
+
     }
 
     /**
@@ -296,6 +301,7 @@ public class PrimitiveCommands {
             String stepName,
             EventMessage event
     ) implements PublishPrimitive.PublishCommand {
+
     }
 
     /**

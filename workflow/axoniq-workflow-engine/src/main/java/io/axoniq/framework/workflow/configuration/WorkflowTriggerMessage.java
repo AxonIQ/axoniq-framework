@@ -18,7 +18,7 @@
  */
 package io.axoniq.framework.workflow.configuration;
 
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
+import io.axoniq.framework.workflow.dsl.api.WorkflowContext;
 import org.axonframework.messaging.core.GenericMessage;
 import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.MessageType;

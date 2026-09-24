@@ -18,20 +18,20 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
+import io.axoniq.framework.workflow.dsl.api.WorkflowContext;
+import io.axoniq.framework.workflow.dsl.api.WorkflowState;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowConfiguration;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContextFactory;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionFactory;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowState;
-import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.util.MetadataUtils;
+import org.axonframework.common.configuration.ComponentNotFoundException;
+import org.axonframework.messaging.core.ApplicationContext;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.VersionedType;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
-import org.axonframework.messaging.core.unitofwork.StubProcessingContext;
-import org.axonframework.common.configuration.ComponentNotFoundException;
-import org.axonframework.messaging.core.ApplicationContext;
 import org.axonframework.messaging.core.unitofwork.SimpleUnitOfWorkFactory;
+import org.axonframework.messaging.core.unitofwork.StubProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 import org.junit.jupiter.api.*;
@@ -76,17 +76,28 @@ class WorkflowEngineRestoreFaultIsolationTest {
      * No definition is registered under this name at all: not exactly, not lower, not higher.
      */
     private static final String RETIRED_WORKFLOW = "RetiredWorkflow";
-
-    private SimpleWorkflowConfigurationRegistry configurationRegistry;
-    private WorkflowStore workflowStore;
-    private WorkflowEngine workflowEngine;
-
     /**
      * Ids whose body the engine started, in restore order.
      */
     private final List<String> bodyStarts = new ArrayList<>();
     private final EventSourcedRunningWorkflows runningWorkflows = new EventSourcedRunningWorkflows();
     private final Map<String, WorkflowState> statesById = new HashMap<>();
+    private SimpleWorkflowConfigurationRegistry configurationRegistry;
+    private WorkflowStore workflowStore;
+    private WorkflowEngine workflowEngine;
+
+    /**
+     * Returns a real unit of work factory: the engine sources every restored instance in a unit of work of its own, so
+     * a mock would hand it none.
+     */
+    private static UnitOfWorkFactory restoreUnitOfWorkFactory() {
+        return new SimpleUnitOfWorkFactory(new ApplicationContext() {
+            @Override
+            public <C> C component(Class<C> type, String name) {
+                throw new ComponentNotFoundException(type, name);
+            }
+        });
+    }
 
     @BeforeEach
     void setUp() {
@@ -193,7 +204,7 @@ class WorkflowEngineRestoreFaultIsolationTest {
             var workflowId = contextInvocation.<String>getArgument(1);
             var execution = WorkflowExecutionFixture.mockExecution(workflowId, stateOf(workflowId), false);
             WorkflowExecutionFixture.recordBodyStartOn(execution, bodyStarts::add, workflowId);
-            var workflowContext = execution.workflowContext();
+            var workflowContext = mock(WorkflowContext.class);
             when(executionFactory.create(workflowContext)).thenReturn(execution);
             return workflowContext;
         }).when(contextFactory).createContext(anyMap(), any(), any(), eq(configuration));
@@ -223,18 +234,5 @@ class WorkflowEngineRestoreFaultIsolationTest {
 
     private ProcessingContext sourcingContext() {
         return new StubProcessingContext();
-    }
-
-    /**
-     * Returns a real unit of work factory: the engine sources every restored instance in a unit of
-     * work of its own, so a mock would hand it none.
-     */
-    private static UnitOfWorkFactory restoreUnitOfWorkFactory() {
-        return new SimpleUnitOfWorkFactory(new ApplicationContext() {
-            @Override
-            public <C> C component(Class<C> type, String name) {
-                throw new ComponentNotFoundException(type, name);
-            }
-        });
     }
 }

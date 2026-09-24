@@ -18,20 +18,20 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
-import io.axoniq.framework.workflow.runtime.api.execution.context.EventNameCustomizer;
+import io.axoniq.framework.workflow.dsl.api.EventNameCustomizer;
+import io.axoniq.framework.workflow.dsl.api.StepCancellationException;
+import io.axoniq.framework.workflow.dsl.api.StepIndeterminateException;
+import io.axoniq.framework.workflow.dsl.api.StepInterruptedException;
+import io.axoniq.framework.workflow.dsl.api.StepRetryInfo;
+import io.axoniq.framework.workflow.dsl.api.StepStatus;
+import io.axoniq.framework.workflow.dsl.api.WorkflowCancelledException;
+import io.axoniq.framework.workflow.dsl.api.WorkflowError;
+import io.axoniq.framework.workflow.dsl.api.WorkflowFailedException;
+import io.axoniq.framework.workflow.dsl.api.WorkflowState;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStepResult;
 import io.axoniq.framework.workflow.runtime.api.execution.context.ExecutePrimitive;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowCancelledException;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowFailedException;
-import io.axoniq.framework.workflow.runtime.api.execution.state.StepCancellationException;
-import io.axoniq.framework.workflow.runtime.api.execution.state.StepIndeterminateException;
-import io.axoniq.framework.workflow.runtime.api.execution.state.StepInterruptedException;
-import io.axoniq.framework.workflow.runtime.api.execution.state.StepRetryInfo;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowState;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowError;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowStepResult;
-import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations;
 import io.axoniq.framework.workflow.runtime.util.FutureResolver;
 import io.axoniq.framework.workflow.runtime.util.ProcessingContextUtils;
 import io.axoniq.framework.workflow.runtime.util.WorkflowStateUtils;
@@ -78,19 +78,19 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
     /**
      * Constructs the delegate.
      *
-     * @param context                   workflow context
-     * @param workflowExecution         workflow state
-     * @param runningSteps              running step registry
-     * @param reachedSteps              reached steps tracker
-     * @param parentEventNameCustomizer event name customizer
-     * @param clock                     clock for time calculations
-     * @param unitOfWorkFactory         unit of work factory for creation of new processing contexts
-     * @param executor                  executor to offload execution tasks from workflow thread
-     * @param timeoutScheduler          scheduler for workflow step timeouts
-     * @param actionResolver            resolver for execute step actions
+     * @param workflowExecutionOperations runtime operations for the workflow execution
+     * @param workflowExecution           workflow state
+     * @param runningSteps                running step registry
+     * @param reachedSteps                reached steps tracker
+     * @param parentEventNameCustomizer   event name customizer
+     * @param clock                       clock for time calculations
+     * @param unitOfWorkFactory           unit of work factory for creation of new processing contexts
+     * @param executor                    executor to offload execution tasks from workflow thread
+     * @param timeoutScheduler            scheduler for workflow step timeouts
+     * @param actionResolver              resolver for execute step actions
      */
     @Internal
-    public ExecuteDelegate(WorkflowContext context,
+    public ExecuteDelegate(WorkflowExecutionOperations workflowExecutionOperations,
                            WorkflowExecution workflowExecution,
                            RunningSteps runningSteps,
                            ReachedSteps reachedSteps,
@@ -101,7 +101,7 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
                            WorkflowScheduler timeoutScheduler,
                            ExecuteStepActionResolver actionResolver
     ) {
-        super(context,
+        super(workflowExecutionOperations,
               workflowExecution,
               runningSteps,
               reachedSteps,
@@ -116,10 +116,10 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
     @Override
     public WorkflowStepResult execute(ExecutePrimitive.ExecuteCommand command) {
         return execute(command,
-                // default failure handler — publish FAILED
+                       // default failure handler — publish FAILED
                        (name, error, enc) ->
                                workflowExecution.appendTask(i -> failed(name, error, enc)),
-                // default timeout handler — publish TIMED_OUT
+                       // default timeout handler — publish TIMED_OUT
                        (name, enc) ->
                                workflowExecution.appendTask(i -> timedOut(name, clock.instant(), enc))
         );
@@ -166,9 +166,12 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
                                                                                                 .getStep(stepName)
                                                                                                 .context(),
                                                                                processingContext);
-                        var payload = parameterPayloadReducer.apply(workflowContext.workflowPayload(), local);
+                        var payload = parameterPayloadReducer.apply(workflowExecutionOperations.workflowPayload(),
+                                                                    local);
                         try {
-                            var action = actionResolver.resolve(workflowContext, workflowExecution, command);
+                            var action = actionResolver.resolve(workflowExecutionOperations,
+                                                                workflowExecution,
+                                                                command);
                             return CompletableFuture.completedFuture(action.apply(procContext, payload));
                         } catch (StepCancellationException | WorkflowCancelledException | WorkflowFailedException t) {
                             // Framework control-flow signals must keep their original type
@@ -236,13 +239,12 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
      * having started the attempt.
      * <p>
      * Read the step state once every pending task is applied, and before this run publishes its own start record. An
-     * in-flight attempt that this execution did not start belongs to another run: either a prior incarnation's
-     * attempt rebuilt from the durable log, or the run of whichever execution owns the instance now. Both may already
-     * have performed the step's external effect, so this run must NOT execute the action; instead it routes the
-     * attempt through the regular error flow (no retry policy: step {@code FAILED} with
-     * {@link StepIndeterminateException}; retry policy: {@code RETRYING} plus next attempt). A live retry attempt
-     * reaches this check with status {@code RETRYING} and earns ownership afterwards by getting its own
-     * {@code RETRY_STARTED} accepted.
+     * in-flight attempt that this execution did not start belongs to another run: either a prior incarnation's attempt
+     * rebuilt from the durable log, or the run of whichever execution owns the instance now. Both may already have
+     * performed the step's external effect, so this run must NOT execute the action; instead it routes the attempt
+     * through the regular error flow (no retry policy: step {@code FAILED} with {@link StepIndeterminateException};
+     * retry policy: {@code RETRYING} plus next attempt). A live retry attempt reaches this check with status
+     * {@code RETRYING} and earns ownership afterwards by getting its own {@code RETRY_STARTED} accepted.
      *
      * @param state    the workflow state after all pending tasks for the step have been applied
      * @param stepName name of the step
@@ -280,8 +282,10 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
                                 StepStatus.STARTED);
         }
         var existing = state.getStep(stepName);
-        if (existing.status() == StepStatus.RETRYING && existing.result() instanceof StepRetryInfo previous) {
-            var nextAttempt = new StepRetryInfo(previous.attempt() + 1, previous.maxRetries(), previous.error());
+        if (existing.status() == StepStatus.RETRYING && existing.result() instanceof StepRetryInfo(
+                int attempt, int maxRetries, WorkflowError error
+        )) {
+            var nextAttempt = new StepRetryInfo(attempt + 1, maxRetries, error);
             return tryStartStep(stepName,
                                 () -> retryStarted(stepName, nextAttempt, eventNameCustomizer),
                                 StepStatus.RETRY_STARTED);
@@ -290,19 +294,19 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
     }
 
     /**
-     * Publishes this execution's start record for one attempt of the given step ({@code STARTED} for the first
-     * attempt, {@code RETRY_STARTED} for a retry) and waits until the step is present with the expected status. That
-     * state change carries no writer identity: the event may have been recorded by another execution of the same
-     * workflow instance and delivered here over this execution's own event stream. The store accepting this
-     * execution's own append is therefore the only proof that this execution took the attempt. The append is then
-     * resolved through the workflow's bounded future-resolution policy before the action is allowed to run.
+     * Publishes this execution's start record for one attempt of the given step ({@code STARTED} for the first attempt,
+     * {@code RETRY_STARTED} for a retry) and waits until the step is present with the expected status. That state
+     * change carries no writer identity: the event may have been recorded by another execution of the same workflow
+     * instance and delivered here over this execution's own event stream. The store accepting this execution's own
+     * append is therefore the only proof that this execution took the attempt. The append is then resolved through the
+     * workflow's bounded future-resolution policy before the action is allowed to run.
      *
      * @param stepName name of the step to start
      * @param publish  publishes this execution's start record for the attempt
      * @param expected the step status the start record evolves the step into
      * @return {@code true} when the store accepted this execution's append, so this execution owns the attempt and may
-     * run its action. {@code false} when the append was rejected, when the step reached the expected status before
-     * this execution's append ran, or when the wait was interrupted (the interrupt flag is restored)
+     * run its action. {@code false} when the append was rejected, when the step reached the expected status before this
+     * execution's append ran, or when the wait was interrupted (the interrupt flag is restored)
      */
     private boolean tryStartStep(String stepName, Supplier<CompletableFuture<Void>> publish, StepStatus expected) {
         var ownStarted = new AtomicReference<CompletableFuture<Void>>();

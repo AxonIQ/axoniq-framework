@@ -39,8 +39,7 @@ import static java.util.Objects.requireNonNull;
  * <p>
  * This class has one job: coordinate checkpoint requests and complete
  * {@link #onCheckpointAdvanced(Segment, TrackingToken)} only after the host confirms that workflow-owned asynchronous
- * work is safe. It does not track
- * processor progress or decide when the engine should switch to live mode.
+ * work is safe. It does not track processor progress or decide when the engine should switch to live mode.
  * <p>
  * Everything here is kept <em>per segment</em>. The processor hands out one {@link CheckpointTrigger} per claimed
  * segment, a request through it advances only that segment's stored token, and it is inert once that claim ends.

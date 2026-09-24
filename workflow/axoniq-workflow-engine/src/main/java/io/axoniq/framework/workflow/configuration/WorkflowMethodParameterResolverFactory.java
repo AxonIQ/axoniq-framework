@@ -18,10 +18,10 @@
  */
 package io.axoniq.framework.workflow.configuration;
 
-import io.axoniq.framework.workflow.runtime.api.annotation.Workflow;
-import io.axoniq.framework.workflow.runtime.api.annotation.WorkflowStatusChangedHandler;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
-import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
+import io.axoniq.framework.workflow.annotation.Workflow;
+import io.axoniq.framework.workflow.annotation.WorkflowStatusChangedHandler;
+import io.axoniq.framework.workflow.dsl.api.WorkflowContext;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
 import org.axonframework.common.annotation.AnnotationUtils;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.Context;
@@ -35,8 +35,8 @@ import java.lang.reflect.Parameter;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * Parameter resolver factory serving both {@link io.axoniq.framework.workflow.runtime.api.annotation.Workflow} body
- * methods and {@link io.axoniq.framework.workflow.runtime.api.annotation.WorkflowStatusChangedHandler} lifecycle
+ * Parameter resolver factory serving both {@link io.axoniq.framework.workflow.annotation.Workflow} body
+ * methods and {@link io.axoniq.framework.workflow.annotation.WorkflowStatusChangedHandler} lifecycle
  * methods.
  *
  * @author Steven van Beelen

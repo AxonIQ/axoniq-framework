@@ -20,7 +20,7 @@ package io.axoniq.framework.workflow.springboot.kotlin
 
 import io.axoniq.framework.workflow.dsl.kotlin.Kontext
 import io.axoniq.framework.workflow.dsl.kotlin.WorkflowKontext
-import io.axoniq.framework.workflow.runtime.api.annotation.Workflow
+import io.axoniq.framework.workflow.annotation.Workflow
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowDefinition
 import io.axoniq.framework.workflow.runtime.execution.WorkflowConfigurationRegistry
 import io.axoniq.framework.workflow.runtime.util.DefaultTimeoutFutureResolver

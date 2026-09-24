@@ -18,9 +18,9 @@
  */
 package io.axoniq.framework.workflow.runtime.util;
 
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowState;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowStep;
-import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
+import io.axoniq.framework.workflow.dsl.api.StepStatus;
+import io.axoniq.framework.workflow.dsl.api.WorkflowState;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStep;
 import org.axonframework.common.annotation.Internal;
 
 import java.util.function.Predicate;

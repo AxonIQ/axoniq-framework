@@ -18,18 +18,17 @@
  */
 package io.axoniq.framework.workflow.runtime.util;
 
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowState;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowStep;
-import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
-import org.junit.jupiter.api.Test;
+import io.axoniq.framework.workflow.dsl.api.StepStatus;
+import io.axoniq.framework.workflow.dsl.api.WorkflowState;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStep;
+import org.junit.jupiter.api.*;
 
 import java.lang.reflect.Constructor;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 
 class WorkflowStateUtilsTest {
 
@@ -83,7 +82,10 @@ class WorkflowStateUtilsTest {
 
     @Test
     void isStepTerminalReturnsTrueWhenStepIsTerminal() {
-        for (StepStatus terminalStatus : List.of(StepStatus.COMPLETED, StepStatus.FAILED, StepStatus.TIMED_OUT, StepStatus.CANCELLED)) {
+        for (StepStatus terminalStatus : List.of(StepStatus.COMPLETED,
+                                                 StepStatus.FAILED,
+                                                 StepStatus.TIMED_OUT,
+                                                 StepStatus.CANCELLED)) {
             WorkflowState state = mock(WorkflowState.class);
             WorkflowStep step = mock(WorkflowStep.class);
 
@@ -120,7 +122,10 @@ class WorkflowStateUtilsTest {
 
     @Test
     void isStepActiveReturnsFalseWhenStepIsTerminal() {
-        for (StepStatus terminalStatus : List.of(StepStatus.COMPLETED, StepStatus.FAILED, StepStatus.TIMED_OUT, StepStatus.CANCELLED)) {
+        for (StepStatus terminalStatus : List.of(StepStatus.COMPLETED,
+                                                 StepStatus.FAILED,
+                                                 StepStatus.TIMED_OUT,
+                                                 StepStatus.CANCELLED)) {
             WorkflowState state = mock(WorkflowState.class);
             WorkflowStep step = mock(WorkflowStep.class);
 

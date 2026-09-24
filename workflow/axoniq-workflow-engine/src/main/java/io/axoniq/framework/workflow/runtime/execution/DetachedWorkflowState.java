@@ -18,9 +18,9 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowState;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowStep;
-import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
+import io.axoniq.framework.workflow.dsl.api.WorkflowState;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStep;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.messaging.core.VersionedType;
 import org.jspecify.annotations.Nullable;

@@ -19,7 +19,6 @@
 package io.axoniq.framework.workflow.runtime.association;
 
 
-
 import java.util.Map;
 import java.util.Objects;
 import java.util.ServiceLoader;

@@ -18,8 +18,8 @@
  */
 package io.axoniq.framework.workflow.configuration;
 
-import io.axoniq.framework.workflow.runtime.api.annotation.Workflow;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
+import io.axoniq.framework.workflow.annotation.Workflow;
+import io.axoniq.framework.workflow.dsl.api.WorkflowContext;
 import org.axonframework.common.annotation.AnnotationUtils;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.MessageStream;
