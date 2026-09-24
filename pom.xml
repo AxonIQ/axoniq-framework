@@ -136,6 +136,10 @@
                     <artifactId>maven-install-plugin</artifactId>
                     <version>${maven-install.version}</version>
                 </plugin>
+                <plugin>
+                    <artifactId>maven-jar-plugin</artifactId>
+                    <version>${maven-jar.version}</version>
+                </plugin>
             </plugins>
         </pluginManagement>
 

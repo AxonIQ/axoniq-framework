@@ -114,7 +114,7 @@ Set `axon.springcloud.enabled=false` to handle commands locally instead.
 
 The same starter also carries the xref:distributed-query-bus.adoc#SpringCloudQueryBusConnector[`SpringCloudQueryBusConnector`], which distributes queries over the same discovery and the same ring.
 
-Applications preferring to wire these beans themselves can depend on `axoniq-springcloud-discovery` alone.
+Applications preferring to wire these beans themselves can depend on `axoniq-springcloud` alone.
 Spring itself is still required: the connector learns about the cluster from Spring Cloud's discovery events, and receives messages and capability requests through Spring MVC controllers.
 Each Spring Cloud component Axoniq Framework supports has a module of its own, so an application takes only the ones it uses.
 

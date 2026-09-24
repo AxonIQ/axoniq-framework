@@ -22,7 +22,6 @@ package io.axoniq.framework.integrationtests.queryhandling;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration;
 import io.axoniq.framework.messaging.queryhandling.distributed.DistributedQueryBus;
 import io.axoniq.framework.testcontainer.AxonServerContainer;
-import io.axoniq.framework.testcontainer.AxonServerContainerUtils;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.integrationtests.queryhandling.AbstractSubscriptionQueryTestSuite;
 import org.axonframework.messaging.core.MessageStream;
@@ -40,12 +39,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
-import java.io.IOException;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicReference;
 
-import static io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration.DEFAULT_CONTEXT;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
@@ -70,17 +67,12 @@ class DistributedQueryBusSubscriptionQueryIT extends AbstractSubscriptionQueryTe
     private static final AxonServerContainer container = new AxonServerContainer()
             .withAxonServerHostname("localhost")
             .withDevMode(true)
+            .withDcbContext(true)
             .withReuse(true);
 
     @BeforeAll
-    static void beforeAll() throws IOException {
+    static void beforeAll() {
         container.start();
-
-        // Mainly needed to create DBC context now:
-        AxonServerContainerUtils.purgeEventsFromAxonServer(container.getHost(),
-                                                           container.getHttpPort(),
-                                                           DEFAULT_CONTEXT,
-                                                           AxonServerContainerUtils.DCB_CONTEXT);
         logger.info("Using Axon Server for integration test. UI is available at http://localhost:{}",
                     container.getHttpPort());
     }

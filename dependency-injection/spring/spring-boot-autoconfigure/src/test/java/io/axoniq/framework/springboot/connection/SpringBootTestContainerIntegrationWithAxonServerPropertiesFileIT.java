@@ -44,7 +44,7 @@ import static org.awaitility.Awaitility.await;
  *
  * @author Steven van Beelen
  */
-@SpringBootTest
+@SpringBootTest(properties = "axon.springcloud.enabled=false")
 @Testcontainers
 @ActiveProfiles("custom")
 class SpringBootTestContainerIntegrationWithAxonServerPropertiesFileIT {

@@ -42,13 +42,60 @@
     <dependencies>
         <dependency>
             <groupId>io.axoniq.framework</groupId>
+            <artifactId>axoniq-springcloud</artifactId>
+            <version>${project.version}</version>
+            <optional>true</optional>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-autoconfigure</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-configuration-processor</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-web</artifactId>
+        </dependency>
+        <!--
+            The discovery implementation (Eureka, Consul, Kubernetes) stays the application's choice, so only the
+            common discovery contracts are depended upon here.
+        -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-commons</artifactId>
+        </dependency>
+
+        <!-- Test -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <!-- Test-only: proves the connector rejects a reactive web application, whose stack cannot serve the
+                 Spring MVC endpoints members reach each other on. -->
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-webflux</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.axonframework.extensions.spring</groupId>
+            <artifactId>axon-spring-boot-starter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.axoniq.framework</groupId>
             <artifactId>axon-server-connector</artifactId>
             <version>${project.version}</version>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>io.axoniq.framework</groupId>
-            <artifactId>axoniq-springcloud-spring-boot-starter</artifactId>
+            <artifactId>axoniq-spring-boot-starter</artifactId>
             <version>${project.version}</version>
             <scope>test</scope>
         </dependency>
