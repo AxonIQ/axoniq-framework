@@ -241,6 +241,7 @@ public interface WorkflowContext {
      * @param componentType type of component to resolve
      * @param <T>           type of component to resolve
      * @return the resolved component
+     * @throws org.axonframework.common.configuration.ComponentNotFoundException is component doesn't exist.
      */
     <T> T resolveComponent(Class<T> componentType);
 
