@@ -58,8 +58,8 @@
         <!-- Explicit heap/metaspace caps for forked test JVMs, so total memory use across concurrent forks is
              predictable instead of relying on each JVM's default ergonomics (a fraction of visible host memory),
              which risks over-committing the runner's limited memory when several forks/containers run at once. -->
-        <surefire.jvm.argLine>-Xmx512m -XX:MaxMetaspaceSize=128m</surefire.jvm.argLine>
-        <failsafe.jvm.argLine>-Xmx512m -XX:MaxMetaspaceSize=128m</failsafe.jvm.argLine>
+        <surefire.jvm.argLine>-Xmx512m -XX:MaxMetaspaceSize=1024m</surefire.jvm.argLine>
+        <failsafe.jvm.argLine>-Xmx512m -XX:MaxMetaspaceSize=1024m</failsafe.jvm.argLine>
 
         <!-- Database -->
         <c3p0.version>0.9.1.2</c3p0.version>
