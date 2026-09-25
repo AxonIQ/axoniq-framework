@@ -18,6 +18,7 @@
  */
 package io.axoniq.framework.workflow.dsl.api;
 
+import org.axonframework.messaging.core.VersionedType;
 import org.jspecify.annotations.Nullable;
 
 import java.util.List;
@@ -235,18 +236,61 @@ public interface WorkflowContext {
                                            WorkflowStepResult... results);
 
     /**
+     * Resolves a component from the processing context of this workflow invocation.
+     *
+     * @param componentType type of component to resolve
+     * @param <T>           type of component to resolve
+     * @return the resolved component
+     * @throws org.axonframework.common.configuration.ComponentNotFoundException is component doesn't exist.
+     */
+    <T> T resolveComponent(Class<T> componentType);
+
+    /**
      * Returns the unique workflow execution identifier.
      *
-     * @return the workflow identifier
+     * @return workflow identifier
      */
     String workflowId();
 
     /**
-     * Returns the workflow definition version currently used by this execution.
+     * Returns the workflow definition identity, including its current definition version.
+     * <p>
+     * Use {@link VersionedType#version()} to obtain the definition version.
      *
-     * @return the workflow definition version
+     * @return workflow definition identity
      */
-    String workflowVersion();
+    VersionedType workflowDefinitionId();
+
+    /**
+     * Retrieves a list of step names in the workflow execution.
+     *
+     * @return list of step names
+     */
+    List<String> workflowStepNames();
+
+    /**
+     * Retrieves a step by name.
+     *
+     * @param stepName name of the step
+     * @return workflow step
+     */
+    @Nullable
+    WorkflowStep getStep(String stepName);
+
+    /**
+     * Checks if a step with the given name exists in the workflow execution.
+     *
+     * @param stepName name of the step
+     * @return true if the step exists, false otherwise
+     */
+    boolean containsStep(String stepName);
+
+    /**
+     * Returns the status of the workflow execution.
+     *
+     * @return workflow status
+     */
+    WorkflowStatus workflowStatus();
 
     /**
      * Returns the current workflow payload.
@@ -254,18 +298,4 @@ public interface WorkflowContext {
      * @return the workflow payload
      */
     Map<String, @Nullable Object> workflowPayload();
-
-    /**
-     * Retrieves workflow status.
-     *
-     * @return the status of the workflow.
-     */
-    WorkflowStatus workflowStatus();
-
-    /**
-     * Retrieves workflow step names.
-     *
-     * @return the names of the workflow steps.
-     */
-    List<String> workflowStepNames();
 }

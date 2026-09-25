@@ -18,16 +18,8 @@
  */
 package io.axoniq.framework.workflow.dsl.kotlin
 
-import io.axoniq.framework.workflow.dsl.api.Payload
 import io.axoniq.framework.workflow.dsl.api.*
 import io.axoniq.framework.workflow.dsl.api.retry.RetryPolicy
-import io.axoniq.framework.workflow.dsl.api.CombinatorWorkflowStepResult
-import io.axoniq.framework.workflow.dsl.api.StepCancellationException
-import io.axoniq.framework.workflow.dsl.api.StepTimedOutException
-import io.axoniq.framework.workflow.dsl.api.WorkflowStepResult
-import io.axoniq.framework.workflow.dsl.api.PayloadModification
-import io.axoniq.framework.workflow.dsl.api.PayloadProcessor
-import io.axoniq.framework.workflow.dsl.api.PayloadReducer
 import io.axoniq.framework.workflow.runtime.association.Associations
 import io.axoniq.framework.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.defaults
 import io.axoniq.framework.workflow.runtime.execution.payload.GlobalOnlyPayloadReducer
@@ -35,6 +27,7 @@ import io.axoniq.framework.workflow.runtime.execution.payload.LocalOnlyPayloadRe
 import org.axonframework.messaging.core.MessageTypeResolver
 import org.axonframework.messaging.core.Metadata
 import org.axonframework.messaging.core.QualifiedName
+import org.axonframework.messaging.core.VersionedType
 import org.axonframework.messaging.eventhandling.EventMessage
 import org.axonframework.messaging.eventhandling.GenericEventMessage
 import org.axonframework.messaging.eventhandling.conversion.EventConverter
@@ -71,16 +64,11 @@ class Kontext(
     val workflowId: String get() = workflowKontext.workflowId()
 
     /**
-     * Current workflow definition version (semver string) — driven by `@Workflow(version=...)` at startup
+     * Current workflow definition. It includes the workflow version, driven by `@Workflow(version=...)` at startup
      * and possibly bumped mid-flight via [version]. Every event the workflow emits carries this on its
      * `MessageType.version()`.
      */
-    val workflowVersion: String get() = workflowKontext.workflowVersion()
-
-    /**
-     * Processing context for the current message.
-     */
-    val processingContext get() = workflowKontext.processingContext()
+    val workflowDefinitionId: VersionedType get() = workflowKontext.workflowDefinitionId()
 
     /**
      * Resolves the Axon qualified message name for the given message type.
@@ -89,7 +77,9 @@ class Kontext(
      * @return qualified name for the provided class
      */
     private fun resolve(messageType: KClass<*>): QualifiedName =
-        processingContext.component(MessageTypeResolver::class.java).resolveOrThrow(messageType.java).qualifiedName
+        workflowKontext.resolveComponent(MessageTypeResolver::class.java)
+            .resolveOrThrow(messageType.java)
+            .qualifiedName
 
     /**
      * Starts an execute step using the Kotlin convenience API.
@@ -276,7 +266,7 @@ class Kontext(
         )
         result.await()
         if (result.success()) {
-            return result.resultAs(eventType.java, processingContext.component(EventConverter::class.java))
+            return result.resultAs(eventType.java, workflowKontext.resolveComponent(EventConverter::class.java))
                 .orElseThrow { IllegalStateException("No event payload for step '$stepName'") }
         }
         if (result.timeout()) {
@@ -372,8 +362,10 @@ class Kontext(
      */
     fun setPayload(stepName: String, value: Any) {
         awaitModifyPayload(stepName) { workflowPayload ->
+            val convertedPayload = workflowKontext.resolveComponent(EventConverter::class.java)
+                .convert<Map<String, Any?>>(value, Payload.PAYLOAD_TYPE.type)
             Payload.payload(workflowPayload)
-                .with(Payload.payload(workflowKontext.processingContext(), value))
+                .with(Payload.payload(requireNotNull(convertedPayload) { "Payload converted to null" }))
                 .values
         }
     }
@@ -478,7 +470,7 @@ class Kontext(
 
     private fun asEventMessage(payload: Any, metadata: Metadata): EventMessage =
         GenericEventMessage(
-            processingContext.component(MessageTypeResolver::class.java).resolveOrThrow(payload),
+            workflowKontext.resolveComponent(MessageTypeResolver::class.java).resolveOrThrow(payload),
             payload,
             metadata
         )
