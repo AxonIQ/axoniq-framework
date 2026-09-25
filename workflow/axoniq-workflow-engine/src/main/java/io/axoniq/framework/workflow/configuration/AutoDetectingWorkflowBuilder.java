@@ -20,14 +20,15 @@ package io.axoniq.framework.workflow.configuration;
 
 import io.axoniq.framework.workflow.dsl.api.EventCondition;
 import io.axoniq.framework.workflow.dsl.api.WorkflowContext;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
+import io.axoniq.framework.workflow.runtime.api.execution.context.RecoverableWorkflowExceptionPolicy;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContextFactory;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowDefinition;
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionFactory;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowIdProvider;
-import io.axoniq.framework.workflow.runtime.api.execution.context.RecoverableWorkflowExceptionPolicy;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowStatusChangeListener;
-import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
-import io.axoniq.framework.workflow.runtime.execution.AbstractWorkflowContext;
 import io.axoniq.framework.workflow.runtime.execution.DefaultEventNameCustomizer;
+import io.axoniq.framework.workflow.runtime.execution.WorkflowContextAdoptingExecutionFactory;
 import io.axoniq.framework.workflow.runtime.util.FutureResolver;
 import org.axonframework.common.AxonConfigurationException;
 import org.axonframework.common.annotation.Internal;
@@ -193,13 +194,13 @@ class AutoDetectingWorkflowBuilder<C extends WorkflowContext>
         MessageType messageType = new MessageType(new QualifiedName(workflowName), workflowVersion);
         MessageHandlingMember<Object> member = findMember(inspector, instance, WorkflowTriggerMessage.class, method);
 
+        WorkflowExecutionFactory executionFactory = new WorkflowContextAdoptingExecutionFactory<>(workflowContextType);
         WorkflowDefinition<C> workflowDefinition = workflowContext -> {
             WorkflowTriggerMessage trigger = new WorkflowTriggerMessage(messageType, workflowContext);
-            ProcessingContext processingContext = ((AbstractWorkflowContext) workflowContext).processingContext()
-                                                                 .withResource(WORKFLOW_CONTEXT_RESOURCE_KEY,
-                                                                               workflowContext)
-                                                                 .withResource(WORKFLOW_INSTANCE_RESOURCE_KEY,
-                                                                               instance);
+            ProcessingContext processingContext = executionFactory
+                    .create(workflowContext).processingContext()
+                    .withResource(WORKFLOW_CONTEXT_RESOURCE_KEY, workflowContext)
+                    .withResource(WORKFLOW_INSTANCE_RESOURCE_KEY, instance);
             CompletableFuture<?> future = inspector.chainedInterceptor(instanceType)
                                                    .handle(trigger, processingContext, instance, member)
                                                    .first()
