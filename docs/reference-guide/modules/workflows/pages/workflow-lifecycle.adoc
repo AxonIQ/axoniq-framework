@@ -49,8 +49,9 @@ The engine writes workflow lifecycle events with event-store tags as well:
 == The workflow context
 
 The workflow context passed to your workflow method is your single entry point to all engine capabilities.
-For Java, `WorkflowContext` is the author-facing workflow-body contract. `BaseWorkflowContext` is the canonical DSL
-layer implementing it, and `SimpleWorkflowContext` adds convenience methods on top:
+For Java, `WorkflowContext` is the shared author-facing workflow-body contract. `BaseWorkflowContext` is the
+canonical Java DSL layer implementing it, with Java-friendly named overloads; `SimpleWorkflowContext` adds further
+convenience methods on top.
 
 [cols="1,2"]
 |===
@@ -58,10 +59,14 @@ layer implementing it, and `SimpleWorkflowContext` adds convenience methods on t
 
 |*Workflow data*
 |`workflowId()`—the unique workflow instance ID +
-`workflowVersion()`—the workflow's current definition version (semver string; see xref:versioning.adoc[Workflow Versioning]) +
+`workflowDefinitionId()`—the workflow definition identity; use `.version()` for its current definition version (see xref:versioning.adoc[Workflow Versioning]) +
 `workflowPayload()`—the current workflow payload +
 `workflowStatus()`—the current status (STARTED, COMPLETED, FAILED, ...) +
-`workflowStepNames()`—names of all steps executed so far
+`workflowStepNames()`—names of steps in this workflow execution +
+`getStep(stepName)` / `containsStep(stepName)`—inspect whether a named step exists and retrieve it when present
+
+|*Component access*
+|`resolveComponent(componentType)`—resolve a component from the processing context for this workflow invocation
 
 |*Execute actions*
 |`awaitExecute(...)`—run an action and wait for the result +
