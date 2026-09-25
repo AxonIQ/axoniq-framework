@@ -42,8 +42,9 @@ import org.springframework.context.annotation.EnableMBeanExport;
 import org.springframework.jmx.support.RegistrationPolicy;
 import org.springframework.test.context.ContextConfiguration;
 
+import java.util.Map;
+
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.*;
 
 /**
  * Integration test for workflow autodetection.
@@ -65,6 +66,9 @@ public class WorkflowAutodetectionIT {
 
     @Test
     void should_autodetect_workflow() {
+        var processingContext = StubProcessingContext.withComponents(
+                cr -> cr.registerComponent(FutureResolver.class, cfg -> new DefaultTimeoutFutureResolver())
+        );
 
         var configurations = registry.getWorkflowsConfigurations(new QualifiedName("io.namespace.TestEvent"));
         assertThat(configurations).isNotNull();
@@ -76,15 +80,12 @@ public class WorkflowAutodetectionIT {
                                        new MessageType(new QualifiedName("io.namespace.TestEvent")),
                                        null
                                ),
-                               mock()
+                               processingContext
                        )
         ).isTrue();
         assertThat(conf.configuration().workflowContextFactory()).isInstanceOf(SimpleWorkflowContextFactory.class);
 
-        var ctx = mock(SimpleWorkflowContext.class);
-        when(ctx.processingContext()).thenReturn(StubProcessingContext.withComponents(
-                cr -> cr.registerComponent(FutureResolver.class, cfg -> new DefaultTimeoutFutureResolver())
-        ));
+        var ctx = new SimpleWorkflowContext("workflow-id", Map.of(), processingContext, conf.configuration());
         //noinspection unchecked,rawtypes
         ((WorkflowDefinition) conf.configuration().workflowDefinition()).accept(ctx);
 

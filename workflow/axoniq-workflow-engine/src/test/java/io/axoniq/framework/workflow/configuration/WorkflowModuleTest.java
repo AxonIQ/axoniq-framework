@@ -254,8 +254,7 @@ class WorkflowModuleTest {
         verify(registry).register(any(EventCondition.class), configCaptor.capture());
         WorkflowConfiguration<TestWorkflowContext> config = configCaptor.getValue();
 
-        TestWorkflowContext context = mock(TestWorkflowContext.class);
-        when(context.processingContext()).thenReturn(processingContextWithFutureResolver());
+        TestWorkflowContext context = workflowContextWith(processingContextWithFutureResolver(), config);
 
         config.workflowDefinition().accept(context);
 
@@ -299,6 +298,13 @@ class WorkflowModuleTest {
         );
     }
 
+    private static TestWorkflowContext workflowContextWith(
+            ProcessingContext processingContext,
+            WorkflowConfiguration<?> workflowConfiguration
+    ) {
+        return new TestWorkflowContext("workflow-id", Map.of(), processingContext, workflowConfiguration);
+    }
+
     @Test
     @SuppressWarnings("unchecked")
     void autodetectedWorkflowBodyWithoutAWorkflowContextParameterIsStillDiscoveredAndInvoked() {
@@ -314,8 +320,7 @@ class WorkflowModuleTest {
         verify(registry).register(any(EventCondition.class), configCaptor.capture());
         WorkflowConfiguration<TestWorkflowContext> config = configCaptor.getValue();
 
-        TestWorkflowContext context = mock(TestWorkflowContext.class);
-        when(context.processingContext()).thenReturn(processingContextWithFutureResolver());
+        TestWorkflowContext context = workflowContextWith(processingContextWithFutureResolver(), config);
 
         config.workflowDefinition().accept(context);
 
@@ -345,8 +350,7 @@ class WorkflowModuleTest {
         verify(registry).register(any(EventCondition.class), configCaptor.capture());
         WorkflowConfiguration<TestWorkflowContext> config = configCaptor.getValue();
 
-        TestWorkflowContext context = mock(TestWorkflowContext.class);
-        when(context.processingContext()).thenReturn(processingContextWithFutureResolver());
+        TestWorkflowContext context = workflowContextWith(processingContextWithFutureResolver(), config);
 
         config.workflowDefinition().accept(context);
 
@@ -370,8 +374,7 @@ class WorkflowModuleTest {
         verify(registry).register(any(EventCondition.class), configCaptor.capture());
         WorkflowConfiguration<TestWorkflowContext> config = configCaptor.getValue();
 
-        TestWorkflowContext context = mock(TestWorkflowContext.class);
-        when(context.processingContext()).thenReturn(processingContextWithFutureResolver());
+        TestWorkflowContext context = workflowContextWith(processingContextWithFutureResolver(), config);
 
         config.workflowDefinition().accept(context);
 
@@ -393,7 +396,7 @@ class WorkflowModuleTest {
                 .hasMessageContaining("run");
     }
 
-    abstract static class TestWorkflowContext extends AbstractWorkflowContext {
+    static class TestWorkflowContext extends AbstractWorkflowContext {
 
         TestWorkflowContext(
                 String workflowId,
