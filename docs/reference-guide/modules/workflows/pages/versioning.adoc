@@ -40,8 +40,8 @@ public void execute(SimpleWorkflowContext ctx) { /* ... */ }
   suffix). Invalid strings are rejected at configuration time via `Version.validate(...)`.
 * Every event the workflow emits carries this version on its `MessageType.version()`, which is AF5's
   built-in event-version field, *not* a separate metadata key.
-* The same value is reachable from inside the workflow body via `ctx.workflowVersion()` (Java) /
-  `ctx.workflowVersion` (Kotlin).
+* The same value is reachable from inside the workflow body via `ctx.workflowDefinitionId().version()` (Java) /
+  `ctx.workflowDefinitionId.version()` (Kotlin).
 
 === Starting new instances
 
