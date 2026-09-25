@@ -18,13 +18,11 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
-import org.jspecify.annotations.Nullable;
-
-import io.axoniq.framework.workflow.runtime.api.execution.context.EventNameCustomizer;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
-import io.axoniq.framework.workflow.runtime.api.execution.state.StepRetryInfo;
-import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
-import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
+import io.axoniq.framework.workflow.dsl.api.EventNameCustomizer;
+import io.axoniq.framework.workflow.dsl.api.StepRetryInfo;
+import io.axoniq.framework.workflow.dsl.api.StepStatus;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations;
 import io.axoniq.framework.workflow.runtime.util.EventMessageUtils;
 import io.axoniq.framework.workflow.runtime.util.MetadataUtils;
 import org.axonframework.messaging.core.QualifiedName;
@@ -33,6 +31,7 @@ import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 import org.axonframework.messaging.eventstreaming.Tag;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.*;
 
 import java.time.Instant;
@@ -48,11 +47,11 @@ class WorkflowEventTagResolverTest {
     private final WorkflowEventTagResolver resolver = new WorkflowEventTagResolver();
     private final EventNameCustomizer customizer = new TestEventNameCustomizer();
     private final VersionedType workflowDefinitionId = VersionedType.of(new QualifiedName("OrderWorkflow"), "0.0.1");
-    private WorkflowContext context;
+    private WorkflowExecutionOperations context;
 
     @BeforeEach
     void setUp() {
-        context = mock(WorkflowContext.class);
+        context = mock(WorkflowExecutionOperations.class);
         when(context.workflowId()).thenReturn("wf-123");
         when(context.workflowPayload()).thenReturn(Map.of("orderId", "123"));
         when(context.workflowVersion()).thenReturn("0.0.1");
@@ -141,15 +140,15 @@ class WorkflowEventTagResolverTest {
 
         @Override
         public QualifiedName getEventName(String stepName,
-                                                   Map<String, @Nullable Object> parameters,
-                                                   StepStatus stepStatus) {
+                                          Map<String, @Nullable Object> parameters,
+                                          StepStatus stepStatus) {
             return new QualifiedName("test", stepName + stepStatus.name());
         }
 
         @Override
         public QualifiedName getEventName(String stepName,
-                                                   Map<String, @Nullable Object> parameters,
-                                                   WorkflowStatus stepStatus) {
+                                          Map<String, @Nullable Object> parameters,
+                                          WorkflowStatus stepStatus) {
             return new QualifiedName("test", stepName + stepStatus.name());
         }
 

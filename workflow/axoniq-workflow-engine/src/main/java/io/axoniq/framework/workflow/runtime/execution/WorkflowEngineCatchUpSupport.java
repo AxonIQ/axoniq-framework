@@ -18,10 +18,10 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
-import org.jspecify.annotations.Nullable;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
+import org.jspecify.annotations.Nullable;
 
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -32,8 +32,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * @author Simon Zambrovski
  * @since 5.4.0
  */
-@Internal
-final class WorkflowEngineCatchUpSupport {
+@Internal final class WorkflowEngineCatchUpSupport {
 
     private final Set<Integer> caughtUpSegments = ConcurrentHashMap.newKeySet();
     @Nullable

@@ -20,7 +20,7 @@ package io.axoniq.framework.workflow.runtime.test.fixture;
 
 import io.axoniq.framework.workflow.configuration.WorkflowConfigurer;
 import io.axoniq.framework.workflow.configuration.WorkflowModule;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
+import io.axoniq.framework.workflow.dsl.api.WorkflowContext;
 import org.axonframework.common.annotation.Internal;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

@@ -18,10 +18,10 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
+import io.axoniq.framework.workflow.dsl.api.WorkflowState;
 import io.axoniq.framework.workflow.history.api.WorkflowHistory;
 import io.axoniq.framework.workflow.history.api.WorkflowHistoryRepository;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.framework.workflow.runtime.util.MetadataUtils;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.messaging.core.GenericMessage;
@@ -36,6 +36,7 @@ import org.mockito.*;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.*;
@@ -45,12 +46,12 @@ import static org.mockito.Mockito.*;
  */
 class EventSourcedWorkflowStateParameterResolverTest {
 
+    private final MessageType messageType = new MessageType(new QualifiedName("ns", "name"), "1.0");
     private WorkflowStateParameterResolver resolver;
     private ProcessingContext context;
     private Configuration configuration;
     private WorkflowExecutionRepository executionRepository;
     private WorkflowHistoryRepository historyRepository;
-    private final MessageType messageType = new MessageType(new QualifiedName("ns", "name"), "1.0");
     private MockedStatic<Message> messageMockedStatic;
 
     @BeforeEach

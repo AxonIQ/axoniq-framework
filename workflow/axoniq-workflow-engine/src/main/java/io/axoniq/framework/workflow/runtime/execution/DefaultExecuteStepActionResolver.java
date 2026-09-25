@@ -18,10 +18,10 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
+import io.axoniq.framework.workflow.dsl.api.PayloadProcessor;
 import io.axoniq.framework.workflow.runtime.api.execution.context.ExecutePrimitive;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
-import io.axoniq.framework.workflow.runtime.api.payload.PayloadProcessor;
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations;
 import org.axonframework.common.annotation.Internal;
 
 /**
@@ -34,7 +34,7 @@ import org.axonframework.common.annotation.Internal;
 public class DefaultExecuteStepActionResolver implements ExecuteStepActionResolver {
 
     @Override
-    public PayloadProcessor resolve(WorkflowContext workflowContext,
+    public PayloadProcessor resolve(WorkflowExecutionOperations workflowExecutionOperations,
                                     WorkflowExecution workflowExecution,
                                     ExecutePrimitive.ExecuteCommand command) {
         return command.action();

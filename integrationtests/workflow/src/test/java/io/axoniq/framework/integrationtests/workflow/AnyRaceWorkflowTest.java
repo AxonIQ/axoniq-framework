@@ -20,12 +20,11 @@ package io.axoniq.framework.integrationtests.workflow;
 
 import io.axoniq.framework.workflow.configuration.WorkflowModule.WorkflowDefinitionPhase.DetectionPhase;
 import io.axoniq.framework.workflow.configuration.WorkflowModule.WorkflowDefinitionPhase.FinalizedPhase;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStepResult;
 import io.axoniq.framework.workflow.dsl.base.BaseWorkflowContext;
 import io.axoniq.framework.workflow.dsl.base.BaseWorkflowContextFactory;
-import io.axoniq.framework.workflow.runtime.api.annotation.Workflow;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowStepResult;
-import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
+import io.axoniq.framework.workflow.annotation.Workflow;
 import io.axoniq.framework.workflow.runtime.test.utils.SleepUtils;
 import org.axonframework.messaging.eventhandling.annotation.Event;
 import org.junit.jupiter.api.*;
@@ -40,8 +39,7 @@ import java.util.function.Function;
 import static io.axoniq.framework.workflow.runtime.test.utils.DelayedPublisher.Schedule.ofMillis;
 
 /**
- * Integration test for {@link AnyRaceWorkflow} — verifies that {@link WorkflowContext#anyMatch} semantics resolve the
- * fast step as winner.
+ * Integration test for {@link AnyRaceWorkflow} — verifies that any-match semantics resolve the fast step as winner.
  *
  * @author Stefan Dragisic
  */

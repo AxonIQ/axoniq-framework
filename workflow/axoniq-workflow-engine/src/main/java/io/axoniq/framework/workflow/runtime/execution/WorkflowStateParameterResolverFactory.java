@@ -18,11 +18,11 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowState;
-import org.jspecify.annotations.Nullable;
+import io.axoniq.framework.workflow.dsl.api.WorkflowState;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.messaging.core.annotation.ParameterResolver;
 import org.axonframework.messaging.core.annotation.ParameterResolverFactory;
+import org.jspecify.annotations.Nullable;
 
 import java.lang.reflect.Executable;
 import java.lang.reflect.Parameter;

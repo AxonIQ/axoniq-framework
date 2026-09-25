@@ -19,7 +19,7 @@
 package io.axoniq.framework.workflow.springboot;
 
 import io.axoniq.framework.workflow.configuration.AutoDetectionUtils.MethodWithWorkflowAttributes;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
+import io.axoniq.framework.workflow.dsl.api.WorkflowContext;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContextFactory;
 import org.axonframework.common.annotation.Internal;
 import org.springframework.beans.factory.config.BeanDefinition;
@@ -27,6 +27,7 @@ import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
 import org.springframework.core.GenericTypeResolver;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -62,7 +63,7 @@ class WorkflowDefinitionLookupUtils {
             ConfigurableListableBeanFactory beanFactory,
             boolean includePrototypeBeans) {
 
-        Map<Class<? extends WorkflowContext>, List<String>> found = new java.util.HashMap<>();
+        Map<Class<? extends WorkflowContext>, List<String>> found = new HashMap<>();
 
         for (String beanName : beanFactory.getBeanDefinitionNames()) {
             BeanDefinition bd = beanFactory.getBeanDefinition(beanName);
@@ -96,7 +97,7 @@ class WorkflowDefinitionLookupUtils {
             ConfigurableListableBeanFactory beanFactory,
             boolean includePrototypeBeans) {
 
-        Map<Class<? extends WorkflowContext>, String> found = new java.util.HashMap<>();
+        Map<Class<? extends WorkflowContext>, String> found = new HashMap<>();
 
         for (String beanName : beanFactory.getBeanDefinitionNames()) {
             BeanDefinition bd = beanFactory.getBeanDefinition(beanName);

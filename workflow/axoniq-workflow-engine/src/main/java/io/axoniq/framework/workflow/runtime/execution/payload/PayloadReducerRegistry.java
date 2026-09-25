@@ -18,7 +18,7 @@
  */
 package io.axoniq.framework.workflow.runtime.execution.payload;
 
-import io.axoniq.framework.workflow.runtime.api.payload.PayloadReducer;
+import io.axoniq.framework.workflow.dsl.api.PayloadReducer;
 
 import java.util.Map;
 import java.util.Objects;

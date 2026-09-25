@@ -18,13 +18,13 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
+import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
-import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.util.MetadataUtils;
-import org.axonframework.messaging.core.unitofwork.StubProcessingContext;
 import org.axonframework.common.configuration.ComponentNotFoundException;
 import org.axonframework.messaging.core.ApplicationContext;
 import org.axonframework.messaging.core.unitofwork.SimpleUnitOfWorkFactory;
+import org.axonframework.messaging.core.unitofwork.StubProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.junit.jupiter.api.*;
 
@@ -47,6 +47,25 @@ class WorkflowEngineSegmentFailoverTest {
     private WorkflowExecutionRepository repository;
     private WorkflowStore workflowStore;
     private WorkflowEngine workflowEngine;
+
+    private static WorkflowExecution execution(String workflowId) {
+        var execution = mock(WorkflowExecution.class);
+        when(execution.workflowId()).thenReturn(workflowId);
+        return execution;
+    }
+
+    /**
+     * Returns a real unit of work factory: the engine sources every restored instance in a unit of work of its own, so
+     * a mock would hand it none.
+     */
+    private static UnitOfWorkFactory restoreUnitOfWorkFactory() {
+        return new SimpleUnitOfWorkFactory(new ApplicationContext() {
+            @Override
+            public <C> C component(Class<C> type, String name) {
+                throw new ComponentNotFoundException(type, name);
+            }
+        });
+    }
 
     @BeforeEach
     void setUp() {
@@ -96,24 +115,5 @@ class WorkflowEngineSegmentFailoverTest {
         verify(owned).stopForShutdown();
         verify(foreign, never()).stopForShutdown();
         assertThat(repository.findAll()).containsExactly(foreign);
-    }
-
-    private static WorkflowExecution execution(String workflowId) {
-        var execution = mock(WorkflowExecution.class);
-        when(execution.workflowId()).thenReturn(workflowId);
-        return execution;
-    }
-
-    /**
-     * Returns a real unit of work factory: the engine sources every restored instance in a unit of
-     * work of its own, so a mock would hand it none.
-     */
-    private static UnitOfWorkFactory restoreUnitOfWorkFactory() {
-        return new SimpleUnitOfWorkFactory(new ApplicationContext() {
-            @Override
-            public <C> C component(Class<C> type, String name) {
-                throw new ComponentNotFoundException(type, name);
-            }
-        });
     }
 }

@@ -18,12 +18,12 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
+import io.axoniq.framework.workflow.dsl.api.WorkflowState;
 import io.axoniq.framework.workflow.history.api.WorkflowHistory;
 import io.axoniq.framework.workflow.history.api.WorkflowHistoryRepository;
 import io.axoniq.framework.workflow.query.api.WorkflowStateQuery;
 import io.axoniq.framework.workflow.query.utils.WorkflowStateQueryMatcher;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.framework.workflow.runtime.api.manager.NonUniqueWorkflowInstanceMatchException;
 import io.axoniq.framework.workflow.runtime.api.manager.WorkflowInstance;
 import io.axoniq.framework.workflow.runtime.api.manager.WorkflowInstances;
@@ -45,7 +45,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Flow;
 import java.util.concurrent.SubmissionPublisher;
-import java.util.function.Function;
 import java.util.stream.Stream;
 
 /**
@@ -92,6 +91,32 @@ public class SimpleWorkflowManager implements WorkflowManager {
         this.executor = Objects.requireNonNull(executor, "The executor must not be null.");
     }
 
+    private static Stream<String> explicitWorkflowIds(WorkflowStateQuery query) {
+        return query.criteria().stream()
+                    .filter(WorkflowStateQuery.WorkflowIdCriterion.class::isInstance)
+                    .map(WorkflowStateQuery.WorkflowIdCriterion.class::cast)
+                    .map(WorkflowStateQuery.WorkflowIdCriterion::workflowId);
+    }
+
+    private static <T> CompletableFuture<T> cancellation(CancellationOperation<T> operation) {
+        try {
+            return operation.request();
+        } catch (RuntimeException e) {
+            return CompletableFuture.failedFuture(e);
+        }
+    }
+
+    private static <T> CompletableFuture<T> cancellation(CancellationOperation<T> operation,
+                                                         @Nullable T unavailableResult) {
+        try {
+            return operation.request();
+        } catch (NoSuchElementException e) {
+            return CompletableFuture.completedFuture(unavailableResult);
+        } catch (RuntimeException e) {
+            return CompletableFuture.failedFuture(e);
+        }
+    }
+
     @Override
     public WorkflowInstances.Single findOne(WorkflowStateQuery query) {
         return new SingleInstanceResult(Objects.requireNonNull(query, "The WorkflowStateQuery must not be null."));
@@ -108,8 +133,8 @@ public class SimpleWorkflowManager implements WorkflowManager {
      * projection that may still lag behind it.
      * <p>
      * Candidates for sourcing are the history matches that are not live, plus every workflow id the query names
-     * explicitly, so a workflow the projection has not seen yet is still found by id. A sourced state is kept only
-     * when it exists and still matches the query.
+     * explicitly, so a workflow the projection has not seen yet is still found by id. A sourced state is kept only when
+     * it exists and still matches the query.
      */
     private CompletableFuture<List<WorkflowState>> matching(WorkflowStateQuery query) {
         return executionRepository.findAll(query)
@@ -130,17 +155,6 @@ public class SimpleWorkflowManager implements WorkflowManager {
                                       }
                                       return List.copyOf(merge.byId().values());
                                   }));
-    }
-
-    private record Merge(LinkedHashMap<String, WorkflowState> byId, List<String> candidates) {
-
-    }
-
-    private static Stream<String> explicitWorkflowIds(WorkflowStateQuery query) {
-        return query.criteria().stream()
-                    .filter(WorkflowStateQuery.WorkflowIdCriterion.class::isInstance)
-                    .map(WorkflowStateQuery.WorkflowIdCriterion.class::cast)
-                    .map(WorkflowStateQuery.WorkflowIdCriterion::workflowId);
     }
 
     private CompletableFuture<List<WorkflowState>> sourceAll(List<String> workflowIds) {
@@ -176,6 +190,16 @@ public class SimpleWorkflowManager implements WorkflowManager {
             }
             return matches.isEmpty() ? Optional.empty() : Optional.of(matches.getFirst());
         });
+    }
+
+    @FunctionalInterface
+    private interface CancellationOperation<T> {
+
+        CompletableFuture<T> request();
+    }
+
+    private record Merge(LinkedHashMap<String, WorkflowState> byId, List<String> candidates) {
+
     }
 
     private final class SingleInstanceResult implements WorkflowInstances.Single {
@@ -256,7 +280,8 @@ public class SimpleWorkflowManager implements WorkflowManager {
 
         @Override
         public CompletableFuture<Boolean> requestStepCancellation(String stepName, @Nullable Throwable cause) {
-            return cancellation(() -> cancellationService.requestStepCancellation(state.workflowId(), stepName, cause), false);
+            return cancellation(() -> cancellationService.requestStepCancellation(state.workflowId(), stepName, cause),
+                                false);
         }
 
         @Override
@@ -327,8 +352,8 @@ public class SimpleWorkflowManager implements WorkflowManager {
                 }
                 return CompletableFuture.allOf(operations.toArray(CompletableFuture[]::new))
                                         .thenApply(ignored -> operations.stream()
-                                                                          .mapToInt(CompletableFuture::resultNow)
-                                                                          .sum());
+                                                                        .mapToInt(CompletableFuture::resultNow)
+                                                                        .sum());
             });
         }
 
@@ -344,29 +369,5 @@ public class SimpleWorkflowManager implements WorkflowManager {
                 return CompletableFuture.allOf(operations.toArray(CompletableFuture[]::new));
             });
         }
-    }
-
-    private static <T> CompletableFuture<T> cancellation(CancellationOperation<T> operation) {
-        try {
-            return operation.request();
-        } catch (RuntimeException e) {
-            return CompletableFuture.failedFuture(e);
-        }
-    }
-
-    private static <T> CompletableFuture<T> cancellation(CancellationOperation<T> operation, @Nullable T unavailableResult) {
-        try {
-            return operation.request();
-        } catch (NoSuchElementException e) {
-            return CompletableFuture.completedFuture(unavailableResult);
-        } catch (RuntimeException e) {
-            return CompletableFuture.failedFuture(e);
-        }
-    }
-
-    @FunctionalInterface
-    private interface CancellationOperation<T> {
-
-        CompletableFuture<T> request();
     }
 }

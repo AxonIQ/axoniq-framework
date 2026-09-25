@@ -18,8 +18,8 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
-import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
-import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
+import io.axoniq.framework.workflow.dsl.api.StepStatus;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
 import org.axonframework.messaging.core.QualifiedName;
 import org.junit.jupiter.api.*;
 
@@ -108,25 +108,29 @@ class DefaultEventNameCustomizerTest {
         @Test
         void testWorkflowCompleted() {
             var customizer = DefaultEventNameCustomizer.Builder.defaults().workflowCompleted("Finished");
-            assertThat(customizer.getEventName("step", Map.of(), WorkflowStatus.COMPLETED).localName()).isEqualTo("StepFinished");
+            assertThat(customizer.getEventName("step", Map.of(), WorkflowStatus.COMPLETED).localName()).isEqualTo(
+                    "StepFinished");
         }
 
         @Test
         void testWorkflowStarted() {
             var customizer = DefaultEventNameCustomizer.Builder.defaults().workflowStarted("Start");
-            assertThat(customizer.getEventName("step", Map.of(), WorkflowStatus.STARTED).localName()).isEqualTo("StepStart");
+            assertThat(customizer.getEventName("step", Map.of(), WorkflowStatus.STARTED).localName()).isEqualTo(
+                    "StepStart");
         }
 
         @Test
         void testWorkflowTimedOut() {
             var customizer = DefaultEventNameCustomizer.Builder.defaults().workflowTimedOut("Timeout");
-            assertThat(customizer.getEventName("step", Map.of(), WorkflowStatus.TIMED_OUT).localName()).isEqualTo("StepTimeout");
+            assertThat(customizer.getEventName("step", Map.of(), WorkflowStatus.TIMED_OUT).localName()).isEqualTo(
+                    "StepTimeout");
         }
 
         @Test
         void testWorkflowFailed() {
             var customizer = DefaultEventNameCustomizer.Builder.defaults().workflowFailed("Fail");
-            assertThat(customizer.getEventName("step", Map.of(), WorkflowStatus.FAILED).localName()).isEqualTo("StepFail");
+            assertThat(customizer.getEventName("step", Map.of(), WorkflowStatus.FAILED).localName()).isEqualTo(
+                    "StepFail");
         }
     }
 
@@ -138,7 +142,8 @@ class DefaultEventNameCustomizerTest {
         @Test
         void testBaseName() {
             customizer.baseName("Base");
-            assertThat(customizer.getEventName("step", Map.of(), StepStatus.COMPLETED).localName()).isEqualTo("BaseCompleted");
+            assertThat(customizer.getEventName("step", Map.of(), StepStatus.COMPLETED).localName()).isEqualTo(
+                    "BaseCompleted");
         }
 
         @Test
@@ -150,25 +155,29 @@ class DefaultEventNameCustomizerTest {
         @Test
         void testAppendToBaseName() {
             customizer.appendToBaseName(false);
-            assertThat(customizer.getEventName("step", Map.of(), StepStatus.COMPLETED).localName()).isEqualTo("Completed");
+            assertThat(customizer.getEventName("step", Map.of(), StepStatus.COMPLETED).localName()).isEqualTo(
+                    "Completed");
         }
 
         @Test
         void testCapitalizeSimpleName() {
             customizer.capitalizeSimpleName(false);
-            assertThat(customizer.getEventName("step", Map.of(), StepStatus.COMPLETED).localName()).isEqualTo("stepCompleted");
+            assertThat(customizer.getEventName("step", Map.of(), StepStatus.COMPLETED).localName()).isEqualTo(
+                    "stepCompleted");
         }
 
         @Test
         void testStepCompleted() {
             customizer.stepCompleted("Finished");
-            assertThat(customizer.getEventName("step", Map.of(), StepStatus.COMPLETED).localName()).isEqualTo("StepFinished");
+            assertThat(customizer.getEventName("step", Map.of(), StepStatus.COMPLETED).localName()).isEqualTo(
+                    "StepFinished");
         }
 
         @Test
         void testStepStarted() {
             customizer.stepStarted("Start");
-            assertThat(customizer.getEventName("step", Map.of(), StepStatus.STARTED).localName()).isEqualTo("StepStart");
+            assertThat(customizer.getEventName("step", Map.of(), StepStatus.STARTED)
+                                 .localName()).isEqualTo("StepStart");
         }
 
         @Test
@@ -187,7 +196,8 @@ class DefaultEventNameCustomizerTest {
         @Test
         void testStepTimedOut() {
             customizer.stepTimedOut("Timeout");
-            assertThat(customizer.getEventName("step", Map.of(), StepStatus.TIMED_OUT).localName()).isEqualTo("StepTimeout");
+            assertThat(customizer.getEventName("step", Map.of(), StepStatus.TIMED_OUT).localName()).isEqualTo(
+                    "StepTimeout");
         }
 
         @Test
@@ -199,25 +209,29 @@ class DefaultEventNameCustomizerTest {
         @Test
         void testWorkflowCompleted() {
             customizer.workflowCompleted("Finished");
-            assertThat(customizer.getEventName("step", Map.of(), WorkflowStatus.COMPLETED).localName()).isEqualTo("StepFinished");
+            assertThat(customizer.getEventName("step", Map.of(), WorkflowStatus.COMPLETED).localName()).isEqualTo(
+                    "StepFinished");
         }
 
         @Test
         void testWorkflowStarted() {
             customizer.workflowStarted("Start");
-            assertThat(customizer.getEventName("step", Map.of(), WorkflowStatus.STARTED).localName()).isEqualTo("StepStart");
+            assertThat(customizer.getEventName("step", Map.of(), WorkflowStatus.STARTED).localName()).isEqualTo(
+                    "StepStart");
         }
 
         @Test
         void testWorkflowTimedOut() {
             customizer.workflowTimedOut("Timeout");
-            assertThat(customizer.getEventName("step", Map.of(), WorkflowStatus.TIMED_OUT).localName()).isEqualTo("StepTimeout");
+            assertThat(customizer.getEventName("step", Map.of(), WorkflowStatus.TIMED_OUT).localName()).isEqualTo(
+                    "StepTimeout");
         }
 
         @Test
         void testWorkflowFailed() {
             customizer.workflowFailed("Fail");
-            assertThat(customizer.getEventName("step", Map.of(), WorkflowStatus.FAILED).localName()).isEqualTo("StepFail");
+            assertThat(customizer.getEventName("step", Map.of(), WorkflowStatus.FAILED).localName()).isEqualTo(
+                    "StepFail");
         }
 
         @Test

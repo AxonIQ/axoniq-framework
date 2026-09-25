@@ -18,24 +18,23 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
-import org.jspecify.annotations.Nullable;
-
-import io.axoniq.framework.workflow.runtime.api.execution.context.EventCondition;
-import io.axoniq.framework.workflow.runtime.api.execution.context.EventConditions;
-import io.axoniq.framework.workflow.runtime.api.execution.context.EventNameCustomizer;
+import io.axoniq.framework.workflow.dsl.api.EventCondition;
+import io.axoniq.framework.workflow.dsl.api.EventConditions;
+import io.axoniq.framework.workflow.dsl.api.EventNameCustomizer;
+import io.axoniq.framework.workflow.dsl.api.WorkflowContext;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowConfiguration;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContextFactory;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowDefinition;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionFactory;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowIdProvider;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowStatusChangeListener;
-import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowConfigurationRegistry.PredicatedWorkflowConfiguration;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.*;
 import org.mockito.*;
 
@@ -58,6 +57,23 @@ import static org.mockito.Mockito.*;
 class SimpleWorkflowConfigurationRegistryTest {
 
     private SimpleWorkflowConfigurationRegistry registry;
+
+    private static EventCondition eventCondition(
+            QualifiedName eventName,
+            BiPredicate<EventMessage, ProcessingContext> predicate
+    ) {
+        return new EventCondition() {
+            @Override
+            public BiPredicate<EventMessage, ProcessingContext> predicate() {
+                return predicate;
+            }
+
+            @Override
+            public QualifiedName qualifiedName() {
+                return eventName;
+            }
+        };
+    }
 
     @BeforeEach
     void setUp() {
@@ -318,23 +334,6 @@ class SimpleWorkflowConfigurationRegistryTest {
         }
     }
 
-    private static EventCondition eventCondition(
-            QualifiedName eventName,
-            BiPredicate<EventMessage, ProcessingContext> predicate
-    ) {
-        return new EventCondition() {
-            @Override
-            public BiPredicate<EventMessage, ProcessingContext> predicate() {
-                return predicate;
-            }
-
-            @Override
-            public QualifiedName qualifiedName() {
-                return eventName;
-            }
-        };
-    }
-
     private static class StubWorkflowConfiguration implements WorkflowConfiguration<WorkflowContext> {
 
         private final WorkflowDefinition<WorkflowContext> definition;
@@ -362,9 +361,9 @@ class SimpleWorkflowConfigurationRegistryTest {
             return new WorkflowContextFactory<>() {
                 @Override
                 public WorkflowContext createContext(Map<String, @Nullable Object> initialPayload,
-                                                              String workflowId,
-                                                              ProcessingContext processingContext,
-                                                              WorkflowConfiguration<?> workflowConfiguration) {
+                                                     String workflowId,
+                                                     ProcessingContext processingContext,
+                                                     WorkflowConfiguration<?> workflowConfiguration) {
                     throw new UnsupportedOperationException("Stub factory can't create contexts");
                 }
             };
@@ -372,7 +371,7 @@ class SimpleWorkflowConfigurationRegistryTest {
 
         @Override
         public WorkflowExecutionFactory workflowExecutionFactory() {
-            return new DSLAdoptingExecutionFactory<>(getWorkflowContextType());
+            return new WorkflowContextAdoptingExecutionFactory<>(getWorkflowContextType());
         }
 
         @Override

@@ -89,6 +89,4 @@ public class WorkflowReflectionUtils {
             throw new RuntimeException("Error invoking " + method, e);
         }
     }
-
-    ;
 }

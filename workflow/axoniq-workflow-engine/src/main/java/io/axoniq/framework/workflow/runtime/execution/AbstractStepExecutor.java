@@ -18,15 +18,15 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
-import io.axoniq.framework.workflow.runtime.api.execution.context.EventNameCustomizer;
+import io.axoniq.framework.workflow.dsl.api.EventNameCustomizer;
+import io.axoniq.framework.workflow.dsl.api.StepCancellationException;
+import io.axoniq.framework.workflow.dsl.api.StepRetryInfo;
+import io.axoniq.framework.workflow.dsl.api.WorkflowCancelledException;
+import io.axoniq.framework.workflow.dsl.api.WorkflowFailedException;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStepResult;
 import io.axoniq.framework.workflow.runtime.api.execution.context.PrimitiveCommands;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowCancelledException;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowFailedException;
-import io.axoniq.framework.workflow.runtime.api.execution.state.StepCancellationException;
-import io.axoniq.framework.workflow.runtime.api.execution.state.StepRetryInfo;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowStepResult;
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations;
 import io.axoniq.framework.workflow.runtime.util.WorkflowStateUtils;
 import org.axonframework.common.FutureUtils;
 import org.axonframework.common.TypeReference;
@@ -57,7 +57,7 @@ import static io.axoniq.framework.workflow.runtime.util.EventMessageUtils.*;
 public abstract class AbstractStepExecutor {
 
     private static final Logger logger = LoggerFactory.getLogger(AbstractStepExecutor.class);
-    protected final WorkflowContext workflowContext;
+    protected final WorkflowExecutionOperations workflowExecutionOperations;
     protected final WorkflowExecution workflowExecution;
     protected final RunningSteps runningSteps;
     protected final ReachedSteps reachedSteps;
@@ -68,17 +68,17 @@ public abstract class AbstractStepExecutor {
     /**
      * Constructs the abstract step executor.
      *
-     * @param workflowContext           workflow context
-     * @param workflowExecution         workflow execution
-     * @param runningSteps              running step registry
-     * @param reachedSteps              reached steps tracker
-     * @param parentEventNameCustomizer parent event name customizer
-     * @param clock                     clock for time calculations
-     * @param timeoutScheduler          timeout scheduler
+     * @param workflowExecutionOperations runtime primitive-operation surface
+     * @param workflowExecution           workflow execution
+     * @param runningSteps                running step registry
+     * @param reachedSteps                reached steps tracker
+     * @param parentEventNameCustomizer   parent event name customizer
+     * @param clock                       clock for time calculations
+     * @param timeoutScheduler            timeout scheduler
      */
     @Internal
     public AbstractStepExecutor(
-            WorkflowContext workflowContext,
+            WorkflowExecutionOperations workflowExecutionOperations,
             WorkflowExecution workflowExecution,
             RunningSteps runningSteps,
             ReachedSteps reachedSteps,
@@ -87,13 +87,54 @@ public abstract class AbstractStepExecutor {
             WorkflowScheduler timeoutScheduler
     ) {
         this.clock = Objects.requireNonNull(clock, "Clock is mandatory");
-        this.workflowContext = Objects.requireNonNull(workflowContext, "Workflow context is mandatory");
+        this.workflowExecutionOperations = Objects.requireNonNull(workflowExecutionOperations,
+                                                                  "Workflow execution operations are mandatory");
         this.workflowExecution = Objects.requireNonNull(workflowExecution, "Workflow state is mandatory");
         this.runningSteps = Objects.requireNonNull(runningSteps, "Running steps are mandatory");
         this.reachedSteps = Objects.requireNonNull(reachedSteps, "Reached steps tracker is mandatory");
         this.parentEventNameCustomizer = Objects.requireNonNull(parentEventNameCustomizer,
                                                                 "Event name customizer is mandatory");
         this.timeoutScheduler = Objects.requireNonNull(timeoutScheduler, "Timeout scheduler is mandatory");
+    }
+
+    /**
+     * Determines whether an exceptional step completion represents cancellation rather than failure or interruption.
+     *
+     * @param error completion error to classify
+     * @return {@code true} when the error represents step or workflow cancellation
+     */
+    public static boolean isCancellation(Throwable error) {
+        var cause = unwrapCompletionException(error);
+        return cause instanceof StepCancellationException
+                || cause instanceof WorkflowCancelledException
+                || cause instanceof WorkflowFailedException;
+    }
+
+    protected static Throwable unwrapCancellation(Throwable e) {
+        return unwrapCompletionException(e);
+    }
+
+    protected static Throwable unwrapCompletionException(Throwable e) {
+        return FutureUtils.unwrap(e);
+    }
+
+    /**
+     * Creates a durable result handle for a step while retaining its event-name customizer for later cancellation.
+     *
+     * @param stepName            logical name of the step
+     * @param eventNameCustomizer customizer originally supplied for the step primitive
+     * @param workflowExecution   execution providing state access and cancellation delegation
+     * @return state-backed step result handle
+     */
+    public static WorkflowStepResult stateBased(String stepName,
+                                                EventNameCustomizer eventNameCustomizer,
+                                                WorkflowExecution workflowExecution) {
+        return new StateBasedWorkflowStepResult(stepName, () -> {
+            workflowExecution.awaitStateChange(s -> true);
+            return null;
+        }, cause -> workflowExecution.workflowExecutionOperations().cancelStep(PrimitiveCommands.cancelStep(
+                stepName, cause, eventNameCustomizer
+        )), workflowExecution);
     }
 
     protected void acceptAllPendingTasksForStep(String stepName) {
@@ -114,7 +155,7 @@ public abstract class AbstractStepExecutor {
 
     protected CompletableFuture<Void> started(String stepName, Map<String, @Nullable Object> payload,
                                               EventNameCustomizer eventNameCustomizer) {
-        return sendStepEvent(stepName, startedStep(workflowContext, stepName, sanitize(payload),
+        return sendStepEvent(stepName, startedStep(workflowExecutionOperations, stepName, sanitize(payload),
                                                    merge(parentEventNameCustomizer, eventNameCustomizer)
         ), getContext(stepName));
     }
@@ -122,14 +163,14 @@ public abstract class AbstractStepExecutor {
     protected CompletableFuture<Void> startedWaitForEvent(String stepName,
                                                           Map<String, @Nullable Object> payload,
                                                           EventNameCustomizer eventNameCustomizer) {
-        return sendStepEvent(stepName, startedWaitForEventStep(workflowContext, stepName, sanitize(payload),
+        return sendStepEvent(stepName, startedWaitForEventStep(workflowExecutionOperations, stepName, sanitize(payload),
                                                                merge(parentEventNameCustomizer, eventNameCustomizer)
         ), getContext(stepName));
     }
 
     protected CompletableFuture<Void> completed(String stepName, Map<String, @Nullable Object> payload,
                                                 EventNameCustomizer eventNameCustomizer) {
-        return sendStepEvent(stepName, completedStep(workflowContext, stepName, sanitize(payload),
+        return sendStepEvent(stepName, completedStep(workflowExecutionOperations, stepName, sanitize(payload),
                                                      null,
                                                      merge(parentEventNameCustomizer, eventNameCustomizer)
         ), getContext(stepName));
@@ -138,7 +179,7 @@ public abstract class AbstractStepExecutor {
     protected CompletableFuture<Void> completed(String stepName, Map<String, @Nullable Object> payload,
                                                 @Nullable String payloadReducerName,
                                                 EventNameCustomizer eventNameCustomizer) {
-        return sendStepEvent(stepName, completedStep(workflowContext, stepName, sanitize(payload),
+        return sendStepEvent(stepName, completedStep(workflowExecutionOperations, stepName, sanitize(payload),
                                                      payloadReducerName,
                                                      merge(parentEventNameCustomizer, eventNameCustomizer)
         ), getContext(stepName));
@@ -148,7 +189,7 @@ public abstract class AbstractStepExecutor {
                                                             Map<String, @Nullable Object> payload,
                                                             @Nullable String payloadReducerName,
                                                             EventNameCustomizer eventNameCustomizer) {
-        return sendStepEvent(stepName, completedWaitForEventStep(workflowContext,
+        return sendStepEvent(stepName, completedWaitForEventStep(workflowExecutionOperations,
                                                                  stepName,
                                                                  sanitize(payload),
                                                                  payloadReducerName,
@@ -165,7 +206,7 @@ public abstract class AbstractStepExecutor {
     protected CompletableFuture<Void> cancelled(String stepName,
                                                 @Nullable Throwable cause,
                                                 EventNameCustomizer eventNameCustomizer) {
-        return sendStepEvent(stepName, cancelledStep(workflowContext, stepName, cause,
+        return sendStepEvent(stepName, cancelledStep(workflowExecutionOperations, stepName, cause,
                                                      merge(parentEventNameCustomizer, eventNameCustomizer)
         ), getContext(stepName));
     }
@@ -224,7 +265,7 @@ public abstract class AbstractStepExecutor {
     protected CompletableFuture<Void> cancelledWaitForEvent(String stepName,
                                                             @Nullable Throwable cause,
                                                             EventNameCustomizer eventNameCustomizer) {
-        return sendStepEvent(stepName, cancelledWaitForEventStep(workflowContext, stepName, cause,
+        return sendStepEvent(stepName, cancelledWaitForEventStep(workflowExecutionOperations, stepName, cause,
                                                                  merge(parentEventNameCustomizer,
                                                                        eventNameCustomizer)
         ), getContext(stepName));
@@ -233,7 +274,7 @@ public abstract class AbstractStepExecutor {
     protected CompletableFuture<Void> failed(String stepName, Throwable ex,
                                              EventNameCustomizer eventNameCustomizer) {
         logger.error("Step '{}' failed in workflow '{}'", stepName, workflowExecution.workflowId(), ex);
-        return sendStepEvent(stepName, failStep(workflowContext, stepName, ex,
+        return sendStepEvent(stepName, failStep(workflowExecutionOperations, stepName, ex,
                                                 merge(parentEventNameCustomizer, eventNameCustomizer)
         ), getContext(stepName));
     }
@@ -241,7 +282,7 @@ public abstract class AbstractStepExecutor {
     protected CompletableFuture<Void> retrying(String stepName,
                                                StepRetryInfo retryInfo,
                                                EventNameCustomizer eventNameCustomizer) {
-        return sendStepEvent(stepName, retryingStep(workflowContext, stepName, retryInfo,
+        return sendStepEvent(stepName, retryingStep(workflowExecutionOperations, stepName, retryInfo,
                                                     merge(parentEventNameCustomizer, eventNameCustomizer)
         ), getContext(stepName));
     }
@@ -249,7 +290,7 @@ public abstract class AbstractStepExecutor {
     protected CompletableFuture<Void> retryStarted(String stepName,
                                                    StepRetryInfo retryInfo,
                                                    EventNameCustomizer eventNameCustomizer) {
-        return sendStepEvent(stepName, retryStartedStep(workflowContext, stepName, retryInfo,
+        return sendStepEvent(stepName, retryStartedStep(workflowExecutionOperations, stepName, retryInfo,
                                                         merge(parentEventNameCustomizer, eventNameCustomizer)
         ), getContext(stepName));
     }
@@ -261,7 +302,7 @@ public abstract class AbstractStepExecutor {
 
     protected CompletableFuture<Void> timedOut(String stepName, Instant timeoutTimestamp,
                                                EventNameCustomizer eventNameCustomizer) {
-        return sendStepEvent(stepName, timeoutStep(workflowContext, stepName, timeoutTimestamp,
+        return sendStepEvent(stepName, timeoutStep(workflowExecutionOperations, stepName, timeoutTimestamp,
                                                    merge(parentEventNameCustomizer, eventNameCustomizer)
         ), getContext(stepName));
     }
@@ -274,7 +315,7 @@ public abstract class AbstractStepExecutor {
     protected CompletableFuture<Void> timedOutWaitForEvent(String stepName,
                                                            Instant timeoutTimestamp,
                                                            EventNameCustomizer eventNameCustomizer) {
-        return sendStepEvent(stepName, timeoutWaitForEventStep(workflowContext, stepName, timeoutTimestamp,
+        return sendStepEvent(stepName, timeoutWaitForEventStep(workflowExecutionOperations, stepName, timeoutTimestamp,
                                                                merge(parentEventNameCustomizer, eventNameCustomizer)
         ), getContext(stepName));
     }
@@ -282,11 +323,11 @@ public abstract class AbstractStepExecutor {
     private CompletableFuture<Void> sendStepEvent(String stepName,
                                                   EventMessage eventMessage,
                                                   Context context) {
-        if (workflowContext.workflowStatus().isTerminal()) {
+        if (workflowExecutionOperations.workflowStatus().isTerminal()) {
             logger.debug("Skipping step event {} — workflow is in terminal state {}", eventMessage.type(),
-                         workflowContext.workflowStatus());
+                         workflowExecutionOperations.workflowStatus());
             return CompletableFuture.failedFuture(new IllegalStateException(
-                    "Workflow is in terminal state " + workflowContext.workflowStatus()
+                    "Workflow is in terminal state " + workflowExecutionOperations.workflowStatus()
                             + ", cannot publish step event " + eventMessage.type()));
         }
         if (WorkflowStateUtils.isStepTerminal(workflowExecution.state(), stepName)) {
@@ -324,45 +365,5 @@ public abstract class AbstractStepExecutor {
         return sanitize(eventMessage.payloadAs(new TypeReference<>() {
                         })
         );
-    }
-
-    /**
-     * Determines whether an exceptional step completion represents cancellation rather than failure or interruption.
-     *
-     * @param error completion error to classify
-     * @return {@code true} when the error represents step or workflow cancellation
-     */
-    public static boolean isCancellation(Throwable error) {
-        var cause = unwrapCompletionException(error);
-        return cause instanceof StepCancellationException
-                || cause instanceof WorkflowCancelledException
-                || cause instanceof WorkflowFailedException;
-    }
-
-    protected static Throwable unwrapCancellation(Throwable e) {
-        return unwrapCompletionException(e);
-    }
-
-    protected static Throwable unwrapCompletionException(Throwable e) {
-        return FutureUtils.unwrap(e);
-    }
-
-    /**
-     * Creates a durable result handle for a step while retaining its event-name customizer for later cancellation.
-     *
-     * @param stepName            logical name of the step
-     * @param eventNameCustomizer customizer originally supplied for the step primitive
-     * @param workflowExecution   execution providing state access and cancellation delegation
-     * @return state-backed step result handle
-     */
-    public static WorkflowStepResult stateBased(String stepName,
-                                                EventNameCustomizer eventNameCustomizer,
-                                                WorkflowExecution workflowExecution) {
-        return new StateBasedWorkflowStepResult(stepName, () -> {
-            workflowExecution.awaitStateChange(s -> true);
-            return null;
-        }, cause -> workflowExecution.workflowContext().cancelStep(PrimitiveCommands.cancelStep(
-                stepName, cause, eventNameCustomizer
-        )), workflowExecution);
     }
 }

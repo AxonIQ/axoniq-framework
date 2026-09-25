@@ -18,25 +18,32 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
+import io.axoniq.framework.workflow.dsl.api.WorkflowState;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
 import io.axoniq.framework.workflow.query.api.WorkflowStateQuery;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowState;
-import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
 import org.axonframework.common.infra.ComponentDescriptor;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 
 import java.util.Collection;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-import static org.mockito.Mockito.verify;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
 
 class InMemoryWorkflowExecutionRepositoryTest {
+
+    private static WorkflowExecution execution(String workflowId, WorkflowStatus workflowStatus) {
+        var state = mock(WorkflowState.class);
+        when(state.workflowId()).thenReturn(workflowId);
+        when(state.workflowStatus()).thenReturn(workflowStatus);
+
+        var execution = mock(WorkflowExecution.class);
+        when(execution.state()).thenReturn(state);
+        return execution;
+    }
 
     @Test
     void savesAnExecutionOnceAndFindsItByIdentifierAndPredicate() {
@@ -92,15 +99,5 @@ class InMemoryWorkflowExecutionRepositoryTest {
         assertThat(repository.remove("unknown")).isNull();
         repository.clear();
         assertThat(repository.findAll()).isEmpty();
-    }
-
-    private static WorkflowExecution execution(String workflowId, WorkflowStatus workflowStatus) {
-        var state = mock(WorkflowState.class);
-        when(state.workflowId()).thenReturn(workflowId);
-        when(state.workflowStatus()).thenReturn(workflowStatus);
-
-        var execution = mock(WorkflowExecution.class);
-        when(execution.state()).thenReturn(state);
-        return execution;
     }
 }

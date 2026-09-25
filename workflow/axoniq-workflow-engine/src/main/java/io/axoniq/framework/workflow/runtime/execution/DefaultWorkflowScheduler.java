@@ -44,7 +44,7 @@ public class DefaultWorkflowScheduler implements WorkflowScheduler {
     /**
      * Creates a scheduler backed by the provided timer executor.
      *
-     * @param clock workflow clock
+     * @param clock         workflow clock
      * @param timerExecutor executor used only for deadline delivery
      */
     public DefaultWorkflowScheduler(Clock clock, ScheduledThreadPoolExecutor timerExecutor) {
