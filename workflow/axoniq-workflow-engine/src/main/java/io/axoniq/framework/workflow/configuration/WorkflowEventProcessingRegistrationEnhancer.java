@@ -62,15 +62,19 @@ import java.util.function.Function;
 @Internal
 public class WorkflowEventProcessingRegistrationEnhancer implements ConfigurationEnhancer {
 
-    private static final Logger logger = LoggerFactory.getLogger(WorkflowEventProcessingRegistrationEnhancer.class);
-
-    private static final int PRE_PROCESSOR_START_PHASE = Phase.INBOUND_EVENT_CONNECTORS - 10;
-
     /**
      * Name of the top-level workflow module.
      */
     public static final String DEFAULT_MODULE_NAME = "Workflow";
-
+    /**
+     * Order for this enhancer.
+     * <p>
+     * Enhancer math: we have to run AFTER the event souring part is set up and let some space for others to register.
+     * </p>
+     */
+    public static final int WORKFLOW_EVENTING_ENHANCER_ORDER = EventSourcingConfigurationDefaults.ENHANCER_ORDER + 20;
+    private static final Logger logger = LoggerFactory.getLogger(WorkflowEventProcessingRegistrationEnhancer.class);
+    private static final int PRE_PROCESSOR_START_PHASE = Phase.INBOUND_EVENT_CONNECTORS - 10;
     private final String moduleName;
     @Nullable
     private final String engineComponentName;
@@ -126,12 +130,21 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
     }
 
     /**
-     * Order for this enhancer.
+     * Returns the name under which a
+     * {@link org.axonframework.messaging.eventhandling.processing.streaming.pooled.PooledStreamingEventProcessorModule}
+     * publishes the {@link TokenStore} its processor ended up with, so the start handler reads back the very store the
+     * processor claims its segments in.
      * <p>
-     * Enhancer math: we have to run AFTER the event souring part is set up and let some space for others to register.
-     * </p>
+     * This names an output of the processor configuration, not an input. An application supplies its token store as an
+     * unnamed {@link TokenStore} component, which {@link #processorCustomization()} resolves; registering one under
+     * this name instead collides with the component the module already publishes.
+     *
+     * @param moduleName module name
+     * @return name of the token store component
      */
-    public static final int WORKFLOW_EVENTING_ENHANCER_ORDER = EventSourcingConfigurationDefaults.ENHANCER_ORDER + 20;
+    private static String tokenStoreName(String moduleName) {
+        return "TokenStore[" + moduleName + "]";
+    }
 
     @Override
     public void enhance(ComponentRegistry componentRegistry) {
@@ -302,22 +315,5 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
     @Override
     public int order() {
         return WORKFLOW_EVENTING_ENHANCER_ORDER;
-    }
-
-    /**
-     * Returns the name under which a
-     * {@link org.axonframework.messaging.eventhandling.processing.streaming.pooled.PooledStreamingEventProcessorModule}
-     * publishes the {@link TokenStore} its processor ended up with, so the start handler reads back the very store the
-     * processor claims its segments in.
-     * <p>
-     * This names an output of the processor configuration, not an input. An application supplies its token store as an
-     * unnamed {@link TokenStore} component, which {@link #processorCustomization()} resolves; registering one under
-     * this name instead collides with the component the module already publishes.
-     *
-     * @param moduleName module name
-     * @return name of the token store component
-     */
-    private static String tokenStoreName(String moduleName) {
-        return "TokenStore[" + moduleName + "]";
     }
 }

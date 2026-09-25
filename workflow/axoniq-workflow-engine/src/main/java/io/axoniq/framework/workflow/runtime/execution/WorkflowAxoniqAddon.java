@@ -28,6 +28,7 @@ import io.axoniq.license.entitlement.AxoniqAddon;
  * @since 5.4.0
  */
 public class WorkflowAxoniqAddon implements AxoniqAddon {
+
     static final String IDENTIFIER = "framework.workflow";
 
     @Override

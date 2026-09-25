@@ -18,8 +18,8 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
-import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
-import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
+import io.axoniq.framework.workflow.dsl.api.StepStatus;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.util.MetadataUtils;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.eventsourcing.eventstore.TagResolver;
@@ -41,6 +41,27 @@ import static io.axoniq.framework.workflow.runtime.execution.WorkflowEventTags.*
 @Internal
 public class WorkflowEventTagResolver implements TagResolver {
 
+
+    private static boolean isEnginePublishedWorkflowEvent(Metadata metadata) {
+        return MetadataUtils.hasWorkflowId().test(metadata)
+                && (MetadataUtils.getWorkflowStatus(metadata).isPresent()
+                || MetadataUtils.getStepStatus(metadata).isPresent());
+    }
+
+    private static String lifecycleValue(WorkflowStatus status) {
+        return switch (status) {
+            case NONE -> throw new IllegalArgumentException("Workflow lifecycle tag is undefined for status NONE");
+            case STARTED, COMPLETED, FAILED, TIMED_OUT, CANCELLED -> TAG_VALUE_EVENT_TYPE_LIFECYCLE;
+        };
+    }
+
+    private static String lifecycleValue(StepStatus status) {
+        return switch (status) {
+            case STARTED, COMPLETED, TIMED_OUT, CANCELLED -> TAG_VALUE_EVENT_TYPE_WAIT_STEP;
+            case RETRYING, RETRY_STARTED, FAILED -> throw new IllegalArgumentException(
+                    "Wait for step lifecycle tag is undefined for status " + status);
+        };
+    }
 
     @Override
     public Set<Tag> resolve(EventMessage eventMessage) {
@@ -68,26 +89,5 @@ public class WorkflowEventTagResolver implements TagResolver {
         }
 
         return Set.copyOf(tags);
-    }
-
-    private static boolean isEnginePublishedWorkflowEvent(Metadata metadata) {
-        return MetadataUtils.hasWorkflowId().test(metadata)
-                && (MetadataUtils.getWorkflowStatus(metadata).isPresent()
-                || MetadataUtils.getStepStatus(metadata).isPresent());
-    }
-
-    private static String lifecycleValue(WorkflowStatus status) {
-        return switch (status) {
-            case NONE -> throw new IllegalArgumentException("Workflow lifecycle tag is undefined for status NONE");
-            case STARTED, COMPLETED, FAILED, TIMED_OUT, CANCELLED -> TAG_VALUE_EVENT_TYPE_LIFECYCLE;
-        };
-    }
-
-    private static String lifecycleValue(StepStatus status) {
-        return switch (status) {
-            case STARTED, COMPLETED, TIMED_OUT, CANCELLED -> TAG_VALUE_EVENT_TYPE_WAIT_STEP;
-            case RETRYING, RETRY_STARTED, FAILED -> throw new IllegalArgumentException(
-                    "Wait for step lifecycle tag is undefined for status " + status);
-        };
     }
 }

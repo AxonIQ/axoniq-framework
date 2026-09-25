@@ -18,10 +18,10 @@
  */
 package io.axoniq.framework.workflow.configuration;
 
+import io.axoniq.framework.workflow.dsl.api.EventCondition;
+import io.axoniq.framework.workflow.dsl.api.WorkflowContext;
 import io.axoniq.framework.workflow.history.inmemory.WorkflowHistoryProjector;
-import io.axoniq.framework.workflow.runtime.api.execution.context.EventCondition;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowConfiguration;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContextFactory;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowDefinition;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowCancellationService;
@@ -51,7 +51,8 @@ import static io.axoniq.framework.workflow.configuration.WorkflowConfigurationDe
 /**
  * Workflow module used to create multiple {@link WorkflowConfiguration} (one per workflow definition) defined for the
  * given {@link WorkflowContext}. As a result, the module will register its configuration in the
- * {@link WorkflowConfigurationRegistry}, used by the {@link io.axoniq.framework.workflow.runtime.execution.WorkflowEngine}.
+ * {@link WorkflowConfigurationRegistry}, used by the
+ * {@link io.axoniq.framework.workflow.runtime.execution.WorkflowEngine}.
  *
  * @param <C> type of workflow context.
  * @author Simon Zambrovski
@@ -136,7 +137,7 @@ class SimpleWorkflowModule<C extends WorkflowContext>
                 //noinspection unchecked,rawtypes
                 cr.registerComponent(
                         WorkflowConfigurationRegistry.class,
-                        (ComponentBuilder) workflowConfigurationRegistryBuilder
+                        workflowConfigurationRegistryBuilder
                 );
             }
             if (workflowExecutionRepositoryBuilder != null) {

@@ -18,17 +18,17 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
-import io.axoniq.framework.workflow.runtime.api.execution.context.EventNameCustomizer;
+import io.axoniq.framework.workflow.dsl.api.EventNameCustomizer;
+import io.axoniq.framework.workflow.dsl.api.PayloadProcessor;
+import io.axoniq.framework.workflow.dsl.api.StepStatus;
+import io.axoniq.framework.workflow.dsl.api.WorkflowState;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStep;
+import io.axoniq.framework.workflow.dsl.api.retry.RetryPolicy;
 import io.axoniq.framework.workflow.runtime.api.execution.context.ExecutePrimitive;
 import io.axoniq.framework.workflow.runtime.api.execution.context.PrimitiveCommands;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowReplayDriftException;
-import io.axoniq.framework.workflow.runtime.api.execution.context.retry.RetryPolicy;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowState;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowStep;
-import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
-import io.axoniq.framework.workflow.runtime.api.payload.PayloadProcessor;
 import io.axoniq.framework.workflow.runtime.execution.payload.GlobalOnlyPayloadReducer;
 import io.axoniq.framework.workflow.runtime.execution.payload.LocalOnlyPayloadReducer;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
@@ -44,7 +44,6 @@ import java.util.concurrent.Executor;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 /**
@@ -56,15 +55,15 @@ import static org.mockito.Mockito.*;
  */
 class ExecuteDelegateDriftTest {
 
-    private WorkflowContext workflowContext;
+    private final ReachedSteps reachedSteps = new ReachedSteps();
+    private WorkflowExecutionOperations workflowExecutionOperations;
     private WorkflowExecution workflowExecution;
     private WorkflowState state;
     private ExecuteDelegate delegate;
-    private final ReachedSteps reachedSteps = new ReachedSteps();
 
     @BeforeEach
     void setUp() {
-        workflowContext = mock(WorkflowContext.class);
+        workflowExecutionOperations = mock(WorkflowExecutionOperations.class);
         workflowExecution = mock(WorkflowExecution.class);
         state = mock(WorkflowState.class);
         EventSink eventSink = mock(EventSink.class);
@@ -79,7 +78,7 @@ class ExecuteDelegateDriftTest {
         when(workflowExecution.hasTasks()).thenReturn(false);
 
         delegate = new ExecuteDelegate(
-                workflowContext,
+                workflowExecutionOperations,
                 workflowExecution,
                 new RunningSteps(),
                 reachedSteps,

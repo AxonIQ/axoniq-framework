@@ -24,7 +24,7 @@ import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.context.annotation.Bean;
 
 /**
- * Autoconfiguration for default workflow DSL context factories.
+ * Autoconfiguration for default workflow context factories.
  *
  * @author Simon Zambrovski
  * @since 5.4.0

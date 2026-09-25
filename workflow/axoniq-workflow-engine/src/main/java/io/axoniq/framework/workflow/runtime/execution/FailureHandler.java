@@ -18,13 +18,12 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
-import io.axoniq.framework.workflow.runtime.api.execution.context.EventNameCustomizer;
+import io.axoniq.framework.workflow.dsl.api.EventNameCustomizer;
 import org.axonframework.common.annotation.Internal;
 
 /**
- * Callback invoked by {@link ExecuteDelegate} when an execute attempt completes with a
- * non-timeout, non-cancellation error. The handler decides the step outcome
- * (e.g. publish FAILED or RETRYING).
+ * Callback invoked by {@link ExecuteDelegate} when an execute attempt completes with a non-timeout, non-cancellation
+ * error. The handler decides the step outcome (e.g. publish FAILED or RETRYING).
  *
  * @author Stefan Dragisic
  * @since 5.4.0

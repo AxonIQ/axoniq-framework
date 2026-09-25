@@ -22,12 +22,11 @@ import io.axoniq.framework.workflow.history.api.WorkflowHistoryRepository;
 import io.axoniq.framework.workflow.runtime.api.manager.WorkflowManager;
 import io.axoniq.framework.workflow.runtime.execution.SimpleWorkflowManager;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowCancellationService;
+import io.axoniq.framework.workflow.runtime.execution.WorkflowEventTagResolver;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowExecutionRepository;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowStore;
-import io.axoniq.framework.workflow.runtime.execution.WorkflowEventTagResolver;
 import io.axoniq.framework.workflow.runtime.util.DefaultTimeoutFutureResolver;
 import org.axonframework.common.configuration.Component;
-import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.common.configuration.ComponentDefinition;
 import org.axonframework.common.configuration.ComponentFactory;
 import org.axonframework.common.configuration.ComponentRegistry;
@@ -42,6 +41,7 @@ import org.axonframework.common.configuration.SearchScope;
 import org.axonframework.common.lifecycle.Phase;
 import org.axonframework.eventsourcing.eventstore.MultiTagResolver;
 import org.axonframework.eventsourcing.eventstore.TagResolver;
+import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.junit.jupiter.api.*;
 
 import java.util.ArrayList;
@@ -61,6 +61,17 @@ import static org.mockito.Mockito.*;
 class WorkflowConfigurationDefaultsTest {
 
     private final WorkflowConfigurationDefaults subject = new WorkflowConfigurationDefaults();
+
+    @SuppressWarnings("unchecked")
+    private static List<TagResolver> extractDelegates(MultiTagResolver resolver) {
+        try {
+            var field = MultiTagResolver.class.getDeclaredField("delegates");
+            field.setAccessible(true);
+            return (List<TagResolver>) field.get(resolver);
+        } catch (ReflectiveOperationException e) {
+            throw new AssertionError("Failed to inspect delegates from MultiTagResolver", e);
+        }
+    }
 
     @Test
     void orderReturnsWorkflowDefaultsEnhancerOrder() {
@@ -323,17 +334,6 @@ class WorkflowConfigurationDefaultsTest {
         @Override
         public void describeTo(org.axonframework.common.infra.ComponentDescriptor descriptor) {
             // no-op for tests
-        }
-    }
-
-    @SuppressWarnings("unchecked")
-    private static List<TagResolver> extractDelegates(MultiTagResolver resolver) {
-        try {
-            var field = MultiTagResolver.class.getDeclaredField("delegates");
-            field.setAccessible(true);
-            return (List<TagResolver>) field.get(resolver);
-        } catch (ReflectiveOperationException e) {
-            throw new AssertionError("Failed to inspect delegates from MultiTagResolver", e);
         }
     }
 }

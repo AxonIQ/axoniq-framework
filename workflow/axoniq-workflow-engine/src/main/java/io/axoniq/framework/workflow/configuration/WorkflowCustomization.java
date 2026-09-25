@@ -18,17 +18,17 @@
  */
 package io.axoniq.framework.workflow.configuration;
 
-import io.axoniq.framework.workflow.runtime.api.execution.context.EventNameCustomizer;
+import io.axoniq.framework.workflow.dsl.api.EventNameCustomizer;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.api.execution.context.RecoverableWorkflowExceptionPolicy;
 import io.axoniq.framework.workflow.runtime.api.execution.context.Version;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowIdProvider;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowStatusChangeListener;
-import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.execution.DefaultEventNameCustomizer;
 import io.axoniq.framework.workflow.runtime.execution.MessageWorkflowIdProvider;
-import org.jspecify.annotations.Nullable;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.configuration.Configuration;
+import org.jspecify.annotations.Nullable;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -51,19 +51,6 @@ public class WorkflowCustomization {
     protected WorkflowIdProvider workflowIdProvider;
     private RecoverableWorkflowExceptionPolicy recoverableExceptionPolicy;
     private String workflowVersion = Version.DEFAULT_VERSION;
-
-    /**
-     * Create default module configuration.
-     *
-     * @param workflowName  name of the workflow.
-     * @param configuration configuration to use.
-     * @return workflow module configuration.
-     */
-    public static WorkflowCustomization defaultConfiguration(String workflowName,
-                                                             @Nullable Configuration configuration) {
-        return new WorkflowCustomization(workflowName, configuration);
-    }
-
 
     /**
      * Constructs new workflow customization.
@@ -96,6 +83,7 @@ public class WorkflowCustomization {
         });
     }
 
+
     /**
      * Copy constructor.
      *
@@ -110,6 +98,18 @@ public class WorkflowCustomization {
         this.recoverableExceptionPolicy = base.recoverableExceptionPolicy;
         this.workflowVersion = base.workflowVersion;
         this.workflowStatusListeners = base.workflowStatusListeners;
+    }
+
+    /**
+     * Create default module configuration.
+     *
+     * @param workflowName  name of the workflow.
+     * @param configuration configuration to use.
+     * @return workflow module configuration.
+     */
+    public static WorkflowCustomization defaultConfiguration(String workflowName,
+                                                             @Nullable Configuration configuration) {
+        return new WorkflowCustomization(workflowName, configuration);
     }
 
     /**

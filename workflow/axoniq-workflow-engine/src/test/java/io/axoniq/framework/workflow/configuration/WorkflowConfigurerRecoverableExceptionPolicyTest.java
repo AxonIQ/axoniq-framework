@@ -18,11 +18,11 @@
  */
 package io.axoniq.framework.workflow.configuration;
 
-import io.axoniq.framework.workflow.runtime.api.annotation.Workflow;
-import io.axoniq.framework.workflow.runtime.api.execution.context.EventConditions;
+import io.axoniq.framework.workflow.dsl.api.EventConditions;
+import io.axoniq.framework.workflow.annotation.Workflow;
 import io.axoniq.framework.workflow.runtime.api.execution.context.RecoverableWorkflowExceptionPolicy;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowConfiguration;
-import io.axoniq.framework.workflow.runtime.execution.AbstractDSLWorkflowContext;
+import io.axoniq.framework.workflow.runtime.execution.AbstractWorkflowContext;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowConfigurationRegistry;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
@@ -34,8 +34,8 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Tests that a {@link RecoverableWorkflowExceptionPolicy} reaches the workflow configuration through each
- * configuration path: the default, a registered component, and a per-workflow customization.
+ * Tests that a {@link RecoverableWorkflowExceptionPolicy} reaches the workflow configuration through each configuration
+ * path: the default, a registered component, and a per-workflow customization.
  *
  * @author Stefan Dragisic
  */
@@ -43,6 +43,50 @@ class WorkflowConfigurerRecoverableExceptionPolicyTest {
 
     private static final RecoverableWorkflowExceptionPolicy COMPONENT_POLICY = e -> e instanceof IllegalStateException;
     private static final RecoverableWorkflowExceptionPolicy WORKFLOW_POLICY = e -> e instanceof ArithmeticException;
+
+    private static RecoverableWorkflowExceptionPolicy policyOf(WorkflowConfigurer configurer, String workflowName) {
+        WorkflowConfigurationRegistry<?> registry =
+                configurer.build().getComponent(WorkflowConfigurationRegistry.class);
+        return registry.findByWorkflowNameAndVersion(workflowName, "0.0.1")
+                       .orElseThrow()
+                       .recoverableExceptionPolicy();
+    }
+
+    private static WorkflowModule declarativeModule(boolean customizePolicy) {
+        return WorkflowModule.defaults("declarative-module", TestContext.class)
+                             .workflowContextFactory(c -> TestContext::new)
+                             .definition(d -> d
+                                     .declarative(c -> ctx -> {
+                                     })
+                                     .workflowName("wf-declarative")
+                                     .on(c -> EventConditions.fromQualifiedName(new QualifiedName("start")))
+                                     .customized((c, w) -> customizePolicy
+                                             ? w.recoverableExceptionPolicy(WORKFLOW_POLICY)
+                                             : w)
+                             );
+    }
+
+    private static WorkflowModule annotatedModule() {
+        return WorkflowModule.defaults("annotated-module", TestContext.class)
+                             .workflowContextFactory(c -> TestContext::new)
+                             .definition(d -> d.autodetected(c -> new AnnotatedTestWorkflow()));
+    }
+
+    public static class AnnotatedTestWorkflow {
+
+        @Workflow(workflowName = "wf-annotated", startOnEventName = "java.lang.String", idProperty = "id")
+        void run(TestContext context) {
+        }
+    }
+
+    static class TestContext extends AbstractWorkflowContext {
+
+        public TestContext(Map<String, @Nullable Object> payload, String workflowId,
+                           ProcessingContext processingContext,
+                           WorkflowConfiguration<?> workflowConfiguration) {
+            super(workflowId, payload, processingContext, workflowConfiguration);
+        }
+    }
 
     @Nested
     class DeclarativeWorkflow {
@@ -120,50 +164,6 @@ class WorkflowConfigurerRecoverableExceptionPolicyTest {
 
             // then
             assertThat(policy).isSameAs(COMPONENT_POLICY);
-        }
-    }
-
-    private static RecoverableWorkflowExceptionPolicy policyOf(WorkflowConfigurer configurer, String workflowName) {
-        WorkflowConfigurationRegistry<?> registry =
-                configurer.build().getComponent(WorkflowConfigurationRegistry.class);
-        return registry.findByWorkflowNameAndVersion(workflowName, "0.0.1")
-                       .orElseThrow()
-                       .recoverableExceptionPolicy();
-    }
-
-    private static WorkflowModule declarativeModule(boolean customizePolicy) {
-        return WorkflowModule.defaults("declarative-module", TestContext.class)
-                             .workflowContextFactory(c -> TestContext::new)
-                             .definition(d -> d
-                                     .declarative(c -> ctx -> {
-                                     })
-                                     .workflowName("wf-declarative")
-                                     .on(c -> EventConditions.fromQualifiedName(new QualifiedName("start")))
-                                     .customized((c, w) -> customizePolicy
-                                             ? w.recoverableExceptionPolicy(WORKFLOW_POLICY)
-                                             : w)
-                             );
-    }
-
-    private static WorkflowModule annotatedModule() {
-        return WorkflowModule.defaults("annotated-module", TestContext.class)
-                             .workflowContextFactory(c -> TestContext::new)
-                             .definition(d -> d.autodetected(c -> new AnnotatedTestWorkflow()));
-    }
-
-    public static class AnnotatedTestWorkflow {
-
-        @Workflow(workflowName = "wf-annotated", startOnEventName = "java.lang.String", idProperty = "id")
-        void run(TestContext context) {
-        }
-    }
-
-    static class TestContext extends AbstractDSLWorkflowContext {
-
-        public TestContext(Map<String, @Nullable Object> payload, String workflowId,
-                           ProcessingContext processingContext,
-                           WorkflowConfiguration<?> workflowConfiguration) {
-            super(workflowId, payload, processingContext, workflowConfiguration);
         }
     }
 }

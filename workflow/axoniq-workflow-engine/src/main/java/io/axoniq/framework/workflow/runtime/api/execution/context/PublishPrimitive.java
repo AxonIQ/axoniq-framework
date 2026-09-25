@@ -18,7 +18,7 @@
  */
 package io.axoniq.framework.workflow.runtime.api.execution.context;
 
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowStepResult;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStepResult;
 import org.axonframework.messaging.eventhandling.EventMessage;
 
 /**
@@ -30,9 +30,9 @@ import org.axonframework.messaging.eventhandling.EventMessage;
  * event consumers receive is the event the workflow published. Workflow metadata keys override user metadata keys of
  * the same name.
  * <p>
- * The appended event acts both as the business event and as the replay-safe checkpoint of the step: on replay the
- * step is found in the workflow state and the event is not published again. Because the event is routed like any
- * other business event, other workflows may start on it or be woken by it.
+ * The appended event acts both as the business event and as the replay-safe checkpoint of the step: on replay the step
+ * is found in the workflow state and the event is not published again. Because the event is routed like any other
+ * business event, other workflows may start on it or be woken by it.
  *
  * @author Stefan Dragisic
  * @since 5.4.0

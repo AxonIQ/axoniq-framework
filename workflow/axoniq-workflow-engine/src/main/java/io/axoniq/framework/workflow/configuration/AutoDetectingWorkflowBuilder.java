@@ -18,8 +18,8 @@
  */
 package io.axoniq.framework.workflow.configuration;
 
+import io.axoniq.framework.workflow.dsl.api.WorkflowContext;
 import io.axoniq.framework.workflow.runtime.api.execution.context.RecoverableWorkflowExceptionPolicy;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContextFactory;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowDefinition;
 import io.axoniq.framework.workflow.runtime.util.WorkflowReflectionUtils;
@@ -50,7 +50,7 @@ class AutoDetectingWorkflowBuilder<C extends WorkflowContext>
         implements WorkflowModule.WorkflowDefinitionPhase.FinalizedPhase<C> {
 
     /**
-     * Constructs an {@link AutoDetectingWorkflowBuilder} for the given {@code parent} module.
+     * Constructs an  for the given {@code parent} module.
      * <p>
      * The given {@code instanceBuilder} is used to create the component instance at build time, which is then inspected
      * for annotated workflow methods via {@link AutoDetectionUtils}.

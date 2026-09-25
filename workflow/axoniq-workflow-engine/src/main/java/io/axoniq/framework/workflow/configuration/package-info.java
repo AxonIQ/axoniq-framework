@@ -18,6 +18,7 @@
  */
 /**
  * Package containing workflow configuration components.
+ *
  * @since 5.4.0
  */
 @NullMarked
