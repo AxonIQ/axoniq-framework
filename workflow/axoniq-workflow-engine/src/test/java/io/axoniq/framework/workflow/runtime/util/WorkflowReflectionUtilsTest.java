@@ -46,7 +46,9 @@ class WorkflowReflectionUtilsTest {
     void testCreateDefaultInstanceFailure() {
         // Class without default constructor
         class NoDefaultConstructor {
-            NoDefaultConstructor(String s) {}
+
+            NoDefaultConstructor(String s) {
+            }
         }
         Optional<NoDefaultConstructor> instance = WorkflowReflectionUtils.createDefaultInstance(NoDefaultConstructor.class);
         assertThat(instance).isEmpty();
@@ -54,13 +56,14 @@ class WorkflowReflectionUtilsTest {
 
     @Test
     void testRequireIsAssignableFrom() {
-        assertThat(WorkflowReflectionUtils.requireIsAssignableFrom(CharSequence.class, String.class)).isEqualTo(String.class);
+        assertThat(WorkflowReflectionUtils.requireIsAssignableFrom(CharSequence.class,
+                                                                   String.class)).isEqualTo(String.class);
     }
 
     @Test
     void testRequireIsAssignableFromFailure() {
         assertThatThrownBy(() ->
-            WorkflowReflectionUtils.requireIsAssignableFrom(String.class, Integer.class))
+                                   WorkflowReflectionUtils.requireIsAssignableFrom(String.class, Integer.class))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -83,7 +86,7 @@ class WorkflowReflectionUtilsTest {
         Method method = TestTarget.class.getMethod("throwException");
         TestTarget target = new TestTarget();
         assertThatThrownBy(() ->
-            WorkflowReflectionUtils.invoke(target, method))
+                                   WorkflowReflectionUtils.invoke(target, method))
                 .isInstanceOf(RuntimeException.class)
                 .hasCauseInstanceOf(RuntimeException.class)
                 .extracting(Throwable::getCause)
@@ -95,15 +98,18 @@ class WorkflowReflectionUtilsTest {
         Method method = TestTarget.class.getDeclaredMethod("privateMethod");
         TestTarget target = new TestTarget();
         assertThatThrownBy(() ->
-            WorkflowReflectionUtils.invoke(target, method))
+                                   WorkflowReflectionUtils.invoke(target, method))
                 .isInstanceOf(RuntimeException.class)
                 .hasMessageContaining("Cannot access");
     }
 
     public static class TestTarget {
+
         public void throwException() {
             throw new RuntimeException("test exception");
         }
-        private void privateMethod() {}
+
+        private void privateMethod() {
+        }
     }
 }

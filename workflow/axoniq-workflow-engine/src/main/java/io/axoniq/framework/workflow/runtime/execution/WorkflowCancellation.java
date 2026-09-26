@@ -18,22 +18,22 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowCancelledException;
-import org.jspecify.annotations.Nullable;
+import io.axoniq.framework.workflow.dsl.api.WorkflowCancelledException;
 import org.axonframework.common.annotation.Internal;
+import org.jspecify.annotations.Nullable;
 
 import java.util.Objects;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CancellationException;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * Coordinates cancellation requests for one running workflow instance.
  * <p>
  * Cancellation is requested from arbitrary threads but executed by the workflow control thread. This preserves the
- * single-consumer ordering of workflow tasks and ensures that a completed future is followed by the appropriate
- * durable terminal event before the returned future completes.
- * This differs from {@link io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowLifecycleControl}, whose
- * operations apply lifecycle commands synchronously on the workflow control thread.
+ * single-consumer ordering of workflow tasks and ensures that a completed future is followed by the appropriate durable
+ * terminal event before the returned future completes. This differs from
+ * {@link io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowLifecycleControl}, whose operations apply
+ * lifecycle commands synchronously on the workflow control thread.
  *
  * @author Simon Zambrovski
  * @author Stefan Dragisic
@@ -46,7 +46,7 @@ public interface WorkflowCancellation {
      * Requests cooperative cancellation of one running workflow step.
      *
      * @param stepName name of the step to cancel
-     * @param cause optional reason for the cancellation
+     * @param cause    optional reason for the cancellation
      * @return a future completing with {@code true} when a terminal step cancellation was recorded, or {@code false}
      * when the step was unknown or already terminal
      */
@@ -102,15 +102,15 @@ public interface WorkflowCancellation {
     /**
      * Represents one pending workflow-cancellation request owned by the cancellation coordinator.
      *
-     * @param cause cancellation cause to record durably
+     * @param cause    cancellation cause to record durably
      * @param callback future completed after the workflow driver performs the terminal transition
      */
     record PendingRequest(WorkflowCancelledException cause,
                           CompletableFuture<Void> callback) {
+
         public PendingRequest {
             Objects.requireNonNull(cause, "Cancellation cause must not be null");
             Objects.requireNonNull(callback, "Completion future must not be null");
         }
-
     }
 }

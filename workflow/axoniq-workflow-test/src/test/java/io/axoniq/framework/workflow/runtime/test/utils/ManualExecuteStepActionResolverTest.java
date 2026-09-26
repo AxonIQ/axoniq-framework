@@ -19,9 +19,9 @@
 package io.axoniq.framework.workflow.runtime.test.utils;
 
 import io.axoniq.framework.workflow.runtime.api.execution.context.ExecutePrimitive;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
-import io.axoniq.framework.workflow.runtime.api.payload.PayloadProcessor;
+import io.axoniq.framework.workflow.dsl.api.PayloadProcessor;
 import org.junit.jupiter.api.*;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -43,7 +43,7 @@ class ManualExecuteStepActionResolverTest {
 
         resolver.applyAction("charge", action);
 
-        PayloadProcessor resolved = resolver.resolve(mock(WorkflowContext.class),
+        PayloadProcessor resolved = resolver.resolve(mock(WorkflowExecutionOperations.class),
                                                      mock(WorkflowExecution.class),
                                                      command);
 
@@ -59,7 +59,7 @@ class ManualExecuteStepActionResolverTest {
 
         resolver.applyOriginalAction("charge");
 
-        PayloadProcessor resolved = resolver.resolve(mock(WorkflowContext.class),
+        PayloadProcessor resolved = resolver.resolve(mock(WorkflowExecutionOperations.class),
                                                      mock(WorkflowExecution.class),
                                                      command);
 
@@ -75,7 +75,7 @@ class ManualExecuteStepActionResolverTest {
 
         resolver.applyOriginalAction("charge");
 
-        assertThatThrownBy(() -> resolver.resolve(mock(WorkflowContext.class),
+        assertThatThrownBy(() -> resolver.resolve(mock(WorkflowExecutionOperations.class),
                                                   mock(WorkflowExecution.class),
                                                   command))
                 .isInstanceOf(RuntimeException.class)

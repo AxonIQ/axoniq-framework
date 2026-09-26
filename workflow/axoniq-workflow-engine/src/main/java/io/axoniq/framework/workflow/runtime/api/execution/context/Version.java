@@ -34,17 +34,13 @@ import java.util.regex.Pattern;
  */
 public final class Version implements Comparable<Version> {
 
-    private static final Pattern VERSION_PATTERN = Pattern.compile(
-            "^(\\d+)\\.(\\d+)\\.(\\d+)(?:-([0-9A-Za-z.-]+))?$"
-    );
-
     /**
      * The default version assigned to workflow definitions that do not declare one explicitly.
      */
     public static final String DEFAULT_VERSION = "0.0.1";
-
-    public static final Version DEFAULT = Version.of(DEFAULT_VERSION);
-
+    private static final Pattern VERSION_PATTERN = Pattern.compile(
+            "^(\\d+)\\.(\\d+)\\.(\\d+)(?:-([0-9A-Za-z.-]+))?$"
+    );
     private final String value;
     private final int major;
     private final int minor;
@@ -60,7 +56,7 @@ public final class Version implements Comparable<Version> {
     }
 
     /**
-     * Parses {@code value} as a semver string and returns the corresponding {@link Version}.
+     * Parses {@code value} as a semver string and returns the corresponding .
      *
      * @throws IllegalArgumentException if {@code value} is not a valid semver string.
      */
@@ -126,6 +122,55 @@ public final class Version implements Comparable<Version> {
                          .min(Version::compareTo);
     }
 
+    private static int comparePreRelease(String left, String right) {
+        if (left == null && right == null) {
+            return 0;
+        }
+        if (left == null) {
+            return 1;
+        }
+        if (right == null) {
+            return -1;
+        }
+        String[] l = left.split("\\.");
+        String[] r = right.split("\\.");
+        int len = Math.min(l.length, r.length);
+        for (int i = 0; i < len; i++) {
+            int cmp = comparePreReleasePart(l[i], r[i]);
+            if (cmp != 0) {
+                return cmp;
+            }
+        }
+        return Integer.compare(l.length, r.length);
+    }
+
+    private static int comparePreReleasePart(String left, String right) {
+        boolean leftNumeric = isNumeric(left);
+        boolean rightNumeric = isNumeric(right);
+        if (leftNumeric && rightNumeric) {
+            return Integer.compare(Integer.parseInt(left), Integer.parseInt(right));
+        }
+        if (leftNumeric) {
+            return -1;
+        }
+        if (rightNumeric) {
+            return 1;
+        }
+        return left.compareTo(right);
+    }
+
+    private static boolean isNumeric(String s) {
+        if (s.isEmpty()) {
+            return false;
+        }
+        for (int i = 0; i < s.length(); i++) {
+            if (!Character.isDigit(s.charAt(i))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     /**
      * The canonical {@code String} representation, suitable for wire-format boundaries.
      */
@@ -183,54 +228,5 @@ public final class Version implements Comparable<Version> {
     @Override
     public String toString() {
         return value;
-    }
-
-    private static int comparePreRelease(String left, String right) {
-        if (left == null && right == null) {
-            return 0;
-        }
-        if (left == null) {
-            return 1;
-        }
-        if (right == null) {
-            return -1;
-        }
-        String[] l = left.split("\\.");
-        String[] r = right.split("\\.");
-        int len = Math.min(l.length, r.length);
-        for (int i = 0; i < len; i++) {
-            int cmp = comparePreReleasePart(l[i], r[i]);
-            if (cmp != 0) {
-                return cmp;
-            }
-        }
-        return Integer.compare(l.length, r.length);
-    }
-
-    private static int comparePreReleasePart(String left, String right) {
-        boolean leftNumeric = isNumeric(left);
-        boolean rightNumeric = isNumeric(right);
-        if (leftNumeric && rightNumeric) {
-            return Integer.compare(Integer.parseInt(left), Integer.parseInt(right));
-        }
-        if (leftNumeric) {
-            return -1;
-        }
-        if (rightNumeric) {
-            return 1;
-        }
-        return left.compareTo(right);
-    }
-
-    private static boolean isNumeric(String s) {
-        if (s.isEmpty()) {
-            return false;
-        }
-        for (int i = 0; i < s.length(); i++) {
-            if (!Character.isDigit(s.charAt(i))) {
-                return false;
-            }
-        }
-        return true;
     }
 }

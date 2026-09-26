@@ -18,7 +18,7 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -66,7 +66,7 @@ class DefaultWorkflowSchedulerTest {
             scheduledTask.cancel();
 
             await().atMost(Duration.ofSeconds(1)).untilAsserted(() ->
-                    assertThat(timerExecutor.getQueue()).isEmpty()
+                                                                        assertThat(timerExecutor.getQueue()).isEmpty()
             );
             assertThat(scheduledTask.completion()).isCancelled();
         } finally {

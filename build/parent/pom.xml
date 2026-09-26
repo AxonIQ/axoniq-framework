@@ -55,6 +55,12 @@
              too easy to starve when tests race multiple concurrent transactions through it. -->
         <common-pool.argLine>-Djava.util.concurrent.ForkJoinPool.common.parallelism=8</common-pool.argLine>
 
+        <!-- Explicit heap/metaspace caps for forked test JVMs, so total memory use across concurrent forks is
+             predictable instead of relying on each JVM's default ergonomics (a fraction of visible host memory),
+             which risks over-committing the runner's limited memory when several forks/containers run at once. -->
+        <surefire.jvm.argLine>-Xmx512m -XX:MaxMetaspaceSize=256m</surefire.jvm.argLine>
+        <failsafe.jvm.argLine>-Xmx512m -XX:MaxMetaspaceSize=256m</failsafe.jvm.argLine>
+
         <!-- Database -->
         <c3p0.version>0.9.1.2</c3p0.version>
         <hikari.version>7.1.0</hikari.version>
@@ -635,6 +641,11 @@
                     <version>${jacoco-maven.version}</version>
                 </plugin>
                 <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-failsafe-plugin</artifactId>
+                    <version>${maven-failsafe.version}</version>
+                </plugin>
+                <plugin>
                     <artifactId>maven-jar-plugin</artifactId>
                     <version>${maven-jar.version}</version>
                 </plugin>
@@ -734,7 +745,7 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>${maven-surefire.version}</version>
                 <configuration>
-                    <argLine>${mockito.agent.argLine} ${common-pool.argLine} -Djava.awt.headless=true</argLine>
+                    <argLine>${surefire.jvm.argLine} ${mockito.agent.argLine} ${common-pool.argLine} -Djava.awt.headless=true</argLine>
                     <systemPropertyVariables>
                         <slf4j.version>${slf4j.version}</slf4j.version>
                         <log4j.version>${log4j.version}</log4j.version>
@@ -808,7 +819,7 @@
                         <artifactId>maven-surefire-plugin</artifactId>
                         <configuration>
                             <!--suppress MavenModelInspection -->
-                            <argLine>-Djava.awt.headless=true ${surefireArgLine} ${mockito.agent.argLine} ${common-pool.argLine}</argLine>
+                            <argLine>-Djava.awt.headless=true ${surefire.jvm.argLine} ${surefireArgLine} ${mockito.agent.argLine} ${common-pool.argLine}</argLine>
                         </configuration>
                     </plugin>
                 </plugins>
@@ -856,7 +867,7 @@
                                 </goals>
                                 <configuration>
                                     <!--suppress MavenModelInspection -->
-                                    <argLine>-Djava.awt.headless=true ${failsafeArgLine} ${mockito.agent.argLine} ${common-pool.argLine}
+                                    <argLine>-Djava.awt.headless=true ${failsafe.jvm.argLine} ${failsafeArgLine} ${mockito.agent.argLine} ${common-pool.argLine}
                                     </argLine>
                                     <systemPropertyVariables>
                                         <test.forkNumber>${surefire.forkNumber}</test.forkNumber>

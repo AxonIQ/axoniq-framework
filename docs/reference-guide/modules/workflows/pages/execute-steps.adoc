@@ -6,9 +6,9 @@ The engine records each execution as durable events, giving you crash recovery a
 
 [NOTE]
 ====
-The Java DSL now has two layers:
+The Java DSL has a shared `WorkflowContext` contract and two layers:
 
-- `BaseWorkflowContext` is the canonical primitive API. Its blocking `awaitExecute(...)` methods return a payload map, and customization happens through `UnaryOperator<ExecuteStepDefinition>`.
+- `BaseWorkflowContext` is the canonical primitive DSL layer. It implements the definition-based `WorkflowContext` operations and adds named `execute(...)` and `awaitExecute(...)` overloads; its blocking methods return a payload map, and customization happens through `UnaryOperator<ExecuteStepDefinition>`.
 - `SimpleWorkflowContext` adds convenience helpers on top, such as execute overloads without extra input payload, typed `awaitExecute(...)` for single-value actions, typed `awaitEvent(...)`, `sleep(...)`, and `setPayload(...)`.
 ====
 

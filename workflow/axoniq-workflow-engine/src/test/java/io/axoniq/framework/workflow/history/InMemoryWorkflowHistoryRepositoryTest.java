@@ -77,7 +77,7 @@ class InMemoryWorkflowHistoryRepositoryTest {
     @Test
     void shouldFindOnlyEntriesMatchingAStateQuery() {
         WorkflowHistory payment = new WorkflowHistory("wf-1",
-                                                       new EventSourcedWorkflowState("wf-1", DEFINITION_ID));
+                                                      new EventSourcedWorkflowState("wf-1", DEFINITION_ID));
         WorkflowHistory shipping = new WorkflowHistory(
                 "wf-2", new EventSourcedWorkflowState("wf-2", VersionedType.of("ShippingWorkflow", "0.0.1"))
         );

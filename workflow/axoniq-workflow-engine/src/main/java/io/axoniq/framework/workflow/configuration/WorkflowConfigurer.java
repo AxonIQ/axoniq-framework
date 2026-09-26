@@ -38,7 +38,7 @@ import static java.util.Objects.requireNonNull;
  * <p>
  * This configurer registers the following defaults:
  * <ul>
- *     <li>Registers a {@link io.axoniq.framework.workflow.runtime.execution.DefaultEventNameCustomizer} for class {@link io.axoniq.framework.workflow.runtime.api.execution.context.EventNameCustomizer}</li>
+ *     <li>Registers a {@link io.axoniq.framework.workflow.runtime.execution.DefaultEventNameCustomizer} for class {@link io.axoniq.framework.workflow.dsl.api.EventNameCustomizer}</li>
  *     <li>Registers a {@link io.axoniq.framework.workflow.runtime.execution.InMemoryWorkflowExecutionRepository} </li>
  *     <li>Registers a {@link io.axoniq.framework.workflow.history.inmemory.InMemoryWorkflowHistoryRepository}</li>
  *     <li>Registers a {@link io.axoniq.framework.workflow.runtime.execution.SimpleWorkflowConfigurationRegistry}</li>
@@ -65,7 +65,7 @@ public class WorkflowConfigurer implements ApplicationConfigurer {
     }
 
     /**
-     * Creates a new {@link WorkflowConfigurer} with the defaults required by the Workflow Engine.
+     * Creates a new  with the defaults required by the Workflow Engine.
      *
      * @return configurer.
      */

@@ -36,6 +36,21 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class WorkflowSegmentOwnershipTest {
 
+    /**
+     * The segments that own the given ids, as a set: its size is how much of the cluster the ids actually use.
+     */
+    private static Set<Integer> segmentsOf(List<String> workflowIds) {
+        return workflowIds.stream()
+                          .map(workflowId -> FOUR_SEGMENTS.stream()
+                                                          .filter(segment -> WorkflowSegmentOwnership.ownedBy(
+                                                                  segment, workflowId
+                                                          ))
+                                                          .findFirst()
+                                                          .orElseThrow()
+                                                          .getSegmentId())
+                          .collect(Collectors.toCollection(TreeSet::new));
+    }
+
     @Test
     void everyIdIsOwnedByExactlyOneSegment() {
         for (var workflowId : List.of("order-1", "order-1#2.0.0", "a#b", "#123")) {
@@ -57,20 +72,5 @@ class WorkflowSegmentOwnershipTest {
 
         assertThat(segmentsOf(hashSeparated)).hasSize(FOUR_SEGMENTS.size());
         assertThat(segmentsOf(dashSeparated)).hasSize(FOUR_SEGMENTS.size());
-    }
-
-    /**
-     * The segments that own the given ids, as a set: its size is how much of the cluster the ids actually use.
-     */
-    private static Set<Integer> segmentsOf(List<String> workflowIds) {
-        return workflowIds.stream()
-                          .map(workflowId -> FOUR_SEGMENTS.stream()
-                                                          .filter(segment -> WorkflowSegmentOwnership.ownedBy(
-                                                                  segment, workflowId
-                                                          ))
-                                                          .findFirst()
-                                                          .orElseThrow()
-                                                          .getSegmentId())
-                          .collect(Collectors.toCollection(TreeSet::new));
     }
 }

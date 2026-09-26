@@ -49,7 +49,9 @@ The engine writes workflow lifecycle events with event-store tags as well:
 == The workflow context
 
 The workflow context passed to your workflow method is your single entry point to all engine capabilities.
-For Java, `BaseWorkflowContext` is the canonical DSL layer and `SimpleWorkflowContext` adds convenience methods on top:
+For Java, `WorkflowContext` is the shared author-facing workflow-body contract. `BaseWorkflowContext` is the
+canonical Java DSL layer implementing it, with Java-friendly named overloads; `SimpleWorkflowContext` adds further
+convenience methods on top.
 
 [cols="1,2"]
 |===
@@ -57,10 +59,14 @@ For Java, `BaseWorkflowContext` is the canonical DSL layer and `SimpleWorkflowCo
 
 |*Workflow data*
 |`workflowId()`—the unique workflow instance ID +
-`workflowVersion()`—the workflow's current definition version (semver string; see xref:versioning.adoc[Workflow Versioning]) +
+`workflowDefinitionId()`—the workflow definition identity; use `.version()` for its current definition version (see xref:versioning.adoc[Workflow Versioning]) +
 `workflowPayload()`—the current workflow payload +
 `workflowStatus()`—the current status (STARTED, COMPLETED, FAILED, ...) +
-`workflowStepNames()`—names of all steps executed so far
+`workflowStepNames()`—names of steps in this workflow execution +
+`getStep(stepName)` / `containsStep(stepName)`—inspect whether a named step exists and retrieve it when present
+
+|*Component access*
+|`resolveComponent(componentType)`—resolve a component from the processing context for this workflow invocation
 
 |*Execute actions*
 |`awaitExecute(...)`—run an action and wait for the result +
@@ -84,7 +90,7 @@ For Java, `BaseWorkflowContext` is the canonical DSL layer and `SimpleWorkflowCo
 |`allMatch(...)`, `anyMatch(...)`, `noneMatch(...)`—combine multiple non-blocking results
 |===
 
-In Kotlin, `WorkflowKontext` is the execution-facing context and `Kontext` is the author-facing wrapper.
+In Kotlin, `WorkflowKontext` is the workflow context instance and `Kontext` is the author-facing wrapper.
 `Kontext` exposes the same primitives through concise overloads and still delegates to the same definition-based API when needed.
 
 [TIP]
@@ -260,13 +266,14 @@ See xref:execute-steps.adoc[] and xref:step-orchestration.adoc[].
 
 == Unhandled exceptions
 
-[IMPORTANT]
-====
-If a workflow exits due to an *unhandled* exception—one where you didn't explicitly call `fail` or `cancel`—it is **not** in a terminal state.
-The engine will retry it on the next restart.
+An exception that escapes the workflow body ends the workflow with `FAILED` when it is a `StepFailedException`
+or a code defect such as a `NullPointerException`. A recoverable exception, an engine shutdown or a replay
+drift stop the body without ending the workflow: the status stays `STARTED`, there is no `PAUSED` status, and
+the engine re-drives the workflow on the next restart or segment claim.
 
-Always ensure your workflow has explicit terminal paths—call `fail` or `cancel` for every error condition, or let the workflow complete normally.
-====
+Always give your workflow explicit terminal paths: call `fail` or `cancel` for every error condition you
+anticipate, or let the workflow complete normally. See xref:error-handling.adoc[Error Handling] for the full
+classification and how a stopped workflow resumes.
 
 == Lifecycle listeners
 

@@ -18,7 +18,7 @@
  */
 package io.axoniq.framework.workflow.runtime.api.manager;
 
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowState;
+import io.axoniq.framework.workflow.dsl.api.WorkflowState;
 
 import java.util.concurrent.CompletableFuture;
 

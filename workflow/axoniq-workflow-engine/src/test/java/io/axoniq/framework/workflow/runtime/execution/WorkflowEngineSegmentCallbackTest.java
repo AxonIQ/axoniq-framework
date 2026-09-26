@@ -19,10 +19,10 @@
 package io.axoniq.framework.workflow.runtime.execution;
 
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
-import org.axonframework.messaging.core.unitofwork.StubProcessingContext;
 import org.axonframework.common.configuration.ComponentNotFoundException;
 import org.axonframework.messaging.core.ApplicationContext;
 import org.axonframework.messaging.core.unitofwork.SimpleUnitOfWorkFactory;
+import org.axonframework.messaging.core.unitofwork.StubProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 import org.junit.jupiter.api.*;
@@ -50,6 +50,42 @@ class WorkflowEngineSegmentCallbackTest {
     private static final String FOREIGN_ID = idOnAnotherSegmentThan(OWNED_ID);
 
     private static final Duration SHORT_TIMEOUT = Duration.ofMillis(200);
+
+    private static WorkflowEngine engine(WorkflowExecutionRepository repository, WorkflowStore workflowStore) {
+        return engine(repository, workflowStore, mock(WorkflowCancellationService.class));
+    }
+
+    private static WorkflowEngine engine(WorkflowExecutionRepository repository,
+                                         WorkflowStore workflowStore,
+                                         WorkflowCancellationService cancellationService) {
+        var engine = new WorkflowEngine(new SimpleWorkflowConfigurationRegistry(),
+                                        repository,
+                                        cancellationService,
+                                        workflowStore,
+                                        restoreUnitOfWorkFactory());
+        engine.setCheckpointingSupport(new WorkflowEngineCheckpointingSupport(engine));
+        engine.restoreTimeout = SHORT_TIMEOUT;
+        return engine;
+    }
+
+    private static WorkflowExecution execution(String workflowId) {
+        var execution = mock(WorkflowExecution.class);
+        when(execution.workflowId()).thenReturn(workflowId);
+        return execution;
+    }
+
+    /**
+     * Returns a real unit of work factory: the engine sources every restored instance in a unit of work of its own, so
+     * a mock would hand it none.
+     */
+    private static UnitOfWorkFactory restoreUnitOfWorkFactory() {
+        return new SimpleUnitOfWorkFactory(new ApplicationContext() {
+            @Override
+            public <C> C component(Class<C> type, String name) {
+                throw new ComponentNotFoundException(type, name);
+            }
+        });
+    }
 
     @Test
     void aClaimWhoseStateLoadNeverCompletesFailsInsteadOfHoldingTheSegment() {
@@ -85,7 +121,8 @@ class WorkflowEngineSegmentCallbackTest {
         assertThat(release).isCompleted();
         verify(owned).stopForShutdown();
         verify(foreign, never()).stopForShutdown();
-        verifyNoInteractions(cancellationService);
+        verify(cancellationService).unregister(OWNED_ID);
+        verify(cancellationService, never()).unregister(FOREIGN_ID);
         assertThat(repository.findAll()).containsExactly(foreign);
     }
 
@@ -107,41 +144,5 @@ class WorkflowEngineSegmentCallbackTest {
                                         restoreUnitOfWorkFactory());
 
         assertThat(engine.restoreTimeout).isEqualTo(WorkflowEngine.DEFAULT_RESTORE_TIMEOUT);
-    }
-
-    private static WorkflowEngine engine(WorkflowExecutionRepository repository, WorkflowStore workflowStore) {
-        return engine(repository, workflowStore, mock(WorkflowCancellationService.class));
-    }
-
-    private static WorkflowEngine engine(WorkflowExecutionRepository repository,
-                                         WorkflowStore workflowStore,
-                                         WorkflowCancellationService cancellationService) {
-        var engine = new WorkflowEngine(new SimpleWorkflowConfigurationRegistry(),
-                                        repository,
-                                        cancellationService,
-                                        workflowStore,
-                                        restoreUnitOfWorkFactory());
-        engine.setCheckpointingSupport(new WorkflowEngineCheckpointingSupport(engine));
-        engine.restoreTimeout = SHORT_TIMEOUT;
-        return engine;
-    }
-
-    private static WorkflowExecution execution(String workflowId) {
-        var execution = mock(WorkflowExecution.class);
-        when(execution.workflowId()).thenReturn(workflowId);
-        return execution;
-    }
-
-    /**
-     * Returns a real unit of work factory: the engine sources every restored instance in a unit of
-     * work of its own, so a mock would hand it none.
-     */
-    private static UnitOfWorkFactory restoreUnitOfWorkFactory() {
-        return new SimpleUnitOfWorkFactory(new ApplicationContext() {
-            @Override
-            public <C> C component(Class<C> type, String name) {
-                throw new ComponentNotFoundException(type, name);
-            }
-        });
     }
 }
