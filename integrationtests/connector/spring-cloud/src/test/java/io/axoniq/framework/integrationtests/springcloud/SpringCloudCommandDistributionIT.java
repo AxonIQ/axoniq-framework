@@ -96,10 +96,6 @@ class SpringCloudCommandDistributionIT {
                 .properties("server.port=" + port,
                             "test.node.name=" + nodeName,
                             "test.cluster.ports=" + portA + "," + portB,
-                            // Distributing through Spring Cloud and through Axon Server are alternatives, and this
-                            // module carries the Axon Server connector on its classpath, so it is switched off here.
-                            // A real Spring Cloud deployment would not have it at all.
-                            "axon.axonserver.enabled=false",
                             "axon.multitenancy.enabled=false",
                             "spring.main.banner-mode=off",
                             "logging.level.root=WARN")
@@ -172,7 +168,7 @@ class SpringCloudCommandDistributionIT {
 
             // when — the same routing key, dispatched repeatedly
             Set<String> handlers = IntStream.range(0, 20)
-                                            .mapToObj(i -> gateway.<String>sendAndWait(
+                                            .mapToObj(i -> gateway.sendAndWait(
                                                     new CreateCourse("course-7", "Axon 5"), String.class
                                             ))
                                             .collect(Collectors.toSet());
