@@ -19,9 +19,6 @@
 
 package io.axoniq.framework.integrationtests.springcloud;
 
-import io.axoniq.license.entitlement.source.axonserver.AxonServerLicenseSourceConfigurationEnhancer;
-import org.axonframework.common.configuration.ComponentRegistry;
-import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.axonframework.messaging.commandhandling.annotation.Command;
 import org.axonframework.messaging.commandhandling.annotation.CommandHandler;
 import org.springframework.beans.factory.annotation.Value;
@@ -33,9 +30,9 @@ import org.springframework.cloud.client.serviceregistry.Registration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.stereotype.Component;
 
-import java.util.List;
 import java.net.URI;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -110,30 +107,6 @@ final class SpringCloudNodes {
             ));
         }
 
-        /**
-         * Keeps the licence source from reaching for an Axon Server that is not part of this test.
-         * <p>
-         * A Spring Cloud deployment takes its licence from Axoniq Platform or from a licence the instances read
-         * themselves, never from Axon Server. This module carries the Axon Server connector on its classpath though,
-         * so without this the licence source spends the test connecting to port 8124 and logging that it cannot.
-         * Entitlement claiming itself is left alone, so the connector claims commands here as it does in production.
-         *
-         * @return an enhancer disabling the Axon Server licence source
-         */
-        @Bean
-        ConfigurationEnhancer disableAxonServerLicenseSource() {
-            return new ConfigurationEnhancer() {
-                @Override
-                public void enhance(ComponentRegistry registry) {
-                    registry.disableEnhancer(AxonServerLicenseSourceConfigurationEnhancer.class);
-                }
-
-                @Override
-                public int order() {
-                    return Integer.MIN_VALUE;
-                }
-            };
-        }
     }
 
     /**
