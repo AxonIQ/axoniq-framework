@@ -32,6 +32,7 @@ import org.springframework.beans.BeansException;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.config.BeanPostProcessor;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
@@ -52,6 +53,7 @@ import org.springframework.context.annotation.Bean;
         after = {AxonServerAutoConfiguration.class, DeadLetterQueueAutoConfiguration.class},
         before = EventProcessingAutoConfiguration.class
 )
+@ConditionalOnClass(AxonServerConfiguration.class)
 public class PersistentStreamAutoConfiguration {
 
     /**
