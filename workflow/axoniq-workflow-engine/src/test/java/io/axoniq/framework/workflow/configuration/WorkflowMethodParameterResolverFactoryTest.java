@@ -21,6 +21,7 @@ package io.axoniq.framework.workflow.configuration;
 import io.axoniq.framework.workflow.annotation.Workflow;
 import io.axoniq.framework.workflow.annotation.WorkflowStatusChangedHandler;
 import io.axoniq.framework.workflow.dsl.api.WorkflowContext;
+import io.axoniq.framework.workflow.dsl.api.WorkflowState;
 import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
 import org.axonframework.messaging.core.annotation.ParameterResolver;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
@@ -31,7 +32,8 @@ import java.lang.reflect.Method;
 import java.util.Arrays;
 import java.util.concurrent.TimeUnit;
 
-import static io.axoniq.framework.workflow.configuration.WorkflowMethodParameterResolverFactory.*;
+import static io.axoniq.framework.workflow.configuration.WorkflowMethodParameterResolverFactory.WORKFLOW_CONTEXT_RESOURCE_KEY;
+import static io.axoniq.framework.workflow.configuration.WorkflowMethodParameterResolverFactory.WORKFLOW_STATUS_RESOURCE_KEY;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.*;
 
@@ -93,6 +95,14 @@ class WorkflowMethodParameterResolverFactoryTest {
     }
 
     @Test
+    void resolvesWorkflowStateAsASharedWorkflowStateParameterResolverInstance() {
+        ParameterResolver<?> resolver =
+                testSubject.createInstance(methodNamed("withState"), parametersOf("withState"), 0);
+
+        assertThat(resolver).isNotNull().isInstanceOf(WorkflowStateParameterResolver.class);
+    }
+
+    @Test
     void returnsNullForAnUnrelatedParameterType() {
         assertThat(testSubject.createInstance(methodNamed("unrelated"), parametersOf("unrelated"), 0)).isNull();
     }
@@ -103,6 +113,15 @@ class WorkflowMethodParameterResolverFactoryTest {
         // any declaring class and get hijacked by the declaring-instance resolver, even on unrelated methods.
         assertThat(testSubject.createInstance(
                 methodNamed("unrelatedWithObjectParameter"), parametersOf("unrelatedWithObjectParameter"), 0
+        )).isNull();
+    }
+
+    @Test
+    void returnsNullForAWorkflowStateTypedParameterOnANonWorkflowMethod() {
+        assertThat(testSubject.createInstance(
+                methodNamed("unrelatedWithWorkflowStateParameter"),
+                parametersOf("unrelatedWithWorkflowStateParameter"),
+                0
         )).isNull();
     }
 
@@ -132,10 +151,17 @@ class WorkflowMethodParameterResolverFactoryTest {
         void wrapped(ContextWrapper wrapper) {
         }
 
+        @Workflow
+        void withState(WorkflowState state) {
+        }
+
         void unrelated(String notAWorkflowType) {
         }
 
         void unrelatedWithObjectParameter(Object notAWorkflowParameter) {
+        }
+
+        void unrelatedWithWorkflowStateParameter(WorkflowState notResolvedOutsideAWorkflowMethod) {
         }
     }
 
