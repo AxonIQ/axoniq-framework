@@ -46,7 +46,6 @@ import org.springframework.boot.autoconfigure.web.reactive.function.client.WebCl
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.EnableMBeanExport;
 import org.springframework.jmx.support.RegistrationPolicy;
-import org.springframework.test.annotation.DirtiesContext;
 
 import java.util.Collections;
 import java.util.Iterator;
@@ -80,15 +79,11 @@ import static org.assertj.core.api.Assertions.*;
         JmxAutoConfiguration.class,
         WebClientAutoConfiguration.class
 })
-@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_EACH_TEST_METHOD)
 @EnableMBeanExport(registration = RegistrationPolicy.IGNORE_EXISTING)
-@Disabled("TODO #460")
 class SpringBootJpaDeadLetteringIT extends AbstractDeadLetteringEventIT {
 
     @Autowired
     private EntityManagerFactory entityManagerFactory;
-    @Autowired
-    private UnitOfWorkFactory unitOfWorkFactory;
     @Autowired
     private Converter converter;
     @Autowired
@@ -113,17 +108,19 @@ class SpringBootJpaDeadLetteringIT extends AbstractDeadLetteringEventIT {
      * registers {@link JpaTransactionalExecutorProvider#SUPPLIER_KEY} on the
      * {@link org.axonframework.messaging.core.unitofwork.ProcessingContext}, exercising the same code path as
      * production.
+     * <p>
+     * Fetched from the {@link Configuration} rather than {@code @Autowired} directly: the {@code CommandBus} and
+     * {@code QueryBus} each get their own timeout-wrapped {@code UnitOfWorkFactory} bean alongside the unnamed one,
+     * so autowiring the type would be ambiguous. {@link Configuration#getComponent(Class)} resolves the same
+     * unnamed component the rest of the framework uses by default.
      */
     @Override
     protected UnitOfWorkFactory buildUnitOfWorkFactory() {
-        return unitOfWorkFactory;
+        return configuration.getComponent(UnitOfWorkFactory.class);
     }
 
     /**
-     * Clears stale dead-letter entries from the database before each test method. Although
-     * {@code @DirtiesContext(AFTER_EACH_TEST_METHOD)} recreates the Spring context (and thus the embedded HSQLDB), an
-     * explicit truncation ensures a clean DLQ table even if context recreation doesn't happen for inherited
-     * {@code @Nested} test classes.
+     * Clears stale dead-letter entries from the database before each test method.
      * <p>
      * Uses JPQL (entity name) instead of native SQL because Spring Boot's default
      * {@code CamelCaseToUnderscoresNamingStrategy} maps the entity {@code DeadLetterEntry} to the table
