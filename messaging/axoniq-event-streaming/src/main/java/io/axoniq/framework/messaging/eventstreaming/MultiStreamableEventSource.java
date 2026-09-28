@@ -114,9 +114,13 @@ public class MultiStreamableEventSource implements StreamableEventSource {
     public MessageStream<EventMessage> open(StreamingCondition condition,
                                             @Nullable ProcessingContext context) {
         TrackingToken trackingToken = condition.position();
-        if (trackingToken == null) {
+        if (TrackingToken.FIRST.equals(trackingToken)) {
             // Start from the beginning
             return DelayedMessageStream.create(createToken(m -> m.firstToken(context))
+                                                       .thenApply(s -> open(s, condition, context)));
+        } else if (TrackingToken.LATEST.equals(trackingToken)) {
+            // Start from the tail, skipping historical events
+            return DelayedMessageStream.create(createToken(m -> m.latestToken(context))
                                                        .thenApply(s -> open(s, condition, context)));
         } else if (trackingToken instanceof MultiSourceTrackingToken multiSourceToken) {
             return open(multiSourceToken, condition, context);
