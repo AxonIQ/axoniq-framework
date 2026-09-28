@@ -38,15 +38,12 @@ import java.util.function.Function;
  * <p>
  * A {@code @WorkflowStatusChangedHandler} lifecycle method is assigned the synthetic
  * {@link WorkflowStatusChangeMessage} as its message type, with {@link WorkflowStatus} as its payload type.
- * <p>
- * This {@code HandlerDefinition} is not classpath-discovered, unlike {@link AnnotatedWorkflowHandlerDefinition}, and is
- * only used by the {@link AutoDetectingWorkflowBuilder workflow autodetection logic}.
  *
  * @author Steven van Beelen
  * @since 5.4.0
  */
 @Internal
-class AnnotatedWorkflowStatusChangedHandlerDefinition implements HandlerDefinition {
+public class AnnotatedWorkflowStatusChangedHandlerDefinition implements HandlerDefinition {
 
     @Override
     public <T> Optional<MessageHandlingMember<T>> createHandler(

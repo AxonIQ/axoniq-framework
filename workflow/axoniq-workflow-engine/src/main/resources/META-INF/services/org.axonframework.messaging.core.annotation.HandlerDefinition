@@ -17,3 +17,4 @@
 #  https://www.axoniq.io/pricing
 #
 io.axoniq.framework.workflow.configuration.AnnotatedWorkflowHandlerDefinition
+io.axoniq.framework.workflow.configuration.AnnotatedWorkflowStatusChangedHandlerDefinition
