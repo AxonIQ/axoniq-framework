@@ -46,7 +46,6 @@ import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.annotation.AnnotatedHandlerInspector;
 import org.axonframework.messaging.core.annotation.MessageHandlingMember;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
-import org.axonframework.messaging.eventhandling.EventMessage;
 import org.jspecify.annotations.Nullable;
 
 import java.lang.annotation.Annotation;
@@ -170,14 +169,20 @@ public final class AutoDetectionUtils {
                         })
                         .forEach(mwa -> {
                             WorkflowStatus status = (WorkflowStatus) mwa.attributes.get(ATTR_WORKFLOW_STATUS);
+                            Method method = mwa.method();
                             MessageHandlingMember<Object> member = AutoDetectingWorkflowBuilder.findMember(
-                                    inspector, instance, EventMessage.class, mwa.method()
+                                    inspector, instance, WorkflowStatusChangeMessage.class, method
                             );
-                            listeners.get(status).addListener((changedStatus, context, event, processingContext) -> {
+                            MessageType messageType = new MessageType(
+                                    new QualifiedName(method.getDeclaringClass().getName() + "." + method.getName()),
+                                    MessageType.DEFAULT_VERSION
+                            );
+                            listeners.get(status).addListener((changedStatus, context, processingContext) -> {
+                                WorkflowStatusChangeMessage event =
+                                        new WorkflowStatusChangeMessage(messageType, changedStatus);
                                 ProcessingContext contextWithResources = processingContext
                                         .withResource(WORKFLOW_CONTEXT_RESOURCE_KEY, context)
-                                        .withResource(WORKFLOW_STATUS_RESOURCE_KEY, changedStatus)
-                                        .withResource(WORKFLOW_INSTANCE_RESOURCE_KEY, instance);
+                                        .withResource(WORKFLOW_STATUS_RESOURCE_KEY, changedStatus);
                                 CompletableFuture<?> future =
                                         inspector.chainedInterceptor(instance.getClass())
                                                  .handle(event, contextWithResources, instance, member)

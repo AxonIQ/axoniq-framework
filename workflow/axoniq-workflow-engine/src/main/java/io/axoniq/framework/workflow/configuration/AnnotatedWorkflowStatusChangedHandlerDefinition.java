@@ -19,6 +19,7 @@
 package io.axoniq.framework.workflow.configuration;
 
 import io.axoniq.framework.workflow.annotation.WorkflowStatusChangedHandler;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
 import org.axonframework.common.annotation.AnnotationUtils;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.MessageStream;
@@ -26,7 +27,6 @@ import org.axonframework.messaging.core.annotation.HandlerDefinition;
 import org.axonframework.messaging.core.annotation.MessageHandlingMember;
 import org.axonframework.messaging.core.annotation.MethodInvokingMessageHandlingMember;
 import org.axonframework.messaging.core.annotation.ParameterResolverFactory;
-import org.axonframework.messaging.eventhandling.EventMessage;
 
 import java.lang.reflect.Method;
 import java.util.Optional;
@@ -36,14 +36,11 @@ import java.util.function.Function;
  * {@link HandlerDefinition} recognizing {@link WorkflowStatusChangedHandler}-annotated methods, building a
  * {@link MethodInvokingMessageHandlingMember} for each.
  * <p>
- * A {@code @WorkflowStatusChangedHandler} lifecycle method is assigned {@link EventMessage} as its message type, as it
- * reacts to the event that drove the status transition.
+ * A {@code @WorkflowStatusChangedHandler} lifecycle method is assigned the synthetic
+ * {@link WorkflowStatusChangeMessage} as its message type, with {@link WorkflowStatus} as its payload type.
  * <p>
- * This {@code HandlerDefinition} should <b>not</b> be registered on the
- * {@link org.axonframework.common.configuration.ComponentRegistry}, as otherwise {@code @WorkflowStatusChangedHandler}
- * annotated handlers paired in a (e.g.) {@link org.axonframework.messaging.eventhandling.EventHandlingComponent} would
- * be registered as regular event handlers. Hence, this {@code HandlerDefinition} is only used by the
- * {@link AutoDetectingWorkflowBuilder workflow autodetection logic}.
+ * This {@code HandlerDefinition} is not classpath-discovered, unlike {@link AnnotatedWorkflowHandlerDefinition}, and is
+ * only used by the {@link AutoDetectingWorkflowBuilder workflow autodetection logic}.
  *
  * @author Steven van Beelen
  * @since 5.4.0
@@ -61,8 +58,8 @@ class AnnotatedWorkflowStatusChangedHandlerDefinition implements HandlerDefiniti
         return AnnotationUtils.findAnnotationAttributes(method, WorkflowStatusChangedHandler.class)
                               .map(attr -> new MethodInvokingMessageHandlingMember<>(
                                       method,
-                                      EventMessage.class,
-                                      Object.class,
+                                      WorkflowStatusChangeMessage.class,
+                                      WorkflowStatus.class,
                                       parameterResolverFactory,
                                       messageStreamResolver
                               ));

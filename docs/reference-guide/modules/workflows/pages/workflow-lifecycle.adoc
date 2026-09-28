@@ -341,11 +341,11 @@ For more control, register listeners via the declarative configuration:
 ----
 .customized((c, w) -> w
         .registerWorkflowStatusChangeListener(WorkflowStatus.COMPLETED,
-                (status, context, event, processingContext) -> {
+                (status, context, processingContext) -> {
                     logger.info("Workflow {} completed", context.workflowId());
                 })
         .registerWorkflowStatusChangeListener(WorkflowStatus.FAILED,
-                (status, context, event, processingContext) -> {
+                (status, context, processingContext) -> {
                     logger.warn("Workflow {} failed", context.workflowId());
                 })
 )
@@ -359,10 +359,9 @@ w.unregisterWorkflowStatusChangeListener(WorkflowStatus.COMPLETED, myListener);
 ----
 
 `WorkflowStatusChangeListener` is a functional interface with a single method,
-`onWorkflowStatus(WorkflowStatus, WorkflowContext, EventMessage, ProcessingContext)`. Receiving the triggering
-`EventMessage` and its `ProcessingContext` lets a programmatic listener participate in the same handler pipeline
-annotation-based listeners do, for example, propagating correlation data or interacting with the active
-transaction, with no extra setup required.
+`onWorkflowStatus(WorkflowStatus, WorkflowContext, ProcessingContext)`. Receiving the `ProcessingContext` lets a
+programmatic listener participate in the same handler pipeline annotation-based listeners do, for example,
+propagating correlation data or interacting with the active transaction, with no extra setup required.
 
 [NOTE]
 ====

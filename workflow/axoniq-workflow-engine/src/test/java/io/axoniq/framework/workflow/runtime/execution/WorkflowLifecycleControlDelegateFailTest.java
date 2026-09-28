@@ -193,9 +193,8 @@ class WorkflowLifecycleControlDelegateFailTest {
         }
     }
 
-    @SuppressWarnings("unchecked")
     @Test
-    void failWorkflowInvokesFailedStatusChangeListener() throws InterruptedException {
+    void failWorkflowInvokesFailedStatusChangeListener() {
         var listener = mock(WorkflowStatusChangeListener.class);
         EventSourcedWorkflowState state = workflowState(Map.of(WorkflowStatus.FAILED, listener));
         when(workflowExecution.state()).thenReturn(state);
@@ -211,9 +210,7 @@ class WorkflowLifecycleControlDelegateFailTest {
                                                       state.workflowDefinitionId(),
                                                       eventNameCustomizer), processingContext);
 
-        verify(listener).onWorkflowStatus(
-                eq(WorkflowStatus.FAILED), eq(workflowContext), any(EventMessage.class), eq(processingContext)
-        );
+        verify(listener).onWorkflowStatus(eq(WorkflowStatus.FAILED), eq(workflowContext), eq(processingContext));
     }
 
     private EventSourcedWorkflowState workflowState(Map<WorkflowStatus, WorkflowStatusChangeListener> listeners) {

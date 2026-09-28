@@ -46,7 +46,6 @@ import org.axonframework.messaging.core.annotation.MessageHandlingMember;
 import org.axonframework.messaging.core.annotation.MultiHandlerDefinition;
 import org.axonframework.messaging.core.annotation.ParameterResolverFactory;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
-import org.axonframework.messaging.eventhandling.EventMessage;
 import org.jspecify.annotations.Nullable;
 
 import java.lang.reflect.Executable;
@@ -58,7 +57,6 @@ import java.util.concurrent.CompletableFuture;
 
 import static io.axoniq.framework.workflow.configuration.AutoDetectionUtils.*;
 import static io.axoniq.framework.workflow.configuration.WorkflowMethodParameterResolverFactory.WORKFLOW_CONTEXT_RESOURCE_KEY;
-import static io.axoniq.framework.workflow.configuration.WorkflowMethodParameterResolverFactory.WORKFLOW_INSTANCE_RESOURCE_KEY;
 
 /**
  * Builder that auto-detects workflow definitions from annotations on a given component.
@@ -128,9 +126,8 @@ class AutoDetectingWorkflowBuilder<C extends WorkflowContext>
      * {@code @MessageHandlerInterceptor} methods declared on the same class are recognized and chained) — with
      * {@link AnnotatedWorkflowStatusChangedHandlerDefinition} (for
      * {@link io.axoniq.framework.workflow.annotation.WorkflowStatusChangedHandler} methods), which is
-     * <b>not</b> classpath-discovered, as it recognizes methods by the generic {@link EventMessage} type and must
-     * remain scoped to workflow autodetection only. Mirrors how {@code AnnotatedCommandHandlingComponent} itself is
-     * built.
+     * <b>not</b> classpath-discovered and remains scoped to workflow autodetection only. Mirrors how
+     * {@code AnnotatedCommandHandlingComponent} itself is built.
      */
     private static AnnotatedHandlerInspector<Object> buildInspector(Object instance, Configuration configuration) {
         MultiHandlerDefinition combinedHandlerDefinition = MultiHandlerDefinition.ordered(

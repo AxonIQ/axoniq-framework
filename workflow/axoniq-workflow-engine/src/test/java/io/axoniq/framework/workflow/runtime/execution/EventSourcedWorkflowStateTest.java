@@ -96,7 +96,7 @@ class EventSourcedWorkflowStateTest {
                 Map.of("key", "value"),
                 DEFINITION_ID
         );
-        sourcedState.setStatus(WorkflowStatus.STARTED, null, true, mock(EventMessage.class), processingContext);
+        sourcedState.setStatus(WorkflowStatus.STARTED, null, true, processingContext);
         var workflowContext = mock(WorkflowContext.class);
         var listener = mock(WorkflowStatusChangeListener.class);
 
@@ -110,12 +110,9 @@ class EventSourcedWorkflowStateTest {
         assertThat(rehydratedState.payload()).containsEntry("key", "value");
         assertThat(rehydratedState.workflowStatus()).isEqualTo(WorkflowStatus.STARTED);
 
-        var completedEventMessage = mock(EventMessage.class);
-        rehydratedState.setStatus(WorkflowStatus.COMPLETED, null, true, completedEventMessage, processingContext);
+        rehydratedState.setStatus(WorkflowStatus.COMPLETED, null, true, processingContext);
 
-        verify(listener).onWorkflowStatus(
-                WorkflowStatus.COMPLETED, workflowContext, completedEventMessage, processingContext
-        );
+        verify(listener).onWorkflowStatus(WorkflowStatus.COMPLETED, workflowContext, processingContext);
     }
 
     @Test
@@ -261,7 +258,7 @@ class EventSourcedWorkflowStateTest {
     @Test
     void ignoresCompletedStepAndPayloadUpdateAfterWorkflowBecomesTerminal() {
         state = new EventSourcedWorkflowState(WORKFLOW_ID, Map.of("before", "terminal"), DEFINITION_ID);
-        state.setStatus(WorkflowStatus.COMPLETED, null, false, mock(EventMessage.class), processingContext);
+        state.setStatus(WorkflowStatus.COMPLETED, null, false, processingContext);
         var metadata = MetadataUtils.create(WORKFLOW_ID, "late-step", StepStatus.COMPLETED)
                                     .and(MetadataUtils.METADATA_KEY_MODIFY_PAYLOAD, NAME);
         var eventMessage = mock(EventMessage.class);
@@ -278,7 +275,7 @@ class EventSourcedWorkflowStateTest {
 
     @Test
     void ignoresVersionMigrationAfterWorkflowBecomesTerminal() {
-        state.setStatus(WorkflowStatus.COMPLETED, null, false, mock(EventMessage.class), processingContext);
+        state.setStatus(WorkflowStatus.COMPLETED, null, false, processingContext);
         var eventMessage = mock(EventMessage.class);
         when(eventMessage.type()).thenReturn(new MessageType("TestWorkflow.Versioned", "0.0.2"));
         when(eventMessage.metadata()).thenReturn(

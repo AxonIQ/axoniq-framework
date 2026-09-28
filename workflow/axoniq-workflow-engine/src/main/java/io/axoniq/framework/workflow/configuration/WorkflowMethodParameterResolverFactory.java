@@ -56,11 +56,6 @@ public class WorkflowMethodParameterResolverFactory implements ParameterResolver
      */
     public static final Context.ResourceKey<WorkflowStatus> WORKFLOW_STATUS_RESOURCE_KEY =
             Context.ResourceKey.withLabel("workflowStatus");
-    /**
-     * Resource key under which the workflow-annotated component instance of the invocation in progress is stored.
-     */
-    public static final Context.ResourceKey<Object> WORKFLOW_INSTANCE_RESOURCE_KEY =
-            Context.ResourceKey.withLabel("workflowInstance");
 
     @Nullable
     @Override
@@ -74,9 +69,6 @@ public class WorkflowMethodParameterResolverFactory implements ParameterResolver
         }
         if (WorkflowContext.class.isAssignableFrom(parameterType)) {
             return new ResourceParameterResolver<>(WORKFLOW_CONTEXT_RESOURCE_KEY);
-        }
-        if (parameterType.isAssignableFrom(executable.getDeclaringClass())) {
-            return new ResourceParameterResolver<>(WORKFLOW_INSTANCE_RESOURCE_KEY);
         }
         if (AutoDetectionUtils.isWorkflowContextWrapper(parameterType)) {
             return new WorkflowContextWrapperParameterResolver(parameterType);

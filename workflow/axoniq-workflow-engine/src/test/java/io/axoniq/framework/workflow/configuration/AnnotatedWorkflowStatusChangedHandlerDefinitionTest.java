@@ -24,7 +24,6 @@ import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
 import org.axonframework.messaging.commandhandling.CommandMessage;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.annotation.MessageHandlingMember;
-import org.axonframework.messaging.eventhandling.EventMessage;
 import org.junit.jupiter.api.*;
 
 import java.lang.reflect.Method;
@@ -47,7 +46,7 @@ class AnnotatedWorkflowStatusChangedHandlerDefinitionTest {
             new AnnotatedWorkflowStatusChangedHandlerDefinition();
 
     @Test
-    void recognizesAWorkflowStatusChangedHandlerAnnotatedMethodAsAnEventMessageHandler() {
+    void recognizesAWorkflowStatusChangedHandlerAnnotatedMethodAsAWorkflowStatusChangeMessageHandler() {
         // given/when...
         Optional<MessageHandlingMember<SampleWorkflow>> optionalHandler =
                 testSubject.createHandler(SampleWorkflow.class,
@@ -56,7 +55,7 @@ class AnnotatedWorkflowStatusChangedHandlerDefinitionTest {
                                           result -> MessageStream.empty());
         // then...
         assertThat(optionalHandler).isPresent();
-        assertThat(optionalHandler.get().canHandleMessageType(EventMessage.class)).isTrue();
+        assertThat(optionalHandler.get().canHandleMessageType(WorkflowStatusChangeMessage.class)).isTrue();
         assertThat(optionalHandler.get().canHandleMessageType(CommandMessage.class)).isFalse();
     }
 

@@ -177,7 +177,7 @@ class SimpleWorkflowManagerTest {
                                    .join();
         var event = eventMessage("payload");
 
-        projectedState.setStatus(WorkflowStatus.COMPLETED, null, false, event, StubProcessingContext.forMessage(event));
+        projectedState.setStatus(WorkflowStatus.COMPLETED, null, false, StubProcessingContext.forMessage(event));
 
         assertThat(detachedState.workflowStatus()).isEqualTo(WorkflowStatus.NONE);
         assertThat(projectedState.workflowStatus()).isEqualTo(WorkflowStatus.COMPLETED);
@@ -190,14 +190,12 @@ class SimpleWorkflowManagerTest {
         historicalState.setStatus(WorkflowStatus.COMPLETED,
                                   null,
                                   false,
-                                  historicalEvent,
                                   StubProcessingContext.forMessage(historicalEvent));
         var liveState = state("order-42", "PaymentWorkflow");
         var liveEvent = eventMessage("live-payload");
         liveState.setStatus(WorkflowStatus.STARTED,
                             null,
                             false,
-                            liveEvent,
                             StubProcessingContext.forMessage(liveEvent));
         WorkflowExecution execution = mock(WorkflowExecution.class);
         when(execution.state()).thenReturn(liveState);
