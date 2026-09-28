@@ -38,8 +38,7 @@ import java.util.function.Function;
  * <p>
  * A {@code @Workflow} body is assigned {@link WorkflowTriggerMessage} as its message type and {@link WorkflowContext}
  * as its expected payload type, since the synthesized command that invokes it always carries the workflow context as
- * its payload. The body responds to an internally synthesized request to resume/run the workflow, never to the event
- * that originally triggered it.
+ * its payload.
  *
  * @author Steven van Beelen
  * @since 5.4.0

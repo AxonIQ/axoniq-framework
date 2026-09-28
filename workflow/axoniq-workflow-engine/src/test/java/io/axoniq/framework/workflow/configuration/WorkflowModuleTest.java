@@ -24,17 +24,17 @@ import io.axoniq.framework.workflow.annotation.WorkflowCompletedHandler;
 import io.axoniq.framework.workflow.dsl.api.EventCondition;
 import io.axoniq.framework.workflow.dsl.api.EventConditions;
 import io.axoniq.framework.workflow.dsl.api.EventNameCustomizer;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.framework.workflow.dsl.api.WorkflowContext;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContextFactory;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowDefinition;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionFactory;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowIdProvider;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowStatusChangeListener;
-import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.association.ValueComparisonOperatorRegistry;
-import io.axoniq.framework.workflow.runtime.execution.DefaultEventNameCustomizer;
 import io.axoniq.framework.workflow.runtime.execution.AbstractWorkflowContext;
+import io.axoniq.framework.workflow.runtime.execution.DefaultEventNameCustomizer;
 import io.axoniq.framework.workflow.runtime.execution.PayloadPropertyWorkflowIdProvider;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowConfigurationRegistry;
 import io.axoniq.framework.workflow.runtime.util.DefaultTimeoutFutureResolver;
@@ -105,7 +105,9 @@ class WorkflowModuleTest {
         when(configuration.getComponent(ParameterResolverFactory.class))
                 .thenReturn(new WorkflowMethodParameterResolverFactory());
         when(configuration.getComponent(HandlerDefinition.class)).thenReturn(MultiHandlerDefinition.ordered(
-                new AnnotatedWorkflowHandlerDefinition(), new AnnotatedMessageHandlingMemberDefinition()
+                new AnnotatedWorkflowHandlerDefinition(),
+                new AnnotatedWorkflowStatusChangedHandlerDefinition(),
+                new AnnotatedMessageHandlingMemberDefinition()
         ));
     }
 
@@ -238,8 +240,16 @@ class WorkflowModuleTest {
     @Test
     @SuppressWarnings("unchecked")
     void autodetectedWorkflowBodyIsInvokedThroughTheRegisteredHandlerEnhancerDefinition() {
+        // Real Axon Framework configuration always composes the HandlerDefinition component with the registered
+        // HandlerEnhancerDefinition (see HandlerDefinitionUtils#registerToComponentRegistry), so the mock must
+        // mirror that composition for this test to exercise the enhancer chain.
         RecordingHandlerEnhancerDefinition enhancer = new RecordingHandlerEnhancerDefinition();
-        when(configuration.getComponent(HandlerEnhancerDefinition.class)).thenReturn(enhancer);
+        when(configuration.getComponent(HandlerDefinition.class)).thenReturn(MultiHandlerDefinition.ordered(
+                enhancer,
+                new AnnotatedWorkflowHandlerDefinition(),
+                new AnnotatedWorkflowStatusChangedHandlerDefinition(),
+                new AnnotatedMessageHandlingMemberDefinition()
+        ));
 
         RecordedWorkflow workflow = new RecordedWorkflow();
         WorkflowContextFactory<TestWorkflowContext> ctxFactory = mock(WorkflowContextFactory.class);
@@ -264,8 +274,16 @@ class WorkflowModuleTest {
     @Test
     @SuppressWarnings("unchecked")
     void autodetectedLifecycleHandlerIsInvokedThroughTheRegisteredHandlerEnhancerDefinition() {
+        // Real Axon Framework configuration always composes the HandlerDefinition component with the registered
+        // HandlerEnhancerDefinition (see HandlerDefinitionUtils#registerToComponentRegistry), so the mock must
+        // mirror that composition for this test to exercise the enhancer chain.
         RecordingHandlerEnhancerDefinition enhancer = new RecordingHandlerEnhancerDefinition();
-        when(configuration.getComponent(HandlerEnhancerDefinition.class)).thenReturn(enhancer);
+        when(configuration.getComponent(HandlerDefinition.class)).thenReturn(MultiHandlerDefinition.ordered(
+                enhancer,
+                new AnnotatedWorkflowHandlerDefinition(),
+                new AnnotatedWorkflowStatusChangedHandlerDefinition(),
+                new AnnotatedMessageHandlingMemberDefinition()
+        ));
 
         RecordedWorkflow workflow = new RecordedWorkflow();
         WorkflowContextFactory<TestWorkflowContext> ctxFactory = mock(WorkflowContextFactory.class);

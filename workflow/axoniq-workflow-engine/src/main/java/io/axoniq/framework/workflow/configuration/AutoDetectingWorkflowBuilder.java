@@ -41,9 +41,7 @@ import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.VersionedType;
 import org.axonframework.messaging.core.annotation.AnnotatedHandlerInspector;
 import org.axonframework.messaging.core.annotation.HandlerDefinition;
-import org.axonframework.messaging.core.annotation.HandlerEnhancerDefinition;
 import org.axonframework.messaging.core.annotation.MessageHandlingMember;
-import org.axonframework.messaging.core.annotation.MultiHandlerDefinition;
 import org.axonframework.messaging.core.annotation.ParameterResolverFactory;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.jspecify.annotations.Nullable;
@@ -104,7 +102,13 @@ class AutoDetectingWorkflowBuilder<C extends WorkflowContext>
         ComponentBuilder<List<SimpleWorkflowModule.ConditionedWorkflowConfiguration<C>>> workflowConfigurationBuilder =
                 configuration -> {
                     Object instance = instanceBuilder.build(configuration);
-                    AnnotatedHandlerInspector<Object> inspector = buildInspector(instance, configuration);
+                    //noinspection unchecked
+                    AnnotatedHandlerInspector<Object> inspector = AnnotatedHandlerInspector.inspectType(
+                            (Class<Object>) instance.getClass(),
+                            configuration.getComponent(MessageTypeResolver.class),
+                            configuration.getComponent(ParameterResolverFactory.class),
+                            configuration.getComponent(HandlerDefinition.class)
+                    );
                     return AutoDetectionUtils.workflowMethods(instance.getClass())
                                              .map(workflowMethod -> mapToWorkflowConfiguration(
                                                      workflowMethod, configuration, instance, inspector,
@@ -113,36 +117,6 @@ class AutoDetectingWorkflowBuilder<C extends WorkflowContext>
                                              .toList();
                 };
         parent.workflowConfigurationBuilder(workflowConfigurationBuilder);
-    }
-
-    /**
-     * Builds the {@link AnnotatedHandlerInspector} shared by every workflow-annotated method detected on
-     * {@code instance}'s class.
-     * <p>
-     * Composes the {@link Configuration}'s {@link HandlerEnhancerDefinition} chain with the {@link Configuration}'s
-     * {@link HandlerDefinition} component — which, since {@link AnnotatedWorkflowHandlerDefinition} is classpath-discovered
-     * (see {@code META-INF/services}), already recognizes {@code @Workflow} methods, on top of the framework's default
-     * recognizers (including {@code AnnotatedMessageHandlingMemberDefinition}, needed so that
-     * {@code @MessageHandlerInterceptor} methods declared on the same class are recognized and chained) — with
-     * {@link AnnotatedWorkflowStatusChangedHandlerDefinition} (for
-     * {@link io.axoniq.framework.workflow.annotation.WorkflowStatusChangedHandler} methods), which is
-     * <b>not</b> classpath-discovered and remains scoped to workflow autodetection only. Mirrors how
-     * {@code AnnotatedCommandHandlingComponent} itself is built.
-     */
-    private static AnnotatedHandlerInspector<Object> buildInspector(Object instance, Configuration configuration) {
-        MultiHandlerDefinition combinedHandlerDefinition = MultiHandlerDefinition.ordered(
-                configuration.getComponent(HandlerEnhancerDefinition.class),
-                configuration.getComponent(HandlerDefinition.class),
-                new AnnotatedWorkflowStatusChangedHandlerDefinition()
-        );
-        @SuppressWarnings("unchecked")
-        Class<Object> instanceType = (Class<Object>) instance.getClass();
-        return AnnotatedHandlerInspector.inspectType(
-                instanceType,
-                configuration.getComponent(MessageTypeResolver.class),
-                configuration.getComponent(ParameterResolverFactory.class),
-                combinedHandlerDefinition
-        );
     }
 
     /**
