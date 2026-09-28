@@ -56,7 +56,6 @@ import org.axonframework.messaging.core.annotation.UnsupportedHandlerException;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.StubProcessingContext;
 import org.axonframework.messaging.core.unitofwork.annotation.ProcessingContextParameterResolverFactory;
-import org.axonframework.messaging.eventhandling.EventMessage;
 import org.junit.jupiter.api.*;
 import org.mockito.*;
 
@@ -281,12 +280,11 @@ class WorkflowModuleTest {
         WorkflowConfiguration<TestWorkflowContext> config = configCaptor.getValue();
 
         TestWorkflowContext context = mock(TestWorkflowContext.class);
-        EventMessage eventMessage = mock(EventMessage.class);
         ProcessingContext processingContext = processingContextWithFutureResolver();
 
         config.workflowStatusChangeListeners()
               .get(WorkflowStatus.COMPLETED)
-              .onWorkflowStatus(WorkflowStatus.COMPLETED, context, eventMessage, processingContext);
+              .onWorkflowStatus(WorkflowStatus.COMPLETED, context, processingContext);
 
         assertThat(workflow.invocations).containsExactly("onCompleted");
         assertThat(enhancer.invocations).isNotEmpty();

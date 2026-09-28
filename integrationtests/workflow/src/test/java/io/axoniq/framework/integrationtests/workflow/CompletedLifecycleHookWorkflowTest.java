@@ -72,7 +72,7 @@ class CompletedLifecycleHookWorkflowTest extends AbstractWorkflowIntegrationTest
     protected Function<DetectionPhase<SimpleWorkflowContext>, FinalizedPhase<SimpleWorkflowContext>> getDeclaredDefinition() {
         // A minimal workflow that completes on the happy path (two synchronous steps, no event waits).
         VersionedWorkflow workflow = new VersionedWorkflow();
-        WorkflowStatusChangeListener completedListener = (status, context, event, processingContext) -> {
+        WorkflowStatusChangeListener completedListener = (status, context, processingContext) -> {
             observedStatus.set(status);
             completedHookInvocations.incrementAndGet();
         };

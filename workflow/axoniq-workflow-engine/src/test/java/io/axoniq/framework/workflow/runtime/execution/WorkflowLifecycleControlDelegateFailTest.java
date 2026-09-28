@@ -206,9 +206,7 @@ class WorkflowLifecycleControlDelegateFailTest {
                 processingContext
         );
 
-        verify(listener).onWorkflowStatus(
-                eq(WorkflowStatus.FAILED), eq(workflowContext), any(EventMessage.class), eq(processingContext)
-        );
+        verify(listener).onWorkflowStatus(eq(WorkflowStatus.FAILED), eq(workflowContext), eq(processingContext));
     }
 
     private EventSourcedWorkflowState workflowState(Map<WorkflowStatus, WorkflowStatusChangeListener> listeners) {

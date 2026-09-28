@@ -20,7 +20,6 @@ package io.axoniq.framework.workflow.runtime.api.execution.context;
 
 import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
-import org.axonframework.messaging.eventhandling.EventMessage;
 
 /**
  * Functional interface describing a {@link WorkflowStatus} change listener, invoked on every status change.
@@ -33,16 +32,13 @@ import org.axonframework.messaging.eventhandling.EventMessage;
 public interface WorkflowStatusChangeListener {
 
     /**
-     * Handler reacting on a {@link WorkflowStatus workflow status} change, including the entire {@code event} and its
-     * {@code processingContext} which contain the status changed event.
+     * Handler reacting on a {@link WorkflowStatus workflow status} change.
      *
      * @param status            the workflow status change this handler reacts to
      * @param context           the current workflow context
-     * @param event             event that triggered the status change
-     * @param processingContext context in which the event is applied
+     * @param processingContext context in which the status change is applied
      */
     void onWorkflowStatus(WorkflowStatus status,
                           WorkflowContext context,
-                          EventMessage event,
                           ProcessingContext processingContext);
 }
