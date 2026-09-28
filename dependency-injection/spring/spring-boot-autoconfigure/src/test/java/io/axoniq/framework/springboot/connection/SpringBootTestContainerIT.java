@@ -42,7 +42,8 @@ class SpringBootTestContainerIT {
 
     @Container
     @ServiceConnection
-    private final static AxonServerContainer axonServer = new AxonServerContainer().withDevMode(true);
+    private static final AxonServerContainer axonServer = new AxonServerContainer().withDevMode(true)
+                                                                                    .withReuse(true);
 
     @Autowired
     private AxonServerConfiguration axonServerConfiguration;

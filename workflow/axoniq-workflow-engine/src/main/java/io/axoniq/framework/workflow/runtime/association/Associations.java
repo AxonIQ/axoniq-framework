@@ -128,6 +128,13 @@ public record Associations(
         return new Associations(registry, normalizeAssociations(registry, associations));
     }
 
+    private static Set<String> normalizeAssociations(ValueComparisonOperatorRegistry registry,
+                                                     String... associations) {
+        return Arrays.stream(associations)
+                     .map(conditionString -> SerializedAssociation.parse(registry, conditionString).serialize())
+                     .collect(Collectors.toCollection(HashSet::new));
+    }
+
     /**
      * Add additional associations to existing ones.
      *
@@ -148,9 +155,9 @@ public record Associations(
     /**
      * Add additional association to existing ones.
      *
-     * @param retriever       value retriever for the left side of the comparison, see
-     *                        {@link PayloadPropertyValueRetriever#payloadProperty(String)} for example.
-     * @param matcher value matcher including operator and value for comparison
+     * @param retriever value retriever for the left side of the comparison, see
+     *                  {@link PayloadPropertyValueRetriever#payloadProperty(String)} for example.
+     * @param matcher   value matcher including operator and value for comparison
      * @return new associations containing old associations and new one
      */
     public Associations and(ValueRetriever retriever,
@@ -170,13 +177,5 @@ public record Associations(
             String operator,
             Object value) {
 
-    }
-
-
-    private static Set<String> normalizeAssociations(ValueComparisonOperatorRegistry registry,
-                                                     String... associations) {
-        return Arrays.stream(associations)
-                     .map(conditionString -> SerializedAssociation.parse(registry, conditionString).serialize())
-                     .collect(Collectors.toCollection(HashSet::new));
     }
 }

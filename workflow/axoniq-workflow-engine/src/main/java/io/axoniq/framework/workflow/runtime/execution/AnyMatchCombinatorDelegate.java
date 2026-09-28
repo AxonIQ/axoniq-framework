@@ -19,16 +19,15 @@
 
 package io.axoniq.framework.workflow.runtime.execution;
 
-import org.jspecify.annotations.Nullable;
-
+import io.axoniq.framework.workflow.dsl.api.CombinatorWorkflowStepResult;
+import io.axoniq.framework.workflow.dsl.api.StepFailedException;
+import io.axoniq.framework.workflow.dsl.api.StepInterruptedException;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStepResult;
+import io.axoniq.framework.workflow.runtime.api.execution.context.AnyMatchCombinator;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
-import io.axoniq.framework.workflow.runtime.api.execution.state.AnyMatchCombinator;
-import io.axoniq.framework.workflow.runtime.api.execution.state.CombinatorWorkflowStepResult;
-import io.axoniq.framework.workflow.runtime.api.execution.state.StepFailedException;
-import io.axoniq.framework.workflow.runtime.api.execution.state.StepInterruptedException;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowStepResult;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.conversion.Converter;
+import org.jspecify.annotations.Nullable;
 
 import java.lang.reflect.Type;
 import java.util.Arrays;

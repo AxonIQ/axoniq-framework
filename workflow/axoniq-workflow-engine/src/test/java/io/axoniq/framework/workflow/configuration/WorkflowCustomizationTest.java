@@ -19,10 +19,11 @@
 
 package io.axoniq.framework.workflow.configuration;
 
-import io.axoniq.framework.workflow.runtime.api.execution.context.EventNameCustomizer;
+import io.axoniq.framework.workflow.dsl.api.EventNameCustomizer;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
+import io.axoniq.framework.workflow.runtime.api.execution.context.RecoverableWorkflowExceptionPolicy;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowIdProvider;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowStatusChangeListener;
-import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.execution.DefaultEventNameCustomizer;
 import io.axoniq.framework.workflow.runtime.execution.MessageWorkflowIdProvider;
 import org.axonframework.common.configuration.Configuration;
@@ -91,6 +92,22 @@ class WorkflowCustomizationTest {
 
         assertThat(config.eventNameCustomizer).isSameAs(customizer);
         assertThat(config.workflowIdProvider).isSameAs(provider);
+    }
+
+    @Test
+    void recoverableExceptionPolicyDefaultsAndCanBeOverriddenPerWorkflow() {
+        // given
+        WorkflowCustomization config = new WorkflowCustomization(WORKFLOW_NAME, null);
+        RecoverableWorkflowExceptionPolicy custom = e -> e instanceof IllegalStateException;
+
+        // when
+        var defaultPolicy = config.recoverableExceptionPolicy();
+        var copiedPolicy = new WorkflowCustomization(config.recoverableExceptionPolicy(custom))
+                .recoverableExceptionPolicy();
+
+        // then
+        assertThat(defaultPolicy).isSameAs(RecoverableWorkflowExceptionPolicy.DEFAULT);
+        assertThat(copiedPolicy).isSameAs(custom);
     }
 
     @Test

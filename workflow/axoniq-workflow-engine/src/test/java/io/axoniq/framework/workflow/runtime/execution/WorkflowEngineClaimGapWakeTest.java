@@ -18,29 +18,28 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
-import io.axoniq.framework.workflow.runtime.api.execution.context.EventConditions;
+import io.axoniq.framework.workflow.dsl.api.EventConditions;
+import io.axoniq.framework.workflow.dsl.api.WorkflowContext;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowConfiguration;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContextFactory;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionFactory;
-import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.execution.payload.GlobalOnlyPayloadReducer;
 import io.axoniq.framework.workflow.runtime.util.MetadataUtils;
 import org.axonframework.common.TypeReference;
+import org.axonframework.common.configuration.ComponentNotFoundException;
+import org.axonframework.eventsourcing.eventstore.EventStore;
+import org.axonframework.messaging.core.ApplicationContext;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.Metadata;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.VersionedType;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
-import org.axonframework.messaging.core.unitofwork.StubProcessingContext;
-import org.axonframework.common.configuration.ComponentNotFoundException;
-import org.axonframework.eventsourcing.eventstore.EventStore;
-import org.axonframework.messaging.core.ApplicationContext;
 import org.axonframework.messaging.core.unitofwork.SimpleUnitOfWorkFactory;
+import org.axonframework.messaging.core.unitofwork.StubProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventMessage;
-import org.axonframework.messaging.eventhandling.EventSink;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 import org.junit.jupiter.api.*;
 
@@ -79,19 +78,59 @@ class WorkflowEngineClaimGapWakeTest {
             VersionedType.of(new QualifiedName("RestoredWorkflow"), "1.0.0");
     private static final QualifiedName RESUME_EVENT = new QualifiedName("io.axoniq.test", "PaymentReceived");
     private static final String WAIT_STEP = "awaitPayment";
-
+    private final RunningSteps runningSteps = new RunningSteps();
+    private final EventWaitConditions eventWaitConditions = new EventWaitConditions();
+    private final ReachedSteps reachedSteps = new ReachedSteps();
     private WorkflowConfigurationRegistry<?> configurationRegistry;
     private WorkflowStore workflowStore;
     private WorkflowEngine workflowEngine;
     private WorkflowEngineCheckpointingSupport checkpointingSupport;
-    private final RunningSteps runningSteps = new RunningSteps();
-    private final EventWaitConditions eventWaitConditions = new EventWaitConditions();
-    private final ReachedSteps reachedSteps = new ReachedSteps();
-
     /**
      * The real execution the claim materializes, so the wake travels the production path.
      */
     private SimpleWorkflowExecution restored;
+
+    /**
+     * The context a restored body runs under. Its executor never runs the submitted body, which freezes the instance in
+     * the window this test is about.
+     */
+    private static ProcessingContext bodyContext() {
+        var context = mock(ProcessingContext.class);
+        when(context.resources()).thenReturn(Map.of());
+        when(context.component(UnitOfWorkFactory.class)).thenReturn(restoreUnitOfWorkFactory());
+        when(context.component(Clock.class)).thenReturn(Clock.systemUTC());
+        when(context.component(ExecutorService.class, WORKFLOW_ENGINE_EXECUTOR))
+                .thenReturn(mock(ExecutorService.class));
+        when(context.component(EventStore.class)).thenReturn(mock(EventStore.class));
+        when(context.component(WorkflowScheduler.class)).thenReturn(mock(WorkflowScheduler.class));
+        when(context.component(ExecuteStepActionResolver.class)).thenReturn(mock(ExecuteStepActionResolver.class));
+        when(context.whenComplete(any())).thenAnswer(invocation -> {
+            invocation.<Consumer<ProcessingContext>>getArgument(0).accept(context);
+            return context;
+        });
+        return context;
+    }
+
+    private static EventMessage resumeEvent() {
+        var eventMessage = mock(EventMessage.class);
+        when(eventMessage.metadata()).thenReturn(Metadata.emptyInstance());
+        when(eventMessage.type()).thenReturn(new MessageType(RESUME_EVENT));
+        when(eventMessage.payloadAs(any(TypeReference.class))).thenReturn(Map.of("orderId", RESIDENT_ID));
+        return eventMessage;
+    }
+
+    /**
+     * Returns a real unit of work factory: the engine sources every restored instance in a unit of work of its own, so
+     * a mock would hand it none.
+     */
+    private static UnitOfWorkFactory restoreUnitOfWorkFactory() {
+        return new SimpleUnitOfWorkFactory(new ApplicationContext() {
+            @Override
+            public <C> C component(Class<C> type, String name) {
+                throw new ComponentNotFoundException(type, name);
+            }
+        });
+    }
 
     @BeforeEach
     void setUp() {
@@ -195,46 +234,25 @@ class WorkflowEngineClaimGapWakeTest {
         when(configuration.eventNameCustomizer()).thenReturn(defaults());
         when(configuration.workflowStatusChangeListeners()).thenReturn(Map.of());
 
-        var workflowContext = mock(WorkflowContext.class);
+        var workflowExecutionOperations = mock(WorkflowContext.class);
         WorkflowContextFactory<WorkflowContext> contextFactory = mock(WorkflowContextFactory.class);
         WorkflowExecutionFactory executionFactory = mock(WorkflowExecutionFactory.class);
         when(configuration.workflowContextFactory()).thenReturn(contextFactory);
         when(configuration.workflowExecutionFactory()).thenReturn(executionFactory);
         when(contextFactory.createContext(anyMap(), eq(RESIDENT_ID), any(), eq(configuration)))
-                .thenReturn(workflowContext);
-        when(executionFactory.create(workflowContext)).thenAnswer(invocation -> {
+                .thenReturn(workflowExecutionOperations);
+        when(executionFactory.create(workflowExecutionOperations)).thenAnswer(invocation -> {
             restored = new SimpleWorkflowExecution(RESIDENT_ID,
                                                    Map.of("orderId", RESIDENT_ID),
                                                    bodyContext(),
                                                    configuration,
-                                                   workflowContext,
+                                                   workflowExecutionOperations,
                                                    runningSteps,
                                                    eventWaitConditions,
                                                    reachedSteps);
             return restored;
         });
         when(configurationRegistry.getWorkflowConfiguration(DEFINITION_ID)).thenReturn(Optional.of(configuration));
-    }
-
-    /**
-     * The context a restored body runs under. Its executor never runs the submitted body, which freezes the instance in
-     * the window this test is about.
-     */
-    private static ProcessingContext bodyContext() {
-        var context = mock(ProcessingContext.class);
-        when(context.resources()).thenReturn(Map.of());
-        when(context.component(UnitOfWorkFactory.class)).thenReturn(restoreUnitOfWorkFactory());
-        when(context.component(Clock.class)).thenReturn(Clock.systemUTC());
-        when(context.component(ExecutorService.class, WORKFLOW_ENGINE_EXECUTOR))
-                .thenReturn(mock(ExecutorService.class));
-        when(context.component(EventStore.class)).thenReturn(mock(EventStore.class));
-        when(context.component(WorkflowScheduler.class)).thenReturn(mock(WorkflowScheduler.class));
-        when(context.component(ExecuteStepActionResolver.class)).thenReturn(mock(ExecuteStepActionResolver.class));
-        when(context.whenComplete(any())).thenAnswer(invocation -> {
-            invocation.<Consumer<ProcessingContext>>getArgument(0).accept(context);
-            return context;
-        });
-        return context;
     }
 
     /**
@@ -248,26 +266,5 @@ class WorkflowEngineClaimGapWakeTest {
 
     private ProcessingContext sourcingContext() {
         return new StubProcessingContext();
-    }
-
-    private static EventMessage resumeEvent() {
-        var eventMessage = mock(EventMessage.class);
-        when(eventMessage.metadata()).thenReturn(Metadata.emptyInstance());
-        when(eventMessage.type()).thenReturn(new MessageType(RESUME_EVENT));
-        when(eventMessage.payloadAs(any(TypeReference.class))).thenReturn(Map.of("orderId", RESIDENT_ID));
-        return eventMessage;
-    }
-
-    /**
-     * Returns a real unit of work factory: the engine sources every restored instance in a unit of
-     * work of its own, so a mock would hand it none.
-     */
-    private static UnitOfWorkFactory restoreUnitOfWorkFactory() {
-        return new SimpleUnitOfWorkFactory(new ApplicationContext() {
-            @Override
-            public <C> C component(Class<C> type, String name) {
-                throw new ComponentNotFoundException(type, name);
-            }
-        });
     }
 }

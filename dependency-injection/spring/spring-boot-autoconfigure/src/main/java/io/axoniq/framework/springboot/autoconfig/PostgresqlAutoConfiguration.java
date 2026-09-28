@@ -21,6 +21,7 @@ package io.axoniq.framework.springboot.autoconfig;
 
 import io.axoniq.framework.postgresql.PostgresqlConfigurationEnhancer;
 import io.axoniq.framework.postgresql.PostgresqlEventStorageEngine;
+import io.axoniq.framework.postgresql.SchemaInitialization;
 import io.axoniq.framework.springboot.PostgresqlProperties;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
@@ -34,11 +35,13 @@ import org.springframework.context.annotation.Bean;
  * Autoconfiguration class for the Axon Framework PostgreSQL extension.
  * <p>
  * Note that the {@link PostgresqlConfigurationEnhancer} already sets this extension's defaults, like the
- * {@link PostgresqlEventStorageEngine}, through the service-loading mechanism. This autoconfiguration at the moment
- * only provides the ability to disable the {@code PostgresqlConfigurationEnhancer} by setting the
- * {@code axon.postgresql.enabled} property to {@code false}.
+ * {@link PostgresqlEventStorageEngine}, through the service-loading mechanism. This autoconfiguration provides the
+ * ability to disable the {@code PostgresqlConfigurationEnhancer} by setting the {@code axon.postgresql.enabled}
+ * property to {@code false}, and to translate {@code axon.postgresql.schema-initialization} into the
+ * {@link SchemaInitialization} the engine is constructed with.
  *
  * @author Steven van Beelen
+ * @author John Hendrikx
  * @since 5.1.0
  */
 @AutoConfiguration(
@@ -70,5 +73,24 @@ public class PostgresqlAutoConfiguration {
                 return Integer.MIN_VALUE;
             }
         };
+    }
+
+    /**
+     * Bean creation method for a {@link ConfigurationEnhancer} translating the
+     * {@code axon.postgresql.schema-initialization} property into the {@link SchemaInitialization} component read
+     * by the {@link PostgresqlConfigurationEnhancer} when it constructs the
+     * {@link PostgresqlEventStorageEngine}. Registration uses {@code registerIfNotPresent}, so a component
+     * registered directly through the {@code ApplicationConfigurer} always wins over this property translation.
+     *
+     * @param properties the bound {@link PostgresqlProperties}
+     * @return a configuration enhancer registering the configured {@link SchemaInitialization}
+     */
+    @Bean
+    @ConditionalOnProperty(name = "axon.postgresql.enabled", matchIfMissing = true)
+    public ConfigurationEnhancer postgresqlSchemaInitializationConfigurationEnhancer(PostgresqlProperties properties) {
+        return registry -> registry.registerIfNotPresent(
+                SchemaInitialization.class,
+                c -> properties.getSchemaInitialization()
+        );
     }
 }

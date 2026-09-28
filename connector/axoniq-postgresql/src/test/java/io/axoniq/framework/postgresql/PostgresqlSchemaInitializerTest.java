@@ -31,6 +31,8 @@ import java.sql.SQLException;
 import java.sql.Statement;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Test class validating the {@link PostgresqlSchemaInitializer}.
@@ -128,15 +130,95 @@ class PostgresqlSchemaInitializerTest {
 
     @Test
     void initializeOnAlreadyMigratedSchemaDoesNotErrorOrDuplicateTags() throws SQLException {
-        PostgresqlSchemaInitializer.initialize(dataSource);
+        PostgresqlSchemaInitializer.initialize(dataSource, SchemaInitialization.CREATE_IF_MISSING);
 
         insertEventDirectly(-1, "com.example.EventA", "1.0.0");
 
         // Running it again (e.g. a second engine instance starting up against an already-migrated
         // database) must be a no-op, not fail or create a duplicate "__T" row.
-        PostgresqlSchemaInitializer.initialize(dataSource);
+        PostgresqlSchemaInitializer.initialize(dataSource, SchemaInitialization.CREATE_IF_MISSING);
 
         assertThat(queryTypeTag(-1)).isEqualTo("com.example.EventA");
+    }
+
+    @Test
+    void schemaIsCompleteReturnsFalseWhenNothingExistsYet() throws SQLException {
+        assertThat(PostgresqlSchemaInitializer.schemaIsComplete(dataSource)).isFalse();
+    }
+
+    @Test
+    void schemaIsCompleteReturnsTrueOnceCreateIfMissingHasRun() throws SQLException {
+        PostgresqlSchemaInitializer.initialize(dataSource, SchemaInitialization.CREATE_IF_MISSING);
+
+        assertThat(PostgresqlSchemaInitializer.schemaIsComplete(dataSource)).isTrue();
+    }
+
+    @Test
+    void validateThrowsOnAMissingSchemaAndCreatesNothing() throws SQLException {
+        assertThatThrownBy(() -> PostgresqlSchemaInitializer.initialize(dataSource, SchemaInitialization.VALIDATE))
+                .isInstanceOf(IllegalStateException.class);
+
+        assertThat(PostgresqlSchemaInitializer.schemaIsComplete(dataSource)).isFalse();
+    }
+
+    @Test
+    void schemaIsCompleteReturnsFalseWhenOnlyASingleIndexIsMissing() throws SQLException {
+        // given - a schema created by an older version that predates one of the indices, simulated
+        // by creating the full schema and then dropping just that one index again.
+        PostgresqlSchemaInitializer.initialize(dataSource, SchemaInitialization.CREATE_IF_MISSING);
+        dropIndex("tags_type_unique");
+
+        // then - the partial schema is reported as incomplete, not mistaken for a complete one.
+        assertThat(PostgresqlSchemaInitializer.schemaIsComplete(dataSource)).isFalse();
+    }
+
+    @Test
+    void createIfMissingRepairsASchemaThatIsMissingOnlyASingleIndex() throws SQLException {
+        PostgresqlSchemaInitializer.initialize(dataSource, SchemaInitialization.CREATE_IF_MISSING);
+        dropIndex("tags_type_unique");
+
+        // when - a next instance starts up against the partially-repaired schema.
+        PostgresqlSchemaInitializer.initialize(dataSource, SchemaInitialization.CREATE_IF_MISSING);
+
+        // then - the missing index was recreated, without needing a full schema wipe.
+        assertThat(PostgresqlSchemaInitializer.schemaIsComplete(dataSource)).isTrue();
+    }
+
+    @Test
+    void validateThrowsWhenOnlyASingleIndexIsMissing() throws SQLException {
+        PostgresqlSchemaInitializer.initialize(dataSource, SchemaInitialization.CREATE_IF_MISSING);
+        dropIndex("tags_type_unique");
+
+        assertThatThrownBy(() -> PostgresqlSchemaInitializer.initialize(dataSource, SchemaInitialization.VALIDATE))
+                .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    void validateSucceedsAndChangesNothingOnAnAlreadyCompleteSchema() throws SQLException {
+        PostgresqlSchemaInitializer.initialize(dataSource, SchemaInitialization.CREATE_IF_MISSING);
+
+        assertThatCode(() -> PostgresqlSchemaInitializer.initialize(dataSource, SchemaInitialization.VALIDATE))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    void skipDoesNotCreateAnythingEvenOnAMissingSchema() throws SQLException {
+        PostgresqlSchemaInitializer.initialize(dataSource, SchemaInitialization.SKIP);
+
+        assertThat(PostgresqlSchemaInitializer.schemaIsComplete(dataSource)).isFalse();
+    }
+
+    private void dropIndex(String indexName) throws SQLException {
+        try (
+            Connection connection = dataSource.getConnection();
+            Statement statement = connection.createStatement()
+        ) {
+            connection.setAutoCommit(false);
+
+            statement.execute("DROP INDEX IF EXISTS " + indexName);
+
+            connection.commit();
+        }
     }
 
     private void dropTypeVersionColumn() throws SQLException {

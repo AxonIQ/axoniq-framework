@@ -10,6 +10,17 @@ Workflows are in *Preview*. APIs and behavior may change without notice, and it 
 
 This reference covers every primitive, configuration option, and pattern available in the Axon Workflow Engine.
 
+== Workflow API boundaries
+
+`WorkflowContext` is the author-facing contract supplied to a workflow body. The built-in
+`BaseWorkflowContext` and `SimpleWorkflowContext` implement that contract and add Java-friendly overloads.
+Use `WorkflowContext` (or one of those implementations) for workflow logic and custom workflow contexts.
+
+The engine translates calls on the author-facing context to its internal `WorkflowExecutionOperations` contract.
+That runtime contract provides primitive operations and execution metadata; application workflow code does not need to
+depend on it. Event-message creation likewise uses the internal, read-only `WorkflowEventPublicationContext` rather
+than the full runtime-operation surface.
+
 [TIP]
 ====
 New to the engine? Start with the xref:axon-workflow-getting-started::index.adoc[Getting Started tutorial] first.
@@ -20,11 +31,12 @@ New to the engine? Start with the xref:axon-workflow-getting-started::index.adoc
 * *xref:execute-steps.adoc[Execute Steps]*: Run actions synchronously (`awaitExecute`) or asynchronously (`execute`)
 * *xref:waiting-for-events.adoc[Waiting for Events]*: Suspend until external events arrive (`awaitEvent`, `waitForEvent`, `sleep`)
 * *xref:publishing-events.adoc[Publishing Events]*: Publish a business event as a durable step (`awaitPublish`, `publish`); how workflows talk to each other
-* *xref:understanding-steps.adoc[Understanding Steps]*: Cross-cutting concerns: timeouts, payload reducers, error handling, event naming, execution semantics
+* *xref:understanding-steps.adoc[Understanding Steps]*: Cross-cutting concerns: timeouts, payload reducers, event naming, execution semantics
 
 == Workflow lifecycle
 
 * *xref:workflow-lifecycle.adoc[Workflow Lifecycle]*: States, fail vs cancel, lifecycle listeners
+* *xref:error-handling.adoc[Error Handling]*: Step failure types, what is stored about an error, when a workflow fails and when it pauses and resumes
 
 == Orchestration
 

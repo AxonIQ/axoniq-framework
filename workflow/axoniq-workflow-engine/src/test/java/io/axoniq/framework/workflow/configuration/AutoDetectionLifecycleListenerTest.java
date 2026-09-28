@@ -19,16 +19,16 @@
 
 package io.axoniq.framework.workflow.configuration;
 
-import io.axoniq.framework.workflow.runtime.api.annotation.Workflow;
-import io.axoniq.framework.workflow.runtime.api.annotation.WorkflowCancelledHandler;
-import io.axoniq.framework.workflow.runtime.api.annotation.WorkflowCompletedHandler;
-import io.axoniq.framework.workflow.runtime.api.annotation.WorkflowFailedHandler;
-import io.axoniq.framework.workflow.runtime.api.annotation.WorkflowStartedHandler;
-import io.axoniq.framework.workflow.runtime.api.annotation.WorkflowStatusChangedHandler;
-import io.axoniq.framework.workflow.runtime.api.annotation.WorkflowTimedOutHandler;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
+import io.axoniq.framework.workflow.dsl.api.WorkflowContext;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
+import io.axoniq.framework.workflow.annotation.Workflow;
+import io.axoniq.framework.workflow.annotation.WorkflowCancelledHandler;
+import io.axoniq.framework.workflow.annotation.WorkflowCompletedHandler;
+import io.axoniq.framework.workflow.annotation.WorkflowFailedHandler;
+import io.axoniq.framework.workflow.annotation.WorkflowStartedHandler;
+import io.axoniq.framework.workflow.annotation.WorkflowStatusChangedHandler;
+import io.axoniq.framework.workflow.annotation.WorkflowTimedOutHandler;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowStatusChangeListener;
-import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
 import org.junit.jupiter.api.*;
 
 import java.util.ArrayList;

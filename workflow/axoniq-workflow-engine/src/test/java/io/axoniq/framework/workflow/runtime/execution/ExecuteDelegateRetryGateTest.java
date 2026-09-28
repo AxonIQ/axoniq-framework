@@ -18,20 +18,20 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
+import io.axoniq.framework.workflow.dsl.api.PayloadProcessor;
+import io.axoniq.framework.workflow.dsl.api.StepIndeterminateException;
+import io.axoniq.framework.workflow.dsl.api.StepRetryInfo;
+import io.axoniq.framework.workflow.dsl.api.StepStatus;
+import io.axoniq.framework.workflow.dsl.api.WorkflowError;
+import io.axoniq.framework.workflow.dsl.api.WorkflowState;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStep;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStepResult;
+import io.axoniq.framework.workflow.dsl.api.retry.RetryPolicy;
 import io.axoniq.framework.workflow.runtime.api.execution.context.ExecutePrimitive;
 import io.axoniq.framework.workflow.runtime.api.execution.context.PrimitiveCommands;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
-import io.axoniq.framework.workflow.runtime.api.execution.context.retry.RetryPolicy;
-import io.axoniq.framework.workflow.runtime.api.execution.state.StepIndeterminateException;
-import io.axoniq.framework.workflow.runtime.api.execution.state.StepRetryInfo;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowError;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowState;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowStep;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowStepResult;
-import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
-import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
-import io.axoniq.framework.workflow.runtime.api.payload.PayloadProcessor;
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations;
 import io.axoniq.framework.workflow.runtime.execution.payload.GlobalOnlyPayloadReducer;
 import io.axoniq.framework.workflow.runtime.execution.payload.LocalOnlyPayloadReducer;
 import io.axoniq.framework.workflow.runtime.util.MetadataUtils;
@@ -72,19 +72,32 @@ class ExecuteDelegateRetryGateTest {
     private static final Instant RETRY_STARTED_AT = RETRYING_AT.plusSeconds(90);
     private static final StepRetryInfo FIRST_ATTEMPT_FAILED =
             new StepRetryInfo(1, 2, WorkflowError.from(new IllegalStateException("first attempt failed")));
-
+    private final AtomicReference<WorkflowStep> currentStep = new AtomicReference<>();
+    private final List<EventMessage> acceptedEvents = new ArrayList<>();
+    private final List<Throwable> reportedFailures = new ArrayList<>();
     private WorkflowExecution workflowExecution;
     private UnitOfWork unitOfWork;
     private WorkflowScheduler scheduler;
     private ExecuteDelegate delegate;
-    private final AtomicReference<WorkflowStep> currentStep = new AtomicReference<>();
-    private final List<EventMessage> acceptedEvents = new ArrayList<>();
-    private final List<Throwable> reportedFailures = new ArrayList<>();
     private boolean storeAcceptsAppends = true;
+
+    private static ExecutePrimitive.ExecuteCommand command() {
+        PayloadProcessor action = (context, payload) -> Map.of();
+        return new PrimitiveCommands.WorkflowStepResultExecuteCommand(
+                STEP_NAME,
+                Map.of(),
+                action,
+                LocalOnlyPayloadReducer.INSTANCE,
+                GlobalOnlyPayloadReducer.INSTANCE,
+                TIMEOUT,
+                DefaultEventNameCustomizer.Builder.defaults(),
+                RetryPolicy.maxRetries(2)
+        );
+    }
 
     @BeforeEach
     void setUp() throws InterruptedException {
-        var workflowContext = mock(WorkflowContext.class);
+        var workflowExecutionOperations = mock(WorkflowExecutionOperations.class);
         workflowExecution = mock(WorkflowExecution.class);
         var workflowState = mock(WorkflowState.class);
         var unitOfWorkFactory = mock(UnitOfWorkFactory.class);
@@ -95,8 +108,8 @@ class ExecuteDelegateRetryGateTest {
 
         var processingContext = mock(ProcessingContext.class);
         when(processingContext.component(EventConverter.class)).thenReturn(mock(EventConverter.class));
-        when(workflowContext.processingContext()).thenReturn(processingContext);
-        when(workflowContext.workflowStatus()).thenReturn(WorkflowStatus.STARTED);
+        when(workflowExecutionOperations.processingContext()).thenReturn(processingContext);
+        when(workflowExecutionOperations.workflowStatus()).thenReturn(WorkflowStatus.STARTED);
         when(workflowExecution.workflowId()).thenReturn("wf-1");
         when(workflowExecution.state()).thenReturn(workflowState);
         when(workflowExecution.isRunning()).thenReturn(true);
@@ -133,7 +146,7 @@ class ExecuteDelegateRetryGateTest {
         });
 
         delegate = new ExecuteDelegate(
-                workflowContext,
+                workflowExecutionOperations,
                 workflowExecution,
                 new RunningSteps(),
                 new ReachedSteps(),
@@ -144,6 +157,14 @@ class ExecuteDelegateRetryGateTest {
                 scheduler,
                 new DefaultExecuteStepActionResolver()
         );
+    }
+
+    private WorkflowStepResult execute() {
+        return delegate.execute(command(),
+                                (name, error, customizer) -> reportedFailures.add(error),
+                                (name, customizer) -> {
+                                    // timeouts are not part of these tests
+                                });
     }
 
     @Nested
@@ -210,27 +231,5 @@ class ExecuteDelegateRetryGateTest {
             assertThat(acceptedEvents).isEmpty();
             verify(unitOfWork, never()).executeWithResult(any());
         }
-    }
-
-    private WorkflowStepResult execute() {
-        return delegate.execute(command(),
-                                (name, error, customizer) -> reportedFailures.add(error),
-                                (name, customizer) -> {
-                                    // timeouts are not part of these tests
-                                });
-    }
-
-    private static ExecutePrimitive.ExecuteCommand command() {
-        PayloadProcessor action = (context, payload) -> Map.of();
-        return new PrimitiveCommands.WorkflowStepResultExecuteCommand(
-                STEP_NAME,
-                Map.of(),
-                action,
-                LocalOnlyPayloadReducer.INSTANCE,
-                GlobalOnlyPayloadReducer.INSTANCE,
-                TIMEOUT,
-                DefaultEventNameCustomizer.Builder.defaults(),
-                RetryPolicy.maxRetries(2)
-        );
     }
 }

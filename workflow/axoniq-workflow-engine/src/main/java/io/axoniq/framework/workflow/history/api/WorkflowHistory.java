@@ -18,7 +18,7 @@
  */
 package io.axoniq.framework.workflow.history.api;
 
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowState;
+import io.axoniq.framework.workflow.dsl.api.WorkflowState;
 
 /**
  * Represents a workflow history of a passed execution.

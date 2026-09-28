@@ -19,6 +19,8 @@
 
 package io.axoniq.framework.messaging.eventhandling.deadletter;
 
+import io.axoniq.framework.messaging.deadletter.SequencedDeadLetterProcessor;
+import io.axoniq.framework.messaging.deadletter.SequencedDeadLetterQueue;
 import org.axonframework.common.FutureUtils;
 import org.axonframework.common.TypeReference;
 import org.axonframework.common.configuration.Component;
@@ -29,9 +31,8 @@ import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.axonframework.common.configuration.DecoratorDefinition;
 import org.axonframework.common.configuration.InstantiatedComponentDefinition;
 import org.axonframework.common.configuration.LifecycleRegistry;
+import org.axonframework.common.configuration.SearchScope;
 import org.axonframework.common.infra.ComponentDescriptor;
-import io.axoniq.framework.messaging.deadletter.SequencedDeadLetterProcessor;
-import io.axoniq.framework.messaging.deadletter.SequencedDeadLetterQueue;
 import org.axonframework.messaging.eventhandling.EventHandlingComponent;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.processing.streaming.pooled.PooledStreamingEventProcessorConfiguration;
@@ -50,12 +51,15 @@ import java.util.Optional;
  * <p>
  * This enhancer registers:
  * <ul>
+ *     <li>A {@link DeadLetterProcessorRegistry} — records the {@link DeadLetteringEventHandlingComponent}
+ *         created for each component name, so it remains discoverable as a {@link SequencedDeadLetterProcessor}
+ *         regardless of what later decorators (e.g. messaging tracing) wrap around it</li>
  *     <li>A {@link ComponentFactory} for {@link SequencedDeadLetterQueue} — creates queue instances
  *         on demand, optionally wrapped with {@link CachingSequencedDeadLetterQueue}</li>
  *     <li>A type-level decorator for {@link EventHandlingComponent} — wraps components with
  *         {@link DeadLetteringEventHandlingComponent} when DLQ is enabled</li>
  *     <li>A {@link ComponentFactory} for {@link SequencedDeadLetterProcessor} — makes DLQ-decorated
- *         components discoverable as dead letter processors</li>
+ *         components discoverable as dead letter processors, via the {@link DeadLetterProcessorRegistry}</li>
  * </ul>
  * <p>
  * This enhancer operates only within module scopes that contain a
@@ -67,12 +71,12 @@ import java.util.Optional;
  * @see DeadLetterQueueConfiguration
  * @see DeadLetteringEventHandlingComponent
  * @see CachingSequencedDeadLetterQueue
+ * @see DeadLetterProcessorRegistry
  */
 public class DeadLetterQueueConfigurationEnhancer implements ConfigurationEnhancer {
 
     /**
-     * The order of this enhancer. Runs late so that the {@link DeadLetteringEventHandlingComponent} wraps
-     * all other decorators, making it discoverable as a {@link SequencedDeadLetterProcessor}.
+     * The order of this enhancer.
      * <p>
      * Set to {@code Integer.MAX_VALUE - 100} — after all normal enhancers but before
      * {@link org.axonframework.messaging.core.configuration.MessagingConfigurationDefaults}
@@ -89,6 +93,9 @@ public class DeadLetterQueueConfigurationEnhancer implements ConfigurationEnhanc
 
     @Override
     public void enhance(ComponentRegistry registry) {
+        registry.registerIfNotPresent(DeadLetterProcessorRegistry.class,
+                                      configuration -> new DeadLetterProcessorRegistry(),
+                                      SearchScope.ALL);
         registry.registerFactory(new DeadLetterQueueComponentFactory());
         registerSegmentChangeListenerDecorator(registry);
         registerDeadLetterQueueDecorator(registry);
@@ -180,13 +187,15 @@ public class DeadLetterQueueConfigurationEnhancer implements ConfigurationEnhanc
 
         logger.info("Dead letter queue enabled for component [{}] with queue name [{}].", name, dlqName);
 
-        return new DeadLetteringEventHandlingComponent(
+        DeadLetteringEventHandlingComponent deadLetteringComponent = new DeadLetteringEventHandlingComponent(
                 delegate,
                 dlq,
                 dlqConfig.enqueuePolicy(),
                 processorConfig.unitOfWorkFactory(),
                 dlqConfig.clearOnReset()
         );
+        config.getComponent(DeadLetterProcessorRegistry.class).register(name, deadLetteringComponent);
+        return deadLetteringComponent;
     }
 
     /**
@@ -267,8 +276,16 @@ public class DeadLetterQueueConfigurationEnhancer implements ConfigurationEnhanc
     }
 
     /**
-     * A {@link ComponentFactory} that provides {@link SequencedDeadLetterProcessor} instances by delegating
-     * to the {@link EventHandlingComponent} registered under the same name.
+     * A {@link ComponentFactory} that provides {@link SequencedDeadLetterProcessor} instances by looking them up
+     * in the {@link DeadLetterProcessorRegistry}, keyed by the name of the {@link EventHandlingComponent} they were
+     * created for.
+     * <p>
+     * First resolves the {@link EventHandlingComponent} registered under that name, to trigger its decoration -
+     * including dead-lettering, if enabled - as a side effect. It does not then check whether the resolved
+     * component itself is a {@link SequencedDeadLetterProcessor}, since a later decorator (e.g. messaging tracing)
+     * may wrap the dead-lettering component further. Instead, it reads the processor from the
+     * {@link DeadLetterProcessorRegistry}, which the dead-lettering decorator populated before any such later
+     * decorator had a chance to wrap it.
      */
     private static class SequencedDeadLetterProcessorFactory
             implements ComponentFactory<SequencedDeadLetterProcessor<EventMessage>> {
@@ -280,13 +297,11 @@ public class DeadLetterQueueConfigurationEnhancer implements ConfigurationEnhanc
 
         @Override
         public Optional<Component<SequencedDeadLetterProcessor<EventMessage>>> construct(String name, Configuration config) {
-            return config.getOptionalComponent(EventHandlingComponent.class, name)
-                         .filter(SequencedDeadLetterProcessor.class::isInstance)
-                         .map(c -> {
-                             @SuppressWarnings("unchecked")
-                             var dlp = (SequencedDeadLetterProcessor<EventMessage>) c;
-                             return dlp;
-                         })
+            // Resolving the EventHandlingComponent triggers its decoration - including dead-lettering,
+            // which is what populates the DeadLetterProcessorRegistry
+            config.getOptionalComponent(EventHandlingComponent.class, name);
+            return config.getComponent(DeadLetterProcessorRegistry.class)
+                         .get(name)
                          .map(dlp -> new InstantiatedComponentDefinition<>(
                                  new Component.Identifier<>(DLP_TYPE_REF, name),
                                  dlp

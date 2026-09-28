@@ -40,6 +40,7 @@ import javax.sql.DataSource;
  * {@code AxonServerConfigurationEnhancer}, thus giving precedence over to the Axon Server {@code EventStorageEngine}.
  *
  * @author Steven van Beelen
+ * @author John Hendrikx
  * @since 1.0.0
  */
 public class PostgresqlConfigurationEnhancer implements ConfigurationEnhancer {
@@ -73,7 +74,9 @@ public class PostgresqlConfigurationEnhancer implements ConfigurationEnhancer {
                 "shared",
                 ignored -> new PostgresqlEventStorageEngine(
                         config.getComponent(DataSource.class),
-                        config.getComponent(EventConverter.class)
+                        config.getComponent(EventConverter.class),
+                        config.getOptionalComponent(SchemaInitialization.class)
+                              .orElse(SchemaInitialization.CREATE_IF_MISSING)
                 )
         );
     }

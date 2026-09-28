@@ -18,21 +18,20 @@
  */
 package io.axoniq.framework.integrationtests.workflow;
 
-import org.jspecify.annotations.Nullable;
-
 import io.axoniq.framework.workflow.configuration.WorkflowModule.WorkflowDefinitionPhase.DetectionPhase;
 import io.axoniq.framework.workflow.configuration.WorkflowModule.WorkflowDefinitionPhase.FinalizedPhase;
+import io.axoniq.framework.workflow.dsl.api.EventConditions;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
 import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContext;
-import io.axoniq.framework.workflow.runtime.api.annotation.Workflow;
-import io.axoniq.framework.workflow.runtime.api.execution.context.EventConditions;
+import io.axoniq.framework.workflow.annotation.Workflow;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContextFactory;
-import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.execution.payload.CombineGlobalAndLocalPayloadReducer;
 import org.axonframework.messaging.core.MessageTypeResolver;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.annotation.Event;
 import org.axonframework.messaging.eventhandling.conversion.EventConverter;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -89,13 +88,12 @@ class WaitForCombineResultWorkflowTest
                 startOnEventClass = RegistrationReceivedEvent.class,
                 startOnConditions = {"payload:status=waitForCombine"}
         )
-        public void execute(WaitForCombineWorkflowContext ctx) {
-            var event = ctx.processingContext().component(EventConverter.class).convert(
+        public void execute(WaitForCombineWorkflowContext ctx, ProcessingContext proce) {
+            var event = ctx.resolveComponent(EventConverter.class).convert(
                     ctx.awaitEvent(
                             "waitStep",
                             EventConditions.fromQualifiedName(
-                                    ctx.processingContext()
-                                       .component(MessageTypeResolver.class)
+                                    ctx.resolveComponent(MessageTypeResolver.class)
                                        .resolve(RegistrationReceivedEvent.class)
                                        .orElseThrow()
                                        .qualifiedName(),

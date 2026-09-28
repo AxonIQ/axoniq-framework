@@ -18,9 +18,9 @@
  */
 package io.axoniq.framework.workflow.query.utils;
 
+import io.axoniq.framework.workflow.dsl.api.WorkflowState;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStep;
 import io.axoniq.framework.workflow.query.api.WorkflowStateQuery;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowState;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowStep;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.VersionedType;
 

@@ -19,9 +19,7 @@
 
 package io.axoniq.framework.workflow.configuration;
 
-import org.jspecify.annotations.Nullable;
-
-import io.axoniq.framework.workflow.runtime.api.execution.context.EventCondition;
+import io.axoniq.framework.workflow.dsl.api.EventCondition;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowIdProvider;
 import io.axoniq.framework.workflow.runtime.association.ValueComparisonOperatorRegistry;
 import org.axonframework.common.configuration.Configuration;
@@ -29,6 +27,7 @@ import org.axonframework.messaging.core.MessageTypeResolver;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.annotation.AnnotationMessageTypeResolver;
 import org.axonframework.messaging.eventhandling.annotation.Event;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.*;
 
 import java.lang.reflect.Method;
@@ -36,7 +35,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Supplier;
 
-import static io.axoniq.framework.workflow.runtime.api.annotation.Workflow.*;
+import static io.axoniq.framework.workflow.annotation.Workflow.*;
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
