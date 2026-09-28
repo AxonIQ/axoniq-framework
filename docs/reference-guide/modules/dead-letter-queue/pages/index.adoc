@@ -328,6 +328,7 @@ How the dead-lettering process reacts to this depends on the <<Enqueue policy,en
 You can retrieve `SequencedDeadLetterProcessor` instances from the `Configuration` based on the processor name and the component name.
 Each Event Handling Component with DLQ enabled is registered as a `SequencedDeadLetterProcessor`. The name to retrieve the processor follows the pattern
 `EventHandlingComponent[processorName][componentName]`.
+The processor's own module, needed to retrieve that component, is registered under `EventProcessor[processorName]`.
 Below are examples of how to process dead-letter sequences for a specific component:
 
 [tabs]
