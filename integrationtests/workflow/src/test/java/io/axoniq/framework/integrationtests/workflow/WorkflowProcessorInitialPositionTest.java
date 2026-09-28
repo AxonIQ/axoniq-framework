@@ -1,5 +1,6 @@
 package io.axoniq.framework.integrationtests.workflow;
 
+import io.axoniq.framework.axonserver.connector.configuration.AxonServerConfigurationEnhancer;
 import io.axoniq.framework.workflow.annotation.Workflow;
 import io.axoniq.framework.workflow.configuration.WorkflowConfigurer;
 import io.axoniq.framework.workflow.configuration.WorkflowModule;
@@ -45,7 +46,8 @@ class WorkflowProcessorInitialPositionTest {
         var started = ConcurrentHashMap.<String>newKeySet();
         var tokenStore = new InMemoryTokenStore();
         var configurer = WorkflowConfigurer.create();
-        configurer.componentRegistry(r -> r.registerComponent(TokenStore.class, c -> tokenStore));
+        configurer.componentRegistry(r -> r.disableEnhancer(AxonServerConfigurationEnhancer.class)
+                                           .registerComponent(TokenStore.class, c -> tokenStore));
         configurer.registerWorkflowModule(WorkflowModule.defaults("Recording", SimpleWorkflowContext.class)
                                                         .workflowContextFactory(c -> new SimpleWorkflowContextFactory())
                                                         .definition(d -> d.autodetected(c -> new RecordingWorkflow(started))));
