@@ -77,23 +77,6 @@ class WorkflowMethodParameterResolverFactoryTest {
     }
 
     @Test
-    void resolvesDeclaringInstanceFromItsResourceKey() {
-        SampleWorkflow instance = new SampleWorkflow();
-        ProcessingContext processingContext = new StubProcessingContext()
-                .withResource(WORKFLOW_INSTANCE_RESOURCE_KEY, instance);
-
-        ParameterResolver<?> resolver =
-                testSubject.createInstance(methodNamed("onStatusChanged"), parametersOf("onStatusChanged"), 1);
-
-        assertThat(resolver).isNotNull();
-        assertThat(
-                resolver.resolveParameterValue(processingContext)
-                        .orTimeout(50, TimeUnit.MILLISECONDS)
-                        .join()
-        ).isSameAs(instance);
-    }
-
-    @Test
     void resolvesAWrapperTypeByWrappingTheWorkflowContextResource() {
         TestWorkflowContext context = mock(TestWorkflowContext.class);
         ProcessingContext processingContext =
@@ -142,7 +125,7 @@ class WorkflowMethodParameterResolverFactoryTest {
         }
 
         @WorkflowStatusChangedHandler(workflowStatus = WorkflowStatus.COMPLETED)
-        void onStatusChanged(WorkflowStatus status, SampleWorkflow instance) {
+        void onStatusChanged(WorkflowStatus status) {
         }
 
         @Workflow

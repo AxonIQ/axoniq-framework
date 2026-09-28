@@ -196,8 +196,7 @@ class AutoDetectingWorkflowBuilder<C extends WorkflowContext>
             WorkflowTriggerMessage trigger = new WorkflowTriggerMessage(messageType, workflowContext);
             ProcessingContext processingContext = executionFactory
                     .create(workflowContext).processingContext()
-                    .withResource(WORKFLOW_CONTEXT_RESOURCE_KEY, workflowContext)
-                    .withResource(WORKFLOW_INSTANCE_RESOURCE_KEY, instance);
+                    .withResource(WORKFLOW_CONTEXT_RESOURCE_KEY, workflowContext);
             CompletableFuture<?> future = inspector.chainedInterceptor(instanceType)
                                                    .handle(trigger, processingContext, instance, member)
                                                    .first()
