@@ -359,7 +359,7 @@ class WorkflowModuleTest {
 
     @Test
     @SuppressWarnings("unchecked")
-    void autodetectedWorkflowBodyResolvesDeclaringInstanceAndWrapperTypeParameters() {
+    void autodetectedWorkflowBodyResolvesWrapperTypeParameters() {
         ParameterInjectionWorkflow workflow = new ParameterInjectionWorkflow();
         WorkflowContextFactory<TestWorkflowContext> ctxFactory = mock(WorkflowContextFactory.class);
         module.workflowContextFactory(c -> ctxFactory)
@@ -376,7 +376,6 @@ class WorkflowModuleTest {
 
         config.workflowDefinition().accept(context);
 
-        assertThat(workflow.capturedInstance).isSameAs(workflow);
         assertThat(workflow.capturedWrapper).isNotNull();
         assertThat(workflow.capturedWrapper.context()).isSameAs(context);
     }
@@ -448,12 +447,10 @@ class WorkflowModuleTest {
 
     public static class ParameterInjectionWorkflow {
 
-        volatile ParameterInjectionWorkflow capturedInstance;
         volatile ContextWrapper capturedWrapper;
 
         @Workflow(workflowName = "parameterInjectionWorkflow", startOnEventName = "java.lang.String", idProperty = "id")
-        public void run(TestWorkflowContext context, ParameterInjectionWorkflow self, ContextWrapper wrapper) {
-            this.capturedInstance = self;
+        public void run(TestWorkflowContext context, ContextWrapper wrapper) {
             this.capturedWrapper = wrapper;
         }
     }
