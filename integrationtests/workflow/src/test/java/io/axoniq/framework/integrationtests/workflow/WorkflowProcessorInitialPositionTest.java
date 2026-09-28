@@ -1,10 +1,10 @@
 package io.axoniq.framework.integrationtests.workflow;
 
+import io.axoniq.framework.workflow.annotation.Workflow;
 import io.axoniq.framework.workflow.configuration.WorkflowConfigurer;
 import io.axoniq.framework.workflow.configuration.WorkflowModule;
 import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContextFactory;
-import io.axoniq.framework.workflow.runtime.api.annotation.Workflow;
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.messaging.eventhandling.gateway.EventGateway;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.ReplayToken;

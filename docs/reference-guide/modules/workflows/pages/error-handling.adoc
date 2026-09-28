@@ -1,0 +1,289 @@
+= Error Handling
+:navtitle: Error Handling
+
+This page is the single place that explains what happens when something goes wrong in a workflow: which
+exception you see, what the engine records, when the workflow stops for good, and when it stops running
+without ending and how it resumes.
+
+== Overview
+
+The engine distinguishes 3 outcomes:
+
+[cols="1,2,2"]
+|===
+|Outcome |What it means |How it ends
+
+|**Step failed**
+|One step did not complete. The step records `FAILED`, `TIMED_OUT` or `CANCELLED`. The workflow keeps running and decides what to do.
+|You catch the `StepFailedException` and compensate, or you let it propagate.
+
+|**Workflow terminal**
+|The workflow itself ended with `COMPLETED`, `FAILED`, `CANCELLED` or `TIMED_OUT`. A terminal event is stored. Nothing runs again.
+|`ctx.fail(...)`, `ctx.cancel(...)`, a workflow timeout, or an exception nobody caught, see <<terminal>>.
+
+|**Workflow stopped, not ended**
+|The body stopped without a terminal status. The stored status is still `STARTED`. Nothing is lost.
+|The engine re-drives the workflow on the next restart or segment claim, see <<stopped>>.
+|===
+
+[IMPORTANT]
+====
+There is no `PAUSED` status. A workflow whose body stopped without ending looks exactly like a running
+workflow in the event store, in `WorkflowManager` queries and in lifecycle listeners: its status is `STARTED`.
+The only signals are the `ERROR` or `WARN` log line the engine writes when the body stops, and the absence of
+further step events. Alert on those log lines.
+====
+
+[[step-failures]]
+== Step failures
+
+Every step failure surfaces as a `StepFailedException` or one of its subtypes. Catch the parent to handle
+any abnormal step end, or a subtype to handle one case.
+
+[cols="1,2,2"]
+|===
+|Exception |When it is thrown |Step status recorded
+
+|`StepFailedException`
+|The step action threw, or the retry policy was exhausted. Also the parent of every row below.
+|`FAILED`
+
+|`StepTimedOutException`
+|The step did not complete within its timeout.
+|`TIMED_OUT`
+
+|`StepCancellationException`
+|The step was cancelled through `result.cancel(...)`, `ctx.cancelStep(...)`, the `WorkflowManager`, or because the workflow reached a terminal status.
+|`CANCELLED`
+
+|`StepIndeterminateException`
+|The action was in flight when the node crashed. The engine does not re-run it, so the outcome is unknown. Without a retry policy the step is `FAILED`; with one it goes to `RETRYING`.
+|`FAILED` or `RETRYING`
+|===
+
+Blocking primitives (`awaitExecute`, `awaitEvent`, `awaitPublish`) throw the exception. Non-blocking primitives
+(`execute`, `waitForEvent`, `publish`) return a `WorkflowStepResult`; read `failure()`, `timeout()`,
+`canceled()` or `error()` on it.
+
+See xref:understanding-steps.adoc#crash-interrupted-steps[Crash-interrupted steps] for the at-most-once rule
+behind `StepIndeterminateException`, and xref:understanding-steps.adoc#retries[Retries] for retry policies.
+
+=== Catching a step failure
+
+With a blocking step, catch and compensate:
+
+[source,java]
+----
+try {
+    ctx.awaitExecute("chargePayment",
+            payload("customerId", customerId, "amount", amount).getValues(),
+            PaymentService::charge);
+} catch (StepFailedException e) {
+    ctx.awaitExecute("releaseStock",
+            payload("customerId", customerId).getValues(),
+            InventoryService::releaseStock);
+    ctx.fail(new RuntimeException("Payment failed: " + e.getMessage())); // <1>
+}
+----
+<.> Decide the outcome yourself. Without `fail`, the workflow continues to the next step.
+
+With a non-blocking step, check the result:
+
+[source,java]
+----
+var shipping = ctx.execute("shipOrder", ctx.workflowPayload(),
+        ShippingService::shipOrder,
+        step -> step.timeout(Duration.ofMinutes(5)));
+
+if (shipping.failure()) { // blocks until the step reaches a terminal status
+    ctx.awaitExecute("refundPayment",
+            payload("customerId", customerId).getValues(),
+            PaymentService::refund);
+    ctx.fail(new RuntimeException("Shipping failed: " + shipping.error().get().getMessage()));
+}
+----
+
+The saga pattern in xref:common-patterns.adoc[Common Patterns] shows compensation in reverse order.
+
+[[durable-errors]]
+== What is stored about an error
+
+The engine stores every step and workflow failure in the event store, so the error survives a restart and
+is identical during live execution and after replay. Only 3 fields are kept per exception in the cause chain:
+
+* the fully qualified class name of the exception
+* its message, truncated to 1023 characters
+* its cause, up to 10 levels deep
+
+The stack trace is not stored. It is written to the application log at the moment of failure. Keeping it
+out of the event store keeps payloads small and avoids class-compatibility problems across JVM versions.
+
+On replay the engine rebuilds the exception as a `WorkflowExecutionException` that carries the original
+class name in `type()`. The engine's own `StepIndeterminateException` is rebuilt as its own type.
+
+Because the rebuilt cause is never the original class, `instanceof` checks against your exception types do
+not match. Branch on the type name instead:
+
+[source,java]
+----
+} catch (StepFailedException e) {
+    var cause = (WorkflowExecutionException) e.getCause();
+    if (cause.isType(OutOfStockException.class)) {
+        // ...
+    }
+}
+----
+
+[[terminal]]
+== When the workflow stops for good
+
+A workflow reaches a terminal status in these cases. A terminal event is stored, running steps are
+interrupted, and the instance is removed from the engine.
+
+[cols="2,1,2"]
+|===
+|Cause |Status |Notes
+
+|`ctx.fail(exception)`
+|`FAILED`
+|Explicit. The exception is stored as described above.
+
+|`ctx.cancel()` / `ctx.cancel(reason)`, or a cancellation requested through the `WorkflowManager`
+|`CANCELLED`
+|Explicit, graceful stop.
+
+|Workflow timeout
+|`TIMED_OUT`
+|Configured on the workflow.
+
+|A `StepFailedException` the body did not catch
+|`FAILED`
+|The step outcome is durable and business-visible, so the failure ends the workflow. The exception is stored as the cause.
+
+|Any other exception the body did not catch and that is not recoverable
+|`FAILED`
+|A defect in the body, such as a `NullPointerException`, `ClassCastException` or `IllegalArgumentException`. See <<recoverable>>.
+|===
+
+Lifecycle listeners such as `@OnFailure` fire on each terminal status. See
+xref:workflow-lifecycle.adoc[Workflow Lifecycle].
+
+[[stopped]]
+== When the workflow stops without ending
+
+In these cases the body stops but no terminal event is stored. The status stays `STARTED`, the instance
+stays registered on the node with its driver stopped, and events addressed to it still update its state.
+Nothing marks it as stopped except the log line written at that moment.
+
+[cols="2,3,3"]
+|===
+|Cause |Why it does not fail |Log line to alert on
+
+|Engine shutdown
+|The node stops, not the workflow. Interrupted steps are not cancelled and resume on the next start.
+|`INFO` "Shutting down WorkflowEngine". Expected, no alert.
+
+|Replay drift
+|The code no longer matches the recorded history. Fix the code or add `ctx.migrateVersion(...)`. See xref:versioning.adoc#drift-detection[Drift detection].
+|`WARN` "paused due to replay drift"
+
+|The event store did not accept one of the workflow's own events
+|Infrastructure did not answer or rejected the append. The next run appends again.
+|`ERROR` "the event store did not accept one of its events", or "did not complete before the resolution timeout"
+
+|A recoverable exception the body did not catch
+|A later run may succeed. See <<recoverable>>.
+|`ERROR` "paused after a recoverable exception in its body"
+|===
+
+=== How a stopped workflow resumes
+
+Nothing is needed beyond a restart. The engine rehydrates every non-terminal instance from the event store
+on 2 occasions:
+
+. the processing node starts
+. the node claims the workflow's segment, for example after a rebalance
+
+The body runs again from its recorded state. Completed steps are not re-executed. A workflow stopped by a
+replay drift resumes as soon as fixed code is deployed and the node restarts.
+
+To find such workflows, query `WorkflowManager` for instances in `STARTED` whose last step event is older than
+you expect, and correlate with the log lines above.
+
+[[recoverable]]
+=== Recoverable versus unrecoverable exceptions
+
+An exception that escapes the body and is not a `StepFailedException` is classified by a
+`RecoverableWorkflowExceptionPolicy`. The default, `RecoverableWorkflowExceptionPolicy.DEFAULT`, walks the cause chain and
+treats these as recoverable:
+
+* any `Error`, such as `OutOfMemoryError` or `StackOverflowError`
+* `InterruptedException` and `StepInterruptedException`, raised when the engine stops
+* `RejectedExecutionException`, raised when an executor is shutting down
+* `AxonTransientException`, the framework's marker for a condition worth retrying
+* `TimeoutException` and `IOException`, raised when infrastructure did not answer
+
+Everything else fails the workflow.
+
+[[recoverable-policy]]
+==== Configuring the policy
+
+You can extend the default policy or replace it. Extend it with `or(...)` to keep the built-in
+classification and add your own exceptions:
+
+[source,java]
+----
+RecoverableWorkflowExceptionPolicy policy =
+        RecoverableWorkflowExceptionPolicy.DEFAULT.or(e -> e instanceof BackendUnavailableException);
+----
+
+Replace it with your own lambda to take full control. Only the exceptions your policy accepts then pause the
+workflow:
+
+[source,java]
+----
+RecoverableWorkflowExceptionPolicy policy = e -> e instanceof BackendUnavailableException;
+----
+
+The engine picks the policy for a workflow in this order:
+
+. the policy set on the workflow through `.customized(...)`
+. the `RecoverableWorkflowExceptionPolicy` component registered in the configuration
+. `RecoverableWorkflowExceptionPolicy.DEFAULT`
+
+To apply a policy to every workflow, register it as a component:
+
+[source,java]
+----
+configurer.componentRegistry(registry -> registry.registerComponent(
+        RecoverableWorkflowExceptionPolicy.class,
+        c -> RecoverableWorkflowExceptionPolicy.DEFAULT.or(e -> e instanceof BackendUnavailableException)
+));
+----
+
+In Spring Boot, declare a bean of the same type:
+
+[source,java]
+----
+@Bean
+public RecoverableWorkflowExceptionPolicy recoverableExceptionPolicy() {
+    return RecoverableWorkflowExceptionPolicy.DEFAULT.or(e -> e instanceof BackendUnavailableException);
+}
+----
+
+To apply a policy to a single workflow, set it in `.customized(...)`:
+
+[source,java]
+----
+.customized((c, w) -> w
+        .recoverableExceptionPolicy(
+                RecoverableWorkflowExceptionPolicy.DEFAULT.or(e -> e instanceof BackendUnavailableException)
+        )
+)
+----
+
+[TIP]
+====
+Prefer catching exceptions in the body and calling `ctx.fail(...)` yourself. The classification is a safety
+net for exceptions you did not anticipate, not a substitute for explicit terminal paths.
+====

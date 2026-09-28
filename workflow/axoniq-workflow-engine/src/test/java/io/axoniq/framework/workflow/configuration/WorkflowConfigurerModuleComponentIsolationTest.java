@@ -19,16 +19,14 @@
 
 package io.axoniq.framework.workflow.configuration;
 
-import org.jspecify.annotations.Nullable;
-
+import io.axoniq.framework.workflow.dsl.api.EventCondition;
+import io.axoniq.framework.workflow.dsl.api.EventConditions;
 import io.axoniq.framework.workflow.history.inmemory.InMemoryWorkflowHistoryRepository;
 import io.axoniq.framework.workflow.history.inmemory.MutableWorkflowHistoryRepository;
 import io.axoniq.framework.workflow.history.inmemory.WorkflowHistoryProjector;
-import io.axoniq.framework.workflow.runtime.api.execution.context.EventCondition;
-import io.axoniq.framework.workflow.runtime.api.execution.context.EventConditions;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowDefinition;
-import io.axoniq.framework.workflow.runtime.execution.AbstractDSLWorkflowContext;
+import io.axoniq.framework.workflow.runtime.execution.AbstractWorkflowContext;
 import io.axoniq.framework.workflow.runtime.execution.InMemoryWorkflowExecutionRepository;
 import io.axoniq.framework.workflow.runtime.execution.SimpleWorkflowConfigurationRegistry;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowConfigurationRegistry;
@@ -37,6 +35,7 @@ import io.axoniq.framework.workflow.runtime.execution.WorkflowExecutionRepositor
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.*;
 
 import java.util.Map;
@@ -169,7 +168,7 @@ class WorkflowConfigurerModuleComponentIsolationTest {
         assertThat(configuration).isNotNull();
     }
 
-    static class TestContext1 extends AbstractDSLWorkflowContext {
+    static class TestContext1 extends AbstractWorkflowContext {
 
         public TestContext1(Map<String, @Nullable Object> payload, String workflowId,
                             ProcessingContext processingContext,
@@ -178,7 +177,7 @@ class WorkflowConfigurerModuleComponentIsolationTest {
         }
     }
 
-    static class TestContext2 extends AbstractDSLWorkflowContext {
+    static class TestContext2 extends AbstractWorkflowContext {
 
         public TestContext2(Map<String, @Nullable Object> payload, String workflowId,
                             ProcessingContext processingContext,
@@ -187,7 +186,7 @@ class WorkflowConfigurerModuleComponentIsolationTest {
         }
     }
 
-    static class TestContext extends AbstractDSLWorkflowContext {
+    static class TestContext extends AbstractWorkflowContext {
 
         public TestContext(Map<String, @Nullable Object> payload, String workflowId,
                            ProcessingContext processingContext,

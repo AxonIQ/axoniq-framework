@@ -38,6 +38,11 @@ import static org.mockito.Mockito.*;
  */
 class FutureResolverTest {
 
+    @SuppressWarnings("unchecked")
+    private static <T extends Throwable> void throwUnchecked(Throwable failure) throws T {
+        throw (T) failure;
+    }
+
     @Test
     void defaultResolverWaitsForPublicationToComplete() {
         var resolver = new DefaultTimeoutFutureResolver();
@@ -110,9 +115,5 @@ class FutureResolverTest {
         FutureResolver.resolve(context, publication);
 
         assertThat(publication).isCompleted();
-    }
-    @SuppressWarnings("unchecked")
-    private static <T extends Throwable> void throwUnchecked(Throwable failure) throws T {
-        throw (T) failure;
     }
 }

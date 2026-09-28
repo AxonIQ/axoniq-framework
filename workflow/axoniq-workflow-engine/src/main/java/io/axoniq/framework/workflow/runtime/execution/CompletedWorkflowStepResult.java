@@ -18,12 +18,12 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
-import io.axoniq.framework.workflow.runtime.api.execution.state.StepFailedException;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowStepResult;
-import org.jspecify.annotations.Nullable;
+import io.axoniq.framework.workflow.dsl.api.StepFailedException;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStepResult;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.conversion.Converter;
 import org.axonframework.messaging.eventhandling.conversion.EventConverter;
+import org.jspecify.annotations.Nullable;
 
 import java.lang.reflect.Type;
 import java.time.Duration;

@@ -19,13 +19,12 @@
 
 package io.axoniq.framework.workflow.runtime.util;
 
-import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
-import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
+import io.axoniq.framework.workflow.dsl.api.StepStatus;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
 import org.axonframework.messaging.core.Metadata;
 import org.junit.jupiter.api.*;
 
 import java.lang.reflect.Constructor;
-import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.*;
 

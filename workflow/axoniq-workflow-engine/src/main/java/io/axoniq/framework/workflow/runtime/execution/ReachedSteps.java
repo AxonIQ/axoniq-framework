@@ -18,8 +18,8 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
+import io.axoniq.framework.workflow.dsl.api.WorkflowState;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowReplayDriftException;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.framework.workflow.runtime.util.WorkflowStateUtils;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.infra.ComponentDescriptor;
@@ -77,8 +77,8 @@ public class ReachedSteps implements DescribableComponent {
     /**
      * Asserts that the current invocation has reached every terminal step in the recorded state.
      *
-     * @param workflowId identifier of the workflow being invoked
-     * @param state recorded state to compare with this invocation's progress
+     * @param workflowId     identifier of the workflow being invoked
+     * @param state          recorded state to compare with this invocation's progress
      * @param aboutToExecute description of the operation being attempted
      * @throws WorkflowReplayDriftException when terminal state steps were not reached by the current invocation
      */

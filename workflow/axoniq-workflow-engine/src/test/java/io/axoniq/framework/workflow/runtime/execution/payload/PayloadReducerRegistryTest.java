@@ -18,7 +18,7 @@
  */
 package io.axoniq.framework.workflow.runtime.execution.payload;
 
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 
 import java.util.Map;
 

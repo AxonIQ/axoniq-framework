@@ -18,6 +18,7 @@
  */
 package io.axoniq.framework.workflow.runtime.api.execution.context;
 
+import io.axoniq.framework.workflow.dsl.api.WorkflowContext;
 import org.axonframework.common.annotation.Internal;
 
 /**
@@ -33,8 +34,8 @@ public interface WorkflowExecutionFactory {
     /**
      * Creates workflow execution for a given workflow context.
      *
-     * @param context context to create the workflow execution for.
+     * @param workflowContext author-facing context to create the workflow execution for
      * @return workflow execution.
      */
-    WorkflowExecution create(WorkflowContext context);
+    WorkflowExecution create(WorkflowContext workflowContext);
 }

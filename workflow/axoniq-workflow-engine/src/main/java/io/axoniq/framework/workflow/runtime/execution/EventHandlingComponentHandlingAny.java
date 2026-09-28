@@ -81,8 +81,8 @@ public class EventHandlingComponentHandlingAny implements EventHandlingComponent
     /**
      * Constructs the component for a workflow engine.
      *
-     * @param workflowEngine             workflow engine to deliver events to
-     * @param checkpointingHandler       handler to notify when checkpointing is required
+     * @param workflowEngine       workflow engine to deliver events to
+     * @param checkpointingHandler handler to notify when checkpointing is required
      */
     public EventHandlingComponentHandlingAny(WorkflowEngine workflowEngine,
                                              Checkpointing checkpointingHandler) {

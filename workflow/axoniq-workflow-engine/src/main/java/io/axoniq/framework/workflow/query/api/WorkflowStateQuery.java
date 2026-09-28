@@ -18,8 +18,8 @@
  */
 package io.axoniq.framework.workflow.query.api;
 
-import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
-import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
+import io.axoniq.framework.workflow.dsl.api.StepStatus;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
 import org.axonframework.messaging.core.VersionedType;
 import org.jspecify.annotations.Nullable;
 
@@ -41,9 +41,9 @@ import static org.axonframework.common.BuilderUtils.assertNonEmpty;
  *                                            .stepStatus("reserve-funds", StepStatus.COMPLETED);
  * }</pre>
  * Use {@link #all()} only for an unrestricted search. Queries contain data only; they intentionally do not accept
- * {@link Predicate predicates} or other executable filters. The same query can be supplied to
- * workflow-management finders and workflow-state repositories, which interpret the {@linkplain #criteria() criteria}
- * in their own storage model.
+ * {@link Predicate predicates} or other executable filters. The same query can be supplied to workflow-management
+ * finders and workflow-state repositories, which interpret the {@linkplain #criteria() criteria} in their own storage
+ * model.
  *
  * @author Simon Zambrovski
  * @since 5.4.0
@@ -108,7 +108,7 @@ public final class WorkflowStateQuery {
     /**
      * Creates a query restricted to a status of a named step.
      *
-     * @param stepName step name to inspect
+     * @param stepName   step name to inspect
      * @param stepStatus step status to match
      * @return a query with the step status restriction
      */
@@ -119,7 +119,7 @@ public final class WorkflowStateQuery {
     /**
      * Creates a query restricted to an exact payload value.
      *
-     * @param key payload entry name to inspect
+     * @param key   payload entry name to inspect
      * @param value payload value to match, which may be {@code null}
      * @return a query with the payload value restriction
      */
@@ -131,7 +131,7 @@ public final class WorkflowStateQuery {
      * Creates a query restricted to an effective version recorded for a change identifier.
      *
      * @param changeId change identifier to inspect
-     * @param version effective version to match
+     * @param version  effective version to match
      * @return a query with the effective-version restriction
      */
     public static WorkflowStateQuery byVersion(String changeId, String version) {
@@ -146,6 +146,14 @@ public final class WorkflowStateQuery {
      */
     public static WorkflowStateQuery byVersionMigration(String changeId) {
         return all().versionMigration(changeId);
+    }
+
+    private static <T> T requireNonNull(@Nullable T value, String name) {
+        return Objects.requireNonNull(value, name + " must not be null");
+    }
+
+    private static void requireNonEmpty(String value, String name) {
+        assertNonEmpty(value, name + " must not be null or empty");
     }
 
     /**
@@ -191,7 +199,7 @@ public final class WorkflowStateQuery {
     /**
      * Restricts this query to a status of a named step.
      *
-     * @param stepName step name to inspect
+     * @param stepName   step name to inspect
      * @param stepStatus step status to match
      * @return query with the step status restriction
      */
@@ -202,7 +210,7 @@ public final class WorkflowStateQuery {
     /**
      * Restricts this query to a payload value.
      *
-     * @param key payload entry name to inspect
+     * @param key   payload entry name to inspect
      * @param value payload value to match, which may be {@code null}
      * @return query with the payload value restriction
      */
@@ -214,7 +222,7 @@ public final class WorkflowStateQuery {
      * Restricts this query to an effective version recorded for a change identifier.
      *
      * @param changeId change identifier to inspect
-     * @param version effective version to match
+     * @param version  effective version to match
      * @return query with the effective version restriction
      */
     public WorkflowStateQuery version(String changeId, String version) {
@@ -246,20 +254,13 @@ public final class WorkflowStateQuery {
         return new WorkflowStateQuery(appendedCriteria);
     }
 
-    private static <T> T requireNonNull(@Nullable T value, String name) {
-        return Objects.requireNonNull(value, name + " must not be null");
-    }
-
-    private static void requireNonEmpty(String value, String name) {
-        assertNonEmpty(value, name + " must not be null or empty");
-    }
-
     /**
      * A value-based condition used to select workflow instances.
      */
     public sealed interface Criterion permits WorkflowIdCriterion, WorkflowDefinitionIdCriterion,
             WorkflowStatusCriterion, StepCriterion, StepStatusCriterion, PayloadValueCriterion, VersionCriterion,
             VersionMigrationCriterion {
+
     }
 
     /**
@@ -313,7 +314,7 @@ public final class WorkflowStateQuery {
     /**
      * Selects workflows by a named step's status.
      *
-     * @param stepName step name to inspect
+     * @param stepName   step name to inspect
      * @param stepStatus step status to match
      */
     public record StepStatusCriterion(String stepName, StepStatus stepStatus) implements Criterion {
@@ -327,7 +328,7 @@ public final class WorkflowStateQuery {
     /**
      * Selects workflows by an exact payload entry value.
      *
-     * @param key payload entry name to inspect
+     * @param key   payload entry name to inspect
      * @param value payload value to match, which may be {@code null}
      */
     public record PayloadValueCriterion(String key, @Nullable Object value) implements Criterion {
@@ -341,7 +342,7 @@ public final class WorkflowStateQuery {
      * Selects workflows by the effective version of a change identifier.
      *
      * @param changeId change identifier to inspect
-     * @param version effective version to match
+     * @param version  effective version to match
      */
     public record VersionCriterion(String changeId, String version) implements Criterion {
 
@@ -362,5 +363,4 @@ public final class WorkflowStateQuery {
             requireNonEmpty(changeId, "changeId");
         }
     }
-
 }

@@ -18,13 +18,13 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
+import io.axoniq.framework.workflow.dsl.api.StepStatus;
+import io.axoniq.framework.workflow.dsl.api.WorkflowState;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStep;
 import io.axoniq.framework.workflow.runtime.api.execution.context.PrimitiveCommands;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowReplayDriftException;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowState;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowStep;
-import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventSink;
 import org.junit.jupiter.api.*;
@@ -45,15 +45,15 @@ import static org.mockito.Mockito.*;
  */
 class WorkflowLifecycleControlDelegateDriftTest {
 
-    private WorkflowContext workflowContext;
+    private final ReachedSteps reachedSteps = new ReachedSteps();
+    private WorkflowExecutionOperations workflowExecutionOperations;
     private WorkflowExecution workflowExecution;
     private WorkflowState state;
     private WorkflowLifecycleControlDelegate delegate;
-    private final ReachedSteps reachedSteps = new ReachedSteps();
 
     @BeforeEach
     void setUp() {
-        workflowContext = mock(WorkflowContext.class);
+        workflowExecutionOperations = mock(WorkflowExecutionOperations.class);
         workflowExecution = mock(WorkflowExecution.class);
         state = mock(WorkflowState.class);
         EventSink eventSink = mock(EventSink.class);
@@ -65,7 +65,7 @@ class WorkflowLifecycleControlDelegateDriftTest {
         when(workflowExecution.state()).thenReturn(state);
 
         delegate = new WorkflowLifecycleControlDelegate(
-                workflowContext, workflowExecution, new RunningSteps(), reachedSteps,
+                workflowExecutionOperations, workflowExecution, new RunningSteps(), reachedSteps,
                 terminalEventPublication -> terminalEventPublication.run()
         );
     }

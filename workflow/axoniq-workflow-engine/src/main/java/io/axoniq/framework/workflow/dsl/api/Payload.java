@@ -19,7 +19,7 @@
 package io.axoniq.framework.workflow.dsl.api;
 
 import com.fasterxml.jackson.core.type.TypeReference;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 import org.jspecify.annotations.Nullable;
 
@@ -54,18 +54,18 @@ public class Payload {
     }
 
     /**
-     * Constructs a new payload around the given value, converting it using converter from workflow context.
+     * Constructs a new payload around the given value, converting it using the given processing context.
      *
-     * @param context workflow context.
-     * @param value   payload value.
+     * @param processingContext processing context for the current workflow invocation
+     * @param value             payload value.
      * @return payload representation of the given value.
      */
     public static Payload payload(
-            WorkflowContext context,
+            ProcessingContext processingContext,
             Object value
     ) {
-        var converter = Objects.requireNonNull(context, "Workflow context must not be null")
-                               .processingContext().component(EventConverter.class);
+        var converter = Objects.requireNonNull(processingContext, "Processing context must not be null")
+                               .component(EventConverter.class);
         Map<String, @Nullable Object> map = Objects.requireNonNull(converter.convert(value, PAYLOAD_TYPE.getType()),
                                                                    "Payload converted to null");
         return payload(map);
@@ -91,21 +91,11 @@ public class Payload {
     }
 
     /**
-     * Constructs a new payload from workflow context.
-     *
-     * @param context workflow context.
-     * @return payload representation of the workflow context.
-     */
-    public static Payload payload(WorkflowContext context) {
-        return payload(Objects.requireNonNull(context, "Workflow context must not be null").workflowPayload());
-    }
-
-    /**
      * Constructs a new payload with a single key-value pair.
      *
      * @param key   property name.
      * @param value value
-     * @return payload with oen value.
+     * @return payload with one value.
      */
     public static Payload payload(String key, @Nullable Object value) {
         return payload().with(Objects.requireNonNull(key, "Payload key must not be null"), value);
@@ -170,7 +160,7 @@ public class Payload {
         Object value = payload.get(key);
         if (value instanceof Map) {
             //noinspection unchecked
-            return (T) converter.apply((Map<String, @Nullable Object>) value);
+            return converter.apply((Map<String, @Nullable Object>) value);
         }
         return (T) value;
     }

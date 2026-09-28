@@ -18,12 +18,12 @@
  */
 package io.axoniq.framework.workflow.history.inmemory;
 
+import io.axoniq.framework.workflow.dsl.api.WorkflowState;
 import io.axoniq.framework.workflow.history.api.WorkflowHistory;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.framework.workflow.runtime.execution.EventSourcedWorkflowState;
 import io.axoniq.framework.workflow.runtime.util.MetadataUtils;
-import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.FutureUtils;
+import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.VersionedType;

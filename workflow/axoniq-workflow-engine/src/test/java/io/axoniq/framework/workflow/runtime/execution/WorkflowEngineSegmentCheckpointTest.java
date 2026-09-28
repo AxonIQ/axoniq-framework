@@ -18,9 +18,9 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
+import io.axoniq.framework.workflow.dsl.api.WorkflowState;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowState;
-import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowConfigurationRegistry.PredicatedWorkflowConfiguration;
 import org.axonframework.common.TypeReference;
 import org.axonframework.messaging.core.MessageType;
@@ -62,6 +62,37 @@ class WorkflowEngineSegmentCheckpointTest {
     private WorkflowEngine workflowEngine;
     private WorkflowEngineCheckpointingSupport checkpointingSupport;
 
+    /**
+     * Registers a definition starting {@link #BUSY_WORKFLOW_ID}. The started execution reports itself as a source of
+     * checkpoint work the moment the engine installs its listener, and keeps reporting unsafe when asked again.
+     */
+    private static void registerStartConfiguration(WorkflowConfigurationRegistry<?> configurationRegistry) {
+        // Live-mode activation sweeps the repository for terminal executions, so the mock needs a status.
+        var busyState = mock(WorkflowState.class);
+        when(busyState.workflowStatus()).thenReturn(WorkflowStatus.STARTED);
+
+        var busyExecution = WorkflowExecutionFixture.mockExecution(BUSY_WORKFLOW_ID, busyState, true);
+        when(busyExecution.hasUnsafeCheckpointWork()).thenReturn(true);
+        doAnswer(invocation -> {
+            invocation.<WorkflowExecution.CheckpointWorkStateListener>getArgument(0).onMarkedUnsafe();
+            return null;
+        }).when(busyExecution).registerCheckpointWorkStateListener(any());
+
+        var configuration = WorkflowExecutionFixture.mockConfiguration(BUSY_WORKFLOW_ID, busyExecution);
+        when(configuration.workflowIdProvider()).thenReturn(event -> BUSY_WORKFLOW_ID);
+        when(configuration.workflowVersion()).thenReturn("1.0.0");
+        when(configurationRegistry.getHighestVersionConfigurations(new MessageType(START_EVENT)))
+                .thenReturn(List.of(new PredicatedWorkflowConfiguration((e, pc) -> true, configuration)));
+    }
+
+    private static EventMessage startEvent() {
+        var eventMessage = mock(EventMessage.class);
+        when(eventMessage.metadata()).thenReturn(Metadata.emptyInstance());
+        when(eventMessage.type()).thenReturn(new MessageType(START_EVENT));
+        when(eventMessage.payloadAs(any(TypeReference.class))).thenReturn(Map.of("id", BUSY_WORKFLOW_ID));
+        return eventMessage;
+    }
+
     @BeforeEach
     void setUp() {
         var configurationRegistry = mock(WorkflowConfigurationRegistry.class);
@@ -95,37 +126,6 @@ class WorkflowEngineSegmentCheckpointTest {
                         .isCompletedWithValue(TOKEN);
             }
         }
-    }
-
-    /**
-     * Registers a definition starting {@link #BUSY_WORKFLOW_ID}. The started execution reports itself as a source of
-     * checkpoint work the moment the engine installs its listener, and keeps reporting unsafe when asked again.
-     */
-    private static void registerStartConfiguration(WorkflowConfigurationRegistry<?> configurationRegistry) {
-        // Live-mode activation sweeps the repository for terminal executions, so the mock needs a status.
-        var busyState = mock(WorkflowState.class);
-        when(busyState.workflowStatus()).thenReturn(WorkflowStatus.STARTED);
-
-        var busyExecution = WorkflowExecutionFixture.mockExecution(BUSY_WORKFLOW_ID, busyState, true);
-        when(busyExecution.hasUnsafeCheckpointWork()).thenReturn(true);
-        doAnswer(invocation -> {
-            invocation.<WorkflowExecution.CheckpointWorkStateListener>getArgument(0).onMarkedUnsafe();
-            return null;
-        }).when(busyExecution).registerCheckpointWorkStateListener(any());
-
-        var configuration = WorkflowExecutionFixture.mockConfiguration(BUSY_WORKFLOW_ID, busyExecution);
-        when(configuration.workflowIdProvider()).thenReturn(event -> BUSY_WORKFLOW_ID);
-        when(configuration.workflowVersion()).thenReturn("1.0.0");
-        when(configurationRegistry.getHighestVersionConfigurations(new MessageType(START_EVENT)))
-                .thenReturn(List.of(new PredicatedWorkflowConfiguration((e, pc) -> true, configuration)));
-    }
-
-    private static EventMessage startEvent() {
-        var eventMessage = mock(EventMessage.class);
-        when(eventMessage.metadata()).thenReturn(Metadata.emptyInstance());
-        when(eventMessage.type()).thenReturn(new MessageType(START_EVENT));
-        when(eventMessage.payloadAs(any(TypeReference.class))).thenReturn(Map.of("id", BUSY_WORKFLOW_ID));
-        return eventMessage;
     }
 
     private ProcessingContext processingContext(Segment segment) {

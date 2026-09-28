@@ -18,10 +18,11 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowStepResult;
-import org.jspecify.annotations.Nullable;
+import io.axoniq.framework.workflow.dsl.api.WorkflowState;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStepResult;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.eventhandling.conversion.EventConverter;
+import org.jspecify.annotations.Nullable;
 
 import java.time.Duration;
 import java.util.Objects;
@@ -38,6 +39,7 @@ public class WorkflowStepResults {
     private WorkflowStepResults() {
         // util class
     }
+
     /**
      * Constructs completed result.
      *
@@ -50,9 +52,8 @@ public class WorkflowStepResults {
     }
 
     /**
-     * Constructs a completed result that carries no payload — for primitives whose recorded value is read
-     * from {@link io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowState} rather than from the result
-     * handle (e.g. the migration primitive).
+     * Constructs a completed result that carries no payload — for primitives whose recorded value is read from
+     * {@link WorkflowState} rather than from the result handle (e.g. the migration primitive).
      *
      * @return completed step result.
      */

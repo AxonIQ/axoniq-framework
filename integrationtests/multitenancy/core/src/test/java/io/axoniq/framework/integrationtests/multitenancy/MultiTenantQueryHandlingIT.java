@@ -47,12 +47,14 @@ import org.axonframework.messaging.queryhandling.gateway.QueryGateway;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.extension.*;
+import org.junit.jupiter.params.Parameter;
 import org.junit.jupiter.params.ParameterizedClass;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import java.time.Duration;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
@@ -72,31 +74,32 @@ import static org.junit.jupiter.api.Assumptions.assumeFalse;
  * queries with a locally registered handler are served from the local segment, and once with it disabled, so every
  * query is dispatched through the multi-tenant connector. Tenant routing and isolation must hold in both setups.
  *
+ * The application and its tenant contexts are built once per parameterization rather than per test, to avoid paying
+ * for a full application startup and context round-trip per test method.
+ *
  * @author Jan Galinski
  * @author Jakob Hatzl
  */
 @ParameterizedClass(name = "preferLocalQueryHandler = {0}")
 @ValueSource(booleans = {false, true})
 @ExtendWith(DisableMultiTenancyTestsWithoutLicense.class)
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class MultiTenantQueryHandlingIT {
 
     private static final AxonServerTestInfrastructure INFRASTRUCTURE = new AxonServerTestInfrastructure();
     private static final String TENANT_A = "tenant-A";
     private static final String TENANT_B = "tenant-B";
 
-    private final boolean preferLocalQueryHandler;
+    @Parameter
+    private boolean preferLocalQueryHandler;
 
     private AxonServerTestInfrastructure.ContextManager contextManager;
     private AxonConfiguration application;
     private final Map<String, QueryUpdateEmitter> capturedEmitters = new ConcurrentHashMap<>();
     private TenantProvider tenantDescriptors;
 
-    MultiTenantQueryHandlingIT(boolean preferLocalQueryHandler) {
-        this.preferLocalQueryHandler = preferLocalQueryHandler;
-    }
-
-    @BeforeEach
-    void setUp() {
+    @BeforeAll
+    void setUpClass() {
         INFRASTRUCTURE.start();
         contextManager = INFRASTRUCTURE.getContextManager();
         contextManager.createContext(TENANT_A);
@@ -136,12 +139,16 @@ class MultiTenantQueryHandlingIT {
         tenantDescriptors = application.getComponent(TenantProvider.class);
     }
 
-    @AfterEach
-    void tearDown() {
+    @AfterAll
+    void tearDownClass() {
         application.shutdown();
         contextManager.deleteAllCustomContexts();
-        capturedEmitters.clear();
         INFRASTRUCTURE.stop();
+    }
+
+    @BeforeEach
+    void setUp() {
+        capturedEmitters.clear();
     }
 
     @Test
@@ -156,7 +163,9 @@ class MultiTenantQueryHandlingIT {
 
     @Test
     void querySentViaDynamicallyAddedTenant() {
-        String dynamicTenant = "tenant-D";
+        // Unique per run: this class runs twice (once per preferLocalQueryHandler value) against the one
+        // shared Axon Server container, so a fixed name would race the other invocation's own creation/teardown.
+        String dynamicTenant = "tenant-D-" + UUID.randomUUID();
         QueryGateway queryGateway = application.getComponent(QueryGateway.class);
 
         assertThat(queryTenant(queryGateway, new RecordTenantQuery("for-tenant-a"), TENANT_A))

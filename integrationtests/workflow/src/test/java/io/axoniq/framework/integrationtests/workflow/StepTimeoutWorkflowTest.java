@@ -18,21 +18,20 @@
  */
 package io.axoniq.framework.integrationtests.workflow;
 
-import org.jspecify.annotations.Nullable;
-
 import io.axoniq.framework.workflow.configuration.WorkflowConfigurer;
 import io.axoniq.framework.workflow.configuration.WorkflowModule.WorkflowDefinitionPhase.DetectionPhase;
 import io.axoniq.framework.workflow.configuration.WorkflowModule.WorkflowDefinitionPhase.FinalizedPhase;
+import io.axoniq.framework.workflow.dsl.api.StepStatus;
+import io.axoniq.framework.workflow.dsl.api.StepTimedOutException;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStepResult;
+import io.axoniq.framework.workflow.dsl.api.retry.RetryContext;
+import io.axoniq.framework.workflow.dsl.api.retry.RetryPolicy;
 import io.axoniq.framework.workflow.dsl.base.BaseWorkflowContext;
 import io.axoniq.framework.workflow.dsl.base.BaseWorkflowContextFactory;
-import io.axoniq.framework.workflow.runtime.api.annotation.Workflow;
-import io.axoniq.framework.workflow.runtime.api.execution.context.retry.RetryContext;
-import io.axoniq.framework.workflow.runtime.api.execution.context.retry.RetryPolicy;
-import io.axoniq.framework.workflow.runtime.api.execution.state.StepTimedOutException;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowStepResult;
-import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
+import io.axoniq.framework.workflow.annotation.Workflow;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.annotation.Event;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -150,12 +149,10 @@ class StepTimeoutWorkflowTest extends AbstractWorkflowIntegrationTestBase<BaseWo
 
     public static class StepTimeoutWorkflow {
 
-        private static final Logger logger = LoggerFactory.getLogger(StepTimeoutWorkflow.class);
-
         static final Duration STEP_TIMEOUT = Duration.ofMillis(200);
         static final long STEP_SLEEP_MILLIS = 1500L;
         static final int MAX_RETRIES = 5;
-
+        private static final Logger logger = LoggerFactory.getLogger(StepTimeoutWorkflow.class);
         private final AtomicInteger attempts = new AtomicInteger(0);
         private final List<RetryContext> retryContexts = new CopyOnWriteArrayList<>();
         private volatile WorkflowStepResult stepResult;
@@ -205,7 +202,8 @@ class StepTimeoutWorkflowTest extends AbstractWorkflowIntegrationTestBase<BaseWo
             logger.info("StepTimeoutWorkflow completed");
         }
 
-        private Map<String, @Nullable Object> slowAction(ProcessingContext context, Map<String, @Nullable Object> payload) {
+        private Map<String, @Nullable Object> slowAction(ProcessingContext context,
+                                                         Map<String, @Nullable Object> payload) {
             int attempt = attempts.incrementAndGet();
             long started = System.currentTimeMillis();
             double random = Math.random();

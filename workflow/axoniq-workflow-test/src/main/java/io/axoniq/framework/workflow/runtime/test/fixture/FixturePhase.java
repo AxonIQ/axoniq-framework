@@ -20,7 +20,7 @@ package io.axoniq.framework.workflow.runtime.test.fixture;
 
 import io.axoniq.framework.workflow.history.api.WorkflowHistory;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
-import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
 import org.axonframework.common.annotation.Internal;
 
 import java.util.Objects;

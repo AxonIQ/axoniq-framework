@@ -4,7 +4,7 @@
 
 === Schema
 
-The `PostgresqlEventStorageEngine` creates the necessary schema automatically on startup if it does not yet exist.
+By default, the `PostgresqlEventStorageEngine` checks whether its schema is complete on startup, and creates or repairs whatever is missing.
 For production deployments, managing the schema through a migration tool such as Flyway or Liquibase gives you full control over schema changes across versions.
 
 The complete DDL is as follows:
@@ -59,6 +59,27 @@ The `consistency_tags` table is a bounded conflict-detection structure used when
 ====
 Table and sequence names cannot be configured.
 All tables and sequences use the fixed names shown above.
+====
+
+=== Controlling schema initialization
+
+The engine's schema handling is controlled by a `SchemaInitialization` value, passed as an optional constructor argument (or, in Spring Boot, through the `axon.postgresql.schema-initialization` property):
+
+* `CREATE_IF_MISSING` (the default)—creates or repairs any missing tables, indices, or migrations.
+* `VALIDATE`—checks that the schema is complete and fails startup with an exception if it is not, without creating or changing anything.
+* `SKIP`—skips the check entirely, trusting that the schema is already complete and correct. This option is not recommended: see the warning below.
+
+[source,java]
+----
+new PostgresqlEventStorageEngine(dataSource, converter, SchemaInitialization.VALIDATE)
+----
+
+[WARNING]
+.Writing to an incomplete schema can corrupt data
+====
+Appending events against a schema that is missing part of an internal migration can silently produce corrupted or incomplete data that is hard to recover from.
+`SKIP` is not recommended: because it performs no check at all, this failure mode is silent even when it is the schema, not the deployment process, that is actually out of date.
+Prefer `VALIDATE` when the schema is managed independently (for example through Flyway or Liquibase)—it gives the same fast, lock-free startup without that blind spot, since an incomplete schema still fails startup with a clear exception instead of corrupting data later.
 ====
 
 === Connection pool sizing

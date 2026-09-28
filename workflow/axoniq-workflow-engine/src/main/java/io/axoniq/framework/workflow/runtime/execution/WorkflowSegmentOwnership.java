@@ -18,11 +18,9 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
-import org.jspecify.annotations.Nullable;
 import org.axonframework.common.StringUtils;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
-
-import java.util.Objects;
+import org.jspecify.annotations.Nullable;
 
 /**
  * The ownership rule partitioning workflow instances over the segments of a streaming event processor: a segment owns

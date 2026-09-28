@@ -33,6 +33,10 @@ trap 'rm -f "$FINGERPRINT_TMP" "$MODULE_DIRS_TMP"' EXIT
 # like _multitenancy_poc that happen to contain their own pom.xml files.
 find . -name "$LIST_FILE" -exec dirname {} \; > "$MODULE_DIRS_TMP"
 
+# The trailing "|| true": grep exits non-zero when zero lines match, which is the expected
+# outcome whenever this reactor has no external SNAPSHOT dependencies at all (e.g. axon-framework
+# pinned to a release) -- under pipefail that would otherwise abort the script before it reaches
+# the graceful empty-result handling below.
 find . -name "$LIST_FILE" -exec cat {} + \
   | sed -E 's/ -- module.*$//' \
   | grep -E ':[0-9][^:]*-SNAPSHOT:(compile|test|runtime|provided|system):' \
@@ -45,7 +49,7 @@ find . -name "$LIST_FILE" -exec cat {} + \
       base=$(basename "$artifact_path")
       hash=$(cd "$dir" && sha256sum -- "$base" | cut -d' ' -f1)
       echo "$base $hash"
-    done | sort > "$FINGERPRINT_TMP"
+    done | sort > "$FINGERPRINT_TMP" || true
 
 find . -name "$LIST_FILE" -delete
 

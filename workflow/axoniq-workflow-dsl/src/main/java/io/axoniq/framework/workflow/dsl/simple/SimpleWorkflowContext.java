@@ -22,15 +22,15 @@ import org.jspecify.annotations.Nullable;
 
 import io.axoniq.framework.workflow.dsl.api.Payload;
 import io.axoniq.framework.workflow.dsl.base.BaseWorkflowContext;
-import io.axoniq.framework.workflow.runtime.api.execution.context.EventConditions;
-import io.axoniq.framework.workflow.runtime.api.execution.context.ExecuteStepDefinition;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WaitForStepDefinition;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowCancelledException;
+import io.axoniq.framework.workflow.dsl.api.EventConditions;
+import io.axoniq.framework.workflow.dsl.api.ExecuteStepDefinition;
+import io.axoniq.framework.workflow.dsl.api.WaitForStepDefinition;
+import io.axoniq.framework.workflow.dsl.api.WorkflowCancelledException;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowConfiguration;
-import io.axoniq.framework.workflow.runtime.api.execution.state.StepCancellationException;
-import io.axoniq.framework.workflow.runtime.api.execution.state.StepTimedOutException;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowStepResult;
-import io.axoniq.framework.workflow.runtime.api.payload.PayloadProcessor;
+import io.axoniq.framework.workflow.dsl.api.StepCancellationException;
+import io.axoniq.framework.workflow.dsl.api.StepTimedOutException;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStepResult;
+import io.axoniq.framework.workflow.dsl.api.PayloadProcessor;
 import io.axoniq.framework.workflow.runtime.association.Associations;
 import org.axonframework.messaging.core.MessageTypeResolver;
 import org.axonframework.messaging.core.Metadata;
@@ -241,7 +241,7 @@ public class SimpleWorkflowContext extends BaseWorkflowContext {
         awaitModifyPayload(
                 stepName,
                 workflowPayload -> Payload.payload(workflowPayload)
-                                          .with(Payload.payload(this, value))
+                                          .with(Payload.payload(processingContext(), value))
                                           .getValues()
         );
     }

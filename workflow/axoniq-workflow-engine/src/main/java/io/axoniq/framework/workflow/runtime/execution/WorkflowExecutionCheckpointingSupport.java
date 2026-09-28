@@ -97,8 +97,7 @@ import static java.util.Objects.requireNonNull;
  * @author Steven van Beelen
  * @since 5.4.0
  */
-@Internal
-final class WorkflowExecutionCheckpointingSupport {
+@Internal final class WorkflowExecutionCheckpointingSupport {
 
     private static final Runnable NO_OP = () -> {
     };

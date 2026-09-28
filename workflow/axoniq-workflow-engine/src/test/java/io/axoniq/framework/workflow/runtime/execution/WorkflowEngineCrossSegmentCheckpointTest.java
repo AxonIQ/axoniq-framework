@@ -21,11 +21,10 @@ package io.axoniq.framework.workflow.runtime.execution;
 import io.axoniq.framework.messaging.eventstreaming.checkpoint.CheckpointTrigger;
 import io.axoniq.framework.messaging.eventstreaming.checkpoint.Checkpointing;
 import io.axoniq.framework.messaging.eventstreaming.checkpoint.CheckpointingProgressStrategy;
+import io.axoniq.framework.workflow.dsl.api.WorkflowState;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowState;
-import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowConfigurationRegistry.PredicatedWorkflowConfiguration;
-import org.jspecify.annotations.Nullable;
 import org.axonframework.common.TypeReference;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.Metadata;
@@ -38,6 +37,7 @@ import org.axonframework.messaging.eventhandling.processing.streaming.progress.S
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.store.inmemory.InMemoryTokenStore;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.params.*;
 import org.junit.jupiter.params.provider.*;
@@ -94,14 +94,36 @@ class WorkflowEngineCrossSegmentCheckpointTest {
     private static final long SLOW_SEGMENT_HANDLED_POSITION = 5;
     private static final long SLOW_SEGMENT_UNHANDLED_POSITION = 42;
     private static final long FAST_SEGMENT_HANDLED_POSITION = 100;
-
+    private final AtomicReference<Consumer<WorkflowExecution>> stragglerTermination = new AtomicReference<>();
     private InMemoryTokenStore tokenStore;
     private WorkflowConfigurationRegistry<?> configurationRegistry;
     private WorkflowExecutionRepository repository;
     private WorkflowEngine workflowEngine;
     private WorkflowEngineCheckpointingSupport checkpointingSupport;
 
-    private final AtomicReference<Consumer<WorkflowExecution>> stragglerTermination = new AtomicReference<>();
+    private static EventMessage startEvent() {
+        var eventMessage = mock(EventMessage.class);
+        when(eventMessage.metadata()).thenReturn(Metadata.emptyInstance());
+        when(eventMessage.type()).thenReturn(new MessageType(START_EVENT));
+        when(eventMessage.payloadAs(any(TypeReference.class))).thenReturn(Map.of("id", STRAGGLER_ID));
+        return eventMessage;
+    }
+
+    private static EventMessage engineEvent(String workflowId) {
+        var eventMessage = mock(EventMessage.class);
+        when(eventMessage.metadata()).thenReturn(Metadata.with("workflowId", workflowId));
+        when(eventMessage.type()).thenReturn(new MessageType("SomeStepCompleted"));
+        return eventMessage;
+    }
+
+    private static String anotherIdOn(Segment segment, String otherThan) {
+        return IntStream.range(1, 512)
+                        .mapToObj(i -> "sharded-" + i)
+                        .filter(candidate -> !candidate.equals(otherThan))
+                        .filter(candidate -> WorkflowSegmentOwnership.ownedBy(segment, candidate))
+                        .findFirst()
+                        .orElseThrow();
+    }
 
     @BeforeEach
     void setUp() {
@@ -239,6 +261,42 @@ class WorkflowEngineCrossSegmentCheckpointTest {
         verifyNoInteractions(releasedTrigger);
     }
 
+    private ProcessingContext processingContext(Segment segment, @Nullable TrackingToken trackingToken) {
+        var context = new StubProcessingContext();
+        context.putResource(Segment.RESOURCE_KEY, segment);
+        if (trackingToken != null) {
+            context.putResource(TrackingToken.RESOURCE_KEY, trackingToken);
+        }
+        return context;
+    }
+
+    /**
+     * Registers a workflow definition that starts {@link #STRAGGLER_ID} from {@link #START_EVENT} and captures the
+     * termination handler the engine installs, so the test can complete the workflow body asynchronously, after the
+     * segment that handled its start event has moved on.
+     */
+    private WorkflowExecution registerStartConfiguration() {
+        var state = mock(WorkflowState.class);
+        when(state.workflowStatus()).thenReturn(WorkflowStatus.COMPLETED);
+
+        var execution = WorkflowExecutionFixture.mockExecution(STRAGGLER_ID, state, false);
+        doAnswer(invocation -> {
+            stragglerTermination.set(invocation.getArgument(0));
+            return CompletableFuture.completedFuture(null);
+        }).when(execution).execute(any());
+
+        var configuration = WorkflowExecutionFixture.mockConfiguration(STRAGGLER_ID, execution);
+        when(configuration.workflowIdProvider()).thenReturn(event -> STRAGGLER_ID);
+        when(configuration.workflowVersion()).thenReturn("1.0.0");
+        when(configurationRegistry.getHighestVersionConfigurations(new MessageType(START_EVENT)))
+                .thenReturn(List.of(new PredicatedWorkflowConfiguration((e, pc) -> true, configuration)));
+        return execution;
+    }
+
+    private TrackingToken storedToken(Segment segment) {
+        return tokenStore.fetchToken(PROCESSOR, segment.getSegmentId(), null).join();
+    }
+
     /**
      * Stand-in for one segment's work package: owns the real framework {@link CheckpointingProgressStrategy} and the
      * segment's stored token, exactly as {@code WorkPackage} does.
@@ -312,65 +370,5 @@ class WorkflowEngineCrossSegmentCheckpointTest {
             strategy.contributeBatchResources(context);
             return context;
         }
-    }
-
-    private ProcessingContext processingContext(Segment segment, @Nullable TrackingToken trackingToken) {
-        var context = new StubProcessingContext();
-        context.putResource(Segment.RESOURCE_KEY, segment);
-        if (trackingToken != null) {
-            context.putResource(TrackingToken.RESOURCE_KEY, trackingToken);
-        }
-        return context;
-    }
-
-    /**
-     * Registers a workflow definition that starts {@link #STRAGGLER_ID} from {@link #START_EVENT} and captures the
-     * termination handler the engine installs, so the test can complete the workflow body asynchronously, after the
-     * segment that handled its start event has moved on.
-     */
-    private WorkflowExecution registerStartConfiguration() {
-        var state = mock(WorkflowState.class);
-        when(state.workflowStatus()).thenReturn(WorkflowStatus.COMPLETED);
-
-        var execution = WorkflowExecutionFixture.mockExecution(STRAGGLER_ID, state, false);
-        doAnswer(invocation -> {
-            stragglerTermination.set(invocation.getArgument(0));
-            return CompletableFuture.completedFuture(null);
-        }).when(execution).execute(any());
-
-        var configuration = WorkflowExecutionFixture.mockConfiguration(STRAGGLER_ID, execution);
-        when(configuration.workflowIdProvider()).thenReturn(event -> STRAGGLER_ID);
-        when(configuration.workflowVersion()).thenReturn("1.0.0");
-        when(configurationRegistry.getHighestVersionConfigurations(new MessageType(START_EVENT)))
-                .thenReturn(List.of(new PredicatedWorkflowConfiguration((e, pc) -> true, configuration)));
-        return execution;
-    }
-
-    private static EventMessage startEvent() {
-        var eventMessage = mock(EventMessage.class);
-        when(eventMessage.metadata()).thenReturn(Metadata.emptyInstance());
-        when(eventMessage.type()).thenReturn(new MessageType(START_EVENT));
-        when(eventMessage.payloadAs(any(TypeReference.class))).thenReturn(Map.of("id", STRAGGLER_ID));
-        return eventMessage;
-    }
-
-    private static EventMessage engineEvent(String workflowId) {
-        var eventMessage = mock(EventMessage.class);
-        when(eventMessage.metadata()).thenReturn(Metadata.with("workflowId", workflowId));
-        when(eventMessage.type()).thenReturn(new MessageType("SomeStepCompleted"));
-        return eventMessage;
-    }
-
-    private TrackingToken storedToken(Segment segment) {
-        return tokenStore.fetchToken(PROCESSOR, segment.getSegmentId(), null).join();
-    }
-
-    private static String anotherIdOn(Segment segment, String otherThan) {
-        return IntStream.range(1, 512)
-                        .mapToObj(i -> "sharded-" + i)
-                        .filter(candidate -> !candidate.equals(otherThan))
-                        .filter(candidate -> WorkflowSegmentOwnership.ownedBy(segment, candidate))
-                        .findFirst()
-                        .orElseThrow();
     }
 }

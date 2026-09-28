@@ -17,8 +17,9 @@
  *  https://www.axoniq.io/pricing
  */
 /**
- * In-memory {@link io.axoniq.framework.workflow.history.api.WorkflowHistoryRepository} implementation and the event handler that
- * projects workflow events into it.
+ * In-memory {@link io.axoniq.framework.workflow.history.api.WorkflowHistoryRepository} implementation and the event
+ * handler that projects workflow events into it.
+ *
  * @since 5.4.0
  */
 @NullMarked
