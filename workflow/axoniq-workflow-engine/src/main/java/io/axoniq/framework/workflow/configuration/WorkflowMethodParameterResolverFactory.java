@@ -18,10 +18,11 @@
  */
 package io.axoniq.framework.workflow.configuration;
 
-import io.axoniq.framework.workflow.runtime.api.annotation.Workflow;
-import io.axoniq.framework.workflow.runtime.api.annotation.WorkflowStatusChangedHandler;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
-import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
+import io.axoniq.framework.workflow.annotation.Workflow;
+import io.axoniq.framework.workflow.annotation.WorkflowStatusChangedHandler;
+import io.axoniq.framework.workflow.dsl.api.WorkflowContext;
+import io.axoniq.framework.workflow.dsl.api.WorkflowState;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
 import org.axonframework.common.annotation.AnnotationUtils;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.Context;
@@ -35,9 +36,10 @@ import java.lang.reflect.Parameter;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * Parameter resolver factory serving both {@link io.axoniq.framework.workflow.runtime.api.annotation.Workflow} body
- * methods and {@link io.axoniq.framework.workflow.runtime.api.annotation.WorkflowStatusChangedHandler} lifecycle
- * methods.
+ * Parameter resolver factory serving both {@link io.axoniq.framework.workflow.annotation.Workflow} body methods and
+ * {@link io.axoniq.framework.workflow.annotation.WorkflowStatusChangedHandler} lifecycle methods, resolving
+ * {@link WorkflowContext}, {@link WorkflowStatus}, {@link WorkflowState}, and any type wrapping a
+ * {@link WorkflowContext}.
  *
  * @author Steven van Beelen
  * @since 5.4.0
@@ -57,6 +59,8 @@ public class WorkflowMethodParameterResolverFactory implements ParameterResolver
     public static final Context.ResourceKey<WorkflowStatus> WORKFLOW_STATUS_RESOURCE_KEY =
             Context.ResourceKey.withLabel("workflowStatus");
 
+    private static final WorkflowStateParameterResolver STATE_PARAMETER_RESOLVER = new WorkflowStateParameterResolver();
+
     @Nullable
     @Override
     public ParameterResolver<?> createInstance(Executable executable, Parameter[] parameters, int parameterIndex) {
@@ -72,6 +76,9 @@ public class WorkflowMethodParameterResolverFactory implements ParameterResolver
         }
         if (AutoDetectionUtils.isWorkflowContextWrapper(parameterType)) {
             return new WorkflowContextWrapperParameterResolver(parameterType);
+        }
+        if (WorkflowState.class.isAssignableFrom(parameterType)) {
+            return STATE_PARAMETER_RESOLVER;
         }
         return null;
     }
