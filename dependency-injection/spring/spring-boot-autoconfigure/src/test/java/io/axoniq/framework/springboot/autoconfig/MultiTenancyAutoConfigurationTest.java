@@ -47,6 +47,7 @@ import org.springframework.context.annotation.Configuration;
 
 import java.util.stream.Stream;
 
+import static io.axoniq.framework.messaging.multitenancy.configuration.StaticTenantConnectPredicate.TENANTS_PROPERTY;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -179,7 +180,7 @@ class MultiTenancyAutoConfigurationTest {
         void currentPropertyTakesPrecedenceOverLegacyProperty() {
             // given both property names with different tenant sets
             contextRunner.withPropertyValues(
-                                 "axoniq.multitenancy.tenants=current-tenant",
+                                 TENANTS_PROPERTY + "=current-tenant",
                                  LEGACY_TENANTS_PROPERTY + "=legacy-tenant")
                          // when the context starts
                          .run(context -> {
