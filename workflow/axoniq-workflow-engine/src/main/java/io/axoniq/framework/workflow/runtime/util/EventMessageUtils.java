@@ -26,7 +26,9 @@ import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.api.execution.context.Version;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowEventPublicationContext;
 import io.axoniq.framework.workflow.runtime.execution.payload.CombineGlobalAndLocalPayloadReducer;
+import org.axonframework.common.ClockUtils;
 import org.axonframework.common.annotation.Internal;
+import org.axonframework.messaging.core.GenericMessage;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.Metadata;
 import org.axonframework.messaging.core.VersionedType;
@@ -37,6 +39,7 @@ import org.jspecify.annotations.Nullable;
 
 import java.time.Instant;
 import java.util.Map;
+import java.time.Clock;
 import java.util.function.Predicate;
 
 import static io.axoniq.framework.workflow.runtime.util.MetadataUtils.METADATA_KEY_MODIFY_PAYLOAD;
@@ -68,8 +71,14 @@ public class EventMessageUtils {
                                              MessageType type,
                                              @Nullable Object payload,
                                              Metadata metadata) {
-        return new GenericEventMessage(type, payload, metadata)
-                .withConverter(workflowEventPublicationContext.processingContext().component(EventConverter.class));
+        // Timestamp from the engine's Clock component: step deadlines are compared with that clock, and a fixture
+        // advances it. Both are the system clock in production. Without the component (a bare processing context in
+        // a unit test) the framework's default clock applies.
+        var processingContext = workflowEventPublicationContext.processingContext();
+        var clock = processingContext.component(Clock.class);
+        var timestamp = clock != null ? clock : ClockUtils.get();
+        return new GenericEventMessage(new GenericMessage(type, payload, metadata), timestamp::instant)
+                .withConverter(processingContext.component(EventConverter.class));
     }
 
     /**
