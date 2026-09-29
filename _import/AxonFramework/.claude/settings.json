@@ -1,7 +1,0 @@
-{
-  "enabledPlugins": {
-    "jdtls-lsp@claude-plugins-official": true,
-    "axoniq-claude-plugin@axonframework": true,
-    "axonframework-contributor-tools@axonframework": true
-  }
-}

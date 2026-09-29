@@ -1,3 +1,0 @@
-# Local credentials for the optional AxonIQ Platform integration. Copy
-# .env.example to .env and fill in the values; never commit the result.
-.env
