@@ -106,7 +106,11 @@ public class WorkflowEngineCheckpointingSupport implements Checkpointing {
     @Override
     public CompletableFuture<TrackingToken> onSegmentReleased(Segment segment,
                                                               TrackingToken requested) {
-        return onCheckpointAdvanced(segment, requested)
+        var released = checkpointLatchCoordinator.holdsCheckpoint(segment)
+                ? CompletableFuture.<TrackingToken>failedFuture(new IllegalStateException(
+                        "Segment " + segment.getSegmentId() + " holds workflow work that is not durable yet"))
+                : onCheckpointAdvanced(segment, requested);
+        return released
                 // Only this segment's trigger dies with its claim; the segments still held keep checkpointing.
                 .whenComplete((ignored, cause) -> segmentIdToTrigger.remove(segment.getSegmentId()));
     }
@@ -140,7 +144,7 @@ public class WorkflowEngineCheckpointingSupport implements Checkpointing {
      * @param token   the token to request, ignored when {@code null}
      */
     void requestCheckpoint(@Nullable Segment segment, @Nullable TrackingToken token) {
-        if (segment == null || token == null) {
+        if (segment == null || token == null || checkpointLatchCoordinator.holdsCheckpoint(segment)) {
             return;
         }
         var trigger = segmentIdToTrigger.get(segment.getSegmentId());
@@ -163,6 +167,8 @@ public class WorkflowEngineCheckpointingSupport implements Checkpointing {
          * @return {@code true} when checkpoint advancement must wait, {@code false} otherwise
          */
         boolean hasUnsafeCheckpointWork(Segment segment);
+
+        boolean holdsCheckpoint(Segment segment);
 
         /**
          * Adds a checkpoint latch across the current set of {@link WorkflowExecution WorkflowExecutions} owned by the
