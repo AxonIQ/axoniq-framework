@@ -20,21 +20,26 @@ package io.axoniq.framework.workflow.runtime.api.execution.context;
 
 import io.axoniq.framework.workflow.dsl.api.WorkflowContext;
 import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 
 /**
- * Listener informed on status change of workflow.
+ * Functional interface describing a {@link WorkflowStatus} change listener, invoked on every status change.
  *
  * @author Simon Zambrovski
+ * @author Steven van Beelen
  * @since 5.4.0
  */
 @FunctionalInterface
 public interface WorkflowStatusChangeListener {
 
     /**
-     * React on workflow status change.
+     * Handler reacting on a {@link WorkflowStatus workflow status} change.
      *
-     * @param state           workflow status.
-     * @param workflowContext author-facing workflow context
+     * @param status            the workflow status change this handler reacts to
+     * @param context           the current workflow context
+     * @param processingContext context in which the status change is applied
      */
-    <C extends WorkflowContext> void onWorkflowStatus(WorkflowStatus state, C workflowContext);
+    void onWorkflowStatus(WorkflowStatus status,
+                          WorkflowContext context,
+                          ProcessingContext processingContext);
 }

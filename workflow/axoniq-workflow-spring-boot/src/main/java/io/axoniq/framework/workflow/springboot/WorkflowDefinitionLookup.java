@@ -51,17 +51,15 @@ public class WorkflowDefinitionLookup implements BeanDefinitionRegistryPostProce
             return;
         }
 
-        Map<Class<? extends WorkflowContext>, List<String>> workflowBeanDefinitions = workflowBeanDefinitions(
-                WorkflowContext.class,
-                beanFactory,
-                true);
+        Map<Class<? extends WorkflowContext>, List<String>> workflowBeanDefinitions =
+                workflowBeanDefinitions(beanFactory, true);
 
         if (workflowBeanDefinitions.isEmpty()) {
             return; // don't register an empty configurer; wait until workflows are visible
         }
 
-        Map<Class<? extends WorkflowContext>, String> factoryBeanDefinitions = workflowContextFactoryBeans(beanFactory,
-                                                                                                           false);
+        Map<Class<? extends WorkflowContext>, String> factoryBeanDefinitions =
+                workflowContextFactoryBeans(beanFactory, false);
 
         String configurerBeanName = "WorkflowModuleConfigurer$$Axon$$WorkflowDefinition";
         AbstractBeanDefinition beanDefinition =

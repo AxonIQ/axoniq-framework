@@ -41,9 +41,11 @@ public class DeadLetterProcessor {
 
     // tag::process-matching[]
     public void retryErrorEventSequence(String processorName, String componentName) {
+        // the event processor's module is registered under `EventProcessor[" + processorName + "]`
+        var eventProcessorModule = "EventProcessor[" + processorName + "]";
         // dead letter processor names follow the pattern `EventHandlingComponent[" + processorName + "][" + componentName + "]`
         var dlqEhc = "EventHandlingComponent[" + processorName + "][" + componentName + "]";
-        configuration.getModuleConfiguration(processorName)
+        configuration.getModuleConfiguration(eventProcessorModule)
                 .flatMap(m -> m.getOptionalComponent(SequencedDeadLetterProcessor.class, dlqEhc))
                 .ifPresent(dlp ->
                         dlp.process(letter -> ((DeadLetter<? extends EventMessage>) letter).message()

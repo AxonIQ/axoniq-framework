@@ -40,7 +40,9 @@ import org.axonframework.messaging.eventhandling.processing.EventProcessor;
 import org.axonframework.messaging.eventhandling.processing.subscribing.SubscribingEventProcessor;
 import org.axonframework.messaging.eventhandling.processing.subscribing.SubscribingEventProcessorConfiguration;
 import org.junit.jupiter.api.*;
+import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
+import org.springframework.boot.test.context.FilteredClassLoader;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.EnableMBeanExport;
@@ -65,6 +67,25 @@ class PersistentStreamAutoConfigurationTest {
         testContext = new ApplicationContextRunner()
                 .withUserConfiguration(TestContext.class)
                 .withPropertyValues("axon.axonserver.enabled=false", "axon.postgresql.enabled=false");
+    }
+
+    @Nested
+    class WithoutAxonServerConnector {
+
+        @Test
+        void startsWithoutPersistentStreamBeans() {
+            // given an application without the Axon Server connector on its classpath
+            ApplicationContextRunner withoutConnector =
+                    new ApplicationContextRunner()
+                            .withConfiguration(AutoConfigurations.of(PersistentStreamAutoConfiguration.class))
+                            .withClassLoader(new FilteredClassLoader("io.axoniq.framework.axonserver.connector"));
+
+            // when / then
+            withoutConnector.run(context -> assertThat(context)
+                    .hasNotFailed()
+                    .doesNotHaveBean("persistentStreamScheduledExecutorBuilder")
+                    .doesNotHaveBean("persistentStreamEventSourceFactory"));
+        }
     }
 
     @Nested

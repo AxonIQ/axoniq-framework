@@ -20,58 +20,43 @@
 package io.axoniq.framework.integrationtests.springcloud;
 
 import io.axoniq.framework.integrationtests.springcloud.SpringCloudNodes.CreateCourse;
-import io.axoniq.framework.integrationtests.springcloud.SpringCloudNodes.FindCourses;
 import io.axoniq.framework.springcloud.SpringCloudMemberRegistry;
 import io.axoniq.framework.springcloud.discovery.MemberCapabilitiesPayload;
 import io.axoniq.framework.springcloud.discovery.RestCapabilityDiscoveryMode;
 import io.axoniq.framework.springcloud.routing.Member;
-import org.awaitility.Awaitility;
 import org.axonframework.messaging.commandhandling.gateway.CommandGateway;
-import org.axonframework.messaging.core.MessageType;
-import org.axonframework.messaging.core.QualifiedName;
-import org.axonframework.messaging.queryhandling.GenericSubscriptionQueryUpdateMessage;
-import org.axonframework.messaging.queryhandling.QueryBus;
-import org.axonframework.messaging.queryhandling.gateway.QueryGateway;
 import org.junit.jupiter.api.*;
+import org.awaitility.Awaitility;
 import org.springframework.boot.WebApplicationType;
 import org.springframework.boot.builder.SpringApplicationBuilder;
-import org.springframework.cloud.client.discovery.event.HeartbeatEvent;
 import org.springframework.context.ConfigurableApplicationContext;
+import org.springframework.cloud.client.discovery.event.HeartbeatEvent;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.client.RestClient;
 
 import java.io.IOException;
-import java.net.ServerSocket;
 import java.time.Duration;
+import java.net.ServerSocket;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
 import java.util.stream.IntStream;
-
-import reactor.core.Disposable;
-import reactor.core.publisher.Flux;
+import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.awaitility.Awaitility.await;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * A two-node test of the Spring Cloud connector, distributing commands and queries over HTTP between two Spring Boot
- * applications in one JVM.
+ * A two-node test of the Spring Cloud connector, distributing commands over HTTP between two Spring Boot applications
+ * in one JVM.
  * <p>
- * Both nodes handle the same command, so where a command is handled is decided by the routing ring alone. Only one
- * node handles the query, so a query dispatched from the other has to travel over its response stream to be answered
- * at all. Each node's handler answers with its own name, which is how the test observes routing without reaching
- * into either node.
+ * Both nodes handle the same command, so where a command is handled is decided by the routing ring alone. Each node's
+ * handler answers with its own name, which is how the test observes routing without reaching into either node.
  *
  * @author Allard Buijze
  */
-class SpringCloudMessageDistributionIT {
+class SpringCloudCommandDistributionIT {
 
     private static final String NODE_A = "node-a";
     private static final String NODE_B = "node-b";
@@ -111,13 +96,6 @@ class SpringCloudMessageDistributionIT {
                 .properties("server.port=" + port,
                             "test.node.name=" + nodeName,
                             "test.cluster.ports=" + portA + "," + portB,
-                            // Only one node answers queries, so a query dispatched from the other has to cross the
-                            // wire to be answered at all.
-                            "test.node.handles-queries=" + NODE_B.equals(nodeName),
-                            // Distributing through Spring Cloud and through Axon Server are alternatives, and this
-                            // module carries the Axon Server connector on its classpath, so it is switched off here.
-                            // A real Spring Cloud deployment would not have it at all.
-                            "axon.axonserver.enabled=false",
                             "axon.multitenancy.enabled=false",
                             "spring.main.banner-mode=off",
                             "logging.level.root=WARN")
@@ -190,7 +168,7 @@ class SpringCloudMessageDistributionIT {
 
             // when — the same routing key, dispatched repeatedly
             Set<String> handlers = IntStream.range(0, 20)
-                                            .mapToObj(i -> gateway.<String>sendAndWait(
+                                            .mapToObj(i -> gateway.sendAndWait(
                                                     new CreateCourse("course-7", "Axon 5"), String.class
                                             ))
                                             .collect(Collectors.toSet());
@@ -264,21 +242,12 @@ class SpringCloudMessageDistributionIT {
         }
 
         @Test
-        void reportsTheQueriesTheNodeHandles() {
+        void reportsAnEmptyQuerySet() {
             // when
             MemberCapabilitiesPayload payload = capabilitiesOf(portB).getBody();
 
-            // then — this is how the other node learns where to send a query
-            assertThat(payload).isNotNull();
-            assertThat(payload.queries()).contains(new QualifiedName(FindCourses.class).toString());
-        }
-
-        @Test
-        void reportsNoQueriesForANodeHandlingNone() {
-            // when
-            MemberCapabilitiesPayload payload = capabilitiesOf(portA).getBody();
-
-            // then a node advertising a query it cannot answer would draw queries it has to reject
+            // then — the field is served from the first release so the endpoint shape does not change when
+            // query distribution arrives
             assertThat(payload).isNotNull();
             assertThat(payload.queries()).isEmpty();
         }
@@ -311,102 +280,6 @@ class SpringCloudMessageDistributionIT {
 
         private String capabilitiesUri(int port) {
             return "http://localhost:" + port + RestCapabilityDiscoveryMode.DEFAULT_CAPABILITIES_ENDPOINT;
-        }
-    }
-
-    @Nested
-    class DistributingQueries {
-
-        @Test
-        void carriesEveryResponseMessageOfTheStreamAcrossTheWire() {
-            // given a query only the other node handles, whose handler answers with three response messages
-            converge();
-
-            // when dispatched from the node that does not handle it
-            List<String> courses = queryGatewayOf(nodeA)
-                    .queryMany(new FindCourses("axon"), String.class)
-                    .orTimeout(20, TimeUnit.SECONDS)
-                    .join();
-
-            // then all three arrived separately, in the order the handler produced them -- three responses merged
-            // into one on the wire would arrive here as a single answer
-            assertThat(courses).containsExactly("course-1@" + NODE_B, "course-2@" + NODE_B, "course-3@" + NODE_B);
-        }
-
-        @Test
-        void answersRepeatedQueriesConsistently() {
-            // given
-            converge();
-
-            // when the same query is dispatched several times, each opening its own response stream
-            List<List<String>> answers = IntStream.range(0, 5)
-                                                  .mapToObj(i -> queryGatewayOf(nodeA)
-                                                          .queryMany(new FindCourses("axon"), String.class)
-                                                          .orTimeout(20, TimeUnit.SECONDS)
-                                                          .join())
-                                                  .toList();
-
-            // then a stream that ended did not leave the next one short
-            assertThat(answers).allSatisfy(answer -> assertThat(answer)
-                    .containsExactly("course-1@" + NODE_B, "course-2@" + NODE_B, "course-3@" + NODE_B));
-        }
-
-        @Test
-        void answersLocallyOnTheNodeHandlingTheQuery() {
-            // given
-            converge();
-
-            // when dispatched from the node that handles it, so that no wire is involved
-            List<String> courses = queryGatewayOf(nodeB)
-                    .queryMany(new FindCourses("axon"), String.class)
-                    .orTimeout(20, TimeUnit.SECONDS)
-                    .join();
-
-            // then the same three responses arrive, so a local answer is not a different answer
-            assertThat(courses).containsExactly("course-1@" + NODE_B, "course-2@" + NODE_B, "course-3@" + NODE_B);
-        }
-
-        @Test
-        void answersASubscriptionQueryWithItsInitialResultAndThenTheUpdates() {
-            // given a subscription opened from the node that does not handle the query
-            converge();
-            Flux<String> answers = Flux.from(queryGatewayOf(nodeA)
-                                                     .subscriptionQuery(new FindCourses("axon"), String.class));
-            List<String> received = new CopyOnWriteArrayList<>();
-            Disposable subscription = answers.subscribe(received::add);
-
-            try {
-                // when the initial result has arrived and the handling node emits an update
-                await().atMost(Duration.ofSeconds(20)).until(() -> received.size() == 3);
-                emitUpdateOn(nodeB, "course-4@" + NODE_B);
-
-                // then it crosses the wire onto the same stream the initial result arrived on
-                await().atMost(Duration.ofSeconds(20)).until(() -> received.size() == 4);
-                assertThat(received).containsExactly("course-1@" + NODE_B,
-                                                     "course-2@" + NODE_B,
-                                                     "course-3@" + NODE_B,
-                                                     "course-4@" + NODE_B);
-            } finally {
-                subscription.dispose();
-            }
-        }
-
-        /**
-         * Emits an update for every open {@link FindCourses} subscription, on the given {@code node}.
-         */
-        private void emitUpdateOn(ConfigurableApplicationContext node, String course) {
-            node.getBean(QueryBus.class)
-                .emitUpdate(query -> SpringCloudNodes.FIND_COURSES.equals(query.type().qualifiedName()),
-                            () -> new GenericSubscriptionQueryUpdateMessage(
-                                    new MessageType(String.class), course
-                            ),
-                            null)
-                .orTimeout(20, TimeUnit.SECONDS)
-                .join();
-        }
-
-        private QueryGateway queryGatewayOf(ConfigurableApplicationContext node) {
-            return node.getBean(QueryGateway.class);
         }
     }
 }
