@@ -21,12 +21,15 @@ package io.axoniq.framework.workflow.springboot;
 import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContextFactory;
 import io.axoniq.framework.workflow.annotation.Workflow;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowConfiguration;
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowDefinition;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowConfigurationRegistry;
+import io.axoniq.framework.workflow.runtime.util.DefaultTimeoutFutureResolver;
+import io.axoniq.framework.workflow.runtime.util.FutureResolver;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
 import org.axonframework.eventsourcing.eventstore.inmemory.InMemoryEventStorageEngine;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
+import org.axonframework.messaging.core.unitofwork.StubProcessingContext;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.store.TokenStore;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.store.inmemory.InMemoryTokenStore;
@@ -39,8 +42,9 @@ import org.springframework.context.annotation.EnableMBeanExport;
 import org.springframework.jmx.support.RegistrationPolicy;
 import org.springframework.test.context.ContextConfiguration;
 
+import java.util.Map;
+
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.*;
 
 /**
  * Integration test for workflow autodetection.
@@ -61,7 +65,10 @@ public class WorkflowAutodetectionIT {
     private TestWorkflow testWorkflow;
 
     @Test
-    void autodetectsWorkflow() {
+    void should_autodetect_workflow() {
+        var processingContext = StubProcessingContext.withComponents(
+                cr -> cr.registerComponent(FutureResolver.class, cfg -> new DefaultTimeoutFutureResolver())
+        );
 
         var configurations = registry.getWorkflowsConfigurations(new QualifiedName("io.namespace.TestEvent"));
         assertThat(configurations).isNotNull();
@@ -73,16 +80,14 @@ public class WorkflowAutodetectionIT {
                                        new MessageType(new QualifiedName("io.namespace.TestEvent")),
                                        null
                                ),
-                               mock()
+                               processingContext
                        )
         ).isTrue();
         assertThat(conf.configuration().workflowContextFactory()).isInstanceOf(SimpleWorkflowContextFactory.class);
 
-        var ctx = mock(SimpleWorkflowContext.class);
-        @SuppressWarnings("unchecked")
-        WorkflowConfiguration<SimpleWorkflowContext> workflowConfiguration =
-                (WorkflowConfiguration<SimpleWorkflowContext>) conf.configuration();
-        workflowConfiguration.workflowDefinition().accept(ctx);
+        var ctx = new SimpleWorkflowContext("workflow-id", Map.of(), processingContext, conf.configuration());
+        //noinspection unchecked,rawtypes
+        ((WorkflowDefinition) conf.configuration().workflowDefinition()).accept(ctx);
 
         assertThat(testWorkflow.executed).isTrue();
     }

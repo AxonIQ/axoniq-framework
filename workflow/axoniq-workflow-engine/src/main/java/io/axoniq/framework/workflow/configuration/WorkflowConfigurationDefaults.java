@@ -41,7 +41,6 @@ import io.axoniq.framework.workflow.runtime.execution.WorkflowEngineCheckpointin
 import io.axoniq.framework.workflow.runtime.execution.WorkflowEventTagResolver;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowExecutionRepository;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowScheduler;
-import io.axoniq.framework.workflow.runtime.execution.WorkflowStateParameterResolverFactory;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowStore;
 import io.axoniq.framework.workflow.runtime.execution.payload.PayloadReducerRegistry;
 import io.axoniq.framework.workflow.runtime.util.DefaultTimeoutFutureResolver;
@@ -57,7 +56,6 @@ import org.axonframework.common.lifecycle.Phase;
 import org.axonframework.eventsourcing.configuration.EventSourcingConfigurationDefaults;
 import org.axonframework.eventsourcing.eventstore.MultiTagResolver;
 import org.axonframework.eventsourcing.eventstore.TagResolver;
-import org.axonframework.messaging.core.configuration.reflection.ParameterResolverFactoryUtils;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.modelling.repository.Repository;
 import org.jspecify.annotations.Nullable;
@@ -172,7 +170,6 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
         registerWorkflowStore(componentRegistry);
         registerWorkflowEngine(componentRegistry);
         registerWorkflowHistoryProjector(componentRegistry);
-        registerWorkflowStateParameterResolverFactory(componentRegistry);
         registerCheckpointingSupport(componentRegistry);
     }
 
@@ -344,12 +341,6 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
         componentRegistry.registerComponent(
                 WorkflowConfigurationRegistry.class,
                 cfg -> new SimpleWorkflowConfigurationRegistry());
-    }
-
-    void registerWorkflowStateParameterResolverFactory(ComponentRegistry componentRegistry) {
-        ParameterResolverFactoryUtils.registerToComponentRegistry(
-                componentRegistry,
-                WorkflowStateParameterResolverFactory::new);
     }
 
     void registerCheckpointingSupport(ComponentRegistry componentRegistry) {

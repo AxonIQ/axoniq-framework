@@ -16,14 +16,14 @@
  * For licensing information and to register, visit:
  *  https://www.axoniq.io/pricing
  */
-package io.axoniq.framework.workflow.runtime.execution;
+package io.axoniq.framework.workflow.configuration;
 
 import io.axoniq.framework.workflow.dsl.api.WorkflowState;
 import io.axoniq.framework.workflow.history.api.WorkflowHistory;
 import io.axoniq.framework.workflow.history.api.WorkflowHistoryRepository;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
+import io.axoniq.framework.workflow.runtime.execution.WorkflowExecutionRepository;
 import io.axoniq.framework.workflow.runtime.util.MetadataUtils;
-import org.axonframework.common.configuration.Configuration;
 import org.axonframework.messaging.core.GenericMessage;
 import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.annotation.ParameterResolver;
@@ -41,39 +41,31 @@ import static java.util.Objects.requireNonNullElseGet;
  * @author Simon Zambrovski
  * @since 5.4.0
  */
-public class WorkflowStateParameterResolver implements ParameterResolver<WorkflowState> {
-
-    private final Configuration configuration;
-
-    public WorkflowStateParameterResolver(Configuration configuration) {
-        this.configuration = requireNonNull(configuration, "The Configuration is required");
-    }
+class WorkflowStateParameterResolver implements ParameterResolver<WorkflowState> {
 
     @Override
     public CompletableFuture<WorkflowState> resolveParameterValue(ProcessingContext context) {
         Message message = requireNonNullElseGet(Message.fromContext(context), GenericMessage::emptyMessage);
-        if (MetadataUtils.hasWorkflowId().test(message.metadata())) {
-            var workflowId = MetadataUtils.getWorkflowId(message.metadata());
-            var liveState = configuration
-                    .getComponent(WorkflowExecutionRepository.class)
-                    .findById(workflowId).map(WorkflowExecution::state)
-                    .orElse(null);
-            if (liveState != null) {
-                return CompletableFuture.completedFuture(liveState);
-            }
-            return configuration
-                    .getComponent(WorkflowHistoryRepository.class)
-                    .findById(workflowId)
-                    .thenApply(history -> history.map(WorkflowHistory::state)
-                                                 .orElseThrow(
-                                                         () -> new IllegalStateException(
-                                                                 "Unable to inject workflow state, since no workflow id was found in the message."
-                                                         )
-                                                 ));
-        } else {
+        if (!MetadataUtils.hasWorkflowId().test(message.metadata())) {
             return CompletableFuture.failedFuture(new IllegalStateException(
                     "Unable to inject workflow state, since no workflow id was found in the message."));
         }
+
+        String workflowId = MetadataUtils.getWorkflowId(message.metadata());
+        WorkflowState liveState = context.component(WorkflowExecutionRepository.class)
+                                         .findById(workflowId).map(WorkflowExecution::state)
+                                         .orElse(null);
+        if (liveState != null) {
+            return CompletableFuture.completedFuture(liveState);
+        }
+
+        return context.component(WorkflowHistoryRepository.class)
+                      .findById(workflowId)
+                      .thenApply(history -> history.map(WorkflowHistory::state).orElseThrow(
+                              () -> new IllegalStateException(
+                                      "Unable to inject workflow state, since no workflow id was found in the message."
+                              )
+                      ));
     }
 
     @Override

@@ -397,7 +397,7 @@ public class EventSourcedWorkflowState implements WorkflowState {
                                  }
                              }
                          }
-                         setStatus(status, terminationCause, notifyStatusListeners);
+                         setStatus(status, terminationCause, notifyStatusListeners, processingContext);
                      });
         logger.trace("Finished applying event {} in thread {}", eventMessage.type(), Thread.currentThread());
         return this;
@@ -475,12 +475,13 @@ public class EventSourcedWorkflowState implements WorkflowState {
     void setStatus(
             WorkflowStatus workflowStatus,
             @Nullable Throwable terminationCause,
-            boolean notifyStatusListeners
+            boolean notifyStatusListeners,
+            ProcessingContext processingContext
     ) {
         this.status = workflowStatus;
         this.terminationCause = terminationCause;
         if (notifyStatusListeners) {
-            this.listenerSupport.notify(workflowStatus);
+            this.listenerSupport.notify(workflowStatus, processingContext);
         }
     }
 
@@ -556,12 +557,12 @@ public class EventSourcedWorkflowState implements WorkflowState {
          *
          * @param status status to notify about.
          */
-        public void notify(WorkflowStatus status) {
+        public void notify(WorkflowStatus status, ProcessingContext processingContext) {
             // only notify if we have a workflow context, this allows the usage without the context
             if (this.workflowContext != null && this.listeners != null) {
                 var listener = this.listeners.get(status);
                 if (listener != null) {
-                    listener.onWorkflowStatus(status, workflowContext);
+                    listener.onWorkflowStatus(status, workflowContext, processingContext);
                 }
             }
         }
