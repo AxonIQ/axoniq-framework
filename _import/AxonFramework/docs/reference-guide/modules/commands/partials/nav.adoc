@@ -1,0 +1,13 @@
+* xref:commands:index.adoc[]
+
+** xref:commands:command-handlers.adoc[]
+** xref:commands:command-dispatchers.adoc[]
+** xref:commands:entities/index.adoc[]
+*** xref:commands:entities/event-sourced-entity.adoc[]
+**** xref:commands:entities/entity-creator.adoc[]
+*** xref:commands:entities/stateful-command-handler.adoc[]
+*** xref:commands:entities/entity-hierarchies.adoc[]
+*** xref:commands:entities/entity-polymorphism.adoc[]
+
+** xref:commands:infrastructure.adoc[]
+** xref:commands:configuration.adoc[]

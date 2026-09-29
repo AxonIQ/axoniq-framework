@@ -1,0 +1,46 @@
+# Maven build artifacts can be ignored
+target/
+# ...but keep the wrapper jar
+!.mvn/wrapper/maven-wrapper.jar
+pom.xml.versionsBackup
+
+axon.ipr
+axon.iws
+
+# IntelliJ project files
+*.iml
+
+# Eclipse project files
+.classpath
+.project
+.settings/
+.factorypath
+/.metadata/
+
+# MacOS makes this one
+.DS_Store
+
+# documentation's local bulid
+docs/_playbook/build
+
+# Python bytecode cache (docs/_samples/bin/compare-snippets.py)
+__pycache__/
+
+# Claude Code
+.claude/settings.local.json
+.ai/temp
+
+# AI ASSISTANT - Kiro
+.kiro
+
+# Spec-kit (local use only, not committed, testing out)
+.specify/
+.claude/skills/speckit-*/
+
+# AI ASSISTANT - Cursor
+.vscode
+.cursor
+
+# just - console helper
+.justfile
+.flattened-pom.xml

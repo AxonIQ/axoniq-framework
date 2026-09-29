@@ -1,0 +1,60 @@
+name: Axon Framework
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - 'axon-5.*.x'
+    paths-ignore:
+      - 'docs/**'
+
+jobs:
+  build:
+    name: Test and Build on JDK ${{ matrix.java-version }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - java-version: 21
+            deploy-enabled: true
+          - java-version: 25
+            deploy-enabled: false
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up JDK ${{ matrix.java-version }}
+        uses: actions/setup-java@v6.0.1
+        with:
+          distribution: 'zulu'
+          java-version: ${{ matrix.java-version }}
+          cache: "maven"
+          server-id: central
+          server-username: MAVEN_USERNAME
+          server-password: MAVEN_PASSWORD
+
+      - name: Regular Build
+        run: |
+          ./mvnw -B -U -ntp -Dstyle.color=always clean verify \
+          -Pintegration-test -Djacoco.skip=true -Dsurefire.rerunFailingTestsCount=5 -Dfailsafe.rerunFailingTestsCount=5 \
+          -Dparallel=classes -DthreadCount=1 -DforkCount=2
+
+      - name: Deploy to Sonatype
+        if: success() && matrix.deploy-enabled
+        run: |
+          ./mvnw -B -U -ntp -Dstyle.color=always deploy -DskipTests=true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MAVEN_USERNAME: ${{ secrets.SONATYPE_TOKEN_ID }}
+          MAVEN_PASSWORD: ${{ secrets.SONATYPE_TOKEN_PASS }}
+
+      - name: Notify run to Slack
+        uses: rtCamp/action-slack-notify@v2
+        env:
+          SLACK_CHANNEL: CAGSEC92A
+          SLACK_COLOR: ${{ job.status }}
+          SLACK_TOKEN:  ${{ secrets.SLACK_BOT_TOKEN }}

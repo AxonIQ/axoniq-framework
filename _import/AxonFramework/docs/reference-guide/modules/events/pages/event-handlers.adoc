@@ -1,0 +1,199 @@
+= Event Handlers
+:navtitle: Handling
+
+An _Event Handler_ is a method that is capable of handling an `EventMessage`.
+As such, the method will react to the occurrences within an application.
+
+In Axon, an _object_ may declare several event handlers.
+This _object_ is referred to as an _Event Handling Component_.
+In most cases, each of these methods is annotated with `@EventHandler`.
+When drafting an `@EventHandler` annotated method, the declared parameters of the method define which events it will receive.
+If users prefer not to use annotations, they're able to manual subscribe every event handler as a lambda with the `EventHandlingComponent`, as shown <<registering_event_handlers,here>>.
+
+Arguably the most important parameter of an event handler is the first parameter which refers to the payload of an `EventMessage`.
+If the event handler does not need access to the payload of the message, you can specify the expected payload type on the `@EventHandler` annotation.
+
+Do not configure the payload type on the annotation if you want the payload to be passed as a parameter.
+For a complete list of all parameters, we refer to xref:messaging-concepts:supported-parameters-annotated-handlers.adoc#supported-parameters-for-event-handlers[this] section.
+
+[[registering_event_handlers]]
+== Registering event handlers
+
+Event handlers can be provided in two forms to Axon:
+
+1. As an `@EventHandler` annotated method.
+2. As an `EventHandler` implementation or lambda.
+
+This split resembles the difference between autodetected and declarative configuration.
+The former is, for example, used by Spring to automate the registration of your handlers.
+The latter would be preferred, for example, by those aiming to use no annotations at all.
+
+Event handlers are registered as part of event handling components.
+In turn, these event handling components are registered as a part of configuring xref:event-processors/index.adoc[event processors].
+
+[TIP]
+.Annotating event messages
+====
+As explained further <<annotated_event_handler_name_resolution,here>>, it's recommended to annotate all event message classes with `@Event`. This allows you to:
+
+* Define an explicit message type independent of the Java class name.
+* Version your queries for evolution over time.
+* Organize queries by bounded context using namespaces.
+* Leverage payload conversion at handling time for different representations.
+
+If the `@Event` annotation is omitted, Axon will default to using the fully qualified class name as the event name, which tightly couples your message identity to your Java package structure.
+====
+
+The exception to this flow is Spring, for which the registration of event handlers is separated from the configuration of event processors.
+The examples below show how to event handlers can be configured:
+
+[tabs]
+====
+Autodetected - Spring Boot::
++
+--
+
+In a Spring Boot environment, simply adding the Event Handling Components to the Application Context is sufficient:
+
+[source,java]
+----
+include::example$events/eventhandlers/springboot/AnnotatedEventHandlingComponent.java[tag=spring-boot-event-handling-component,indent=0]
+----
+
+Axon's auto-configuration will automatically detect and register all message handlers and assign them to the appropriate event processor.
+Be sure to read <<annotated_event_handler_name_resolution,this section>> if you want to comprehend how you can influence the automated handler registration.
+--
+
+Autodetected - Configuration API::
++
+--
+When using Axon's configuration API, event handlers can only be registered as part of event processor configuration.
+However, you are not inclined to register every event handler separately, assuming you're using the `@EventHandler` annotation.
+When assigning event handling components to an event processor, you will be able to use the `autodetected` method for this flow:
+
+[source,java]
+----
+include::example$events/eventhandlers/autodetected/AxonConfig.java[tag=autodetected-configuration-api,indent=0]
+----
+
+With `autodetected()`, the framework scans the component for `@EventHandler` annotated methods and registers them automatically.
+This is the recommended approach when using annotations.
+Be sure to read <<annotated_event_handler_name_resolution,this section>> if you want to comprehend how you can influence the automated handler registration.
+
+For complete details on event processor configuration and assigning handlers to processors, see xref:event-processors/index.adoc[Event Processors].
+--
+
+Declarative - Configuration API::
++
+--
+When using Axon's configuration API, event handlers can only be registered as part of event processor configuration.
+If your prefer not to use annotations, you will have to subscribe every event handler separately with an `EventHandlingComponent`
+You're automatically guided to that point when you are configuring an event processor and choose the `declarative` flow:
+
+[source,java]
+----
+include::example$events/eventhandlers/declarative/AxonConfig.java[tag=declarative-configuration-api,indent=0]
+----
+
+With `declarative()`, you explicitly create an `EventHandlingComponent` (typically `SimpleEventHandlingComponent`) and subscribe handler logic using the `subscribe()` methods.
+This gives you full control without relying on annotation scanning.
+Use this when you want to avoid annotation-based "magic" and prefer a more explicit configuration style.
+
+For complete details on event processor configuration and assigning handlers to processors, see xref:event-processors/index.adoc[Event Processors].
+--
+====
+
+[[annotated_event_handler_name_resolution]]
+=== Annotated event handler name resolution
+
+`@EventHandler` annotated methods can specify which event they handle in two ways.
+
+Most common is the use of the `@Event` annotation on your event class.
+This allows you to explicitly define its name, namespace, and version:
+
+[source,java]
+----
+include::example$events/eventhandlers/OrderPlacedEvent.java[tag=event-annotated-order-placed,indent=0]
+----
+
+<1> When `namespace` is not specified on `@Event`, Axon first searches for the presence of the `@Namespace` annotation (as described xref:messaging-concepts:anatomy-message.adoc#namespace-annotation[here]). When no `@Namespace` annotation is found, it falls back to the package name of the class.
+
+The event handler's name is composed of `namespace` and `name` (for example, `"orders.OrderPlaced"`).
+Now let's assume we have an `@EventHandler` handling the `OrderPlacedEvent`:
+
+[source,java]
+----
+include::example$events/eventhandlers/NameResolutionHandlers.java[tag=event-handler-implicit-name,indent=0]
+----
+
+Axon's autodetected configuration will find the `OrderPlacedEvent` event handler and note the `@Event` handler.
+The resulting name is then used to register the handler.
+The component in charge of this resolution is the `MessageTypeResolver`, which is explained in more detail xref:messaging-concepts:anatomy-message.adoc#message_type_resolution[here].
+
+If you need to override the name used to register the event handler or if the event payload does not contain the `@Event` annotation at all, you should define the `eventName` attribute of the `@EventHandler`:
+
+[source,java]
+----
+include::example$events/eventhandlers/NameResolutionHandlers.java[tag=event-handler-explicit-name,indent=0]
+----
+
+[[handler-resolution]]
+== Handler resolution - How a published event reaches an event handler
+
+When an event is published, Axon determines which event handler methods to invoke based on the event type.
+In Axon, **all matching event handlers are invoked** for each event.
+Matching is done based on the `QualifiedName` of the handler and the `MessageType` of the event (both the name and type are explained in more detail xref:messaging-concepts:anatomy-message.adoc#message_type[here]).
+
+When you have manually subscribed every event handler with an Event Handling Component, the matching based on the names is leading.
+When you've taken the `autodetected` flow (as shown <<registering_event_handlers,here>>), the framework uses the following rules to determine matching handlers:
+
+. Axon identifies all event handlers that can handle the event type by matching the type with the name of the handler.
+. For each matching handler, Axon evaluates whether it can resolve all required parameters.
+. All handlers for which parameters can be resolved are invoked.
+. If no suitable event handler is found, the event is ignored (or handled by the processor's default behavior).
+
+Consider the following Event Handling Component sample:
+
+[source,java]
+----
+include::example$events/eventhandlers/OrderEventHandler.java[tag=order-event-handler,indent=0]
+----
+
+In this example, when an `OrderPlacedEvent` is published, **both** the `on()` and `logOrderPlaced()` methods will be invoked.
+
+[[event_handler_return_values]]
+== Event handler return values
+
+Event handlers through their nature cannot have a concrete return object.
+This stems from the fact that an event handler can handle events from 5 minutes ago, 5 days ago, or 5 years ago.
+As such, an event handler is conceptually not able to "directly" respond to the component that published the event.
+
+Hence, the typical return type of any event handler is `void`:
+
+[source,java]
+----
+include::example$events/eventhandlers/EventHandlerReturnValues.java[tag=event-handler-void-return,indent=0]
+----
+
+However, you are able to make asynchronous event handlers, by for example using a `CompletableFuture<Void>`:
+
+[source,java]
+----
+include::example$events/eventhandlers/EventHandlerReturnValues.java[tag=event-handler-completablefuture-return,indent=0]
+----
+
+The framework will wait for the `CompletableFuture` to complete before considering the event handled.
+The same option applies for `Mono`:
+
+[source,java]
+----
+include::example$events/eventhandlers/EventHandlerReturnValues.java[tag=event-handler-mono-return,indent=0]
+----
+
+Lastly, you're able to use Axon's `MessageStream` to support either of the above flows.
+When registering an `EventHandler` as a lambda directly, you are even expected to return a `MessageStream`:
+
+[source,java]
+----
+include::example$events/eventhandlers/messagestream/AxonConfig.java[tag=event-handler-messagestream-return,indent=0]
+----

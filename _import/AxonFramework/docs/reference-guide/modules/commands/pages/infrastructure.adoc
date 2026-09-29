@@ -1,0 +1,305 @@
+= Infrastructure
+
+Command handling in Axon Framework involves several infrastructure components that work together to dispatch commands, manage entity state, and coordinate command processing across your application.
+
+This page covers the key infrastructure components you'll work with:
+
+* **Repositories**: Manage entity lifecycle and state persistence
+* **Command bus**: Routes and dispatches commands to handlers
+* **Command gateway**: Provides a convenient API for dispatching commands
+* **Command handling components**: Register and manage command handlers
+
+== Repositories
+
+Repositories provide an abstraction for loading and persisting entities.
+When you use entities for stateful command handling (see xref:command-handlers.adoc[Command handlers]), repositories manage the entity lifecycle automatically.
+
+=== Why repositories?
+
+Repositories handle several concerns for you:
+
+* **Loading entity state**: Fetch current state from storage (event store or database)
+* **Lifecycle management**: Track entity instances during command processing
+* **Persistence**: Save state changes when command processing completes
+* **Coordination**: Ensure changes are committed as part of the processing context
+
+Without a repository, you would need to manually load entities, track changes, and persist them. Repositories do all of this automatically.
+
+=== Async-native API
+
+Repository operations in Axon Framework are async-native, returning `CompletableFuture` to support non-blocking operations:
+
+[source,java,role=api-excerpt]
+----
+public interface Repository<ID, E> {
+    // Load an existing entity
+    CompletableFuture<ManagedEntity<ID, E>> load(ID identifier,
+                                                 ProcessingContext context);
+
+    // Load existing or create new entity
+    CompletableFuture<ManagedEntity<ID, E>> loadOrCreate(ID identifier,
+                                                         ProcessingContext context);
+
+    // Persist a new entity
+    ManagedEntity<ID, E> persist(ID identifier, E entity,
+                                 ProcessingContext context);
+}
+----
+
+All repository operations require an active `ProcessingContext`.
+Command handlers automatically receive a `ProcessingContext` parameter that you pass to repository methods.
+
+=== `ManagedEntity`
+
+Repositories return entities wrapped in a `ManagedEntity` interface.
+This wrapper tracks the entity's lifecycle and enables the repository to detect and persist changes.
+
+[source,java,role=api-excerpt]
+----
+public interface ManagedEntity<ID, E> {
+    ID identifier();           // Get the entity identifier
+    E entity();               // Get the current entity state
+    E applyStateChange(UnaryOperator<E> change);  // Modify entity state
+}
+----
+
+The `ManagedEntity` wrapper ensures that:
+
+* Changes to entity state are tracked
+* State modifications are persisted when the processing context commits
+* The repository maintains consistent state throughout command processing
+
+=== Using repositories in command handlers
+
+When command handlers are not on the entity itself, you use a repository to load and manage entities manually.
+This pattern is covered in xref:command-handlers.adoc#_command_centric_stateful_handlers[Command-centric stateful handlers].
+
+[source,java]
+----
+include::example$commands/infrastructure/repositories/OrderCommandHandler.java[tag=repository-command-handler,indent=0]
+----
+
+=== `EventSourcedRepository`
+
+The most common repository implementation is `EventSourcedRepository`, which manages event-sourced entities.
+
+Configuration with Spring Boot:
+
+[source,java]
+----
+include::example$commands/infrastructure/repositories/springboot/Order.java[tag=event-sourced-spring,indent=0]
+----
+
+Configuration with Configuration API:
+
+[source,java]
+----
+include::example$commands/infrastructure/repositories/configapi/Order.java[tag=order-entity,indent=0]
+include::example$commands/infrastructure/repositories/configapi/AxonConfig.java[tag=order-config,indent=0]
+----
+
+== Command bus
+
+The command bus is responsible for routing commands to their registered handlers.
+It receives commands from gateways or dispatchers and invokes the appropriate command handler.
+
+=== `SimpleCommandBus`
+
+The `SimpleCommandBus` is the standard command bus implementation.
+
+Key characteristics:
+
+* **Simple and reliable**: Straightforward processing model
+* **Good performance**: Low overhead for command handling
+* **Single JVM**: Cannot distribute commands across multiple instances
+
+Spring Boot automatically configures a `SimpleCommandBus` when using the Axon Spring Boot starter (unless Axon Server is configured).
+
+Manual configuration:
+
+[tabs]
+====
+Configuration API::
++
+--
+[source,java]
+----
+include::example$commands/infrastructure/commandbus/AxonConfig.java[tag=command-bus-config-api,indent=0]
+----
+--
+
+Spring Boot::
++
+--
+[source,java]
+----
+include::example$commands/infrastructure/commandbus/springboot/AxonConfig.java[tag=command-bus-spring,indent=0]
+----
+--
+====
+
+=== Interceptors
+
+The command bus supports interceptors for cross-cutting concerns like logging, metrics, or validation.
+
+There are two types of interceptors:
+
+* **Dispatch interceptors**: Invoked when a command is dispatched, before routing
+* **Handler interceptors**: Invoked before the actual command handler, after routing
+
+See xref:messaging-concepts:message-intercepting.adoc#command-interceptors[Command interceptors] for details on implementing and registering interceptors.
+
+[NOTE]
+====
+**Automatic command sequencing**: The command bus automatically includes a sequencing interceptor that prevents concurrent commands from causing optimistic locking failures. Commands targeting the same entities (same routing key) are processed sequentially while maintaining full concurrency for different entities. This is transparent and requires no configuration in most cases.
+
+For customization options, see xref:tuning:command-processing.adoc#command-sequencing[Command sequencing].
+====
+
+=== Retry behavior
+
+When a command dispatch fails, the framework can automatically retry it if a `RetryScheduler` is registered in the
+configuration.
+The `RetryScheduler` decides, based on the failure and the dispatch history, whether another attempt is warranted
+and how long to wait before trying again.
+No additional wiring is required: registering the scheduler is enough for the framework to activate retry behavior.
+
+The built-in `AsyncRetryScheduler` executes retries on a `ScheduledExecutorService` according to a `RetryPolicy`.
+Axon Framework provides three composable `RetryPolicy` implementations:
+
+`ExponentialBackOffRetryPolicy`::
+Doubles the retry delay after each attempt, starting from a given initial wait time in milliseconds.
+Retries indefinitely on its own, so combine it with `MaxAttemptsPolicy` to cap the number of attempts.
++
+[source,java]
+----
+include::example$commands/infrastructure/retry/RetryPolicyExamples.java[tag=exponential-backoff,indent=0]
+----
+
+`MaxAttemptsPolicy`::
+Wraps any other policy and stops retrying once the maximum number of attempts is reached.
++
+[source,java]
+----
+include::example$commands/infrastructure/retry/RetryPolicyExamples.java[tag=max-attempts,indent=0]
+----
+
+`FilteringRetryPolicy`::
+Wraps any other policy and only delegates to it when the latest exception matches a given predicate.
+Failures that do not match are propagated immediately without retrying.
++
+[source,java]
+----
+include::example$commands/infrastructure/retry/RetryPolicyExamples.java[tag=filtering,indent=0]
+----
+
+Compose them to express the exact behavior you need.
+A common combination is exponential backoff, capped at a maximum number of retries, filtered to transient errors only:
+
+[source,java]
+----
+include::example$commands/infrastructure/retry/RetryPolicyExamples.java[tag=composed-policy,indent=0]
+----
+
+Register an `AsyncRetryScheduler` with the policy to enable automatic retry behavior:
+
+[tabs]
+====
+Configuration API::
++
+--
+[source,java]
+----
+include::example$commands/infrastructure/retry/AxonConfig.java[tag=retry-scheduler-config-api,indent=0]
+----
+--
+
+Spring Boot::
++
+--
+[source,java]
+----
+include::example$commands/infrastructure/retry/springboot/AxonConfig.java[tag=retry-scheduler-spring,indent=0]
+----
+--
+====
+
+When the built-in policies do not cover your requirements, implement `RetryPolicy` directly.
+The interface receives the failed message, the current exception, and the exception types from all previous attempts,
+and returns a `RetryPolicy.Outcome` that either schedules the next attempt or aborts:
+
+[source,java]
+----
+include::example$commands/infrastructure/retry/CustomRetryPolicy.java[tag=custom-retry-policy,indent=0]
+----
+
+== Command gateway
+
+The command gateway provides a convenient, type-safe API for dispatching commands.
+While you can dispatch commands directly through the command bus, the gateway is generally the easiest option.
+
+=== Using the default `CommandGateway`
+
+The `CommandGateway` interface provides several methods for sending commands:
+
+[source,java,role=api-excerpt]
+----
+public interface CommandGateway {
+    // Send and get CommandResult for full control
+    CommandResult send(@Nonnull Object command);
+
+    // Send and get CompletableFuture with converted result type
+    CompletableFuture<R> send(@Nonnull Object command, @Nonnull Class<R> resultType);
+
+    // Send and wait for result
+    Object sendAndWait(@Nonnull Object command);
+}
+----
+
+Example usage:
+
+[source,java]
+----
+include::example$commands/infrastructure/gateway/OrderController.java[tag=order-controller,indent=0]
+----
+
+Axon Framework will construct a `CommandGateway` component for you out of the box at all times.
+With Axon's Spring Boot integration, you can thus automatically inject a `CommandGateway` bean when needed.
+
+== Command handling component registration
+
+Command handlers need to be registered with the framework so commands can be routed to them.
+
+=== Spring Boot auto-registration
+
+With Spring Boot, command handlers are automatically discovered and registered when you:
+
+* Use `@Component` or `@Service` on handler classes
+* Use `@EventSourced` on entity classes with command handlers
+
+[source,java]
+----
+include::example$commands/infrastructure/registration/springboot/OrderCommandHandler.java[tag=component-command-handler,indent=0]
+----
+
+[source,java]
+----
+include::example$commands/infrastructure/registration/springboot/Order.java[tag=event-sourced-creation-handler,indent=0]
+----
+
+=== Manual registration with configuration API
+
+When not using Spring Boot, register command handlers using `CommandHandlingModule`:
+
+[source,java]
+----
+include::example$commands/infrastructure/registration/AxonConfig.java[tag=manual-registration,indent=0]
+----
+
+The `autodetectedCommandHandlingComponent()` method scans the handler for `@CommandHandler` annotated methods and registers them with the command bus. When you prefer to register methods as command handlers without the use of annotations, use the `commandHandler(QualifiedName, CommandHandler)` method instead.
+
+For registering event-sourced entities and their repositories, use `EventSourcingConfigurer` or `ModellingConfigurer` which provide entity-specific registration methods.
+
+ifdef::advanced-framework[]
+include::distributed-messaging:partial$distributed-command-bus.adoc[]
+endif::[]

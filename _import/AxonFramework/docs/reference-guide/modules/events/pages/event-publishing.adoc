@@ -1,0 +1,266 @@
+= Event Publishing
+:navtitle: Publishing
+
+The publishing of an event is the starting point of such a message.
+Events have to be published, just like any type of message, before they can be handled.
+Event publication can originate from a couple of locations within your Axon Framework application.
+In general, these can be grouped in two major areas:
+
+1. Publishing events from an entity, and
+2. Publishing events from regular components
+
+Axon provides five interfaces you can use to publish event to your event handlers:
+
+1. The `EventAppender` - This component comes into play when <<event_appender,publishing events>>, from for example an entity.
+2. The `EventGateway` - This component comes into play when <<event_gateway,publishing events from anything else than an entity>>.
+3. The `EventSink`, `EventBus`, and `EventStore` - Axon's infrastructure layering to support different event publication concerns, as described <<low_level_event_publication,here>>.
+Useful to know they exist, but we recommend usage of the `EventAppender` and `EventGateway` at all times.
+
+This page will describe how to <<event_tagging,structure an event>> and then get it on a publication mechanism.
+For more specifics regarding event publication and storage implementations in Axon Framework, read xref:event-buses-and-event-stores.adoc[this] section.
+
+[NOTE]
+====
+Event publication only results in event storage if an xref:infrastructure.adoc#event_store[Event Store] is used.
+====
+
+[#event_appender]
+== Event Appender: Publishing events from an entity
+
+The xref:commands:entities/index.adoc[Entity] or its xref:commands:entities/entity-hierarchies.adoc[child entities] are typically the starting point of all event messages.
+The event simply is the notification that a decision has been made: a successful resolution of handling a command.
+Note that <<event_tagging,tagging>> is a hard requirement to ensure the published event as associated with your entity or entities.
+
+To publish an event from an entity, it is required to do this from the lifecycle of the entity instance.
+This is mandatory as we want the entity identifier to be tied to the event message.
+It is also of the essence that the events originate in order.
+
+The `EventAppender` provides a simple means to achieve the above:
+
+[source,java]
+----
+include::example$events/eventpublishing/eventappender/EventAppenderExamples.java[tag=append-event-from-command-handler,indent=0]
+----
+
+The `EventAppender` is automatically injected by Axon Framework when declared as a parameter in a command handler.
+It is the recommended way to append events from within an entity's command handling methods, as it automatically:
+
+. Uses the current `ProcessingContext`, ensuring transactionality and correlation data propagation.
+. Attaches the entity identifier to the event.
+. Publishes the event to registered event handlers within the entity (necessary for event sourcing).
+. Publishes the event to the `EventSink`.
+
+[TIP]
+.The `EventAppender` can append multiple events at once
+====
+[source,java]
+----
+include::example$events/eventpublishing/eventappender/EventAppenderExamples.java[tag=append-multiple-events,indent=0]
+----
+====
+
+=== Appending events with metadata
+
+Sometimes you want to attach `Metadata` to an event at the append site.
+The `EventAppender` provides overloads for both a single event and a batch:
+
+[source,java]
+----
+include::example$events/eventpublishing/eventappender/EventAppenderExamples.java[tags=append-event-with-metadata-import;append-event-with-metadata,indent=0]
+----
+
+The same `Metadata` can be applied to every event in a batch in a single call:
+
+[source,java]
+----
+include::example$events/eventpublishing/eventappender/EventAppenderExamples.java[tag=append-batch-with-metadata,indent=0]
+----
+
+When the supplied event is already an `EventMessage` that carries its own metadata, the provided `Metadata` is *merged* with the existing metadata.
+Provided values take precedence on conflict, so any key present in both sets resolves to the value you pass at the append site.
+
+[NOTE]
+====
+When the event is a plain object (not a `Message`), the provided `Metadata` is set directly on the resulting `EventMessage`.
+====
+
+[#event_gateway]
+== Event Gateway: Publishing events from a non-entity
+
+In the vast majority of cases, xref:commands:entities/index.adoc[entities] will publish events by appending them.
+However, occasionally, it is necessary to publish an event directly to the `EventSink`, possibly from within another component such as an event handler or a regular service.
+
+The `EventGateway` provides a convenient API for publishing events from components that are not entities:
+
+[source,java]
+----
+include::example$events/eventpublishing/eventgateway/EventGatewayExamples.java[tags=publish-events-with-eventgateway-import;publish-events-with-eventgateway-class,indent=0]
+----
+
+The `EventGateway` automatically wraps your event objects into `EventMessage` instances before sending them to the `EventSink`.
+It provides two main approaches for publishing events:
+
+=== Publishing without a `ProcessingContext`
+
+When publishing events from outside a message handler (for example, from an HTTP endpoint or scheduled task), you can use the simple `publish` method without providing a `ProcessingContext`.
+Down below is an example of a Spring REST endpoint doing just that:
+
+[source,java]
+----
+include::example$events/eventpublishing/eventgateway/EventGatewayExamples.java[tags=publish-events-without-context-import;publish-events-without-context-class,indent=0]
+----
+
+The `EventGateway#publish(List<?)` method returns a `CompletableFuture<Void>`, allowing you to handle the result asynchronously.
+
+=== Publishing with a `ProcessingContext`
+
+When publishing events from within a message handler (such as an event handler or query handler), you should provide the `ProcessingContext` to maintain correlation data:
+
+[source,java]
+----
+include::example$events/eventpublishing/eventgateway/EventGatewayExamples.java[tags=publish-events-with-context-import;publish-events-with-context,indent=0]
+----
+
+Providing the `ProcessingContext` ensures that:
+
+* Correlation data (trace ID, correlation ID, causation ID) flows from one message to another.
+* The event publication is part of the same processing lifecycle.
+* Distributed tracing works correctly across message boundaries.
+
+[TIP]
+.Async-native API
+====
+All event publishing methods in Axon return a `CompletableFuture<Void>`.
+This allows you to:
+
+* Chain additional operations after publication.
+* Handle errors gracefully.
+* Integrate with reactive frameworks.
+
+[source,java]
+----
+include::example$events/eventpublishing/eventgateway/EventGatewayExamples.java[tag=publish-event-async-chaining,indent=0]
+----
+====
+
+[TIP]
+.Reactive event publishing
+====
+If your application uses Project Reactor, the xref:ROOT:modules.adoc#axon-reactor[Reactor extension] provides a `ReactorEventGateway` that returns `Mono<Void>` and supports reactive dispatch interceptors with access to Reactor context.
+====
+
+[#low_level_event_publication]
+== Event sink, bus, and store: Low-level event publication
+
+For advanced use cases, Axon Framework provides lower-level components for event publication: the `EventSink`, `EventBus`, and `EventStore`.
+These components give you more control over the event publication process, but require more manual handling.
+
+For detailed information about these infrastructure components, see the xref:infrastructure.adoc[Infrastructure] page.
+
+[IMPORTANT]
+====
+For most use cases, prefer using <<event_gateway,`EventGateway`>> or <<event_appender,`EventAppender`>> over these lower-level components.
+The higher-level APIs handle message wrapping and context management automatically, reducing the chance of errors.
+====
+
+[#event_sink_directly]
+=== Using `EventSink` directly
+
+The `EventSink` is the foundational interface for publishing events, which Axon uses to provide a multitude of event sink options.
+It operates on `EventMessage` instances rather than plain event objects, giving you full control over metadata:
+
+[source,java]
+----
+include::example$events/eventpublishing/eventsink/DirectEventPublisher.java[tag=publish-via-event-sink,indent=0]
+----
+
+The example above shows that when using the `EventSink` directly, you need to create an `EventMessage` instance containing _your_ event payload yourself.
+However, this does give control over the entire structure of your `EventMessage`, including setting any metadata.
+
+[TIP]
+.Event Appender and Gateway understand `EventMessages`
+====
+Although the `EventSink` enforce the `EventMessage`, you are still able to provide an `EventMessage` to an `EventAppender` and `EventGateway`.
+Thus, Axon ensures your `EventMesage` is not wrapped in another `EventMessage`, as that would be wasteful.
+====
+
+[#event_bus_directly]
+=== Using `EventBus` directly
+
+The `EventBus` extends `EventSink` and adds the capability to publish events to subscribed event handlers.
+As with the `EventSink`, this interface exists to allow Axon to construct other event bus implementations (in the future).
+We can restructure our example from <<event_sink_directly,here>> and use an `EventBus` instead:
+
+[source,java]
+----
+include::example$events/eventpublishing/eventbus/DirectEventPublisher.java[tag=publish-via-event-bus,indent=0]
+----
+
+[#event_store_direct]
+=== Using `EventStore` directly
+
+The `EventStore` combines the functionality of an `EventBus` with durable storage.
+For more details on configuring and using an event store, be sure to read this xref:infrastructure.adoc#event_store[section].
+We can restructure our example from <<event_sink_directly,here>> and use an `EventStore` instead:
+
+[source,java]
+----
+include::example$events/eventpublishing/eventstore/DirectEventPublisher.java[tag=publish-via-event-store,indent=0]
+----
+
+[#event_tagging]
+== Event tagging
+
+When events are published as a result of command handling for <<event_appender,an entity>>, the applicable events should be tagged.
+These tags are essential to protect your xref:event-store-internals.adoc#dynamic_consistency_boundaries_dcb[consistency boundary], which is mandatory to protect your entities and aggregates against concurrent writes.
+
+When events are stored, it's the tags that determine which logical groupings they belong to.
+This affects:
+
+* **Event sourcing**: Tags define which events are loaded when reconstructing entity state.
+An entity can source events from multiple tag-based streams, not just a single aggregate stream.
+* **Consistency boundaries**: Tags establish the boundary for write conflict detection.
+Events with the same tags are checked for concurrent modifications.
+* **Event streaming**: Event processors can filter events based on tags when streaming from the event store.
+
+Without tags, events would lack the metadata needed to organize them into meaningful boundaries, limiting the flexibility of your event-sourced models.
+
+=== Configuring tags with `@EventTag`
+
+The simplest way to tag events is using the `@EventTag` annotation on event fields:
+
+[source,java]
+----
+include::example$events/eventpublishing/eventtagging/annotation/OrderPlacedEvent.java[tag=event-tag-annotation,indent=0]
+----
+
+The `@EventTag` annotation marks fields whose values should be extracted as tags when the event is published.
+By default, the tag key matches the field name, but you can override it by specifying the `key` attribute (as shown with `"region"`).
+
+When an `OrderPlacedEvent` is appended, the `TagResolver` automatically extracts `orderId` and `region` as tags from the annotated fields.
+
+=== Custom tag resolution
+
+For more complex scenarios where annotation-based tagging is insufficient, you can implement a custom `TagResolver`:
+
+[source,java]
+----
+include::example$events/eventpublishing/eventtagging/custom/CustomTagResolver.java[tag=custom-tag-resolver,indent=0]
+----
+
+Register your custom `TagResolver` using the configuration API:
+
+[source,java]
+----
+include::example$events/eventpublishing/eventtagging/configapi/TagResolverConfig.java[tag=register-tag-resolver-config-api,indent=0]
+----
+
+When using Spring Boot, you can register a custom `TagResolver` as a Spring bean:
+
+[source,java]
+----
+include::example$events/eventpublishing/eventtagging/springboot/AxonConfig.java[tag=register-tag-resolver-spring-boot,indent=0]
+----
+
+For detailed information about tags, event criteria, and consistency markers, see xref:event-store-internals.adoc#tags[Event Store Internals].
+

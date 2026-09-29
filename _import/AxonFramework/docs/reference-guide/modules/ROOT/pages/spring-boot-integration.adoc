@@ -1,0 +1,134 @@
+= Spring Boot Integration
+
+Axon Framework provides extensive support for Spring Boot through its Spring Boot Starter extension.
+While Axon can be configured programmatically without Spring, the Spring Boot integration provides the easiest way to get started through automatic configuration.
+
+[NOTE]
+.Looking for the concrete implementation details?
+====
+This page covers getting started, supported versions, and event processor configuration.
+For how the Spring integration maps onto Axon's configuration API under the hood, including bean-to-component mapping, overriding auto-configured defaults, handler and entity detection, and lifecycle integration, see xref:configuration:spring.adoc[Spring Boot integration] in the Configuration chapter.
+====
+
+The following table shows which Spring Boot versions are supported by each Axon Framework version:
+
+[cols="2,1,1,1",options="header"]
+|===
+|Axon Framework Version |Spring Boot 2 |Spring Boot 3 |Spring Boot 4
+
+|4.0 - 4.6
+|✓
+|
+|
+
+|4.7 - 4.12
+|✓
+|✓
+|
+
+|4.13
+|✓
+|✓
+|✓
+
+|5.0.3+
+|
+|✓
+|✓
+|===
+
+== Getting started
+
+To enable Spring Boot auto-configuration, add the Axon Spring Boot Starter dependency to your project:
+
+[tabs]
+====
+Maven::
++
+--
+[source,xml]
+----
+<dependency>
+    <groupId>org.axonframework.extensions.spring</groupId>
+    <artifactId>axon-spring-boot-starter</artifactId>
+    <version>${axon.version}</version>
+</dependency>
+----
+--
+
+Gradle::
++
+--
+[source,groovy]
+----
+implementation 'org.axonframework.extensions.spring:axon-spring-boot-starter:${axonVersion}'
+----
+--
+====
+
+With this dependency in place, Axon will automatically:
+
+* Detect and register all message handlers (command handlers, event handlers, query handlers)
+* Configure the command bus, event bus, and query bus
+* Set up event processors to handle events
+* Configure entities and repositories
+* Wire all components together
+
+== Infrastructure configuration
+
+The Spring Boot Starter will automatically configure the necessary infrastructure based on what's available:
+
+**Axon Server** (recommended)::
+If the Axon Server connector is on the classpath, Axon will automatically connect to Axon Server (by default at `localhost:8124`) and use it for:
+* Command routing and distribution
+* Event storage and distribution
+* Query routing and distribution
+
+You can disable Axon Server integration by setting `axon.axonserver.enabled=false` in your application properties.
+
+**JPA fallback**::
+If Axon Server is not available or disabled, Axon will use JPA-based implementations for Event storage.
+
+**Extension-based implementations**::
+Other extensions can provide additional implementations:
+* PostgreSQL event store (via the PostgreSQL extension)
+* Reactive gateways for commands, events, and queries (via the xref:modules.adoc#axon-reactor[Reactor extension])
+
+ifdef::advanced-framework[]
+include::connector:partial$connection-security.adoc[]
+endif::[]
+
+== Component detection
+
+The Spring Boot Starter automatically detects Axon components in your application:
+
+* Methods on Spring beans that are annotated with `@CommandHandler`, `@EventHandler`, or `@QueryHandler` are automatically registered
+* Classes annotated with `@EventSourced` are registered as entities
+* All detected components are wired with the appropriate buses and infrastructure
+
+See xref:configuration:spring.adoc#handling-component-detection[Message handler and entity detection] for how this detection works and an example combining all three handler types in a single bean.
+
+== Customization
+
+The auto-configuration is non-intrusive and only configures components that you haven't explicitly defined: you can override any auto-configured bean by defining your own in a `@Configuration` class.
+See xref:configuration:spring.adoc#customizing-axon-config-with-spring[Customizing Axon's configuration through Spring] for examples of replacing, decorating, and enhancing auto-configured components.
+
+For detailed configuration options, see the specific sections in this reference guide for commands, events, queries, and entities.
+
+[#event-processor-configuration]
+== Event processor configuration
+
+The simplest way to configure an event processor is through `application.properties` or `application.yml`:
+
+[source,properties]
+----
+axon.eventhandling.processors.my-processor.mode=pooled-streaming
+axon.eventhandling.processors.my-processor.initial-segment-count=4
+axon.eventhandling.processors.my-processor.batch-size=100
+axon.eventhandling.processors.my-processor.thread-count=16
+----
+
+This approach is ideal for simple processor configuration, environment-specific settings (dev, test, prod), and quick prototyping.
+For fine-grained, type-safe control over handler assignment through `EventProcessorDefinition` beans, namespace-based handler selection, and how properties-based and programmatic configuration interact, see xref:configuration:spring.adoc#event-processor-configuration[Event processor configuration] in the Configuration chapter.
+
+For comprehensive event processor configuration examples and detailed information, see xref:events:event-processors/streaming.adoc[Event Processors].

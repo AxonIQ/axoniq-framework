@@ -1,0 +1,259 @@
+/*
+ * Copyright (c) 2010-2026. Axon Framework
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.axonframework.extension.spring.config;
+
+import org.axonframework.common.AxonConfigurationException;
+import org.axonframework.common.AxonThreadFactory;
+import org.axonframework.common.StringUtils;
+import org.axonframework.common.configuration.Configuration;
+import org.axonframework.messaging.core.SubscribableEventSource;
+import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
+import org.axonframework.messaging.eventhandling.processing.streaming.pooled.PooledStreamingEventProcessorConfiguration;
+import org.axonframework.messaging.eventhandling.processing.streaming.pooled.PooledStreamingEventProcessorModule;
+import org.axonframework.messaging.eventhandling.processing.streaming.token.store.TokenStore;
+import org.axonframework.messaging.eventhandling.processing.subscribing.SubscribingEventProcessorConfiguration;
+import org.axonframework.messaging.eventhandling.processing.subscribing.SubscribingEventProcessorModule;
+import org.axonframework.messaging.eventstreaming.StreamableEventSource;
+import org.jspecify.annotations.Nullable;
+
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.function.Supplier;
+
+/**
+ * Holder for Spring customizations based on settings.
+ *
+ * @author Simon Zambrovski
+ * @since 5.0.0
+ */
+interface SpringCustomizations {
+
+    /**
+     * The bean name a {@link TokenStore} is resolved under when the token-store setting is unset.
+     * <p>
+     * Both the JPA and JDBC auto configurations register their token store under this name, so preferring it keeps
+     * applications that declare several token stores resolving the same one they resolved before the setting became
+     * optional.
+     */
+    String CONVENTIONAL_TOKEN_STORE_BEAN_NAME = "tokenStore";
+
+    /**
+     * Creates customizations for a pooled streaming event processing module.
+     *
+     * @param name     Module name.
+     * @param settings Settings of the module.
+     * @return Customizations for the module.
+     */
+    static PooledStreamingEventProcessorModule.Customization pooledStreamingCustomizations(
+            String name,
+            EventProcessorSettings.PooledEventProcessorSettings settings
+    ) {
+        return new SpringPooledStreamingEventProcessingModuleCustomization(name, settings);
+    }
+
+    /**
+     * Creates customizations for a subscribing event processing module.
+     *
+     * @param name     Module name.
+     * @param settings Settings of the module.
+     * @return Customizations for the module.
+     */
+    static SubscribingEventProcessorModule.Customization subscribingCustomizations(
+            String name,
+            EventProcessorSettings.SubscribingEventProcessorSettings settings) {
+        return new SpringSubscribingEventProcessingModuleCustomization(name, settings);
+    }
+
+    /**
+     * Customization executed based on the {@link EventProcessorSettings.SubscribingEventProcessorSettings}.
+     * <p>
+     * The {@link SubscribableEventSource} is only mandatory when the
+     * {@link EventProcessorSettings#source() source setting} is explicitly set. When it is unset (or empty), this
+     * customization falls back to resolving the unique, type-level {@code SubscribableEventSource} (typically the
+     * {@link org.axonframework.messaging.eventhandling.EventBus}) and only sets a source when one is found. Otherwise,
+     * it leaves the source untouched, allowing customizations applied after this one, like an
+     * {@code EventProcessorDefinition}, to supply it. A still-missing source is reported when the resulting
+     * {@link SubscribingEventProcessorConfiguration} is validated.
+     */
+    class SpringSubscribingEventProcessingModuleCustomization implements SubscribingEventProcessorModule.Customization {
+
+        private final EventProcessorSettings.SubscribingEventProcessorSettings settings;
+        private final String name;
+
+        SpringSubscribingEventProcessingModuleCustomization(
+                String name,
+                EventProcessorSettings.SubscribingEventProcessorSettings settings) {
+            this.name = name;
+            this.settings = settings;
+        }
+
+        @Override
+        public SubscribingEventProcessorConfiguration apply(Configuration configuration,
+                                                            SubscribingEventProcessorConfiguration subscribingEventProcessorConfiguration) {
+            var unitOfWorkFactory = getComponent(configuration, UnitOfWorkFactory.class, null, null);
+            require(unitOfWorkFactory != null,
+                    "Could not find a mandatory UnitOfWorkFactory for event processor '" + name + "'.");
+            var result = subscribingEventProcessorConfiguration.unitOfWorkFactory(unitOfWorkFactory);
+
+            String sourceName = StringUtils.nonEmptyOrNull(settings.source()) ? settings.source() : null;
+            var messageSource = getComponent(configuration, SubscribableEventSource.class, sourceName, null);
+            if (sourceName != null) {
+                require(messageSource != null, "Could not find a mandatory Source with name '" + settings.source()
+                        + "' for event processor '" + name + "'.");
+            }
+            return messageSource != null ? result.eventSource(messageSource) : result;
+        }
+    }
+
+
+    /**
+     * Customization executed based on the {@link EventProcessorSettings.PooledEventProcessorSettings}.
+     * <p>
+     * The {@link StreamableEventSource} and {@link TokenStore} are only mandatory when the corresponding
+     * {@link EventProcessorSettings#source() source} or
+     * {@link EventProcessorSettings.PooledEventProcessorSettings#tokenStore() token-store} setting is explicitly set.
+     * When a setting is unset (or empty), this customization falls back to resolving the unique, type-level component
+     * and only applies it when one is found. An unset token store prefers the
+     * {@link #CONVENTIONAL_TOKEN_STORE_BEAN_NAME conventional bean name} before that type-level lookup, so that
+     * applications declaring several token stores keep resolving the same one. Otherwise, it leaves that part of the
+     * configuration untouched, allowing customizations applied after this one, like an
+     * {@code EventProcessorDefinition}, to supply it. A still-missing source is reported when the resulting
+     * {@link PooledStreamingEventProcessorConfiguration} is validated, a still-missing token store by
+     * {@link #requireResolvedTokenStore(String, PooledStreamingEventProcessorConfiguration)} once all customizations
+     * have been applied.
+     */
+    class SpringPooledStreamingEventProcessingModuleCustomization
+            implements PooledStreamingEventProcessorModule.Customization {
+
+        private final EventProcessorSettings.PooledEventProcessorSettings settings;
+        private final String name;
+
+        SpringPooledStreamingEventProcessingModuleCustomization(
+                String name,
+                EventProcessorSettings.PooledEventProcessorSettings settings
+        ) {
+            this.settings = settings;
+            this.name = name;
+        }
+
+        @Override
+        public PooledStreamingEventProcessorConfiguration apply(
+                Configuration configuration,
+                PooledStreamingEventProcessorConfiguration eventProcessorConfiguration) {
+            String executorName = "WorkPackage[" + name + "]";
+            Supplier<ScheduledExecutorService> scheduledExecutorService = () -> Executors.newScheduledThreadPool(
+                    settings.threadCount(),
+                    new AxonThreadFactory(executorName)
+            );
+
+            var unitOfWorkFactory = getComponent(configuration, UnitOfWorkFactory.class, null, null);
+            require(unitOfWorkFactory != null,
+                    "Could not find a mandatory UnitOfWorkFactory for event processor '" + name + "'.");
+
+            var result = eventProcessorConfiguration
+                    .workerExecutor(scheduledExecutorService)
+                    .tokenClaimInterval(settings.tokenClaimIntervalInMillis())
+                    .claimExtensionThreshold(settings.claimExtensionThresholdInMillis())
+                    .batchSize(settings.batchSize())
+                    .initialSegmentCount(settings.initialSegmentCount())
+                    .unitOfWorkFactory(unitOfWorkFactory);
+
+            if (settings.coordinatorClaimExtension()) {
+                // Only applied when enabled, so a customization applied elsewhere that enables it is never undone.
+                result = result.enableCoordinatorClaimExtension();
+            }
+
+            String sourceName = StringUtils.nonEmptyOrNull(settings.source()) ? settings.source() : null;
+            var eventSource = getComponent(configuration, StreamableEventSource.class, sourceName, null);
+            if (sourceName != null) {
+                require(eventSource != null, "Could not find a mandatory Source with name '" + settings.source()
+                        + "' for event processor '" + name + "'.");
+            }
+            if (eventSource != null) {
+                result = result.eventSource(eventSource);
+            }
+
+            String tokenStoreName = StringUtils.nonEmptyOrNull(settings.tokenStore()) ? settings.tokenStore() : null;
+            TokenStore tokenStore;
+            if (tokenStoreName != null) {
+                tokenStore = getComponent(configuration, TokenStore.class, tokenStoreName, null);
+                require(tokenStore != null, "Could not find a mandatory TokenStore with name '" + settings.tokenStore()
+                        + "' for event processor '" + name + "'.");
+            } else {
+                tokenStore = getComponent(configuration,
+                                          TokenStore.class,
+                                          CONVENTIONAL_TOKEN_STORE_BEAN_NAME,
+                                          () -> getComponent(configuration, TokenStore.class, null, null));
+            }
+            if (tokenStore != null) {
+                result = result.tokenStore(tokenStore);
+            }
+
+            return result;
+        }
+    }
+
+    /**
+     * Verifies a {@link TokenStore} ended up on the given {@code configuration} of the event processor with the given
+     * {@code name}, after every customization had the opportunity to supply one.
+     * <p>
+     * Names the {@link #CONVENTIONAL_TOKEN_STORE_BEAN_NAME bean that was looked for}, as that is the information
+     * needed to fix the configuration, and is no longer available once the
+     * {@link PooledStreamingEventProcessorConfiguration} itself reports the missing token store during validation.
+     *
+     * @param name          the name of the event processor the {@code configuration} belongs to
+     * @param configuration the event processor configuration with all customizations applied
+     */
+    static void requireResolvedTokenStore(String name, PooledStreamingEventProcessorConfiguration configuration) {
+        require(configuration.tokenStore() != null,
+                "Could not find a mandatory TokenStore with name '" + CONVENTIONAL_TOKEN_STORE_BEAN_NAME
+                        + "' for event processor '" + name + "'. The TokenStore is a hard requirement and should be "
+                        + "provided, either by naming a TokenStore bean '" + CONVENTIONAL_TOKEN_STORE_BEAN_NAME
+                        + "', by declaring a single TokenStore bean, or by setting the token-store property of this "
+                        + "event processor.");
+    }
+
+    /**
+     * Retrieves component from configuration.
+     *
+     * @param configuration The configuration holding the component registry.
+     * @param type          The type of the component.
+     * @param name          An optional component name, if omitted only type is used.
+     * @param supplier      An optional supplier, if omitted replaced by the null supplier.
+     * @param <T>           type of the component.
+     * @return a component of given type and name, if found or supplied by the supplier.
+     */
+    @Nullable
+    static <T> T getComponent(Configuration configuration, Class<T> type,
+                              @Nullable String name,
+                              @Nullable Supplier<T> supplier) {
+        Supplier<T> safeSupplier = (supplier != null) ? supplier : () -> null;
+        return configuration.getOptionalComponent(type, name).orElseGet(safeSupplier);
+    }
+
+    /**
+     * Throws AxonConfiguration exception if the condition is not met.
+     *
+     * @param condition Condition which has to be met.
+     * @param message   Message reported in Axon Configuration Exception, if the condition is not met.
+     */
+    static void require(boolean condition, String message) {
+        if (!condition) {
+            throw new AxonConfigurationException(message);
+        }
+    }
+}

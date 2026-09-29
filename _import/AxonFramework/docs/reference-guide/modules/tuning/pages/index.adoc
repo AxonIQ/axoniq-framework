@@ -1,0 +1,21 @@
+= Tuning
+:page-aliases: README.adoc
+
+The Tuning section collects the performance guidance that is relevant for Axon Framework.
+It focuses on command sequencing, pooled streaming event processing, snapshotting for event-sourced entities, and relational database settings for the JPA-backed event store.
+
+The topics in this section are intentionally practical.
+They describe the defaults that ship with the framework, when to change them, and which knobs matter most in real applications.
+
+[cols="<,<"]
+|===
+|Section |Purpose
+
+|xref:tuning:command-processing.adoc[Command Processing] |Keep commands for the same entity ordered and avoid optimistic locking conflicts.
+|xref:tuning:event-processing.adoc[Event Processing] |Tune pooled streaming event processors for throughput, claim management, and batching.
+|xref:tuning:rdbms-tuning.adoc[Relational Database Tuning] |Adjust schema and database settings for the aggregate-based JPA event store.
+ifdef::advanced-framework[]
+|xref:snapshotting.adoc[Snapshotting] |Reduce entity rebuild time by creating snapshots at the right moments.
+|xref:caching:index.adoc[Caching] |Reduce event store traffic by caching data close to the application.
+endif::[]
+|===

@@ -1,0 +1,258 @@
+= Aggregate Migration
+:navtitle: Aggregates
+
+The focus of this guide is to help you migrate your existing Axon Framework 4 aggregate-based applications to Axon Framework 5 with minimal architectural changes. While we encourage exploring the benefits of DCB for new development or significant refactorings, the following steps provide an "architecture-neutral" path to get your code running on the new version. Switching to DCB can be done incrementally after the initial migration and is not required for Axon Framework 5.
+
+Throughout this documentation, we will refer to **entities** instead of aggregates to align with the new API, but the underlying patterns of state-encapsulation and command handling remain familiar.
+
+*The aggregate migration is broken down into several key topics:*
+
+xref:migration:paths/aggregates/index.adoc#import-and-package-changes[Import and package changes]::
+General considerations regarding java imports and dependency management.
+
+xref:migration:paths/aggregates/configuration-migration.adoc[Entity configuration]::
+How to register entities and declare modules using the new xref:understanding-architecture-principles.adoc#improved_configuration_architecture[configurer API].
+
+xref:migration:paths/aggregates/index.adoc#static-factory-methods-for-creation[Static factory methods for creation]::
+No more command handling constructors.
+
+xref:migration:paths/aggregates/index.adoc#eventappender-instead-of-aggregatelifecycle[EventAppender vs. AggregateLifecycle]::
+Do not use static/thread local references any more.
+
+xref:migration:paths/aggregates/event-tagging.adoc[Event tagging with @EventTag]::
+How events are now linked to their entity through `@EventTag` instead of `@AggregateIdentifier`.
+
+xref:migration:paths/aggregates/index.adoc#entitycreator-annotation[The @EntityCreator annotation]::
+Required for entity construction.
+
+xref:migration:paths/aggregates/multi-entity-migration.adoc[Multi-Entity Migration]::
+How to migrate aggregates with child entities and use `@EntityMember`.
+
+xref:migration:paths/aggregates/polymorphism-migration.adoc[Polymorphic Entities]::
+How to configure polymorphic/hierarchical entities.
+
+== Simple `EventSourcedEntity` example
+
+To visualize the shift for a "simple" entity, here is a side-by-side comparison of a standard `GiftCard` implementation. This represents the minimal, architecture-neutral way to move from Axon Framework 4 to 5.
+
+[tabs]
+====
+Axon Framework 5::
++
+[source,java]
+----
+include::example$migration/paths/aggregates/index/simpleexample/GiftCard.java[tag=simple-example,indent=0]
+----
+<1> `@EventSourcedEntity` replaces `@Aggregate` (or `@AggregateRoot`).
+<2> `@EntityCreator` is mandatory and replaces the `@CommandHandler` constructor for instantiation.
+<3> Command Handlers that create a new instance are now **static** and use `EventAppender` to publish the initial event.
+<4> Command Handlers now accept an `EventAppender` parameter to publish events.
+<5> `@EventSourcingHandler` remains the way to update the entity state from events, keeping the logic encapsulated.
+
+Axon Framework 4::
++
+[source,java,role=axon4]
+----
+@AggregateRoot // <1>
+public class GiftCard {
+
+    @AggregateIdentifier // <2>
+    private String cardId;
+    private int remainingValue;
+
+    public GiftCard() { // <3>
+        // Required by Axon
+    }
+
+    @CommandHandler // <4>
+    public GiftCard(IssueCardCommand cmd) {
+        AggregateLifecycle.apply(new CardIssuedEvent(cmd.getCardId(), cmd.getAmount())); // <5>
+    }
+
+    @CommandHandler
+    public void handle(RedeemCardCommand cmd) {
+        if (cmd.getAmount() > remainingValue) {
+            throw new IllegalStateException("Insufficient funds");
+        }
+        AggregateLifecycle.apply(new CardRedeemedEvent(cardId, cmd.getAmount()));
+    }
+
+    @EventSourcingHandler // <6>
+    public void on(CardIssuedEvent event) {
+        this.cardId = event.getCardId();
+        this.remainingValue = event.getAmount();
+    }
+
+    @EventSourcingHandler
+    public void on(CardRedeemedEvent event) {
+        this.remainingValue -= event.getAmount();
+    }
+}
+----
+<1> `@AggregateRoot`  marks the class as the root of the consistency boundary.
+<2> `@AggregateIdentifier` is required on the field that uniquely identifies the aggregate instance.
+<3> A **no-arg constructor** is mandatory for Axon to instantiate the aggregate when loading it from the event store.
+<4> Creation commands are handled via an **annotated constructor**, which creates the initial state.
+<5> Static `AggregateLifecycle.apply()` is used to publish events within the aggregate's scope (using `ThreadLocal`).
+<6> `@EventSourcingHandler` updates the internal state based on published events to allow reconstruction of the aggregate.
+
+====
+
+== Core concepts in Axon Framework 5
+
+Before diving into the specific changes, it is helpful to understand the primary components that replace the aggregate-centric API in Axon Framework 4.
+
+* **`@EventSourcedEntity`**: The replacement for `@AggregateRoot`. It marks a class as an event-sourced entity, signaling to the framework that its state should be managed and reconstructed from an event stream. (Note: In Spring environments, instead of `@Aggregate` you use `@EventSourced`, which is meta-annotated with `@EventSourcedEntity`).
+* **`@EntityCreator`**: A mandatory annotation that tells Axon how to instantiate your entity. In Axon Framework 4, the framework often relied on a `@CommandHandler` constructor; in Axon Framework 5, the instantiation is decoupled from the command handling logic.
+* **`EventAppender`**: The interface that replaces `AggregateLifecycle.apply()`. It is passed as an argument to command handlers, making the side-effect of publishing events explicit and easier to test.
+* **`@EntityMember`**: The replacement for `@AggregateMember`. It is used to mark fields or collections that contain child entities within a larger entity (aggregate) structure.
+
+
+[#import-and-package-changes]
+== Import and package changes
+
+The location of `@CommandHandler` and `@EventSourcingHandler` has changed to better reflect their role in the messaging and event sourcing modules.
+For a more comprehensive list of package changes, see the xref:migration:paths/index.adoc#import-and-package-changes[general import changes] section.
+
+[cols="1,2"]
+|===
+| Description | Changes (AF4 to AF5)
+
+| Command Handler annotation
+| `org.axonframework.modelling.command.CommandHandler`
+
+to
+
+`org.axonframework.messaging.commandhandling.annotation.CommandHandler`
+
+| Event Sourcing Handler annotation
+| `org.axonframework.eventsourcing.EventSourcingHandler`
+
+to
+
+`org.axonframework.eventsourcing.annotation.EventSourcingHandler`
+|===
+
+[#static-factory-methods-for-creation]
+== `@EntityCreator` and static factory methods
+
+Axon Framework 5 removes `@AggregateIdentifier` and favors **static factory methods** for command handling of creation commands.
+These methods are combined with the [anchor=entitycreator-annotation]#@EntityCreator# annotation, which is a **hard requirement** for instance instantiation. It tells Axon how to create an initial instance of the entity before applying events to it.
+
+The identifier is then typically set in the `@EventSourcingHandler` of the creation event or injected into the `@EntityCreator`.
+
+[source,java,role=axon4]
+----
+// AF4
+@Aggregate
+public class GiftCard {
+    @AggregateIdentifier
+    private String cardId;
+
+    @CommandHandler
+    public GiftCard(IssueCardCommand cmd) {
+        apply(new CardIssuedEvent(cmd.getCardId(), cmd.getAmount()));
+    }
+}
+----
+
+[source,java]
+----
+include::example$migration/paths/aggregates/index/entitycreatorstatic/GiftCard.java[tag=entity-creator-static,indent=0]
+----
+<1> When using a no-arg `@EntityCreator`, the framework instantiates the entity, and the identifier is typically set in the `@EventSourcingHandler` of the creation event.
+
+
+[#entitycreator-annotation]
+=== Patterns of `@EntityCreator` usage
+
+There are three common patterns for using `@EntityCreator` that you can apply to your setup based on preference:
+
+* **Pattern 1: No-arg constructor** (Recommended for most migrations)
++
+[source,java]
+----
+include::example$migration/paths/aggregates/index/entitycreatorpatterns/noargument/GiftCard.java[tag=entity-creator-noarg,indent=0]
+----
+Axon creates an empty instance. The identifier and other relevant states are then initialized in the `@EventSourcingHandler` of the first event.
+
+* **Pattern 2: Identifier-only constructor**
++
+[source,java]
+----
+include::example$migration/paths/aggregates/index/entitycreatorpatterns/identifier/GiftCard.java[tag=entity-creator-identifier,indent=0]
+----
+Axon resolves the identifier from the first event and injects it into the constructor. Note the mandatory `@InjectEntityId` annotation.
+
+* **Pattern 3: Creation from origin event**
++
+[source,java]
+----
+include::example$migration/paths/aggregates/index/entitycreatorpatterns/firstevent/GiftCard.java[tag=entity-creator-firstevent,indent=0]
+----
+Axon uses the first event's payload to construct the initial instance directly.
+
+
+[#eventappender-instead-of-aggregatelifecycle]
+== `EventAppender` instead of `AggregateLifecycle`
+
+The `AggregateLifecycle.apply()` method is replaced by the `EventAppender` interface, which is passed as a parameter to your command handling methods. This makes the dependency on the event publishing mechanism explicit. This decision is documented in more detail in the xref:migration:solved-architecture-choices.adoc#remove_threadlocal_usage[ThreadLocal usage prevents proper asynchronous and reactive programming] section.
+
+[source,java,role=axon4]
+----
+// Axon Framework 4
+@CommandHandler
+public void handle(RedeemCardCommand cmd) {
+    AggregateLifecycle.apply(new CardRedeemedEvent(id, cmd.getAmount()));
+}
+----
+
+[source,java]
+----
+include::example$migration/paths/aggregates/index/eventappender/GiftCard.java[tag=event-appender,indent=0]
+----
+
+=== Removal of `@CreationPolicy`
+
+The `@CreationPolicy` annotation was removed in Axon Framework 5. You can use stateful/stateless command handlers to replace its functionality.
+
+* *`CreationPolicy.ALWAYS`*
++
+The recommended flow is to use a **static `@CommandHandler`** for creation. If the command should only succeed if the entity doesn't exist, the static handler naturally handles this as it is called when no instance is present.
++
+[source,java]
+----
+include::example$migration/paths/aggregates/index/creationpolicyalways/GiftCard.java[tag=creation-policy-always,indent=0]
+----
+
+* *`CreationPolicy.CREATE_IF_MISSING`*
++
+If you need "only create if missing" logic, you can implement it within the static handler by checking for the existence of an optional state parameter. The renewed support is documented in more detail xref:commands:entities/stateful-command-handler.adoc#missing_injected_entity[here]. For convenience-sake, here's an immediate sample showing the injection of a nullable `GiftCard`:
++
+[source,java]
+----
+include::example$migration/paths/aggregates/index/creationpolicycreateifmissing/GiftCard.java[tag=creation-policy-create-if-missing,indent=0]
+----
++
+Alternatively, if you want to keep the create-if-missing logic on an **instance** command handler, closer to how `@CreationPolicy(CREATE_IF_MISSING)` worked in Axon Framework 4, annotate a no-argument or identifier-based `@EntityCreator` with `@ForcedEntityCreator`. Axon then always constructs the entity, even when it does not yet exist, so the instance handler receives a non-null entity and can decide for itself whether to append the event that establishes its existence.
++
+[source,java]
+----
+include::example$migration/paths/aggregates/index/forcedentitycreator/GiftCard.java[tag=forced-entity-creator-create-if-missing,indent=0]
+----
+
+* *`CreationPolicy.NEVER`*
++
+New entities are created when a command appends an event that can be routed to an `@EntityCreator`. So any `@CommandHandler` that does not append such an event will implicitly follow the `NEVER` policy.
+
+[#see-also]
+== See also
+
+For more information on command handling and modeling patterns in Axon Framework 5, refer to:
+
+- xref:commands:entities/index.adoc[Entities]: stateful command handlers that enforce business rules using prior state
+- xref:commands:entities/stateful-command-handler.adoc[Stateful command handlers]: how to structure handlers by use case using Vertical Slice Architecture
+- xref:migration:understanding-architecture-principles.adoc#moving-away-from-aggregates[Architecture Principles: Moving away from Aggregates]
+- xref:events:event-store-internals.adoc[Event Store Internals and DCB]
+- xref:commands:command-handlers.adoc[Command handlers]: stateless command handlers that need no prior state
+- link:https://www.axoniq.io/blog/dcb-in-af-5[Dynamic Consistency Boundary Blog Post,role=external,window=_blank]

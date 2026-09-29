@@ -1,0 +1,732 @@
+= Basic Testing with AxonTestFixture
+[[basic_testing]]
+:navtitle: Basic Testing
+
+The `AxonTestFixture` is the main tool for testing Axon applications.
+It provides a fluent API for setting up test scenarios, executing actions, and verifying results using a clear Given-When-Then pattern.
+
+`AxonTestFixture` is built on the same `ApplicationConfigurer` you use in production, which means:
+
+* **No duplicate configuration** - Your tests use the same setup as your production code.
+* **Integration testing support** - Test with real infrastructure (event stores, processors, etc).
+* **Consistent behavior** - What works in tests works in production.
+
+This makes the `AxonTestFixture` **the** choice whenever you want to test components that are attached to Axon.
+
+== Creating a test fixture
+
+=== Basic fixture creation
+
+Create a fixture from any `ApplicationConfigurer`:
+
+[source,java]
+----
+include::example$testing/basictesting/creatingfixture/basic/BasicFixtureCreation.java[tag=basic-fixture-creation,indent=0]
+----
+
+IMPORTANT: Always call `fixture.stop()` in your `@AfterEach` method to properly release resources. You can use the xref:junit_extension[`AxonFrameworkExtension`] with JUnit to automate this process.
+
+[#fixture_customization]
+=== Fixture with customization
+
+You can customize the fixture using the `AxonTestFixture#with(ApplicationConfigurer, UnaryOperator<Customization>)` method:
+
+[source,java]
+----
+include::example$testing/basictesting/creatingfixture/customization/FixtureCustomization.java[tags=fixture-with-customization-import;fixture-with-customization,indent=0]
+----
+
+The `Customization` given as the second parameter allows a number of adjustments:
+
+* `asIntegrationTest()` - Enable heavier infrastructure components, like the Axon Server connector, which are disabled by default.
+* `registerIgnoredField(Class<?> clazz, String field)` - Ignore specific fields during equality checks.
+* `registerFieldFilter(FieldFilter filter)` - Register custom field filter.
+
+For more details on field filters, be sure to read the dedicated xref:matchers-and-field-filters.adoc[field filters] section.
+
+=== Reusing production configuration
+
+Although you can recreate your configuration specifically for your tests, it is recommended to reuse your production configuration.
+This ensures your tests use the exact same configuration as production.
+
+[tabs]
+====
+Configuration API::
++
+--
+If you're not using Axon's configuration API directly, you can for example create a static configuration method:
+
+[source,java]
+----
+include::example$testing/basictesting/creatingfixture/reuseconfig/AxonConfig.java[tag=reuse-production-configuration-api,indent=0]
+----
+--
+
+Spring Boot::
++
+--
+When using Spring Boot, the configurer is created by the Axon's Spring Boot integration.
+Inject it as a bean into your test for realistic integration testing:
+
+[source,java,role=pseudocode]
+----
+import org.axonframework.common.configuration.ApplicationConfigurer;
+import org.axonframework.test.fixture.AxonTestFixture;
+import io.axoniq.framework.testcontainer.AxonServerContainer;
+import org.junit.jupiter.api.*;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
+
+@SpringBootTest
+@Testcontainers
+class AccountTest {
+
+    @Container
+    @ServiceConnection
+    static AxonServerContainer axonServer = new AxonServerContainer();
+
+    @Autowired
+    private ApplicationConfigurer configurer;
+
+    private AxonTestFixture fixture;
+
+    @BeforeEach
+    void setUp() {
+        fixture = AxonTestFixture.with(configurer);
+    }
+
+    @AfterEach
+    void tearDown() {
+        fixture.stop();
+    }
+    // Tests ...
+}
+----
+
+The `@SpringBootTest` annotation ensures Spring Boot starts with your production configuration, and `@Autowired` injects the configurer bean created by Axon's Spring Boot integration.
+The `AxonServerContainer` starts an Axon Server instance in a Docker container for realistic integration testing.
+The `@ServiceConnection` annotation (Spring Boot 3.1+) automatically configures the Axon Server connection.
+--
+====
+
+[#test_phases]
+== Test phases
+
+Every test follows a three-phase structure:
+
+1. **<<given_phase,Given>>** - Set up initial state for your test.
+2. **<<when_phase,When>>** - Execute the action being tested.
+3. **<<then_phase,Then>>** - Verify the results of the action.
+
+The API enforces this structure with type-safe phase transitions.
+
+[#given_phase]
+=== Given-phase: Setting up initial state
+
+The given-phase defines the state before your test action.
+Each operation runs in its own processing context and is immediately committed.
+
+[#given_events]
+==== Given events
+
+You can define the given-phase by defining the events that should form the base for your tests.
+In most event-driven applications, this is the recommended approach, as it gives granular control of what **has** happened until you move into the <<when_phase,when-phase>>.
+The examples below show the provide operations you can use for this:
+
+[tabs]
+====
+Single event::
++
+--
+[source,java]
+----
+include::example$testing/basictesting/given/singleevent/GivenSingleEvent.java[tag=given-single-event,indent=0]
+----
+--
+
+Single event with metadata::
++
+--
+[source,java]
+----
+include::example$testing/basictesting/given/singleeventwithmetadata/GivenSingleEventWithMetadata.java[tag=given-single-event-with-metadata,indent=0]
+----
+--
+
+Multiple events at once::
++
+--
+[source,java]
+----
+include::example$testing/basictesting/given/multipleevents/GivenMultipleEvents.java[tag=given-multiple-events,indent=0]
+----
+
+Note that you can either use the `events(...)` method with several events, or invoke the `events(...)` method multiple times per event.
+
+--
+====
+
+[#given_commands]
+==== Given commands
+
+Besides <<given_events,given events>>, you are able to derive the initial state based on commands as well.
+This is useful when you want to test the full command handling flow, or our setup needs both command validation and event generation.
+The examples below show the provide operations you can use for this:
+
+[tabs]
+====
+Single command::
++
+--
+[source,java]
+----
+include::example$testing/basictesting/given/singlecommand/GivenSingleCommand.java[tag=given-single-command,indent=0]
+----
+--
+
+Single command with metadata::
++
+--
+[source,java]
+----
+include::example$testing/basictesting/given/singlecommandwithmetadata/GivenSingleCommandWithMetadata.java[tag=given-single-command-with-metadata,indent=0]
+----
+--
+
+Multiple commands at once::
++
+--
+[source,java]
+----
+include::example$testing/basictesting/given/multiplecommands/GivenMultipleCommands.java[tag=given-multiple-commands,indent=0]
+----
+
+Note that you can either use the `commands(...)` method with several commands, or invoke the `command(...)` method multiple times per command.
+
+--
+====
+
+[#no_prior_activity]
+==== Given no prior activity
+
+In some scenarios, there are no <<given_events,given events>> or <<given_commands,given commands>>.
+When there is no priority activity, you can use the `noPriorActivity` method to initiate your test scenario:
+
+[source,java]
+----
+include::example$testing/basictesting/given/nopriotactivity/GivenNoPriorActivity.java[tag=given-no-prior-activity,indent=0]
+----
+
+[#given_execute]
+==== Given custom execute
+
+For complex setup scenarios you can use `execute(Function<Configuration, ?>)`.
+The `execute()` grants access to the entire `Configuration`, allowing users to access any component they require.
+This can be useful whenever you need to set up external state, mock (complex) test dependencies, or whenever the fixture does not support what you require.
+
+[tabs]
+====
+Execute::
++
+--
+[source,java]
+----
+include::example$testing/basictesting/given/execute/GivenExecute.java[tag=given-execute,indent=0]
+----
+--
+
+Asynchronous execute::
++
+--
+[source,java]
+----
+include::example$testing/basictesting/given/executeasync/GivenExecuteAsync.java[tag=given-execute-async,indent=0]
+----
+--
+====
+
+[#when_phase]
+=== When-phase: Executing the action
+
+The when-phase executes the action you're testing.
+The entire phase runs in a single processing context.
+
+[#when_commands]
+==== When dispatching commands
+
+In a lot of scenarios, the when-phase triggers by dispatching a command.
+The command is dispatched through the command bus, and all resulting activity is recorded for verification.
+The examples below show the provide operations you can use for this:
+
+[tabs]
+====
+Command::
++
+--
+[source,java]
+----
+include::example$testing/basictesting/when/command/WhenCommand.java[tag=when-command,indent=0]
+----
+--
+
+Command with metadata::
++
+--
+[source,java]
+----
+include::example$testing/basictesting/when/commandwithmetadata/WhenCommandWithMetadata.java[tag=when-command-with-metadata,indent=0]
+----
+--
+====
+
+[#when_events]
+==== When publishing events
+
+Besides <<when_commands,when commands>>, you are able to trigger the test based on events as well.
+This is useful when you want to directly test your event handlers or simulate triggered events from an external system).
+The examples below show the provide operations you can use for this:
+
+[tabs]
+====
+Single event::
++
+--
+[source,java]
+----
+include::example$testing/basictesting/when/singleevent/WhenSingleEvent.java[tag=when-single-event,indent=0]
+----
+--
+
+Single event with metadata::
++
+--
+[source,java]
+----
+include::example$testing/basictesting/when/singleeventwithmetadata/WhenSingleEventWithMetadata.java[tag=when-single-event-with-metadata,indent=0]
+----
+--
+
+Multiple events at once::
++
+--
+[source,java]
+----
+include::example$testing/basictesting/when/multipleevents/WhenMultipleEvents.java[tag=when-multiple-events,indent=0]
+----
+
+Note that you can either use the `events(...)` method with several events, or invoke the `events(...)` method multiple times per event.
+
+--
+====
+
+[#when_nothing]
+==== When nothing happens
+
+In some scenarios, you do not care about some triggering scenario like <<when_commands,when commands>> or <<when_events,when events>> provides.
+Thus, when there is nothing happening in the system, you can use the `nothing` method to move to the <<then_phase,then-phase>>:
+
+[source,java]
+----
+include::example$testing/basictesting/when/nothing/WhenNothing.java[tag=when-nothing,indent=0]
+----
+
+This option is useful whenever you want to validate against the given state directly, or if you want to validate the base reply from query handlers.
+
+[#then_phase]
+=== Then-phase: Verifying results
+
+The Then-phase verifies that the action from the <<when_phase,when-phase>> produced the expected results based on the <<given_phase,given-phase's>> initial state.
+As with given and when, there are a couple of options for you to validate your system fully.
+Note that you are able to combine several then-phase verifiers to come to the desired validation!
+
+Recorded-message assertions exclude commands and events supplied directly to the when-phase, even though those inputs
+still pass through the configured command bus or event sink. Event and command assertions, including custom assertions
+and their `noEvents()` and `noCommands()` variants, cover only messages produced while handling the inputs. Input
+messages are recognized by identifier, so a handler-produced message with an equal payload remains visible.
+
+[#then_successful]
+==== Then verifying successful handling
+
+If you except the <<when_phase,when-phase>> to proceed without any exceptions, you can use the `success()` method as a quick validation:
+
+[source,java]
+----
+include::example$testing/basictesting/then/success/ThenSuccess.java[tag=then-success,indent=0]
+----
+
+As stated at the start of <<then_phase,this section>>, you can follow up the `success()` check with another check, like <<then_events,events>>:
+You can combine it with other assertions:
+
+[source,java]
+----
+include::example$testing/basictesting/then/successwithevents/ThenSuccessWithEvents.java[tag=then-success-with-events,indent=0]
+----
+
+[#then_exceptional]
+==== Then verifying exceptional handling
+
+If you except the <<when_phase,when-phase>> to resolve exceptionally, you can utilize a number of `exception(...)` methods:
+
+[tabs]
+====
+Specific exception::
++
+--
+
+[source,java]
+----
+include::example$testing/basictesting/then/exception/ThenException.java[tag=then-exception,indent=0]
+----
+--
+
+Specific exception and message::
++
+--
+
+[source,java]
+----
+include::example$testing/basictesting/then/exceptionwithmessage/ThenExceptionWithMessage.java[tag=then-exception-with-message,indent=0]
+----
+--
+
+Custom exception matcher::
++
+--
+
+[source,java]
+----
+include::example$testing/basictesting/then/exceptionsatisfies/ThenExceptionSatisfies.java[tag=then-exception-satisfies,indent=0]
+----
+--
+====
+
+[#then_events]
+==== Then verifying events
+
+If the <<when_phase,when-phase>> was based on a <<when_commands,command>>, chances are high you want to verify the events, or events that have been published.
+To that end, there are a number of event-specific methods you can use.
+Examples of this are `events(...)`, `eventsSatify(...)`, `eventsMatch(...)`, and `noEvents()`:
+
+[tabs]
+====
+Single event::
++
+--
+
+[source,java]
+----
+include::example$testing/basictesting/then/singleevent/ThenSingleEvent.java[tag=then-single-event,indent=0]
+----
+--
+
+Multiple events::
++
+--
+
+[source,java]
+----
+include::example$testing/basictesting/then/multipleevents/ThenMultipleEvents.java[tag=then-multiple-events,indent=0]
+----
+
+Note that you can either use the `events(...)` method with several events, or invoke the `events(...)` method multiple times per event.
+
+--
+
+Custom event validation::
++
+--
+[#then_event_satisfies]
+[source,java]
+----
+include::example$testing/basictesting/then/eventssatisfy/ThenEventsSatisfy.java[tag=then-events-satisfy,indent=0]
+----
+--
+
+Events match a predicate::
++
+--
+[#then_event_matches]
+[source,java]
+----
+include::example$testing/basictesting/then/eventsmatch/ThenEventsMatch.java[tag=then-events-match,indent=0]
+----
+--
+
+No events::
++
+--
+
+[source,java]
+----
+include::example$testing/basictesting/then/noevents/ThenNoEvents.java[tag=then-no-events,indent=0]
+----
+--
+====
+
+[#then_command_result]
+==== Then verifying command handling results
+
+If the <<when_phase,when-phase>> was based on a <<when_commands,command>>, you may want to verify the result your command handling functions return.
+Thus, besides validating the <<then_events,events>> that have been published, you can for example validate the identifier of newly created entities:
+
+[tabs]
+====
+Result::
++
+--
+
+[source,java]
+----
+include::example$testing/basictesting/then/resultpayload/ThenResultPayload.java[tag=then-result-payload,indent=0]
+----
+--
+
+Result satisfies::
++
+--
+
+[source,java]
+----
+include::example$testing/basictesting/then/resultpayloadsatisfies/ThenResultPayloadSatisfies.java[tag=then-result-payload-satisfies,indent=0]
+----
+--
+
+Result message satisfies::
++
+--
+
+[source,java]
+----
+include::example$testing/basictesting/then/resultmessagesatisfies/ThenResultMessageSatisfies.java[tag=then-result-message-satisfies,indent=0]
+----
+--
+====
+
+[#then_commands]
+==== Then verifying dispatched commands
+
+Actions within the <<when_phase,when-phase>> can result in additional commands to be dispatched.
+For example, if an event handler triggers the next step in a workflow, you would need to validate that new command.
+To that end, you can use a number of command-specific then-phase tasks to validate your application.
+Examples of this are `commands(...)`, `commandsSatify(...)`, `commandsMatch(...)`, and `noCommands()`:
+
+[tabs]
+====
+Single command::
++
+--
+
+[source,java]
+----
+include::example$testing/basictesting/then/singlecommand/ThenSingleCommand.java[tag=then-single-command,indent=0]
+----
+--
+
+Multiple commands::
++
+--
+
+[source,java]
+----
+include::example$testing/basictesting/then/multiplecommands/ThenMultipleCommands.java[tag=then-multiple-commands,indent=0]
+----
+
+Note that you can either use the `commands(...)` method with several commands, or invoke the `commands(...)` method multiple times per command.
+
+--
+
+Custom command validation::
++
+--
+
+[#then_command_satisfies]
+[source,java]
+----
+include::example$testing/basictesting/then/commandssatisfy/ThenCommandsSatisfy.java[tag=then-commands-satisfy,indent=0]
+----
+--
+
+Commands match a predicate::
++
+--
+
+[#then_command_matches]
+[source,java]
+----
+include::example$testing/basictesting/then/commandsmatch/ThenCommandsMatch.java[tag=then-commands-match,indent=0]
+----
+--
+
+No commands::
++
+--
+
+[source,java]
+----
+include::example$testing/basictesting/then/nocommands/ThenNoCommands.java[tag=then-no-commands,indent=0]
+----
+--
+====
+
+[#then_await]
+==== Then await verification
+
+Sometimes, the <<when_phase,when-phase>> action will not trigger immediately.
+Examples of these are xref:advanced-testing.adoc#integration_testing[(integration) tests] using a xref:events:event-processors/streaming.adoc[streaming event processor], which by design take some time.
+When this is the case you can use the `await(...)` operation.
+If you do not provide a `Duration`, the task will be awaited on for a default of five seconds.
+When you know a task should be verifiable sooner or later, you can define your own `Duration`:
+
+[tabs]
+====
+Await::
++
+--
+
+[source,java]
+----
+include::example$testing/basictesting/then/await/ThenAwait.java[tag=then-await,indent=0]
+----
+
+Using plain `await(...)` uses the default timeout of 5 seconds at all time.
+
+--
+
+Await with duration::
++
+--
+[source,java]
+----
+include::example$testing/basictesting/then/awaitwithduration/ThenAwaitWithDuration.java[tag=then-await-with-duration,indent=0]
+----
+--
+====
+
+[#then_expect]
+==== Then custom expect verification
+
+For complex verification scenarios you can use `expect(Consumer<Configuration>)`.
+The `expect()` grants access to the entire `Configuration`, allowing users to access any component they require.
+This can be useful whenever you need to verify external state, validate custom components, or whenever the fixture does not support what you require.
+
+[tabs]
+====
+Expect::
++
+--
+[source,java]
+----
+include::example$testing/basictesting/then/expect/ThenExpect.java[tag=then-expect,indent=0]
+----
+--
+
+Asynchronous expect::
++
+--
+[source,java]
+----
+include::example$testing/basictesting/then/expectasync/ThenExpectAsync.java[tag=then-expect-async,indent=0]
+----
+--
+====
+
+[#chaining_tests]
+== Chaining multiple tests
+
+When constructing unit tests sticking to a single given-when-then flow is recommended.
+However, some test scenarios benefit from validating a more intricate flow.
+
+Workflows are a clear example of this, where a number of <<given_events,given events>>, followed by a <<when_commands,command>>, result in <<then_events,events>> that form a clear basis for a follow-up <<when_commands,command>>.
+To support these cases you can use the `and()` operation to chain an additional given-when-then block:
+
+[source,java]
+----
+include::example$testing/basictesting/chaining/ChainingTests.java[tag=chaining-tests,indent=0]
+----
+
+This structure provides a number of benefits you can utilize.
+Like being able to reuse the previous test's state, validating a sequence of operations, or to verify your workflows are up to par.
+
+[#junit_extension]
+== JUnit `AxonFrameworkExtension`
+
+If you use JUnit for testing, you can simplify the lifecycle management of the `AxonTestFixture` by using the `AxonFrameworkExtension`.
+This extension automatically creates and stops the fixture for you, so you do not have to worry about that in your tests.
+
+To use the extension, simply annotate your test class with `@ExtendWith(AxonFrameworkExtension.class)` and declare a `AxonTestFixture` field in your test class. The extension will automatically inject the fixture into your test class and manage its lifecycle.
+
+[source,java]
+----
+include::example$testing/basictesting/extension/basic/BasicExtensionUsage.java[tag=junit-extension-basic,indent=0]
+----
+
+<1> The `@ExtendWith(AxonFrameworkExtension.class)` annotation tells JUnit to use the `AxonFrameworkExtension` for this test.
+<2> The `@ProvidedAxonTestFixture` annotation indicates that the `provider` field can create a new instance of an  `AxonTestFixture` for every test run.
+<3> Use parameter injection to get the `AxonTestFixture` instance in your test method. The extension will automatically create and inject the fixture for you, so you can focus on writing your tests without worrying about fixture lifecycle management.
+
+
+IMPORTANT: `@ProvidedAxonTestFixture` cannot be applied on static fields, as this breaks the lifecycle contract of getting a new instance of the fixture on every test run. You can however use `@ProvidedAxonTestFixture` on static and non-static methods if you want.
+
+
+Alternatively, you can also parameterize `@ProvidedAxonTestFixture` with a class value implementing the `AxonTestFixtureProvider` interface. By doing so, you can reuse the same provider across multiple test classes, or even share it across your entire test suite by using a common base class.
+By using the `@ProvidedAxonTestFixture` directly on a test method, you can override the default configured on class level.
+
+[source,java]
+----
+include::example$testing/basictesting/extension/providers/ProviderBasedExtensionUsage.java[tag=junit-extension-providers,indent=0]
+----
+
+<1> The `@ProvidedAxonTestFixture(GlobalFixtureProvider.class)` annotation tells the extension to use the `GlobalFixtureProvider` class to create new instances of the `AxonTestFixture` for every test run. This allows you to centralize your fixture configuration in one place and reuse it across multiple test classes.
+<2> This test method will use the `GlobalFixtureProvider` to create the fixture instance, as it is the default provider configured at the class level.
+<3> This test method will use the `SpecificFixtureProvider` to create the fixture instance.
+
+== Example test scenarios
+
+Besides the specific examples spread throughout the explanation of the different <<test_phases,phases>>, there are coarse grained examples that you can benefit from.
+To that end, the list below shows some tests for <<testing_command_handling_components,command handling components>>, <<testing_event_handling_components,event handling components>>, <<testing_event_sourced_entities,event-sourced entities>>, and testing <<testing_query_handling_components,query handling components>>.
+
+[#testing_command_handling_components]
+=== Example: Testing a stateful command handling component
+
+In this test, the user decided to have a Command Handling Component called the `AccountCommandHandler` for which the state is automatically injected in the command handlers.
+The state, which is the event-sourced `Account`, is registered separately with the configurer in this example.
+Furthermore, the developer decided to construct fine-grained unit tests to validate the flow:
+
+[source,java]
+----
+include::example$testing/basictesting/examples/commandhandling/AccountCommandHandlerTest.java[tag=testing-command-handling-component,indent=0]
+----
+
+[#testing_event_handling_components]
+=== Example: Testing an event handling component
+
+Here is an example test scenario how an Event Handling Component sends emails as a result of handling an event. Take note of the use of <<then_await,await>>, which mandatory to give the xref:events:event-processors/index.adoc[event processor] time to actually process the event.
+
+[source,java]
+----
+include::example$testing/basictesting/examples/eventhandling/NotificationEventHandlerTest.java[tag=testing-event-handling-component,indent=0]
+----
+
+[#testing_event_sourced_entities]
+=== Example: Testing an event-sourced entity with command handler
+
+In this test example, the developers decided to combine the command handler with the event-sourced entity in one object.
+Furthermore, the test runs through the complete lifecycle of an account in one go using the fixture's <<chaining_tests,chaining>> capabilities:
+
+[source,java]
+----
+include::example$testing/basictesting/examples/eventsourcedentity/AccountEntityTest.java[tag=testing-event-sourced-entity,indent=0]
+----
+
+[#testing_query_handling_components]
+=== Example: Testing a query handling component
+
+As the test fixtures (not yet) support query validation, this scenario uses the `expect(...)` operation to fully customize the <<then_phase,then-phase>> to their purposes:
+
+[source,java]
+----
+include::example$testing/basictesting/examples/queryhandling/AccountQueryHandlerTest.java[tag=testing-query-handling-component,indent=0]
+----

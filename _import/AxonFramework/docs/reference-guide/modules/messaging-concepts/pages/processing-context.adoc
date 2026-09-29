@@ -1,0 +1,266 @@
+= Processing Context
+:page-aliases: unit-of-work.adoc
+
+The `ProcessingContext` is the core abstraction for managing the lifecycle of message processing in Axon Framework.
+It coordinates all actions performed during the processing of a message, regardless of whether it's a command, event, or query. As such, it is constructed by **any** message handling component in Axon Framework, so that you don't have to.
+While you're unlikely to interact with it directly in most cases, understanding the `ProcessingContext` helps you leverage Axon's lifecycle management capabilities when needed.
+
+[WARNING]
+====
+As stated directly above, you are unlikely to interact with the `ProcessingContext` in the majority of cases. Default Axon Framework usage through message handlers means you mostly only ever have to pass it along. If you do need use to it, for whatever reason, be certain to clearly read the documentation below and ask questions when in doubt.
+====
+
+== Overview
+
+When Axon processes a message, it creates a `ProcessingContext` that:
+
+* **Manages the processing lifecycle** through distinct phases (pre-invocation, invocation, commit, etc.)
+* **Stores resources** needed during processing (database connections, entity managers, etc.)
+* **Coordinates cleanup actions** to release resources after processing
+* **Provides access to framework components** from the configuration
+* **Supports async-native processing** with `CompletableFuture`-based APIs
+
+The `ProcessingContext` ensures that message processing is atomic. Processing either completes successfully or is rolled back entirely if something goes wrong.
+
+In most cases, Axon's building blocks automatically manage the `ProcessingContext` for you.
+You typically only need to interact with it when:
+
+* Registering lifecycle callbacks for cleanup or transaction management **not** supported by Axon Framework out of the box.
+* Managing custom resources that span multiple processing steps.
+* Implementing advanced interceptors or custom infrastructure components.
+* Single-point of access to Axon's configured components.
+
+
+== Accessing the processing context
+
+The `ProcessingContext` is injected as a parameter in your message handlers:
+
+[source,java]
+----
+include::example$messagingconcepts/processingcontext/AccessingContextHandlers.java[tag=accessing-context,indent=0]
+----
+
+== Processing lifecycle
+
+The `ProcessingContext` manages message processing through a series of phases.
+Each phase serves a specific purpose in the processing lifecycle.
+
+=== Lifecycle phases
+
+The processing lifecycle consists of these phases, executed in order:
+
+[cols="1,1,4"]
+|===
+|Phase |Order |Purpose
+
+|**Pre-Invocation**
+|-10000
+|Execute setup actions before the handler is invoked. Use for validation, security checks, or preparing resources.
+
+|**Invocation**
+|0
+|The main processing phase where your message handler executes.
+
+|**Post-Invocation**
+|10000
+|Execute actions after handler invocation but before commit. Use for post-processing logic that should happen before persistence.
+
+|**Prepare-Commit**
+|20000
+|Prepare resources for commit. Use for validation before the final commit.
+
+|**Commit**
+|30000
+|Commit changes. Use for persisting state, committing transactions, publishing events, or sending messages.
+
+|**After-Commit**
+|40000
+|Execute actions after successful commit. Use for notifications, logging, or triggering follow-up processes.
+|===
+
+=== Phase execution rules
+
+* **Sequential execution**: Phases execute strictly in order from lowest to highest.
+* **Parallel actions**: Multiple actions within the same phase may execute in parallel.
+* **Phase completion**: All actions in a phase must complete before moving to the next phase.
+* **Failure handling**: If any action fails, subsequent phases are skipped and error handlers execute.
+* **Registering from within a phase**: An action may register further actions, but only for a phase with a higher order than the one it is running in. Registering for the phase currently running, or for one already passed, is rejected with an `IllegalStateException`.
+
+That last rule matters more often than it looks, because a handler is not always invoked in the phase it would expect. Events published with a `ProcessingContext` are delivered during that context's prepare-commit phase, and a subscribing event processor hands them to its handlers there. Such a handler runs *inside* prepare-commit and so cannot register for it.
+
+The way to attach work to the caller's lifecycle from that position is a custom phase in the gap above the one you are in. `Phase` is an interface over an arbitrary order, and the default phases leave 10000 between them, so there is always room:
+
+[source,java]
+----
+private static final ProcessingLifecycle.Phase AFTER_PREPARE_COMMIT =
+        () -> ProcessingLifecycle.DefaultPhases.PREPARE_COMMIT.order() + 5_000;
+
+// From a handler invoked during PREPARE_COMMIT:
+context.runOn(AFTER_PREPARE_COMMIT, ctx -> { /* still inside the caller's transaction */ });
+----
+
+The action runs once every prepare-commit action is done and before the context commits. Two framework components use exactly this: an `axon-legacy` saga is written in such a phase, and the event store hands its appended events to the storage engine in another one, ordered last so that anything appending from an earlier custom phase is still included.
+
+=== Registering lifecycle actions
+
+You can register actions to execute in any phase:
+
+[source,java]
+----
+include::example$messagingconcepts/processingcontext/LifecycleActionRegistration.java[tag=register-lifecycle-actions,indent=0]
+----
+
+All lifecycle methods come in two variants:
+
+* **Async variant** (`on*`) - For actions that return `CompletableFuture<?>`
+* **Sync variant** (`runOn*`) - For simple actions with no return value
+
+Available lifecycle methods:
+
+[source,java]
+----
+include::example$messagingconcepts/processingcontext/LifecycleActionRegistration.java[tag=phase-handlers,indent=0]
+----
+
+For synchronous actions that need to return a value to be passed to a following step, wrap the result in a `CompletableFuture`:
+
+[source,java]
+----
+include::example$messagingconcepts/processingcontext/LifecycleActionRegistration.java[tag=sync-result-in-future,indent=0]
+----
+
+=== Error and completion handlers
+
+Beyond the standard phases, you can register handlers for errors and completion:
+
+[source,java]
+----
+include::example$messagingconcepts/processingcontext/ErrorCompletionHandlers.java[tag=error-completion-handlers,indent=0]
+----
+
+**Execution order for error scenarios:**
+
+1. Normal phases execute until one fails, then
+2. `onError` handlers execute, then
+3. `whenComplete` handlers are **skipped**, then
+4. `doFinally` handlers execute.
+
+**Execution order for success scenarios:**
+
+1. All normal phases execute successfully, then
+2. `onError` handlers are **skipped**, then
+3. `whenComplete` handlers execute, then
+4. `doFinally` handlers execute.
+
+== Resource management
+
+The `ProcessingContext` provides type-safe resource management for storing and retrieving resources needed during message processing. This allows Axon Framework to add resources in an early phase of the `ProcessingContext`, which is then accessed during a later phase of the context's lifecycle.
+
+=== Resource keys
+
+Resources are identified using type-safe keys:
+
+[source,java]
+----
+include::example$messagingconcepts/processingcontext/ResourceKeyDefinitions.java[tags=resource-key-import;resource-keys,indent=0]
+----
+
+Using typed keys prevents casting errors and provides IDE auto-completion support.
+
+=== Storing and retrieving resources
+
+[source,java]
+----
+include::example$messagingconcepts/processingcontext/ResourceStorageHandler.java[tag=storing-retrieving-resources,indent=0]
+----
+
+=== Resource lifecycle pattern
+
+A common pattern for managing resources:
+
+[source,java]
+----
+include::example$messagingconcepts/processingcontext/TransactionInterceptor.java[tag=transaction-interceptor,indent=0]
+----
+
+=== Updating resources
+
+You can update existing resources using the update method:
+
+[source,java]
+----
+include::example$messagingconcepts/processingcontext/ResourceUpdateHandler.java[tag=updating-resources,indent=0]
+----
+
+=== Accessing the current message
+
+One of the default resources Axon Framework adds for you to the `ProcessingContext`, is the entire `Message`:
+
+[source,java]
+----
+include::example$messagingconcepts/processingcontext/AccessingCurrentMessage.java[tag=accessing-current-message,indent=0]
+----
+
+== Accessing configured components
+
+The `ProcessingContext` provides access to components registered in the Axon Framework configuration:
+
+[source,java]
+----
+include::example$messagingconcepts/processingcontext/AccessingComponents.java[tag=accessing-components,indent=0]
+----
+
+This is particularly useful in interceptors or custom infrastructure components where you need to access framework services.
+
+== Context propagation
+
+When dispatching new messages from within a handler, it is strongly recommended you do some from _with_ the active `ProcessingContext` to maintain xref:message-correlation.adoc[correlation data] and share resources.
+
+=== Using `EventAppender`
+
+`EventAppender` automatically uses the current processing context when publishing events:
+
+[source,java]
+----
+include::example$messagingconcepts/processingcontext/EventAppenderPropagation.java[tag=event-appender,indent=0]
+----
+
+=== Using `CommandDispatcher`
+
+`CommandDispatcher` is automatically context-aware when injected into handlers:
+
+[source,java]
+----
+include::example$messagingconcepts/processingcontext/CommandDispatcherPropagation.java[tag=command-dispatcher,indent=0]
+----
+
+=== Creating branched contexts
+
+You can create a new context that shares resources from a parent context:
+
+[source,java]
+----
+include::example$messagingconcepts/processingcontext/BranchedContext.java[tag=branched-context,indent=0]
+----
+
+== Advanced usage
+
+Although using the `ProcessingContext` directly already counts as an advanced use case for the typical Axon Framework users, there are even more advanced usages when you are interacting with it directly.
+
+=== Custom phases
+
+You can define custom phases to insert logic at specific points in the lifecycle. As Axon Framework itself will never use your custom phases to register operation, you are certain **your** tasks are the only ones running during that point in time:
+
+[source,java]
+----
+include::example$messagingconcepts/processingcontext/CustomPhaseInterceptor.java[tag=custom-phase,indent=0]
+----
+
+=== Checking lifecycle state
+
+You can query the current state of the processing context:
+
+[source,java]
+----
+include::example$messagingconcepts/processingcontext/LifecycleStateHandler.java[tag=lifecycle-state,indent=0]
+----
