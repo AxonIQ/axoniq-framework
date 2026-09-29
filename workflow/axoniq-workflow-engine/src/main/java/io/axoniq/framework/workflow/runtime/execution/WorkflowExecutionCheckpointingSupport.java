@@ -221,6 +221,13 @@ final class WorkflowExecutionCheckpointingSupport {
         }
     }
 
+    /**
+     * Reports that this execution stops for recovery and holds the checkpoint of its segment.
+     */
+    synchronized void holdCheckpoint() {
+        checkpointWorkStateListener.onCheckpointHeld();
+    }
+
     synchronized void refreshCheckpointWorkState() {
         reportCheckpointWorkState();
     }

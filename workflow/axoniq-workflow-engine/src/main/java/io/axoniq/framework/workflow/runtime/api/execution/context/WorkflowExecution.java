@@ -175,6 +175,14 @@ public interface WorkflowExecution extends DescribableComponent {
          * Invoked when the workflow execution no longer has checkpoint-relevant work.
          */
         void onMarkedSafe();
+
+        /**
+         * Invoked when the workflow execution stops for recovery. It then no longer handles the events of its
+         * segment, so the checkpoint of that segment must not pass them until the execution is restored.
+         */
+        default void onCheckpointHeld() {
+            // No-op by default
+        }
     }
 
     /**

@@ -28,6 +28,7 @@ import org.axonframework.messaging.eventhandling.processing.streaming.token.Trac
 import org.jspecify.annotations.Nullable;
 
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -59,6 +60,7 @@ public class WorkflowEngineCheckpointingSupport implements Checkpointing {
 
     private final CheckpointLatchCoordinator checkpointLatchCoordinator;
     private final Map<Integer, CheckpointTrigger> segmentIdToTrigger = new ConcurrentHashMap<>();
+    private final Set<String> pausedWorkflowIds = ConcurrentHashMap.newKeySet();
 
     /**
      * Creates checkpointing support for a {@link WorkflowEngine} using the given {@code checkpointLatchCoordinator}.
@@ -77,12 +79,20 @@ public class WorkflowEngineCheckpointingSupport implements Checkpointing {
                                  @Nullable TrackingToken from,
                                  CheckpointTrigger trigger) {
         segmentIdToTrigger.put(segment.getSegmentId(), trigger);
+        // The claim restores the paused workflows from durable state, which ends their hold.
+        pausedWorkflowIds.removeIf(workflowId -> WorkflowSegmentOwnership.ownedBy(segment, workflowId));
     }
 
     @Override
     public CompletableFuture<TrackingToken> onCheckpointAdvanced(Segment segment,
                                                                  TrackingToken requested) {
         CompletableFuture<TrackingToken> result = new CompletableFuture<>();
+        // A paused workflow ignores the events of its segment. Failing leaves the stored token behind them.
+        if (holdsPausedCheckpoint(segment)) {
+            result.completeExceptionally(new IllegalStateException(
+                    "A paused workflow of segment " + segment.getSegmentId() + " holds its checkpoint"));
+            return result;
+        }
         if (!checkpointLatchCoordinator.hasUnsafeCheckpointWork(segment)) {
             result.complete(requested);
             return result;
@@ -106,7 +116,12 @@ public class WorkflowEngineCheckpointingSupport implements Checkpointing {
     @Override
     public CompletableFuture<TrackingToken> onSegmentReleased(Segment segment,
                                                               TrackingToken requested) {
-        return onCheckpointAdvanced(segment, requested)
+        // Failing the release leaves the stored token where it is, so the held work is delivered again on a next claim.
+        var released = checkpointLatchCoordinator.holdsCheckpoint(segment)
+                ? CompletableFuture.<TrackingToken>failedFuture(new IllegalStateException(
+                        "Segment " + segment.getSegmentId() + " holds workflow work that is not durable yet"))
+                : onCheckpointAdvanced(segment, requested);
+        return released
                 // Only this segment's trigger dies with its claim; the segments still held keep checkpointing.
                 .whenComplete((ignored, cause) -> segmentIdToTrigger.remove(segment.getSegmentId()));
     }
@@ -122,7 +137,8 @@ public class WorkflowEngineCheckpointingSupport implements Checkpointing {
     void getAndSetTriggerFrom(ProcessingContext context) {
         Segment.fromContext(context).ifPresent(
                 segment -> CheckpointTrigger.fromContext(context)
-                                            .ifPresent(trigger -> onSegmentClaimed(segment, null, trigger))
+                                            .ifPresent(trigger -> segmentIdToTrigger.put(segment.getSegmentId(),
+                                                                                         trigger))
         );
     }
 
@@ -135,12 +151,16 @@ public class WorkflowEngineCheckpointingSupport implements Checkpointing {
      * request can also arrive for a segment this node holds whose trigger has not been registered yet, and is dropped
      * the same way. That is safe: the stored token merely stays behind, so the events are re-processed after a restart
      * instead of being skipped.
+     * <p>
+     * The request is dropped as well while the segment holds its checkpoint: while a workflow of the segment is paused,
+     * or while the {@link CheckpointLatchCoordinator#holdsCheckpoint(Segment) coordinator holds it}.
      *
      * @param segment the segment the requested position belongs to, ignored when {@code null}
      * @param token   the token to request, ignored when {@code null}
      */
     void requestCheckpoint(@Nullable Segment segment, @Nullable TrackingToken token) {
-        if (segment == null || token == null) {
+        if (segment == null || token == null
+                || holdsPausedCheckpoint(segment) || checkpointLatchCoordinator.holdsCheckpoint(segment)) {
             return;
         }
         var trigger = segmentIdToTrigger.get(segment.getSegmentId());
@@ -150,19 +170,50 @@ public class WorkflowEngineCheckpointingSupport implements Checkpointing {
     }
 
     /**
+     * Holds the checkpoint of the segment owning the given workflow, because its execution stopped for recovery.
+     * <p>
+     * The hold outlives the execution: it ends only when the segment is claimed again, as that claim restores the
+     * workflow from durable state and delivers the events it ignored once more.
+     *
+     * @param workflowId the id of the paused workflow
+     */
+    void holdCheckpointOf(String workflowId) {
+        pausedWorkflowIds.add(workflowId);
+    }
+
+    private boolean holdsPausedCheckpoint(Segment segment) {
+        return pausedWorkflowIds.stream().anyMatch(workflowId -> WorkflowSegmentOwnership.ownedBy(segment, workflowId));
+    }
+
+    /**
      * Coordinates workflow work that must complete before checkpoint advancement.
      */
     @Internal
     public interface CheckpointLatchCoordinator {
 
         /**
-         * Returns whether any {@link WorkflowExecution WorkflowExecutions} owned by the given {@code segment} still
-         * makes checkpoint advancement unsafe.
+         * Returns whether any running {@link WorkflowExecution WorkflowExecutions} owned by the given {@code segment}
+         * still makes checkpoint advancement unsafe. Work of an execution that is not running is reported by
+         * {@link #holdsCheckpoint(Segment)} instead.
          *
          * @param segment the segment whose checkpoint is being advanced
          * @return {@code true} when checkpoint advancement must wait, {@code false} otherwise
          */
         boolean hasUnsafeCheckpointWork(Segment segment);
+
+        /**
+         * Returns whether any {@link WorkflowExecution WorkflowExecutions} owned by the given {@code segment} holds
+         * work that no running workflow driver drains, such as an execution that is restored or created but not
+         * started yet.
+         * <p>
+         * No latch can wait for such work, so while it is held the segment's checkpoint must not advance at all.
+         *
+         * @param segment the segment whose checkpoint is being advanced
+         * @return {@code true} when the checkpoint of the segment must not advance, {@code false} otherwise
+         */
+        default boolean holdsCheckpoint(Segment segment) {
+            return false;
+        }
 
         /**
          * Adds a checkpoint latch across the current set of {@link WorkflowExecution WorkflowExecutions} owned by the

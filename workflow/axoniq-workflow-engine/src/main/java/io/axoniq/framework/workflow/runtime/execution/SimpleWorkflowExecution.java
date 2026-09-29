@@ -463,6 +463,8 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
      */
     private void stopRuntimeForRecovery() {
         this.stoppedForRecovery = true;
+        // Before the stop releases any checkpoint latch, so the checkpoint that latch awaited cannot pass either.
+        this.checkpointingSupport.holdCheckpoint();
         stopRuntime(new StepInterruptedException("Workflow runtime stopped for recovery"));
     }
 

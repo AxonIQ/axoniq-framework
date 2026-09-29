@@ -42,6 +42,7 @@ import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.util.HashSet;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
@@ -87,7 +88,8 @@ public class WorkflowEngine implements
     private WorkflowEngineCheckpointingSupport checkpointingSupport;
     private final WorkflowEngineCatchUpSupport catchUpSupport = new WorkflowEngineCatchUpSupport();
     private final WorkflowEngineSequencingPolicy segmentedRouting;
-    private final UnsafeCheckpointWorkIndex checkpointWorkIndex = new UnsafeCheckpointWorkIndex();
+    private final UnsafeCheckpointWorkIndex checkpointWorkIndex =
+            new UnsafeCheckpointWorkIndex(workflowId -> checkpointingSupport.holdCheckpointOf(workflowId));
     // Package-private so a test can shrink it instead of waiting out the production timeout.
     Duration restoreTimeout = DEFAULT_RESTORE_TIMEOUT;
 
@@ -260,17 +262,23 @@ public class WorkflowEngine implements
 
     @Override
     public boolean hasUnsafeCheckpointWork(Segment segment) {
-        return unsafeWorkflowIdsOf(segment).findAny().isPresent();
+        return unsafeExecutionsOf(segment).anyMatch(WorkflowExecution::isRunning);
+    }
+
+    @Override
+    public boolean holdsCheckpoint(Segment segment) {
+        return unsafeExecutionsOf(segment).anyMatch(execution -> !execution.isRunning());
     }
 
     /**
      * Adds a checkpoint latch across the current set of {@link WorkflowExecution WorkflowExecutions} owned by the given
      * {@code segment} that are still performing tasks.
      * <p>
-     * The given {@code latch} is attached to all {@code WorkflowExecutions} that still have tasks to perform. Or in
-     * other terms, executions that are "unsafe" to checkpoint on. When no execution is unsafe at the moment the latch
-     * is attached, the latch runs straight away so safety is re-checked, covering a workflow that appended work
-     * concurrently.
+     * The given {@code latch} is attached to all running {@code WorkflowExecutions} that still have tasks to perform.
+     * Or in other terms, executions that are "unsafe" to checkpoint on. An execution that is not running has no driver
+     * to cross a latch; it {@link #holdsCheckpoint(Segment) holds the checkpoint} instead. When no running execution is
+     * unsafe at the moment the latch is attached, the latch runs straight away so safety is re-checked, covering a
+     * workflow that appended work concurrently.
      *
      * @param segment the segment whose checkpoint is being advanced
      * @param latch   the latch to invoke after all unsafe {@link WorkflowExecution WorkflowExecutions} have reached it
@@ -282,7 +290,10 @@ public class WorkflowEngine implements
                 workflowId -> workflowExecutionRepository.findById(workflowId).ifPresentOrElse(
                         execution -> {
                             if (execution.hasUnsafeCheckpointWork()) {
-                                executions.add(execution);
+                                // Only a running driver crosses a latch; the others hold the checkpoint instead.
+                                if (execution.isRunning()) {
+                                    executions.add(execution);
+                                }
                             } else {
                                 checkpointWorkIndex.markSafe(workflowId);
                             }
@@ -661,6 +672,12 @@ public class WorkflowEngine implements
         return checkpointWorkIndex.unsafeWorkflowIds()
                                   .stream()
                                   .filter(workflowId -> WorkflowSegmentOwnership.ownedBy(segment, workflowId));
+    }
+
+    private Stream<WorkflowExecution> unsafeExecutionsOf(Segment segment) {
+        return unsafeWorkflowIdsOf(segment).map(workflowExecutionRepository::findById)
+                                           .flatMap(Optional::stream)
+                                           .filter(WorkflowExecution::hasUnsafeCheckpointWork);
     }
 
     /**

@@ -37,6 +37,16 @@ import java.util.function.Consumer;
 final class UnsafeCheckpointWorkIndex {
 
     private final Set<String> unsafeWorkflowIds = ConcurrentHashMap.newKeySet();
+    private final Consumer<String> checkpointHeldListener;
+
+    /**
+     * Creates an index that reports the workflows holding the checkpoint of their segment to the given listener.
+     *
+     * @param checkpointHeldListener invoked with the id of a workflow whose execution holds the checkpoint
+     */
+    UnsafeCheckpointWorkIndex(Consumer<String> checkpointHeldListener) {
+        this.checkpointHeldListener = checkpointHeldListener;
+    }
 
     boolean hasUnsafeCheckpointWork() {
         return !unsafeWorkflowIds.isEmpty();
@@ -71,6 +81,11 @@ final class UnsafeCheckpointWorkIndex {
             @Override
             public void onMarkedSafe() {
                 markSafe(workflowId);
+            }
+
+            @Override
+            public void onCheckpointHeld() {
+                checkpointHeldListener.accept(workflowId);
             }
         });
     }

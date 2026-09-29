@@ -20,7 +20,11 @@ package io.axoniq.framework.workflow.runtime.execution;
 
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.GlobalSequenceTrackingToken;
+import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.junit.jupiter.api.*;
+
+import java.util.ArrayList;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -69,16 +73,136 @@ class WorkflowEngineCheckpointingSupportTest {
         assertThat(coordinator.scheduledBarriers).isEqualTo(2);
     }
 
+    @Test
+    void failsACheckpointThatAwaitedAWorkflowWhichPausedMeanwhile() {
+        // given
+        var coordinator = new InlineCheckpointLatchCoordinator();
+        coordinator.pendingWork = true;
+        var support = new WorkflowEngineCheckpointingSupport(coordinator);
+        var result = support.onCheckpointAdvanced(Segment.ROOT_SEGMENT, new GlobalSequenceTrackingToken(42));
+
+        // when
+        coordinator.pendingWork = false;
+        support.holdCheckpointOf("paused-workflow");
+        coordinator.crossBarrier();
+
+        // then
+        assertThat(result).isCompletedExceptionally();
+    }
+
+    @Nested
+    class WhileTheCoordinatorHoldsTheCheckpoint {
+
+        @Test
+        void dropsACheckpointRequest() {
+            // given
+            var coordinator = new InlineCheckpointLatchCoordinator();
+            coordinator.held = true;
+            var support = new WorkflowEngineCheckpointingSupport(coordinator);
+            var requests = new ArrayList<TrackingToken>();
+            support.onSegmentClaimed(Segment.ROOT_SEGMENT, null, requests::add);
+
+            // when
+            support.requestCheckpoint(Segment.ROOT_SEGMENT, new GlobalSequenceTrackingToken(42));
+
+            // then
+            assertThat(requests).isEmpty();
+        }
+
+        @Test
+        void failsTheReleaseSoTheStoredTokenStaysBehindTheHeldWork() {
+            // given
+            var coordinator = new InlineCheckpointLatchCoordinator();
+            coordinator.held = true;
+            var support = new WorkflowEngineCheckpointingSupport(coordinator);
+
+            // when
+            var released = support.onSegmentReleased(Segment.ROOT_SEGMENT, new GlobalSequenceTrackingToken(42));
+
+            // then
+            assertThat(released).isCompletedExceptionally();
+            assertThat(coordinator.scheduledBarriers).isZero();
+        }
+    }
+
+    @Nested
+    class WhileAWorkflowOfTheSegmentIsPaused {
+
+        private static final String WORKFLOW_ID = "paused-workflow";
+
+        private final InlineCheckpointLatchCoordinator coordinator = new InlineCheckpointLatchCoordinator();
+        private final WorkflowEngineCheckpointingSupport support = new WorkflowEngineCheckpointingSupport(coordinator);
+        private final List<TrackingToken> requests = new ArrayList<>();
+
+        @BeforeEach
+        void claimAndPause() {
+            support.onSegmentClaimed(Segment.ROOT_SEGMENT, null, requests::add);
+            support.holdCheckpointOf(WORKFLOW_ID);
+        }
+
+        @Test
+        void dropsACheckpointRequest() {
+            // when
+            support.requestCheckpoint(Segment.ROOT_SEGMENT, new GlobalSequenceTrackingToken(42));
+
+            // then
+            assertThat(requests).isEmpty();
+        }
+
+        @Test
+        void failsTheReleaseAfterTheEngineDroppedThePausedExecution() {
+            // given the coordinator reports no work at all, as after the engine cleared its executions
+
+            // when
+            var released = support.onSegmentReleased(Segment.ROOT_SEGMENT, new GlobalSequenceTrackingToken(42));
+
+            // then
+            assertThat(released).isCompletedExceptionally();
+        }
+
+        @Test
+        void aNewClaimOfTheSegmentEndsTheHold() {
+            // given
+            support.onSegmentReleased(Segment.ROOT_SEGMENT, new GlobalSequenceTrackingToken(42));
+
+            // when
+            support.onSegmentClaimed(Segment.ROOT_SEGMENT, null, requests::add);
+            support.requestCheckpoint(Segment.ROOT_SEGMENT, new GlobalSequenceTrackingToken(42));
+
+            // then
+            assertThat(requests).containsExactly(new GlobalSequenceTrackingToken(42));
+        }
+
+        @Test
+        void doesNotHoldASegmentThatDoesNotOwnTheWorkflow() {
+            // given
+            var segments = Segment.ROOT_SEGMENT.split();
+            var otherSegment = segments[0].matches(WORKFLOW_ID) ? segments[1] : segments[0];
+
+            // when
+            var result = support.onCheckpointAdvanced(otherSegment, new GlobalSequenceTrackingToken(42));
+
+            // then
+            assertThat(result).isCompletedWithValue(new GlobalSequenceTrackingToken(42));
+        }
+    }
+
     private static final class InlineCheckpointLatchCoordinator
             implements WorkflowEngineCheckpointingSupport.CheckpointLatchCoordinator {
 
         private boolean pendingWork;
+        private boolean held;
         private Runnable barrier;
         private int scheduledBarriers;
 
         @Override
         public boolean hasUnsafeCheckpointWork(Segment segment) {
             return pendingWork;
+        }
+
+        @Override
+        public boolean holdsCheckpoint(Segment segment) {
+            return held;
         }
 
         @Override

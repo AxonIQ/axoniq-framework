@@ -221,18 +221,12 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
                                      // events and unique start candidates reach the owning segment and all other
                                      // business events are broadcast to every segment.
                                      var workflowEngine = workflowEngine(cfg);
-                                     EventHandlingComponentHandlingAny component;
-                                     if (engineComponentName != null) {
-                                         component = new EventHandlingComponentHandlingAny(
-                                                 workflowEngine,
-                                                 cfg.getComponent(WorkflowEngineCheckpointingSupport.class)
-                                         );
-                                     } else {
-                                         component = new EventHandlingComponentHandlingAny(workflowEngine);
-                                     }
                                      return new SequenceOverridingEventHandlingComponent(
                                              workflowEngine.segmentedRouting(),
-                                             component
+                                             new EventHandlingComponentHandlingAny(
+                                                     workflowEngine,
+                                                     cfg.getComponent(WorkflowEngineCheckpointingSupport.class)
+                                             )
                                      );
                                  }
                     );
