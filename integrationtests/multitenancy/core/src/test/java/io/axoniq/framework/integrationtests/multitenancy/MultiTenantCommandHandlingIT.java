@@ -56,17 +56,24 @@ import static org.awaitility.Awaitility.await;
 
 /**
  * Integration test for the multi-tenancy feature testing against multi-context Axon Server.
+ * <p>
+ * The application and its tenant contexts are built once for the whole class rather than per test, to avoid paying
+ * for a full application startup and context round-trip per test method.
  *
  * @author Jan Galinski
  * @author Jakob Hatzl
  * @since 5.3.0
  */
 @ExtendWith(DisableMultiTenancyTestsWithoutLicense.class)
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class MultiTenantCommandHandlingIT {
 
     private static final AxonServerTestInfrastructure INFRASTRUCTURE = new AxonServerTestInfrastructure();
     private static final String TENANT_A = "tenant-A";
     private static final String TENANT_B = "tenant-B";
+    // Dedicated to the one test that deletes a tenant, so that destructive test doesn't affect TENANT_A/TENANT_B,
+    // which every other test in this class relies on remaining present regardless of test execution order.
+    private static final String TENANT_TO_DELETE = "tenant-to-delete";
 
     private AxonServerTestInfrastructure.ContextManager contextManager;
     private AxonConfiguration application;
@@ -74,14 +81,15 @@ class MultiTenantCommandHandlingIT {
     private final Queue<RecordedCommand> resolvedTenantScopedComponents = new ConcurrentLinkedQueue<>();
     private TenantProvider tenantDescriptors;
 
-    @BeforeEach
-    void setUp() {
+    @BeforeAll
+    void setUpClass() {
         INFRASTRUCTURE.start();
         contextManager = INFRASTRUCTURE.getContextManager();
         contextManager.createContext(TENANT_A);
         contextManager.createContext(TENANT_B);
+        contextManager.createContext(TENANT_TO_DELETE);
         assertThat(contextManager.getContexts())
-                .containsExactlyInAnyOrder(ADMIN_CONTEXT, DEFAULT_CONTEXT, TENANT_A, TENANT_B);
+                .containsExactlyInAnyOrder(ADMIN_CONTEXT, DEFAULT_CONTEXT, TENANT_A, TENANT_B, TENANT_TO_DELETE);
 
         CommandHandlingModule.CommandHandlerPhase commandHandlingModule =
                 CommandHandlingModule.named("multi-tenancy-it-module")
@@ -106,12 +114,17 @@ class MultiTenantCommandHandlingIT {
         tenantDescriptors = application.getComponent(TenantProvider.class);
     }
 
-    @AfterEach
-    void tearDown() {
+    @AfterAll
+    void tearDownClass() {
         application.shutdown();
         contextManager.deleteAllCustomContexts();
-        recordedCommands.clear();
         INFRASTRUCTURE.stop();
+    }
+
+    @BeforeEach
+    void setUp() {
+        recordedCommands.clear();
+        resolvedTenantScopedComponents.clear();
     }
 
     @Test
@@ -169,12 +182,13 @@ class MultiTenantCommandHandlingIT {
     @Test
     void sendingCommandToDeletedTenantFails() {
         CommandGateway commandGateway = application.getComponent(CommandGateway.class);
-        contextManager.deleteContext(TENANT_A);
-        await().untilAsserted(() -> assertThat(tenantDescriptors.tenants()).noneMatch(d -> TENANT_A.equals(d.tenantId())));
+        contextManager.deleteContext(TENANT_TO_DELETE);
+        await().untilAsserted(() -> assertThat(tenantDescriptors.tenants())
+                .noneMatch(d -> TENANT_TO_DELETE.equals(d.tenantId())));
 
-        CommandResult result = commandGateway.send(new RecordTenantCommand("for-tenant-a"),
+        CommandResult result = commandGateway.send(new RecordTenantCommand("for-deleted-tenant"),
                                                    Metadata.with(MetadataBasedTenantResolver.DEFAULT_TENANT_METADATA_KEY,
-                                                                 TENANT_A),
+                                                                 TENANT_TO_DELETE),
                                                    null);
         assertThatThrownBy(() -> result.getResultMessage().join())
                 .hasCauseInstanceOf(TenantNotResolvedException.class);

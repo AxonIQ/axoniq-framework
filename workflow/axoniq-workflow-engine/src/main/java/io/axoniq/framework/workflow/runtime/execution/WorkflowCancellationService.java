@@ -18,10 +18,10 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
-import org.jspecify.annotations.Nullable;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.common.infra.DescribableComponent;
+import org.jspecify.annotations.Nullable;
 
 import java.util.NoSuchElementException;
 import java.util.Objects;
@@ -45,6 +45,13 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class WorkflowCancellationService implements DescribableComponent {
 
     private final ConcurrentHashMap<String, WorkflowCancellation> cancellations = new ConcurrentHashMap<>();
+
+    private static void abortPendingWorkflowCancellation(@Nullable WorkflowCancellation cancellation,
+                                                         String reason) {
+        if (cancellation instanceof WorkflowCancellation.Request request) {
+            request.abortPendingWorkflowCancellation(new CancellationException(reason));
+        }
+    }
 
     /**
      * Registers the cancellation coordinator for a live workflow.
@@ -131,12 +138,5 @@ public final class WorkflowCancellationService implements DescribableComponent {
             throw new NoSuchElementException("No running workflow found with id '" + workflowId + "'");
         }
         return cancellation;
-    }
-
-    private static void abortPendingWorkflowCancellation(@Nullable WorkflowCancellation cancellation,
-                                                         String reason) {
-        if (cancellation instanceof WorkflowCancellation.Request request) {
-            request.abortPendingWorkflowCancellation(new CancellationException(reason));
-        }
     }
 }

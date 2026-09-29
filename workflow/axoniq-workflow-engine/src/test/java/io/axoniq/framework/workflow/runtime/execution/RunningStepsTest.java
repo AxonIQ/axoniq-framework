@@ -18,7 +18,7 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
-import io.axoniq.framework.workflow.runtime.api.execution.state.StepCancellationException;
+import io.axoniq.framework.workflow.dsl.api.StepCancellationException;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.junit.jupiter.api.*;
 
@@ -28,7 +28,8 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicReference;
 
-import static org.assertj.core.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.*;
 
 /**

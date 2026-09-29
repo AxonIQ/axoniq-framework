@@ -22,11 +22,11 @@ import io.axoniq.framework.workflow.configuration.WorkflowConfigurer;
 import io.axoniq.framework.workflow.configuration.WorkflowModule;
 import io.axoniq.framework.workflow.configuration.WorkflowModule.WorkflowDefinitionPhase.DetectionPhase;
 import io.axoniq.framework.workflow.configuration.WorkflowModule.WorkflowDefinitionPhase.FinalizedPhase;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
 import io.axoniq.framework.workflow.dsl.base.BaseWorkflowContext;
 import io.axoniq.framework.workflow.dsl.base.BaseWorkflowContextFactory;
 import io.axoniq.framework.workflow.history.api.WorkflowHistory;
-import io.axoniq.framework.workflow.runtime.api.annotation.Workflow;
-import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
+import io.axoniq.framework.workflow.annotation.Workflow;
 import io.axoniq.framework.workflow.runtime.execution.PayloadPropertyWorkflowIdProvider;
 import org.axonframework.messaging.eventhandling.annotation.Event;
 import org.junit.jupiter.api.*;
@@ -60,13 +60,13 @@ class ParallelExecutionsWorkflowTest extends AbstractWorkflowIntegrationTestBase
     @Override
     protected UnaryOperator<WorkflowConfigurer> configure() {
         return c -> super.configure().apply(c).componentRegistry(r -> r.registerModule(
-                                                WorkflowModule
-                                                        .defaults("another", BaseWorkflowContext.class)
-                                                        .workflowContextFactory(conf -> new BaseWorkflowContextFactory())
-                                                        .definition(
-                                                                d -> d.autodetected(c0 -> new CustomerNotificationWorkflow())
-                                                        )
-                                        )
+                                                                         WorkflowModule
+                                                                                 .defaults("another", BaseWorkflowContext.class)
+                                                                                 .workflowContextFactory(conf -> new BaseWorkflowContextFactory())
+                                                                                 .definition(
+                                                                                         d -> d.autodetected(c0 -> new CustomerNotificationWorkflow())
+                                                                                 )
+                                                                 )
         );
     }
 

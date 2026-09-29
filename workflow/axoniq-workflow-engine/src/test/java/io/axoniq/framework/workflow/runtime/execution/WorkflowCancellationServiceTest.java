@@ -18,18 +18,16 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 
 import java.util.NoSuchElementException;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CancellationException;
+import java.util.concurrent.CompletableFuture;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
 
 /**
  * @author Simon Zambrovski
@@ -37,6 +35,12 @@ import static org.mockito.ArgumentMatchers.any;
 class WorkflowCancellationServiceTest {
 
     private static final String WORKFLOW_ID = "workflow-id";
+
+    private static void assertNoRunningWorkflow(WorkflowCancellationService service, String workflowId) {
+        assertThatThrownBy(() -> service.requestWorkflowCancellation(workflowId, null))
+                .isInstanceOf(NoSuchElementException.class)
+                .hasMessage("No running workflow found with id '" + workflowId + "'");
+    }
 
     @Test
     void cancellationRequestsDelegateToRegisteredCoordinator() {
@@ -108,11 +112,5 @@ class WorkflowCancellationServiceTest {
         assertThatThrownBy(() -> service.requestCancellationOfAllSteps(WORKFLOW_ID, null))
                 .isInstanceOf(NoSuchElementException.class)
                 .hasMessage("No running workflow found with id 'workflow-id'");
-    }
-
-    private static void assertNoRunningWorkflow(WorkflowCancellationService service, String workflowId) {
-        assertThatThrownBy(() -> service.requestWorkflowCancellation(workflowId, null))
-                .isInstanceOf(NoSuchElementException.class)
-                .hasMessage("No running workflow found with id '" + workflowId + "'");
     }
 }

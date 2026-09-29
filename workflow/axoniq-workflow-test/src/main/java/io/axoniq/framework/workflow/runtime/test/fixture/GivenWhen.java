@@ -20,9 +20,9 @@ package io.axoniq.framework.workflow.runtime.test.fixture;
 
 import org.jspecify.annotations.Nullable;
 
-import io.axoniq.framework.workflow.runtime.api.execution.state.StepFailedException;
-import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
-import io.axoniq.framework.workflow.runtime.api.payload.PayloadProcessor;
+import io.axoniq.framework.workflow.dsl.api.StepFailedException;
+import io.axoniq.framework.workflow.dsl.api.StepStatus;
+import io.axoniq.framework.workflow.dsl.api.PayloadProcessor;
 
 import java.time.Duration;
 import java.util.Map;

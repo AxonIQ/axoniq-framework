@@ -22,10 +22,10 @@ import org.jspecify.annotations.Nullable;
 
 import io.axoniq.framework.workflow.history.api.WorkflowHistory;
 import io.axoniq.framework.workflow.history.inmemory.MutableWorkflowHistoryRepository;
-import io.axoniq.framework.workflow.runtime.api.execution.state.StepFailedException;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowState;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowStep;
-import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
+import io.axoniq.framework.workflow.dsl.api.StepFailedException;
+import io.axoniq.framework.workflow.dsl.api.WorkflowState;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStep;
+import io.axoniq.framework.workflow.dsl.api.StepStatus;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowConfigurationRegistry;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowEngine;
 import io.axoniq.framework.workflow.runtime.test.utils.DelayedPublisher;

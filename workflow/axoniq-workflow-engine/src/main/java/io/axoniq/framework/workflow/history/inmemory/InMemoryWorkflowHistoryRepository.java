@@ -43,10 +43,10 @@ public class InMemoryWorkflowHistoryRepository implements MutableWorkflowHistory
     @Override
     public CompletableFuture<List<WorkflowHistory>> findAll(WorkflowStateQuery query) {
         return CompletableFuture.completedFuture(workflowHistoryMap.values().stream()
-                                                                     .filter(history -> WorkflowStateQueryMatcher.matches(
-                                                                             query, history.state()
-                                                                     ))
-                                                                     .toList());
+                                                                   .filter(history -> WorkflowStateQueryMatcher.matches(
+                                                                           query, history.state()
+                                                                   ))
+                                                                   .toList());
     }
 
     @Override

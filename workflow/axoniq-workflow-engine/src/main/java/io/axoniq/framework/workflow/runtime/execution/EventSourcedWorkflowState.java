@@ -18,29 +18,29 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
+import io.axoniq.framework.workflow.dsl.api.StepRetryInfo;
+import io.axoniq.framework.workflow.dsl.api.WorkflowCancelledException;
+import io.axoniq.framework.workflow.dsl.api.WorkflowContext;
+import io.axoniq.framework.workflow.dsl.api.WorkflowError;
+import io.axoniq.framework.workflow.dsl.api.WorkflowFailedException;
+import io.axoniq.framework.workflow.dsl.api.WorkflowState;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStep;
 import io.axoniq.framework.workflow.runtime.api.execution.context.Version;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowCancelledException;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowFailedException;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowStatusChangeListener;
-import io.axoniq.framework.workflow.runtime.api.execution.state.StepRetryInfo;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowError;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowState;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowStep;
-import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.execution.payload.PayloadReducerRegistry;
 import io.axoniq.framework.workflow.runtime.util.MetadataUtils;
 import io.axoniq.framework.workflow.runtime.util.WorkflowStateUtils;
-import org.jspecify.annotations.Nullable;
 import org.axonframework.common.TypeReference;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.infra.ComponentDescriptor;
-import org.axonframework.messaging.core.VersionedType;
 import org.axonframework.messaging.core.Metadata;
+import org.axonframework.messaging.core.VersionedType;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventstreaming.EventCriteria;
 import org.axonframework.messaging.eventstreaming.Tag;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -71,12 +71,11 @@ public class EventSourcedWorkflowState implements WorkflowState {
     private final static Logger logger = LoggerFactory.getLogger(EventSourcedWorkflowState.class);
 
     private final String workflowId;
-    private Map<String, @Nullable Object> payload;
-    private volatile VersionedType workflowDefinition;
     private final WorkflowStateListenerSupport listenerSupport;
-
     private final Map<String, WorkflowStep> steps = new ConcurrentHashMap<>();
     private final Map<String, String> versions = new ConcurrentHashMap<>();
+    private Map<String, @Nullable Object> payload;
+    private volatile VersionedType workflowDefinition;
     private WorkflowStatus status = WorkflowStatus.NONE;
     private volatile Throwable terminationCause;
 
@@ -118,14 +117,14 @@ public class EventSourcedWorkflowState implements WorkflowState {
      * @param workflowId         workflow id
      * @param payload            initial workflow payload
      * @param workflowDefinition current workflow definition reference
-     * @param context            workflow context to use
+     * @param workflowContext    workflow workflowContext to use
      * @param listeners          workflow status change listeners
      */
     EventSourcedWorkflowState(
             String workflowId,
             Map<String, @Nullable Object> payload,
             VersionedType workflowDefinition,
-            WorkflowContext context,
+            WorkflowContext workflowContext,
             Map<WorkflowStatus, WorkflowStatusChangeListener> listeners
     ) {
         this.workflowId = requireNonNull(workflowId, "Workflow id must be set.");
@@ -133,7 +132,7 @@ public class EventSourcedWorkflowState implements WorkflowState {
         this.workflowDefinition = requireNonNull(workflowDefinition, "Workflow definition id must be set.");
         this.listenerSupport = new WorkflowStateListenerSupport(
                 requireNonNull(listeners, "Workflow status listeners must be set."),
-                requireNonNull(context, "Workflow context must be set.")
+                requireNonNull(workflowContext, "Workflow workflowContext must be set.")
         );
     }
 
@@ -143,22 +142,6 @@ public class EventSourcedWorkflowState implements WorkflowState {
             Map<WorkflowStatus, WorkflowStatusChangeListener> listeners
     ) {
         this(requireEventSourcedState(state), context, listeners);
-    }
-
-    /**
-     * Returns the event sourced workflow state.
-     *
-     * @param state workflow state
-     * @return event sourced workflow state or throws an exception if the given state is not an event sourced state
-     * @throws IllegalArgumentException if the given state is not an event sourced state
-     */
-    public static EventSourcedWorkflowState requireEventSourcedState(WorkflowState state) {
-        if (!(state instanceof EventSourcedWorkflowState sourcedState)) {
-            throw new IllegalArgumentException(
-                    "Currently only EventSourcedWorkflowState is supported, but you passed an instance of %s.".formatted(
-                            state.getClass().getName()));
-        }
-        return sourcedState;
     }
 
     /**
@@ -186,9 +169,20 @@ public class EventSourcedWorkflowState implements WorkflowState {
         this.terminationCause = sourcedState.terminationCause;
     }
 
-    @Override
-    public String workflowId() {
-        return workflowId;
+    /**
+     * Returns the event sourced workflow state.
+     *
+     * @param state workflow state
+     * @return event sourced workflow state or throws an exception if the given state is not an event sourced state
+     * @throws IllegalArgumentException if the given state is not an event sourced state
+     */
+    public static EventSourcedWorkflowState requireEventSourcedState(WorkflowState state) {
+        if (!(state instanceof EventSourcedWorkflowState sourcedState)) {
+            throw new IllegalArgumentException(
+                    "Currently only EventSourcedWorkflowState is supported, but you passed an instance of %s.".formatted(
+                            state.getClass().getName()));
+        }
+        return sourcedState;
     }
 
     /**
@@ -199,6 +193,11 @@ public class EventSourcedWorkflowState implements WorkflowState {
      */
     public static EventCriteria criteriaBuilder(String workflowId) {
         return EventCriteria.havingTags(Tag.of(WorkflowEventTags.TAG_WORKFLOW_ID, workflowId));
+    }
+
+    @Override
+    public String workflowId() {
+        return workflowId;
     }
 
     @Override
@@ -398,7 +397,7 @@ public class EventSourcedWorkflowState implements WorkflowState {
                                  }
                              }
                          }
-                         setStatus(status, terminationCause, notifyStatusListeners);
+                         setStatus(status, terminationCause, notifyStatusListeners, processingContext);
                      });
         logger.trace("Finished applying event {} in thread {}", eventMessage.type(), Thread.currentThread());
         return this;
@@ -476,12 +475,13 @@ public class EventSourcedWorkflowState implements WorkflowState {
     void setStatus(
             WorkflowStatus workflowStatus,
             @Nullable Throwable terminationCause,
-            boolean notifyStatusListeners
+            boolean notifyStatusListeners,
+            ProcessingContext processingContext
     ) {
         this.status = workflowStatus;
         this.terminationCause = terminationCause;
         if (notifyStatusListeners) {
-            this.listenerSupport.notify(workflowStatus);
+            this.listenerSupport.notify(workflowStatus, processingContext);
         }
     }
 
@@ -526,6 +526,16 @@ public class EventSourcedWorkflowState implements WorkflowState {
         descriptor.describeProperty("workflowDefinitionId", workflowDefinition);
     }
 
+    public String toString() {
+        return "WorkflowState{" +
+                "workflowId='" + workflowId + '\'' +
+                ", workflowDefinitionId=" + workflowDefinition +
+                ", status=" + status +
+                ", steps=" + steps +
+                ", payload=" + payload +
+                '}';
+    }
+
     /**
      * Offload the safe usage of listeners from the state implementation and makes it safe to operate with.
      *
@@ -547,24 +557,14 @@ public class EventSourcedWorkflowState implements WorkflowState {
          *
          * @param status status to notify about.
          */
-        public void notify(WorkflowStatus status) {
+        public void notify(WorkflowStatus status, ProcessingContext processingContext) {
             // only notify if we have a workflow context, this allows the usage without the context
             if (this.workflowContext != null && this.listeners != null) {
                 var listener = this.listeners.get(status);
                 if (listener != null) {
-                    listener.onWorkflowStatus(status, workflowContext);
+                    listener.onWorkflowStatus(status, workflowContext, processingContext);
                 }
             }
         }
-    }
-
-    public String toString() {
-        return "WorkflowState{" +
-                "workflowId='" + workflowId + '\'' +
-                ", workflowDefinitionId=" + workflowDefinition +
-                ", status=" + status +
-                ", steps=" + steps +
-                ", payload=" + payload +
-                '}';
     }
 }

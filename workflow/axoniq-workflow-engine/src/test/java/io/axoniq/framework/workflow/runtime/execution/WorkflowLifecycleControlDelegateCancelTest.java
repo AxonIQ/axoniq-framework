@@ -18,15 +18,16 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
-import io.axoniq.framework.workflow.runtime.api.execution.context.EventNameCustomizer;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowCancelledException;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
+import io.axoniq.framework.workflow.dsl.api.EventNameCustomizer;
+import io.axoniq.framework.workflow.dsl.api.StepStatus;
+import io.axoniq.framework.workflow.dsl.api.WorkflowCancelledException;
+import io.axoniq.framework.workflow.dsl.api.WorkflowContext;
+import io.axoniq.framework.workflow.dsl.api.WorkflowState;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStep;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowStatusChangeListener;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowState;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowStep;
-import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
-import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.util.EventMessageUtils;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.VersionedType;
@@ -56,6 +57,7 @@ import static org.mockito.Mockito.eq;
  */
 class WorkflowLifecycleControlDelegateCancelTest {
 
+    private WorkflowExecutionOperations workflowExecutionOperations;
     private WorkflowContext workflowContext;
     private WorkflowExecution workflowExecution;
     private EventSink eventSink;
@@ -71,6 +73,7 @@ class WorkflowLifecycleControlDelegateCancelTest {
     @BeforeEach
     void setUp() {
 
+        workflowExecutionOperations = mock(WorkflowExecutionOperations.class);
         workflowContext = mock(WorkflowContext.class);
         workflowExecution = mock(WorkflowExecution.class);
         eventSink = mock(EventSink.class);
@@ -93,17 +96,17 @@ class WorkflowLifecycleControlDelegateCancelTest {
                     return action.apply(processingContext);
                 });
         when(workflowExecution.state()).thenReturn(workflowState(Map.of()));
-        when(workflowContext.processingContext()).thenReturn(processingContext);
+        when(workflowExecutionOperations.processingContext()).thenReturn(processingContext);
         when(workflowExecution.workflowName()).thenReturn("test-workflow");
-        when(workflowContext.workflowId()).thenReturn("wf-1");
-        when(workflowContext.workflowPayload()).thenReturn(Map.of());
+        when(workflowExecutionOperations.workflowId()).thenReturn("wf-1");
+        when(workflowExecutionOperations.workflowPayload()).thenReturn(Map.of());
         when(workflowExecution.appendWorkflowEvent(any(EventMessage.class), any(ProcessingContext.class)))
                 .thenReturn(CompletableFuture.completedFuture(null));
 
         eventNameCustomizer = defaults();
 
         delegate = new WorkflowLifecycleControlDelegate(
-                workflowContext,
+                workflowExecutionOperations,
                 workflowExecution,
                 runningSteps,
                 new ReachedSteps(),
@@ -165,9 +168,8 @@ class WorkflowLifecycleControlDelegateCancelTest {
         order.verify(workflowExecution).appendWorkflowEvent(any(EventMessage.class), any(ProcessingContext.class));
     }
 
-    @SuppressWarnings("unchecked")
     @Test
-    void cancelWorkflowInvokesCancelledStatusChangeListener() throws InterruptedException {
+    void cancelWorkflowInvokesCancelledStatusChangeListener() {
         var listener = mock(WorkflowStatusChangeListener.class);
         EventSourcedWorkflowState state = workflowState(Map.of(WorkflowStatus.CANCELLED, listener));
         when(workflowExecution.state()).thenReturn(state);
@@ -176,13 +178,13 @@ class WorkflowLifecycleControlDelegateCancelTest {
                 cancelWorkflow(null, eventNameCustomizer)))
                 .isInstanceOf(WorkflowCancelledException.class);
 
-        state.evolve(EventMessageUtils.cancelledWorkflow(workflowContext,
+        state.evolve(EventMessageUtils.cancelledWorkflow(workflowExecutionOperations,
                                                          "test-workflow",
                                                          null,
                                                          state.workflowDefinitionId(),
                                                          eventNameCustomizer), processingContext);
 
-        verify(listener).onWorkflowStatus(eq(WorkflowStatus.CANCELLED), eq(workflowContext));
+        verify(listener).onWorkflowStatus(eq(WorkflowStatus.CANCELLED), eq(workflowContext), eq(processingContext));
     }
 
     @Test

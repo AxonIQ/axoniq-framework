@@ -18,10 +18,10 @@
  */
 package io.axoniq.framework.workflow.query.api;
 
-import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
-import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
+import io.axoniq.framework.workflow.dsl.api.StepStatus;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
 import org.axonframework.messaging.core.VersionedType;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -32,14 +32,14 @@ class WorkflowStateQueryTest {
     void exposesAllExplicitStateValueCriteria() {
         var workflowDefinitionId = VersionedType.of("PaymentWorkflow", "2.0");
         var query = WorkflowStateQuery.all()
-                                         .workflowId("order-42")
-                                         .workflowDefinitionId(workflowDefinitionId)
-                                         .workflowStatus(WorkflowStatus.STARTED)
-                                         .step("reserve-funds")
-                                         .stepStatus("reserve-funds", StepStatus.COMPLETED)
-                                         .payloadValue("orderId", "order-42")
-                                         .version("payment-retry", "2.0")
-                                         .versionMigration("payment-retry");
+                                      .workflowId("order-42")
+                                      .workflowDefinitionId(workflowDefinitionId)
+                                      .workflowStatus(WorkflowStatus.STARTED)
+                                      .step("reserve-funds")
+                                      .stepStatus("reserve-funds", StepStatus.COMPLETED)
+                                      .payloadValue("orderId", "order-42")
+                                      .version("payment-retry", "2.0")
+                                      .versionMigration("payment-retry");
 
         var criteria = query.criteria();
         assertThat(criteria).hasSize(8);

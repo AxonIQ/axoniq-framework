@@ -40,16 +40,6 @@ public class MetadataPropertyValueRetriever implements ValueRetriever {
     private final String metadataPropertyName;
 
     /**
-     * Creates a value retriever based on the given metadata property.
-     *
-     * @param metadataPropertyName property to read from the message metadata.
-     * @return value retriever.
-     */
-    public static ValueRetriever metadataProperty(String metadataPropertyName) {
-        return new MetadataPropertyValueRetriever(metadataPropertyName);
-    }
-
-    /**
      * Constructs a new instance reading a specified metadata property.
      *
      * @param metadataPropertyName property to read from the message metadata.
@@ -58,6 +48,16 @@ public class MetadataPropertyValueRetriever implements ValueRetriever {
     public MetadataPropertyValueRetriever(String metadataPropertyName) {
         this.metadataPropertyName = Objects.requireNonNull(metadataPropertyName,
                                                            "Metadata property name must not be null");
+    }
+
+    /**
+     * Creates a value retriever based on the given metadata property.
+     *
+     * @param metadataPropertyName property to read from the message metadata.
+     * @return value retriever.
+     */
+    public static ValueRetriever metadataProperty(String metadataPropertyName) {
+        return new MetadataPropertyValueRetriever(metadataPropertyName);
     }
 
     @Override

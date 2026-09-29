@@ -18,15 +18,19 @@ jobs:
       # The build cache extension defaults to disabled (see .mvn/maven-build-cache-config.xml);
       # CI is the only place with the SNAPSHOT-fingerprinting safety net, so it is the only place
       # that opts back in.
-      MAVEN_OPTS: -Dmaven.build.cache.enabled=true
+      # The heap/metaspace cap keeps the Maven JVM itself from over-committing memory alongside its
+      # forked test JVMs and the containers they start, on this repo's 2-vCPU CI runners. Metaspace
+      # needs more headroom than the forked test JVMs: this one process compiles all 35 modules and
+      # their annotation processors in-process across the whole reactor, so classes keep accumulating
+      # instead of resetting per module like a fresh fork does. 128m was not enough -- it broke the
+      # build with a Metaspace OOM partway through the reactor.
+      MAVEN_OPTS: -Dmaven.build.cache.enabled=true -Xmx512m -XX:MaxMetaspaceSize=512m
     strategy:
       fail-fast: false
       matrix:
         include:
           - java-version: 21
-            sonar-enabled: false
           - java-version: 25
-            sonar-enabled: false
 
     steps:
       - name: Checkout code
@@ -72,22 +76,11 @@ jobs:
         run: printf 'testcontainers.reuse.enable=true\n' > ~/.testcontainers.properties
 
       - name: Regular Build
-        if: ${{ !matrix.sonar-enabled }}
         run: |
           set -o pipefail
           ./mvnw -B -U -ntp -Dstyle.color=always -fae -Possrh -Pintegration-test -Djacoco.skip=true clean verify \
           -Dsurefire.rerunFailingTestsCount=5 -Dfailsafe.rerunFailingTestsCount=5 \
-          -Dparallel=classes -DthreadCount=1 -DforkCount=2 2>&1 | tee build.log
-        env:
-          AXONIQ_LICENSE: ${{ secrets.AXON_SERVER_LICENSE }}
-
-      - name: Build with Coverage reports
-        if: matrix.sonar-enabled
-        run: |
-          set -o pipefail
-          ./mvnw -B -U -ntp -Dstyle.color=always -fae -Possrh -Dcoverage clean verify \
-          -Dsurefire.rerunFailingTestsCount=5 -Dfailsafe.rerunFailingTestsCount=5 \
-          -Dparallel=classes -DthreadCount=1 -DforkCount=2 2>&1 | tee build.log
+          -Dparallel=classes -DthreadCount=1 -DforkCount=2 -DforkedProcessTimeoutInSeconds=600 2>&1 | tee build.log
         env:
           AXONIQ_LICENSE: ${{ secrets.AXON_SERVER_LICENSE }}
 
@@ -108,17 +101,6 @@ jobs:
           name: build-report-jdk${{ matrix.java-version }}
           path: build-report.md
           retention-days: 1
-
-      - name: Sonar Analysis
-        if: false # ${{ success() && matrix.sonar-enabled && github.event.pull_request.head.repo.full_name == github.repository }} | disabled for the time being
-        run: |
-          ./mvnw -B -ntp -Dstyle.color=always org.sonarsource.scanner.maven:sonar-maven-plugin:sonar \
-          -Dsonar.projectKey=AxonIQ_axoniq-framework \
-          -Dsonar.organization=axoniq \
-          -Dsonar.host.url=https://sonarcloud.io \
-          -Dsonar.login=${{ secrets.SONAR_TOKEN }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create test summary
         uses: test-summary/action@v2

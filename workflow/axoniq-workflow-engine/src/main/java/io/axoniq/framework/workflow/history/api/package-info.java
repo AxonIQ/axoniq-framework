@@ -18,6 +18,7 @@
  */
 /**
  * Public API for reading historic workflow executions, exposing their final state and a repository abstraction.
+ *
  * @since 5.4.0
  */
 @NullMarked

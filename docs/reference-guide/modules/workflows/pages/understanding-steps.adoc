@@ -2,7 +2,7 @@
 :navtitle: Understanding Steps
 
 In the previous sections you saw `awaitExecute` and `awaitEvent` in action.
-This section covers the full configuration available across all step types—timeouts, payload mapping, event naming, error handling, and execution semantics.
+This section covers the full configuration available across all step types: timeouts, payload mapping, event naming, and execution semantics.
 
 [NOTE]
 ====
@@ -275,101 +275,9 @@ In Java, the full-form `awaitExecute` with `PayloadProcessor` uses `LocalOnlyPay
 [[error-handling]]
 == Error handling
 
-When a step fails, you need to decide: recover with a compensating action, or terminate the workflow?
-The approach depends on whether you're using blocking (`awaitExecute`) or non-blocking (`execute`) steps.
-
-=== Blocking steps—try/catch
-
-`awaitExecute` throws a `StepFailedException` when a step fails.
-Catch it to run a compensating action, or let it propagate to fail the workflow:
-
-[source,java]
-----
-try {
-    ctx.awaitExecute("chargePayment",
-            payload("customerId", customerId, "amount", amount).getValues(),
-            PaymentService::charge);
-} catch (StepFailedException e) {
-    // Compensating action: refund the reserved stock
-    ctx.awaitExecute("releaseStock",
-            payload("customerId", customerId).getValues(),
-            InventoryService::releaseStock);
-
-    ctx.fail(new RuntimeException("Payment failed: " + e.getMessage())); // <1>
-}
-----
-<.> After the compensating action, explicitly fail the workflow. Without this, the workflow would continue to the next step.
-
-=== Non-blocking steps—check the result
-
-With `execute` and `waitForEvent`, steps run asynchronously. Check the result to handle errors:
-
-[source,java]
-----
-var paymentConfirmation = ctx.waitForEvent("awaitPayment",
-        EventConditions.fromQualifiedName(ctx.resolve(PaymentConfirmed.class)),
-        step -> step.timeout(Duration.ofMinutes(15)));
-
-var shipping = ctx.execute("shipOrder", ctx.workflowPayload(),
-        ShippingService::shipOrder,
-        step -> step.timeout(Duration.ofMinutes(5)));
-
-if (paymentConfirmation.timeout()) { // blocks until terminal state
-    ctx.fail(new RuntimeException("Payment confirmation timed out"));
-}
-
-if (shipping.failure()) { // blocks until shipping reaches a terminal state
-    // Compensating action for failed shipping
-    ctx.awaitExecute("refundPayment",
-            payload("customerId", customerId).getValues(),
-            PaymentService::refund);
-
-    ctx.fail(new RuntimeException("Shipping failed: " + shipping.error().get().getMessage()));
-}
-----
-
-=== What gets thrown?
-
-[cols="1,2"]
-|===
-|Scenario |Exception
-
-|Step action throws an exception
-|`StepFailedException` wrapping the original cause
-
-|Step times out
-|`StepTimedOutException` (a subtype of `StepFailedException`, thrown by `awaitExecute` / `awaitEvent`), or check `result.timeout()` (for `execute`)
-
-|Step is cancelled
-|`StepCancellationException`
-
-|Workflow is failed via `ctx.fail()`
-|`WorkflowFailedException`
-
-|Workflow is cancelled via `ctx.cancel()`
-|`WorkflowCancelledException`
-|===
-
-[NOTE]
-====
-Any exception thrown by a step body is converted to a `WorkflowExecutionException` at the runtime boundary, then wrapped in `StepFailedException`.
-The conversion happens immediately—the same `WorkflowExecutionException` is observed during live execution and after event-sourced replay.
-
-Use `getCause()` on `StepFailedException` to access the `WorkflowExecutionException`, which exposes the originating throwable's fully qualified class name via `type()` and its message via `getMessage()`.
-The original stack trace is written to the application log at the moment of failure but is not stored in the event store, so it is not available after replay.
-
-Because the cause is always a `WorkflowExecutionException`, `instanceof` checks against the originating exception class never match—neither live nor on replay. Branch on `type()` instead:
-
-[source,java]
-----
-} catch (StepFailedException e) {
-    var cause = (WorkflowExecutionException) e.getCause();
-    if (cause.isType(OutOfStockException.class)) {
-        // ...
-    }
-}
-----
-====
+Every step failure surfaces as a `StepFailedException` or one of its subtypes. Catch it to compensate, or
+let it propagate to fail the workflow. What the engine stores about an error, when a workflow stops for good
+and when it pauses and resumes are covered in one place: xref:error-handling.adoc[Error Handling].
 
 [[cancelling-a-step]]
 == Cancelling a step
@@ -443,7 +351,7 @@ See xref:#step-level-customizer[Step-level customizer] for how to control event 
 
 [TIP]
 ====
-For workflow-level termination (`ctx.fail()`, `ctx.cancel()`), terminal states, unhandled exceptions, and lifecycle listeners (`@OnSuccess`, `@OnFailure`, etc.), see xref:workflow-lifecycle.adoc[Workflow Lifecycle].
+For workflow-level termination (`ctx.fail()`, `ctx.cancel()`), terminal states, unhandled exceptions, and lifecycle listeners (`@WorkflowCompletedHandler`, `@WorkflowFailedHandler`, etc.), see xref:workflow-lifecycle.adoc[Workflow Lifecycle].
 ====
 
 [[execution-semantics]]
@@ -470,19 +378,19 @@ When a step's action is interrupted by a crash and not re-run, the engine resolv
 
 [IMPORTANT]
 ====
-A step reaching FAILED does **not** by itself terminate the workflow — by design a workflow goes to a terminal FAILED status **only** when you call `ctx.fail(...)`. If a workflow should fail when a crash-interrupted (or otherwise failed) step surfaces, handle it explicitly:
+A step reaching FAILED does not by itself terminate the workflow while the body handles it. Catch the `StepFailedException` to compensate, branch, or retry with a fresh step:
 
 [source,java]
 ----
 try {
     ctx.awaitExecute("chargePayment", payload, (pc, p) -> charge(p));
 } catch (StepFailedException e) {
-    // crash-interrupted (StepIndeterminateException cause) or a genuine failure — compensate, then fail the workflow
+    // crash-interrupted (StepIndeterminateException cause) or a genuine failure: compensate, then fail the workflow
     ctx.fail(e);
 }
 ----
 
-Otherwise the body decides what to do (compensate, branch, retry with a fresh step). See xref:workflow-lifecycle.adoc[Workflow Lifecycle] for the `ctx.fail` / `ctx.cancel` terminal primitives and unhandled-exception behavior.
+A `StepFailedException` the body does not catch fails the workflow. See xref:error-handling.adoc[Error Handling].
 ====
 
 [[retries]]

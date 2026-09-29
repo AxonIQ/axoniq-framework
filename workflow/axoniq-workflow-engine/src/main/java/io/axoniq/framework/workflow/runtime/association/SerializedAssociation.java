@@ -118,6 +118,14 @@ public record SerializedAssociation(
         return new SerializedAssociation(qualifier, path, operator, right);
     }
 
+    private static Object serializeRetrievedValue(Object value) {
+        return value == null ? null : String.valueOf(value);
+    }
+
+    private static Set<String> supportedQualifiers() {
+        return Set.of(PayloadPropertyValueRetriever.QUALIFIER, MetadataPropertyValueRetriever.QUALIFIER);
+    }
+
     /**
      * Delivers a predicate that can be used to filter event messages.
      *
@@ -156,13 +164,5 @@ public record SerializedAssociation(
             case MetadataPropertyValueRetriever.QUALIFIER -> MetadataPropertyValueRetriever.metadataProperty(path);
             default -> throw BadAssociationFormatException.unsupportedQualifier(supportedQualifiers(), serialize());
         };
-    }
-
-    private static Object serializeRetrievedValue(Object value) {
-        return value == null ? null : String.valueOf(value);
-    }
-
-    private static Set<String> supportedQualifiers() {
-        return Set.of(PayloadPropertyValueRetriever.QUALIFIER, MetadataPropertyValueRetriever.QUALIFIER);
     }
 }

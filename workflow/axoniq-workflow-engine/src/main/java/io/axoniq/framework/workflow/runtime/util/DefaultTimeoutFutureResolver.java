@@ -47,14 +47,14 @@ public class DefaultTimeoutFutureResolver implements FutureResolver {
     private final Duration timeout;
 
     /**
-     * Constructs a {@link DefaultTimeoutFutureResolver} with a default timeout.
+     * Constructs a  with a default timeout.
      */
     public DefaultTimeoutFutureResolver() {
         this(DEFAULT_JOIN_TIMEOUT);
     }
 
     /**
-     * Constructs a {@link DefaultTimeoutFutureResolver} with the given timeout.
+     * Constructs a  with the given timeout.
      *
      * @param timeout timeout to use for future joining
      */
@@ -72,7 +72,8 @@ public class DefaultTimeoutFutureResolver implements FutureResolver {
      *
      * @param future future to resolve
      * @throws FutureResolutionTimeoutException if the future does not complete within the configured timeout
-     * @throws Throwable        the unwrapped cause if the future completed exceptionally (exact type preserved).
+     * @throws Throwable                        the unwrapped cause if the future completed exceptionally (exact type
+     *                                          preserved).
      */
     @Override
     public void resolve(CompletableFuture<?> future) {

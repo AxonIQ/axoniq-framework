@@ -19,8 +19,8 @@
 
 package io.axoniq.framework.workflow.runtime.execution;
 
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowState;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowStepResult;
+import io.axoniq.framework.workflow.dsl.api.WorkflowState;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStepResult;
 import org.axonframework.common.annotation.Internal;
 
 import java.util.ArrayList;
@@ -35,28 +35,21 @@ import java.util.stream.Collectors;
 
 
 /**
- * Package-private utility that extracts the shared categorization and ordering logic
- * used by all three combinator delegates ({@code AnyMatch}, {@code NoneMatch}, {@code AllMatch}).
+ * Package-private utility that extracts the shared categorization and ordering logic used by all three combinator
+ * delegates ({@code AnyMatch}, {@code NoneMatch}, {@code AllMatch}).
  *
  * @author Stefan Dragisic
  * @since 5.4.0
  */
-@Internal
-final class CombinatorSupport {
+@Internal final class CombinatorSupport {
 
     private CombinatorSupport() {
     }
 
     /**
-     * Categorized matched/unmatched result pair.
-     */
-    record Categories(List<WorkflowStepResult> matched, List<WorkflowStepResult> unmatched) {
-    }
-
-    /**
-     * Splits the results array into matched (completed + satisfies predicate) and unmatched (everything else).
-     * Matched results are sorted by event-sourced timestamp.
-     * Unmatched results list completed (sorted by timestamp) first, then not-yet-completed in array order.
+     * Splits the results array into matched (completed + satisfies predicate) and unmatched (everything else). Matched
+     * results are sorted by event-sourced timestamp. Unmatched results list completed (sorted by timestamp) first, then
+     * not-yet-completed in array order.
      */
     static Categories computeCategories(WorkflowStepResult[] results,
                                         Predicate<WorkflowStepResult> predicate,
@@ -78,8 +71,8 @@ final class CombinatorSupport {
     }
 
     /**
-     * Finds the first completed result matching the given predicate, ordered by event-sourced timestamp.
-     * Falls back to stream order when event-sourced ordering is unavailable.
+     * Finds the first completed result matching the given predicate, ordered by event-sourced timestamp. Falls back to
+     * stream order when event-sourced ordering is unavailable.
      */
     static Optional<WorkflowStepResult> findFirstByPredicate(WorkflowStepResult[] results,
                                                              Predicate<WorkflowStepResult> matchPredicate,
@@ -93,18 +86,18 @@ final class CombinatorSupport {
             return Optional.empty();
         }
         return firstCompletedAmong(workflowState, matchedNames)
-                             .flatMap(name -> Arrays.stream(results)
-                                                    .filter(r -> r.getStepName().equals(name))
-                                                    .findFirst())
-                             .or(() -> Arrays.stream(results)
-                                             .filter(WorkflowStepResult::isCompleted)
-                                             .filter(matchPredicate)
-                                             .findFirst());
+                .flatMap(name -> Arrays.stream(results)
+                                       .filter(r -> r.getStepName().equals(name))
+                                       .findFirst())
+                .or(() -> Arrays.stream(results)
+                                .filter(WorkflowStepResult::isCompleted)
+                                .filter(matchPredicate)
+                                .findFirst());
     }
 
     /**
-     * Sorts completed results by event-sourced timestamp. Falls back to the input order
-     * when the workflow state cannot provide a timestamp ordering.
+     * Sorts completed results by event-sourced timestamp. Falls back to the input order when the workflow state cannot
+     * provide a timestamp ordering.
      */
     static List<WorkflowStepResult> sortByEventSourcedTimestamp(List<WorkflowStepResult> items,
                                                                 WorkflowState workflowState) {
@@ -125,8 +118,8 @@ final class CombinatorSupport {
     }
 
     /**
-     * Sorts a mixed list: completed results by event-sourced timestamp first,
-     * then not-yet-completed results in their original order.
+     * Sorts a mixed list: completed results by event-sourced timestamp first, then not-yet-completed results in their
+     * original order.
      */
     private static List<WorkflowStepResult> sortMixed(List<WorkflowStepResult> items,
                                                       WorkflowState workflowState) {
@@ -155,5 +148,12 @@ final class CombinatorSupport {
                         })
                         .sorted(Comparator.comparing(name -> workflowState.getStep(name).timestamp()))
                         .toList();
+    }
+
+    /**
+     * Categorized matched/unmatched result pair.
+     */
+    record Categories(List<WorkflowStepResult> matched, List<WorkflowStepResult> unmatched) {
+
     }
 }

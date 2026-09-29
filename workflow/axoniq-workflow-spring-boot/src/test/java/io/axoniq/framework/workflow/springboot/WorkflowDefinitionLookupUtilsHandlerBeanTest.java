@@ -20,10 +20,9 @@ package io.axoniq.framework.workflow.springboot;
 
 import org.jspecify.annotations.Nullable;
 
-import io.axoniq.framework.workflow.runtime.api.annotation.Workflow;
+import io.axoniq.framework.workflow.annotation.Workflow;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowConfiguration;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
-import io.axoniq.framework.workflow.runtime.execution.AbstractDSLWorkflowContext;
+import io.axoniq.framework.workflow.runtime.execution.AbstractWorkflowContext;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.extension.*;
@@ -52,11 +51,7 @@ public class WorkflowDefinitionLookupUtilsHandlerBeanTest {
 
     @Test
     void shouldDetectWorkflowWorkflowBeanDefinitions() {
-        // We look for any workflow context type or a specific one.
-        // SpringUtils.handlerBeans takes a Class<? extends WorkflowContext> as a first argument.
-        var handlerBeans = WorkflowDefinitionLookupUtils.workflowBeanDefinitions(WorkflowContext.class,
-                                                                                 beanFactory,
-                                                                                 false);
+        var handlerBeans = WorkflowDefinitionLookupUtils.workflowBeanDefinitions(beanFactory, false);
 
         assertThat(handlerBeans).hasSize(2);
         assertThat(handlerBeans).containsOnlyKeys(MyWorkflowContext.class, OtherWorkflowContext.class);
@@ -83,7 +78,7 @@ public class WorkflowDefinitionLookupUtilsHandlerBeanTest {
         }
     }
 
-    static class MyWorkflowContext extends AbstractDSLWorkflowContext {
+    static class MyWorkflowContext extends AbstractWorkflowContext {
 
         public MyWorkflowContext(String workflowId, Map<String, @Nullable Object> payload, ProcessingContext processingContext,
                                  WorkflowConfiguration<?> workflowConfiguration) {
@@ -91,7 +86,7 @@ public class WorkflowDefinitionLookupUtilsHandlerBeanTest {
         }
     }
 
-    static class OtherWorkflowContext extends AbstractDSLWorkflowContext {
+    static class OtherWorkflowContext extends AbstractWorkflowContext {
 
         public OtherWorkflowContext(String workflowId, Map<String, @Nullable Object> payload, ProcessingContext processingContext,
                                     WorkflowConfiguration<?> workflowConfiguration) {

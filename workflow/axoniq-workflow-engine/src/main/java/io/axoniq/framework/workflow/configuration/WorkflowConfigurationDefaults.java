@@ -18,11 +18,11 @@
  */
 package io.axoniq.framework.workflow.configuration;
 
+import io.axoniq.framework.workflow.dsl.api.EventNameCustomizer;
+import io.axoniq.framework.workflow.history.api.WorkflowHistoryRepository;
 import io.axoniq.framework.workflow.history.inmemory.InMemoryWorkflowHistoryRepository;
 import io.axoniq.framework.workflow.history.inmemory.MutableWorkflowHistoryRepository;
 import io.axoniq.framework.workflow.history.inmemory.WorkflowHistoryProjector;
-import io.axoniq.framework.workflow.history.api.WorkflowHistoryRepository;
-import io.axoniq.framework.workflow.runtime.api.execution.context.EventNameCustomizer;
 import io.axoniq.framework.workflow.runtime.api.manager.WorkflowManager;
 import io.axoniq.framework.workflow.runtime.execution.DefaultEventNameCustomizer;
 import io.axoniq.framework.workflow.runtime.execution.DefaultExecuteStepActionResolver;
@@ -41,12 +41,10 @@ import io.axoniq.framework.workflow.runtime.execution.WorkflowEngineCheckpointin
 import io.axoniq.framework.workflow.runtime.execution.WorkflowEventTagResolver;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowExecutionRepository;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowScheduler;
-import io.axoniq.framework.workflow.runtime.execution.WorkflowStateParameterResolverFactory;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowStore;
 import io.axoniq.framework.workflow.runtime.execution.payload.PayloadReducerRegistry;
 import io.axoniq.framework.workflow.runtime.util.DefaultTimeoutFutureResolver;
 import io.axoniq.framework.workflow.runtime.util.FutureResolver;
-import org.jspecify.annotations.Nullable;
 import org.axonframework.common.ClockUtils;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.annotation.RegistrationScope;
@@ -58,9 +56,9 @@ import org.axonframework.common.lifecycle.Phase;
 import org.axonframework.eventsourcing.configuration.EventSourcingConfigurationDefaults;
 import org.axonframework.eventsourcing.eventstore.MultiTagResolver;
 import org.axonframework.eventsourcing.eventstore.TagResolver;
-import org.axonframework.messaging.core.configuration.reflection.ParameterResolverFactoryUtils;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.modelling.repository.Repository;
+import org.jspecify.annotations.Nullable;
 
 import java.time.Clock;
 import java.util.Iterator;
@@ -83,18 +81,14 @@ import static org.axonframework.eventsourcing.configuration.EventSourcedEntityMo
 @RegistrationScope(scope = RegistrationScope.Scope.CURRENT)
 public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
 
-    static final int DEFAULT_WORKFLOW_TIMER_THREAD_COUNT = 4;
-
     /**
      * Name of the event handling component used for workflow history projector.
      */
     public static final String COMPONENT_WORKFLOW_HISTORY_PROJECTOR = "WorkflowHistoryProjector";
-
     /**
      * Name of the event handling component used for the workflow engine.
      */
     public static final String COMPONENT_WORKFLOW_ENGINE = "WorkflowEngine";
-
     /**
      * Name of the dedicated executor service component used for workflow-body work and workflow-event publication.
      * <p>
@@ -103,7 +97,6 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
      * that isolation or size their executor for the configured resolver timeout.
      */
     public static final String WORKFLOW_ENGINE_EXECUTOR = "WorkflowEngineExecutor";
-
     /**
      * Order for this enhancer.
      * <p>
@@ -111,6 +104,46 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
      * </p>
      */
     public static final int WORKFLOW_DEFAULTS_ENHANCER_ORDER = EventSourcingConfigurationDefaults.ENHANCER_ORDER - 10;
+    static final int DEFAULT_WORKFLOW_TIMER_THREAD_COUNT = 4;
+    /**
+     * Phase in which the engine's executions are dropped on shutdown: a workflow is a message handler, extensively
+     * wrapped, so it is dropped where message handlers are.
+     * <p>
+     * Shutdown handlers run from the highest phase down, so this runs after the event processor has stopped at
+     * {@link Phase#INBOUND_EVENT_CONNECTORS} and its drain has stored the token. Sharing the processor's own phase
+     * would make the two race: clearing the repository first leaves the drain with nothing to hold the token back, and
+     * it stores a position whose wakes were never applied.
+     */
+    private static final int POST_PROCESSOR_SHUTDOWN_PHASE = Phase.LOCAL_MESSAGE_HANDLER_REGISTRATIONS;
+
+    private static FutureResolver loadFutureResolver() {
+        var contextClassLoader = Thread.currentThread().getContextClassLoader();
+        var resolver = findFutureResolver(contextClassLoader);
+        if (resolver == null && contextClassLoader != FutureResolver.class.getClassLoader()) {
+            resolver = findFutureResolver(FutureResolver.class.getClassLoader());
+        }
+        return resolver != null ? resolver : new DefaultTimeoutFutureResolver();
+    }
+
+    @Nullable
+    private static FutureResolver findFutureResolver(@Nullable ClassLoader classLoader) {
+        if (classLoader == null) {
+            return null;
+        }
+        Iterator<FutureResolver> resolvers = ServiceLoader.load(FutureResolver.class, classLoader).iterator();
+        return resolvers.hasNext() ? resolvers.next() : null;
+    }
+
+    static ScheduledThreadPoolExecutor defaultWorkflowTimerExecutor() {
+        return new ScheduledThreadPoolExecutor(
+                DEFAULT_WORKFLOW_TIMER_THREAD_COUNT,
+                runnable -> {
+                    var thread = new Thread(runnable, "axon-workflow-timer");
+                    thread.setDaemon(true);
+                    return thread;
+                }
+        );
+    }
 
     /**
      * Registers default components.
@@ -137,7 +170,6 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
         registerWorkflowStore(componentRegistry);
         registerWorkflowEngine(componentRegistry);
         registerWorkflowHistoryProjector(componentRegistry);
-        registerWorkflowStateParameterResolverFactory(componentRegistry);
         registerCheckpointingSupport(componentRegistry);
     }
 
@@ -147,24 +179,6 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
 
     void registerFutureResolver(ComponentRegistry componentRegistry) {
         componentRegistry.registerIfNotPresent(FutureResolver.class, cfg -> loadFutureResolver());
-    }
-
-    private static FutureResolver loadFutureResolver() {
-        var contextClassLoader = Thread.currentThread().getContextClassLoader();
-        var resolver = findFutureResolver(contextClassLoader);
-        if (resolver == null && contextClassLoader != FutureResolver.class.getClassLoader()) {
-            resolver = findFutureResolver(FutureResolver.class.getClassLoader());
-        }
-        return resolver != null ? resolver : new DefaultTimeoutFutureResolver();
-    }
-
-    @Nullable
-    private static FutureResolver findFutureResolver(@Nullable ClassLoader classLoader) {
-        if (classLoader == null) {
-            return null;
-        }
-        Iterator<FutureResolver> resolvers = ServiceLoader.load(FutureResolver.class, classLoader).iterator();
-        return resolvers.hasNext() ? resolvers.next() : null;
     }
 
     void registerEventNameCustomizer(ComponentRegistry componentRegistry) {
@@ -191,17 +205,6 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
                                    ))
                                    .onShutdown(Phase.INBOUND_EVENT_CONNECTORS,
                                                scheduler -> ((DefaultWorkflowScheduler) scheduler).shutdown()));
-    }
-
-    static ScheduledThreadPoolExecutor defaultWorkflowTimerExecutor() {
-        return new ScheduledThreadPoolExecutor(
-                DEFAULT_WORKFLOW_TIMER_THREAD_COUNT,
-                runnable -> {
-                    var thread = new Thread(runnable, "axon-workflow-timer");
-                    thread.setDaemon(true);
-                    return thread;
-                }
-        );
     }
 
     void decorateTagResolver(ComponentRegistry componentRegistry) {
@@ -251,17 +254,6 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
                 WORKFLOW_ENGINE_EXECUTOR,
                 cfg -> Executors.newVirtualThreadPerTaskExecutor());
     }
-
-    /**
-     * Phase in which the engine's executions are dropped on shutdown: a workflow is a message handler, extensively
-     * wrapped, so it is dropped where message handlers are.
-     * <p>
-     * Shutdown handlers run from the highest phase down, so this runs after the event processor has stopped at
-     * {@link Phase#INBOUND_EVENT_CONNECTORS} and its drain has stored the token. Sharing the processor's own phase
-     * would make the two race: clearing the repository first leaves the drain with nothing to hold the token back, and
-     * it stores a position whose wakes were never applied.
-     */
-    private static final int POST_PROCESSOR_SHUTDOWN_PHASE = Phase.LOCAL_MESSAGE_HANDLER_REGISTRATIONS;
 
     void registerWorkflowEngine(ComponentRegistry componentRegistry) {
         componentRegistry.registerIfNotPresent(
@@ -349,12 +341,6 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
         componentRegistry.registerComponent(
                 WorkflowConfigurationRegistry.class,
                 cfg -> new SimpleWorkflowConfigurationRegistry());
-    }
-
-    void registerWorkflowStateParameterResolverFactory(ComponentRegistry componentRegistry) {
-        ParameterResolverFactoryUtils.registerToComponentRegistry(
-                componentRegistry,
-                WorkflowStateParameterResolverFactory::new);
     }
 
     void registerCheckpointingSupport(ComponentRegistry componentRegistry) {
