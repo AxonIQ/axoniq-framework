@@ -48,16 +48,16 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication.Type;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
-import org.springframework.boot.http.client.ClientHttpRequestFactoryBuilder;
-import org.springframework.boot.http.client.ClientHttpRequestFactorySettings;
 import org.springframework.cloud.client.ServiceInstance;
 import org.springframework.cloud.client.discovery.DiscoveryClient;
 import org.springframework.cloud.client.serviceregistry.Registration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.client.ClientHttpRequestFactory;
+import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
 
+import java.net.http.HttpClient;
 import java.time.Duration;
 import java.util.Objects;
 import java.util.concurrent.Executor;
@@ -282,12 +282,14 @@ public class SpringCloudAutoConfiguration {
                              .build();
         }
 
+        // Built on Spring Framework's JDK client rather than Spring Boot's ClientHttpRequestFactoryBuilder, whose
+        // settings API differs between Spring Boot 3 and 4.
         private static ClientHttpRequestFactory requestFactory(Duration connectTimeout, Duration readTimeout) {
-            ClientHttpRequestFactorySettings settings =
-                    ClientHttpRequestFactorySettings.defaults()
-                                                    .withConnectTimeout(connectTimeout)
-                                                    .withReadTimeout(readTimeout);
-            return ClientHttpRequestFactoryBuilder.detect().build(settings);
+            JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(
+                    HttpClient.newBuilder().connectTimeout(connectTimeout).build()
+            );
+            requestFactory.setReadTimeout(readTimeout);
+            return requestFactory;
         }
 
         /**

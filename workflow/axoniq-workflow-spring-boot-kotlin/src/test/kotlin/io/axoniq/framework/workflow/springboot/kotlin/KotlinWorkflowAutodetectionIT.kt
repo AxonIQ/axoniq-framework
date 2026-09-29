@@ -23,14 +23,16 @@ import io.axoniq.framework.workflow.dsl.kotlin.WorkflowKontext
 import io.axoniq.framework.workflow.annotation.Workflow
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowDefinition
 import io.axoniq.framework.workflow.runtime.execution.WorkflowConfigurationRegistry
+import io.axoniq.framework.workflow.runtime.util.DefaultTimeoutFutureResolver
+import io.axoniq.framework.workflow.runtime.util.FutureResolver
 import org.assertj.core.api.Assertions.assertThat
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine
 import org.axonframework.eventsourcing.eventstore.inmemory.InMemoryEventStorageEngine
 import org.axonframework.messaging.core.QualifiedName
+import org.axonframework.messaging.core.unitofwork.StubProcessingContext
 import org.axonframework.messaging.eventhandling.processing.streaming.token.store.TokenStore
 import org.axonframework.messaging.eventhandling.processing.streaming.token.store.inmemory.InMemoryTokenStore
 import org.junit.jupiter.api.Test
-import org.mockito.Mockito.mock
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration
 import org.springframework.boot.test.context.SpringBootTest
@@ -54,14 +56,24 @@ class KotlinWorkflowAutodetectionIT {
 
     @Test
     fun `should autodetect kotlin workflow`() {
+        val processingContext = StubProcessingContext.withComponents { cr ->
+            cr.registerComponent(FutureResolver::class.java) { DefaultTimeoutFutureResolver() }
+        }
+
         val configurations = registry.getWorkflowsConfigurations(QualifiedName("io.namespace.KotlinEvent"))
         assertThat(configurations).isNotNull
         assertThat(configurations).hasSize(1)
         val conf = configurations.first()
         assertThat(conf.configuration().workflowName()).isEqualTo("KotlinWorkflow")
 
+        val kontext = WorkflowKontext(
+            workflowId = "workflow-id",
+            initialPayload = emptyMap(),
+            processingContext = processingContext,
+            workflowConfiguration = conf.configuration()
+        )
         (conf.configuration()
-            .workflowDefinition() as WorkflowDefinition<WorkflowKontext>).accept(mock(WorkflowKontext::class.java))
+            .workflowDefinition() as WorkflowDefinition<WorkflowKontext>).accept(kontext)
         assertThat(kotlinWorkflow.executed).isTrue()
     }
 

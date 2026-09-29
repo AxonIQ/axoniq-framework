@@ -19,22 +19,10 @@
 
 package io.axoniq.framework.integrationtests.springcloud;
 
-import io.axoniq.license.entitlement.source.axonserver.AxonServerLicenseSourceConfigurationEnhancer;
-import org.axonframework.common.configuration.ComponentRegistry;
-import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.axonframework.messaging.commandhandling.annotation.Command;
 import org.axonframework.messaging.commandhandling.annotation.CommandHandler;
-import org.axonframework.messaging.core.MessageStream;
-import org.axonframework.messaging.core.MessageType;
-import org.axonframework.messaging.core.QualifiedName;
-import org.axonframework.messaging.queryhandling.GenericQueryResponseMessage;
-import org.axonframework.messaging.queryhandling.QueryBus;
-import org.axonframework.messaging.queryhandling.QueryHandler;
-import org.axonframework.messaging.queryhandling.QueryResponseMessage;
-import org.springframework.beans.factory.SmartInitializingSingleton;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.cloud.client.DefaultServiceInstance;
 import org.springframework.cloud.client.ServiceInstance;
 import org.springframework.cloud.client.discovery.DiscoveryClient;
@@ -46,7 +34,6 @@ import java.net.URI;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.IntStream;
 
 /**
  * The application and command each node of the two-node Spring Cloud test runs.
@@ -78,20 +65,6 @@ final class SpringCloudNodes {
     record CreateCourse(String courseId, String name) {
 
     }
-
-    /**
-     * A query for the courses whose name starts with a prefix, answered with one response per course.
-     *
-     * @param prefix The prefix the courses to find start with.
-     */
-    record FindCourses(String prefix) {
-
-    }
-
-    /**
-     * The name {@link FindCourses} is known by on the wire, which is what a member advertises and routes on.
-     */
-    static final QualifiedName FIND_COURSES = new QualifiedName(FindCourses.class);
 
     /**
      * The application each node runs.
@@ -134,60 +107,6 @@ final class SpringCloudNodes {
             ));
         }
 
-        /**
-         * Registers the {@link FindCourses} handler, on the one node configured to handle it.
-         * <p>
-         * A programmatic {@link QueryHandler} subscribed straight onto the {@link QueryBus}, rather than an annotated
-         * method. The formal answer to a query is a {@code MessageStream} of response messages, and only a handler
-         * implementing the interface produces several of them; an annotated method returning a collection is one
-         * response carrying a collection, which would leave the thing worth proving here -- that each response
-         * message crosses the wire as an event of its own -- untested.
-         * <p>
-         * Only this node registers it, so a query dispatched from the other has to cross the wire to be answered.
-         *
-         * @param queryBus The bus to subscribe the handler on, which advertises the query to the other nodes.
-         * @param nodeName The name of this node, which each response carries so the test can see where it was
-         *                 answered.
-         * @return a callback subscribing the handler once the application's singletons exist
-         */
-        @Bean
-        @ConditionalOnProperty(name = "test.node.handles-queries", havingValue = "true")
-        SmartInitializingSingleton findCoursesQueryHandler(QueryBus queryBus,
-                                                           @Value("${test.node.name}") String nodeName) {
-            QueryHandler handler = (query, context) -> MessageStream.fromIterable(
-                    IntStream.rangeClosed(1, 3)
-                             .mapToObj(i -> (QueryResponseMessage) new GenericQueryResponseMessage(
-                                     new MessageType(String.class), "course-" + i + "@" + nodeName
-                             ))
-                             .toList()
-            );
-            return () -> queryBus.subscribe(FIND_COURSES, handler);
-        }
-
-        /**
-         * Keeps the licence source from reaching for an Axon Server that is not part of this test.
-         * <p>
-         * A Spring Cloud deployment takes its licence from Axoniq Platform or from a licence the instances read
-         * themselves, never from Axon Server. This module carries the Axon Server connector on its classpath though,
-         * so without this the licence source spends the test connecting to port 8124 and logging that it cannot.
-         * Entitlement claiming itself is left alone, so the connector claims commands here as it does in production.
-         *
-         * @return an enhancer disabling the Axon Server licence source
-         */
-        @Bean
-        ConfigurationEnhancer disableAxonServerLicenseSource() {
-            return new ConfigurationEnhancer() {
-                @Override
-                public void enhance(ComponentRegistry registry) {
-                    registry.disableEnhancer(AxonServerLicenseSourceConfigurationEnhancer.class);
-                }
-
-                @Override
-                public int order() {
-                    return Integer.MIN_VALUE;
-                }
-            };
-        }
     }
 
     /**

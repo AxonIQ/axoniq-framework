@@ -351,7 +351,7 @@ See xref:#step-level-customizer[Step-level customizer] for how to control event 
 
 [TIP]
 ====
-For workflow-level termination (`ctx.fail()`, `ctx.cancel()`), terminal states, unhandled exceptions, and lifecycle listeners (`@OnSuccess`, `@OnFailure`, etc.), see xref:workflow-lifecycle.adoc[Workflow Lifecycle].
+For workflow-level termination (`ctx.fail()`, `ctx.cancel()`), terminal states, unhandled exceptions, and lifecycle listeners (`@WorkflowCompletedHandler`, `@WorkflowFailedHandler`, etc.), see xref:workflow-lifecycle.adoc[Workflow Lifecycle].
 ====
 
 [[execution-semantics]]
