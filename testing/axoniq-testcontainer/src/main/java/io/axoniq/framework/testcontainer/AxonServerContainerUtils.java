@@ -21,6 +21,7 @@ package io.axoniq.framework.testcontainer;
 
 import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
+import org.awaitility.core.ConditionTimeoutException;
 import org.axonframework.common.Assert;
 
 import java.io.BufferedReader;
@@ -85,25 +86,44 @@ public class AxonServerContainerUtils {
         if (shouldBeReused && initialized(hostname, port)) {
             return;
         }
-        final URL url = URI.create(String.format("http://%s:%d/v2/cluster/init?dcb=%s", hostname, port, dcbContext)).toURL();
-        HttpURLConnection connection = null;
         try {
-            connection = openConnection(url);
-            connection.setDoOutput(true);
-            connection.setRequestMethod("POST");
-            connection.getInputStream().close();
-
-            int responseCode = connection.getResponseCode();
-            Assert.isTrue(202 == responseCode, () -> "The response code [" + responseCode + "] did not match 202.");
-        } finally {
-            if (connection != null) {
-                connection.disconnect();
-            }
+            await().atMost(Duration.ofSeconds(30))
+                   .pollInterval(1, TimeUnit.SECONDS)
+                   .until(() -> tryInitCluster(hostname, port, dcbContext));
+        } catch (ConditionTimeoutException e) {
+            throw new IOException("Failed to initialize the Axon Server cluster within 30 seconds of retrying", e);
         }
         waitForContextsCondition(
                 hostname, port,
                 contexts -> contexts.contains("_admin") && contexts.contains("default")
         );
+    }
+
+    /**
+     * Attempts a single cluster-init POST, returning whether it succeeded.
+     * <p>
+     * A container that has just passed its readiness checks (log message and health endpoint) can still return a
+     * transient 500 here for a few seconds, since those checks don't guarantee the cluster-init endpoint itself is
+     * ready yet. Failures are swallowed rather than thrown so {@link #initCluster} can retry within its own budget
+     * instead of failing the whole container start on the first attempt.
+     */
+    private static boolean tryInitCluster(String hostname, int port, boolean dcbContext) {
+        HttpURLConnection connection = null;
+        try {
+            URL url = URI.create(String.format("http://%s:%d/v2/cluster/init?dcb=%s", hostname, port, dcbContext)).toURL();
+            connection = openConnection(url);
+            connection.setDoOutput(true);
+            connection.setRequestMethod("POST");
+            connection.getInputStream().close();
+
+            return 202 == connection.getResponseCode();
+        } catch (IOException e) {
+            return false;
+        } finally {
+            if (connection != null) {
+                connection.disconnect();
+            }
+        }
     }
 
     /**
