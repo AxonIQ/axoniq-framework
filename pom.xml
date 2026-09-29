@@ -48,12 +48,6 @@
 
         <maven-enforcer.allow-spring-dependencies>false</maven-enforcer.allow-spring-dependencies>
 
-        <sonar.coverage.jacoco.xmlReportPaths>
-            ${project.basedir}/coverage-report/target/site/jacoco-aggregate/jacoco.xml,
-            ${project.basedir}/../coverage-report/target/site/jacoco-aggregate/jacoco.xml
-        </sonar.coverage.jacoco.xmlReportPaths>
-
-
         <kotlin.version>2.4.20</kotlin.version>
         <!-- Build / Plugin -->
         <central-publishing-maven-plugin.version>0.11.0</central-publishing-maven-plugin.version>
