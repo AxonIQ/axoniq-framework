@@ -70,7 +70,7 @@ public class StaticTenantConnectPredicate implements TenantConnectPredicate {
      * @param tenants the tenant identifiers to accept
      */
     public StaticTenantConnectPredicate(Set<String> tenants) {
-        Assert.isTrue( !Objects.requireNonNull(tenants, ERROR_MSG).isEmpty(), () -> ERROR_MSG);
+        Assert.isTrue(!Objects.requireNonNull(tenants, ERROR_MSG).isEmpty(), () -> ERROR_MSG);
         this.tenants = Set.copyOf(tenants);
     }
 
