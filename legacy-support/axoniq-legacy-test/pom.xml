@@ -18,18 +18,18 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
     <parent>
-        <groupId>org.axonframework</groupId>
-        <artifactId>axon-parent</artifactId>
+        <groupId>io.axoniq.framework</groupId>
+        <artifactId>axoniq-framework-parent</artifactId>
         <version>${revision}</version>
-        <relativePath>../build/parent/pom.xml</relativePath>
+        <relativePath>../../build/parent/pom.xml</relativePath>
     </parent>
 
-    <artifactId>axon-legacy-test</artifactId>
+    <artifactId>axoniq-legacy-test</artifactId>
 
-    <name>Axon Framework - Legacy Test Fixtures</name>
+    <name>Axoniq Framework - Legacy Test Fixtures</name>
     <description>
-        Test support for the legacy solutions of Axon Framework 4 carried by axon-legacy, such as the saga test
-        fixture. Separate from axon-legacy because axon-test pulls JUnit onto the compile classpath, which does not
+        Test support for the legacy solutions of Axon Framework 4 carried by axoniq-legacy, such as the saga test
+        fixture. Separate from axoniq-legacy because axon-test pulls JUnit onto the compile classpath, which does not
         belong on a production module.
     </description>
 
@@ -37,15 +37,17 @@
 
     <dependencies>
         <dependency>
-            <groupId>org.axonframework</groupId>
-            <artifactId>axon-legacy</artifactId>
+            <groupId>io.axoniq.framework</groupId>
+            <artifactId>axoniq-legacy</artifactId>
             <version>${project.version}</version>
         </dependency>
-        <!-- Brings the given-when-then fixture this module layers on. -->
+        <!-- Brings the given-when-then fixture this module layers on. Compile scope, as the parent manages it at test
+             scope. -->
         <dependency>
             <groupId>org.axonframework</groupId>
             <artifactId>axon-test</artifactId>
-            <version>${project.version}</version>
+            <version>${axon-framework.version}</version>
+            <scope>compile</scope>
         </dependency>
 
         <!-- Compile scope, as in axon-test: the parent declares both at test scope for every module, which would

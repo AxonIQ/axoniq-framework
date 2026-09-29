@@ -79,6 +79,9 @@
 
         <module>integrationtests</module>
 
+        <module>legacy-support/axoniq-legacy</module>
+        <module>legacy-support/axoniq-legacy-test</module>
+
         <module>messaging/axoniq-dead-letter</module>
         <module>messaging/axoniq-distributed-messaging</module>
         <module>messaging/axoniq-event-streaming</module>

@@ -45,7 +45,7 @@
         </dependency>
         <!--
            Verifies that the Axon Framework 4 saga stores take part in a transaction driven by a unit of work. This is
-           the module that can depend on both axon-legacy and the Spring extension, which is what makes the JDBC side
+           the module that can depend on both axoniq-legacy and the Spring extension, which is what makes the JDBC side
            testable against the real SpringTransactionManager.
        -->
         <dependency>
