@@ -63,5 +63,12 @@ class StaticTenantConnectPredicateTest {
             assertThatThrownBy(() -> new StaticTenantConnectPredicate(tenantIds))
                     .hasMessage("Tenant identifiers are required");
         }
+
+        @Test
+        void doesNotAcceptNullCsv() {
+            assertThatThrownBy(() -> StaticTenantConnectPredicate.from(null))
+                    .isInstanceOf(NullPointerException.class)
+                    .hasMessage("Tenant identifiers are required");
+        }
     }
 }
