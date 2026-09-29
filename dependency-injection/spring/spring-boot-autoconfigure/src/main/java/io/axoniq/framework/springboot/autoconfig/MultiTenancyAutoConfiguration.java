@@ -100,10 +100,15 @@ public class MultiTenancyAutoConfiguration {
                 .or(() -> Optional.ofNullable(environment.getProperty(LEGACY_TENANTS_PROPERTY)))
                 .orElseThrow(() -> new IllegalStateException(
                         "A static tenant property was detected, but no tenant identifiers could be read"));
-        if (environment.containsProperty(StaticTenantConnectPredicate.TENANTS_PROPERTY)
-                && environment.containsProperty(LEGACY_TENANTS_PROPERTY)) {
+        boolean hasCurrent = environment.containsProperty(StaticTenantConnectPredicate.TENANTS_PROPERTY);
+        boolean hasLegacy = environment.containsProperty(LEGACY_TENANTS_PROPERTY);
+        if (hasCurrent && hasLegacy) {
             logger.warn("Both '{}' and deprecated '{}' are configured; using '{}'.",
                         StaticTenantConnectPredicate.TENANTS_PROPERTY,
+                        LEGACY_TENANTS_PROPERTY,
+                        StaticTenantConnectPredicate.TENANTS_PROPERTY);
+        } else if (hasLegacy) {
+            logger.warn("Property '{}' is deprecated and will be removed in a future release; please migrate to '{}'.",
                         LEGACY_TENANTS_PROPERTY,
                         StaticTenantConnectPredicate.TENANTS_PROPERTY);
         }

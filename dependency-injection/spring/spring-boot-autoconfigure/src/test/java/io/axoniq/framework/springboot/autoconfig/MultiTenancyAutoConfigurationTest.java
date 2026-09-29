@@ -31,6 +31,11 @@ import io.axoniq.framework.messaging.multitenancy.configuration.TenantComponentP
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.MultiTenantEventStorageEngine;
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.MultiTenantSnapshotStore;
 import io.axoniq.framework.messaging.multitenancy.util.StubTenantProvider;
+import org.apache.logging.log4j.Level;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.core.LogEvent;
+import org.apache.logging.log4j.core.Logger;
+import org.apache.logging.log4j.core.test.appender.ListAppender;
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.axonframework.conversion.Converter;
@@ -45,6 +50,7 @@ import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import java.util.List;
 import java.util.stream.Stream;
 
 import static io.axoniq.framework.messaging.multitenancy.configuration.StaticTenantConnectPredicate.TENANTS_PROPERTY;
@@ -150,6 +156,27 @@ class MultiTenancyAutoConfigurationTest {
         private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
                 .withConfiguration(AutoConfigurations.of(MultiTenancyAutoConfiguration.class));
 
+        private Logger configLogger;
+        private Level previousLevel;
+        private ListAppender appender;
+
+        @BeforeEach
+        void attachAppender() {
+            configLogger = (Logger) LogManager.getLogger(MultiTenancyAutoConfiguration.class);
+            previousLevel = configLogger.getLevel();
+            configLogger.setLevel(Level.WARN);
+            appender = new ListAppender("MultiTenancyAutoConfigurationTest");
+            appender.start();
+            configLogger.addAppender(appender);
+        }
+
+        @AfterEach
+        void detachAppender() {
+            configLogger.removeAppender(appender);
+            appender.stop();
+            configLogger.setLevel(previousLevel);
+        }
+
         @Test
         void createsAPredicateForConfiguredTenants() {
             // given a comma-separated set of static tenant identifiers
@@ -161,6 +188,7 @@ class MultiTenancyAutoConfigurationTest {
                              assertThat(predicate.test(TenantDescriptor.tenantWithId("tenant-a"))).isTrue();
                              assertThat(predicate.test(TenantDescriptor.tenantWithId("tenant-b"))).isTrue();
                              assertThat(predicate.test(TenantDescriptor.tenantWithId("tenant-c"))).isFalse();
+                             assertThat(warnings()).isEmpty();
                          });
         }
 
@@ -173,6 +201,10 @@ class MultiTenancyAutoConfigurationTest {
                              // then its predicate accepts the legacy tenant
                              TenantConnectPredicate predicate = context.getBean(TenantConnectPredicate.class);
                              assertThat(predicate.test(TenantDescriptor.tenantWithId("legacy-tenant"))).isTrue();
+                             assertThat(warnings())
+                                     .singleElement()
+                                     .matches(event -> event.getMessage().getFormattedMessage().contains(
+                                             "Property 'axon.axonserver.contexts' is deprecated and will be removed in a future release; please migrate to 'axoniq.multitenancy.tenants'."));
                          });
         }
 
@@ -182,13 +214,24 @@ class MultiTenancyAutoConfigurationTest {
             contextRunner.withPropertyValues(
                                  TENANTS_PROPERTY + "=current-tenant",
                                  LEGACY_TENANTS_PROPERTY + "=legacy-tenant")
-                         // when the context starts
-                         .run(context -> {
-                             // then the current property determines the predicate
-                             TenantConnectPredicate predicate = context.getBean(TenantConnectPredicate.class);
-                             assertThat(predicate.test(TenantDescriptor.tenantWithId("current-tenant"))).isTrue();
-                             assertThat(predicate.test(TenantDescriptor.tenantWithId("legacy-tenant"))).isFalse();
-                         });
+                          // when the context starts
+                          .run(context -> {
+                              // then the current property determines the predicate
+                              TenantConnectPredicate predicate = context.getBean(TenantConnectPredicate.class);
+                              assertThat(predicate.test(TenantDescriptor.tenantWithId("current-tenant"))).isTrue();
+                              assertThat(predicate.test(TenantDescriptor.tenantWithId("legacy-tenant"))).isFalse();
+                              assertThat(warnings())
+                                      .singleElement()
+                                      .matches(event -> event.getMessage().getFormattedMessage().contains(
+                                              "Both 'axoniq.multitenancy.tenants' and deprecated 'axon.axonserver.contexts' are configured; using 'axoniq.multitenancy.tenants'."));
+                          });
+        }
+
+        private List<LogEvent> warnings() {
+            return appender.getEvents()
+                           .stream()
+                           .filter(event -> event.getLevel() == Level.WARN)
+                           .toList();
         }
 
         @Test
