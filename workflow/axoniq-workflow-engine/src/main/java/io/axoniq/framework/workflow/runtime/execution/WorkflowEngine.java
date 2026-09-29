@@ -42,6 +42,7 @@ import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.util.HashSet;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
@@ -278,7 +279,12 @@ public class WorkflowEngine implements
 
     @Override
     public boolean hasUnsafeCheckpointWork(Segment segment) {
-        return unsafeWorkflowIdsOf(segment).findAny().isPresent();
+        return unsafeExecutionsOf(segment).anyMatch(WorkflowExecution::isRunning);
+    }
+
+    @Override
+    public boolean holdsCheckpoint(Segment segment) {
+        return unsafeExecutionsOf(segment).anyMatch(execution -> !execution.isRunning());
     }
 
     /**
@@ -300,7 +306,9 @@ public class WorkflowEngine implements
                 workflowId -> workflowExecutionRepository.findById(workflowId).ifPresentOrElse(
                         execution -> {
                             if (execution.hasUnsafeCheckpointWork()) {
-                                executions.add(execution);
+                                if (execution.isRunning()) {
+                                    executions.add(execution);
+                                }
                             } else {
                                 checkpointWorkIndex.markSafe(workflowId);
                             }
@@ -659,6 +667,12 @@ public class WorkflowEngine implements
         return checkpointWorkIndex.unsafeWorkflowIds()
                                   .stream()
                                   .filter(workflowId -> WorkflowSegmentOwnership.ownedBy(segment, workflowId));
+    }
+
+    private Stream<WorkflowExecution> unsafeExecutionsOf(Segment segment) {
+        return unsafeWorkflowIdsOf(segment).map(workflowExecutionRepository::findById)
+                                           .flatMap(Optional::stream)
+                                           .filter(WorkflowExecution::hasUnsafeCheckpointWork);
     }
 
     /**
