@@ -22,6 +22,7 @@ package io.axoniq.framework.workflow.configuration;
 import io.axoniq.framework.workflow.dsl.api.EventCondition;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowIdProvider;
 import io.axoniq.framework.workflow.runtime.association.ValueComparisonOperatorRegistry;
+import org.axonframework.common.AxonConfigurationException;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.messaging.core.MessageTypeResolver;
 import org.axonframework.messaging.core.QualifiedName;
@@ -33,6 +34,7 @@ import org.junit.jupiter.api.*;
 import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.Supplier;
 
 import static io.axoniq.framework.workflow.annotation.Workflow.*;
@@ -204,6 +206,53 @@ class AutoDetectionUtilsTest {
                 .hasMessageContaining("<qualifier>:<path><operator><value>");
     }
 
+    @Test
+    void shouldPreferRegisteredComponentOverReflectionForIdProvider() {
+        Configuration configuration = mock(Configuration.class);
+        MyIdProvider registeredInstance = new MyIdProvider();
+        when(configuration.getOptionalComponent(eq(MyIdProvider.class))).thenReturn(Optional.of(
+                registeredInstance));
+
+        Map<String, @Nullable Object> attributes = new HashMap<>();
+        attributes.put(ATTR_ID_PROPERTY_PROVIDER, MyIdProvider.class);
+
+        WorkflowIdProvider result =
+                AutoDetectionUtils.workflowIdProviderComponentBuilder(attributes).build(configuration);
+
+        assertThat(result).isSameAs(registeredInstance);
+    }
+
+    @Test
+    void shouldFallBackToNoArgConstructorWhenIdProviderNotRegistered() {
+        Configuration configuration = mock(Configuration.class);
+        when(configuration.getOptionalComponent(eq(NoArgConstructibleIdProvider.class))).thenReturn(
+                Optional.empty());
+
+        Map<String, @Nullable Object> attributes = new HashMap<>();
+        attributes.put(ATTR_ID_PROPERTY_PROVIDER, NoArgConstructibleIdProvider.class);
+
+        WorkflowIdProvider result =
+                AutoDetectionUtils.workflowIdProviderComponentBuilder(attributes).build(configuration);
+
+        assertThat(result).isInstanceOf(NoArgConstructibleIdProvider.class);
+    }
+
+    @Test
+    void shouldThrowWhenIdProviderNeitherRegisteredNorNoArgConstructible() {
+        Configuration configuration = mock(Configuration.class);
+        when(configuration.getOptionalComponent(eq(NonNoArgIdProvider.class))).thenReturn(Optional.empty());
+
+        Map<String, @Nullable Object> attributes = new HashMap<>();
+        attributes.put(ATTR_ID_PROPERTY_PROVIDER, NonNoArgIdProvider.class);
+
+        assertThatThrownBy(
+                () -> AutoDetectionUtils.workflowIdProviderComponentBuilder(attributes).build(configuration))
+                .isInstanceOf(AxonConfigurationException.class)
+                .hasMessageContaining(NonNoArgIdProvider.class.getName())
+                .hasMessageContaining("not registered as a Configuration component")
+                .hasMessageContaining("no accessible no-arg constructor");
+    }
+
     @Event(namespace = "custom", name = "AnnotatedEvent")
     private record AnnotatedEvent(String id) {
 
@@ -216,6 +265,25 @@ class AutoDetectionUtilsTest {
     }
 
     private static class MyIdProvider implements WorkflowIdProvider {
+
+        @Override
+        public String apply(org.axonframework.messaging.eventhandling.EventMessage eventMessage) {
+            return "id";
+        }
+    }
+
+    public static class NoArgConstructibleIdProvider implements WorkflowIdProvider {
+
+        @Override
+        public String apply(org.axonframework.messaging.eventhandling.EventMessage eventMessage) {
+            return "id";
+        }
+    }
+
+    private static class NonNoArgIdProvider implements WorkflowIdProvider {
+
+        NonNoArgIdProvider(String requiredArgument) {
+        }
 
         @Override
         public String apply(org.axonframework.messaging.eventhandling.EventMessage eventMessage) {

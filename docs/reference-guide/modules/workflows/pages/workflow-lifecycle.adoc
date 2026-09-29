@@ -293,22 +293,22 @@ public class OrderFulfillmentWorkflow {
         // ... workflow logic
     }
 
-    @OnSuccess // <1>
+    @WorkflowCompletedHandler // <1>
     public void onCompleted(WorkflowStatus status, SimpleWorkflowContext ctx) {
         logger.info("Order {} fulfilled successfully!", ctx.workflowPayload().get("orderId"));
     }
 
-    @OnFailure // <2>
+    @WorkflowFailedHandler // <2>
     public void onFailed(WorkflowStatus status, SimpleWorkflowContext ctx) {
         logger.warn("Order {} failed: {}", ctx.workflowPayload().get("orderId"), status);
     }
 
-    @OnCancellation // <3>
+    @WorkflowCancelledHandler // <3>
     public void onCancelled(WorkflowStatus status, SimpleWorkflowContext ctx) {
         logger.info("Order {} was cancelled", ctx.workflowPayload().get("orderId"));
     }
 
-    @OnTimeout // <4>
+    @WorkflowTimedOutHandler // <4>
     public void onTimedOut(WorkflowStatus status, SimpleWorkflowContext ctx) {
         logger.warn("Order {} timed out", ctx.workflowPayload().get("orderId"));
     }
@@ -321,11 +321,16 @@ public class OrderFulfillmentWorkflow {
 
 Each listener method receives the `WorkflowStatus` and the `WorkflowContext`, giving you access to the workflow payload and ID.
 
+Annotation-based listeners execute through the same handler pipeline as every other Axon Framework message
+handler: tracing, handler timeouts, `@MessageHandlerInterceptor`, replay-awareness, and any
+`HandlerEnhancerDefinition` registered in the configuration all apply automatically, with no extra setup.
+
 [NOTE]
 ====
 Lifecycle listeners must be defined in the same class as the `@Workflow` method.
 Only methods on the workflow instance's class (and its type hierarchy) are scanned for listener annotations.
-Use the `workflowName` attribute (for example, `@OnSuccess(workflowName = "myWorkflow")`) to bind a listener to a specific workflow when multiple workflows are defined in the same class.
+Use the `workflowName` attribute (for example, `@WorkflowCompletedHandler(workflowName = "myWorkflow")`) to bind
+a listener to a specific workflow when multiple workflows are defined in the same class.
 ====
 
 === Programmatic listeners
@@ -336,11 +341,11 @@ For more control, register listeners via the declarative configuration:
 ----
 .customized((c, w) -> w
         .registerWorkflowStatusChangeListener(WorkflowStatus.COMPLETED,
-                (status, context) -> {
+                (status, context, processingContext) -> {
                     logger.info("Workflow {} completed", context.workflowId());
                 })
         .registerWorkflowStatusChangeListener(WorkflowStatus.FAILED,
-                (status, context) -> {
+                (status, context, processingContext) -> {
                     logger.warn("Workflow {} failed", context.workflowId());
                 })
 )
@@ -353,11 +358,51 @@ You can also unregister listeners:
 w.unregisterWorkflowStatusChangeListener(WorkflowStatus.COMPLETED, myListener);
 ----
 
+`WorkflowStatusChangeListener` is a functional interface with a single method,
+`onWorkflowStatus(WorkflowStatus, WorkflowContext, ProcessingContext)`. Receiving the `ProcessingContext` lets a
+programmatic listener participate in the same handler pipeline annotation-based listeners do, for example,
+propagating correlation data or interacting with the active transaction, with no extra setup required.
+
 [NOTE]
 ====
 Lifecycle listeners are called *after* the terminal event is published.
 They run in the context of the workflow execution and have access to the full workflow payload.
 ====
+
+== Method parameters
+
+Both the `@Workflow` method and annotation-based lifecycle listeners can declare additional parameters beyond
+the workflow context, resolved the same way every other Axon Framework annotated handler resolves its
+parameters:
+
+[source,java]
+----
+@WorkflowCompletedHandler
+public void onCompleted(WorkflowStatus status, SimpleWorkflowContext ctx, OrderFulfillmentWorkflow self) {
+    logger.info("Order {} fulfilled successfully! (workflow instance: {})", ctx.workflowPayload().get("orderId"), self);
+}
+----
+
+The following parameters are supported for workflow related handler methods:
+
+[cols="1,2"]
+|===
+|Parameter type |Resolved to
+
+|`WorkflowContext` (or your custom subtype)
+|The workflow context of the invocation in progress.
+
+|`WorkflowStatus`
+|The status that triggered the listener. Only available on lifecycle listener methods.
+Declaring it on the `@Workflow` method itself has no matching value, so that method won't be recognized as a handler.
+
+|The workflow instance's own type (or a supertype)
+|The workflow-annotated component instance itself, letting a listener call other methods or read fields on it.
+
+|Any type with a public constructor accepting your `WorkflowContext` type
+|Your `WorkflowContext`, wrapped in that type. Useful for giving a lifecycle listener the same convenience type
+(for example, `SimpleWorkflowContext`) the `@Workflow` method itself uses.
+|===
 
 == Event versioning
 

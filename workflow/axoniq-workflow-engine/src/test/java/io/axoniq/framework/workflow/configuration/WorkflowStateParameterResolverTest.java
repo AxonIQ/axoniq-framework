@@ -16,14 +16,14 @@
  * For licensing information and to register, visit:
  *  https://www.axoniq.io/pricing
  */
-package io.axoniq.framework.workflow.runtime.execution;
+package io.axoniq.framework.workflow.configuration;
 
 import io.axoniq.framework.workflow.dsl.api.WorkflowState;
 import io.axoniq.framework.workflow.history.api.WorkflowHistory;
 import io.axoniq.framework.workflow.history.api.WorkflowHistoryRepository;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
+import io.axoniq.framework.workflow.runtime.execution.WorkflowExecutionRepository;
 import io.axoniq.framework.workflow.runtime.util.MetadataUtils;
-import org.axonframework.common.configuration.Configuration;
 import org.axonframework.messaging.core.GenericMessage;
 import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.MessageType;
@@ -42,28 +42,29 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.*;
 
 /**
- * Tests for {@link WorkflowStateParameterResolver}.
+ * Tests validating the {@link WorkflowStateParameterResolver}.
+ *
+ * @author Simon Zambrovski
  */
-class EventSourcedWorkflowStateParameterResolverTest {
+class WorkflowStateParameterResolverTest {
 
     private final MessageType messageType = new MessageType(new QualifiedName("ns", "name"), "1.0");
-    private WorkflowStateParameterResolver resolver;
     private ProcessingContext context;
-    private Configuration configuration;
     private WorkflowExecutionRepository executionRepository;
     private WorkflowHistoryRepository historyRepository;
     private MockedStatic<Message> messageMockedStatic;
 
+    private WorkflowStateParameterResolver testSubject;
+
     @BeforeEach
     void setUp() {
         context = mock(ProcessingContext.class);
-        configuration = mock(Configuration.class);
-        resolver = new WorkflowStateParameterResolver(configuration);
+        testSubject = new WorkflowStateParameterResolver();
         executionRepository = mock(WorkflowExecutionRepository.class);
         historyRepository = mock(WorkflowHistoryRepository.class);
 
-        when(configuration.getComponent(WorkflowExecutionRepository.class)).thenReturn(executionRepository);
-        when(configuration.getComponent(WorkflowHistoryRepository.class)).thenReturn(historyRepository);
+        when(context.component(WorkflowExecutionRepository.class)).thenReturn(executionRepository);
+        when(context.component(WorkflowHistoryRepository.class)).thenReturn(historyRepository);
 
         messageMockedStatic = mockStatic(Message.class);
     }
@@ -78,27 +79,27 @@ class EventSourcedWorkflowStateParameterResolverTest {
     }
 
     @Test
-    void testMatchesNoWorkflowId() {
+    void matchesNoWorkflowId() {
         GenericMessage message = new GenericMessage(messageType, "payload", Metadata.with("foo", "bar"));
         setMessageInContext(message);
 
-        assertThat(resolver.matches(context)).isFalse();
+        assertThat(testSubject.matches(context)).isFalse();
     }
 
     @Test
-    void testMatchesWithWorkflowId() {
+    void matchesWithWorkflowId() {
         GenericMessage message = new GenericMessage(messageType, "payload", MetadataUtils.create("workflow-1"));
         setMessageInContext(message);
 
-        assertThat(resolver.matches(context)).isTrue();
+        assertThat(testSubject.matches(context)).isTrue();
     }
 
     @Test
-    void testResolveNoWorkflowId() {
+    void resolveNoWorkflowId() {
         GenericMessage message = new GenericMessage(messageType, "payload", Metadata.with("foo", "bar"));
         setMessageInContext(message);
 
-        CompletableFuture<WorkflowState> result = resolver.resolveParameterValue(context);
+        CompletableFuture<WorkflowState> result = testSubject.resolveParameterValue(context);
 
         assertThat(result).isCompletedExceptionally();
         assertThatThrownBy(result::get)
@@ -108,7 +109,7 @@ class EventSourcedWorkflowStateParameterResolverTest {
     }
 
     @Test
-    void testResolveInExecutionRepository() throws Exception {
+    void resolveInExecutionRepository() throws Exception {
         String workflowId = "workflow-1";
         GenericMessage message = new GenericMessage(messageType, "payload", MetadataUtils.create(workflowId));
         setMessageInContext(message);
@@ -118,17 +119,17 @@ class EventSourcedWorkflowStateParameterResolverTest {
         when(execution.state()).thenReturn(state);
         when(executionRepository.findById(workflowId)).thenReturn(Optional.of(execution));
 
-        CompletableFuture<WorkflowState> result = resolver.resolveParameterValue(context);
+        CompletableFuture<WorkflowState> result = testSubject.resolveParameterValue(context);
 
         assertThat(result).isCompleted().isNotCompletedExceptionally();
         assertThat(result.get()).isSameAs(state);
-        verify(configuration).getComponent(WorkflowExecutionRepository.class);
+        verify(context).component(WorkflowExecutionRepository.class);
         verify(executionRepository).findById(workflowId);
         verifyNoInteractions(historyRepository);
     }
 
     @Test
-    void testResolveInHistoryRepository() throws Exception {
+    void resolveInHistoryRepository() throws Exception {
         String workflowId = "workflow-1";
         GenericMessage message = new GenericMessage(messageType, "payload", MetadataUtils.create(workflowId));
         setMessageInContext(message);
@@ -140,18 +141,18 @@ class EventSourcedWorkflowStateParameterResolverTest {
         when(executionRepository.findById(workflowId)).thenReturn(Optional.empty());
         when(historyRepository.findById(workflowId)).thenReturn(CompletableFuture.completedFuture(Optional.of(history)));
 
-        CompletableFuture<WorkflowState> result = resolver.resolveParameterValue(context);
+        CompletableFuture<WorkflowState> result = testSubject.resolveParameterValue(context);
 
         assertThat(result).isCompleted().isNotCompletedExceptionally();
         assertThat(result.get()).isSameAs(state);
-        verify(configuration).getComponent(WorkflowExecutionRepository.class);
+        verify(context).component(WorkflowExecutionRepository.class);
         verify(executionRepository).findById(workflowId);
-        verify(configuration).getComponent(WorkflowHistoryRepository.class);
+        verify(context).component(WorkflowHistoryRepository.class);
         verify(historyRepository).findById(workflowId);
     }
 
     @Test
-    void testResolveNotFound() {
+    void resolveNotFound() {
         String workflowId = "workflow-1";
         GenericMessage message = new GenericMessage(messageType, "payload", MetadataUtils.create(workflowId));
         setMessageInContext(message);
@@ -159,11 +160,11 @@ class EventSourcedWorkflowStateParameterResolverTest {
         when(executionRepository.findById(workflowId)).thenReturn(Optional.empty());
         when(historyRepository.findById(workflowId)).thenReturn(CompletableFuture.completedFuture(Optional.empty()));
 
-        assertThat(resolver.resolveParameterValue(context)).isCompletedExceptionally();
+        assertThat(testSubject.resolveParameterValue(context)).isCompletedExceptionally();
 
-        verify(configuration).getComponent(WorkflowExecutionRepository.class);
+        verify(context).component(WorkflowExecutionRepository.class);
         verify(executionRepository).findById(workflowId);
-        verify(configuration).getComponent(WorkflowHistoryRepository.class);
+        verify(context).component(WorkflowHistoryRepository.class);
         verify(historyRepository).findById(workflowId);
     }
 }

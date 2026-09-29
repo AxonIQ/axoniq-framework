@@ -35,9 +35,11 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Test class validating the {@code PostgresqlFinalizer}.
@@ -115,6 +117,11 @@ class PostgresqlFinalizerTest {
 
         notifiedGlobalIndex = new AtomicLong(-1);
         testSubject = new PostgresqlFinalizer(dataSource, notifiedGlobalIndex::set);
+    }
+
+    @AfterEach
+    void tearDown() {
+        testSubject.close();
     }
 
     @Test
@@ -210,6 +217,47 @@ class PostgresqlFinalizerTest {
         }
 
         assertThat(queryAllGlobalIndices()).hasSize(2).allMatch(index -> index > 0);
+    }
+
+    @Test
+    void twoFinalizerInstancesBothBlockOnAdvisoryLockHeldByAnotherConnection() throws SQLException {
+        insertEvent(-1);
+        insertEvent(-2);
+
+        PostgresqlFinalizer finalizerA = new PostgresqlFinalizer(dataSource, index -> {});
+        PostgresqlFinalizer finalizerB = new PostgresqlFinalizer(dataSource, index -> {});
+
+        try {
+            // Simulates another process already holding the same advisory lock key: if
+            // FINALIZE_STATEMENT genuinely acquires it, both finalizers below - independent
+            // PostgresqlFinalizer instances with their own executors, standing in for two
+            // separate engine instances - must wait until this connection releases it.
+            try (
+                Connection lockHolder = dataSource.getConnection();
+                Statement lockStatement = lockHolder.createStatement()
+            ) {
+                lockStatement.execute("SELECT pg_advisory_lock(42)");
+
+                CompletableFuture<ConsistencyMarker> futureA = finalizerA.scheduleFinalization();
+                CompletableFuture<ConsistencyMarker> futureB = finalizerB.scheduleFinalization();
+
+                assertThatThrownBy(() -> futureA.get(300, TimeUnit.MILLISECONDS))
+                        .isInstanceOf(TimeoutException.class);
+                assertThatThrownBy(() -> futureB.get(300, TimeUnit.MILLISECONDS))
+                        .isInstanceOf(TimeoutException.class);
+
+                lockStatement.execute("SELECT pg_advisory_unlock(42)");
+
+                assertThat(join(futureA)).isNotNull();
+                assertThat(join(futureB)).isNotNull();
+            }
+
+            assertThat(queryAllGlobalIndices()).hasSize(2).allMatch(index -> index > 0);
+        }
+        finally {
+            finalizerA.close();
+            finalizerB.close();
+        }
     }
 
     private static ConsistencyMarker join(CompletableFuture<ConsistencyMarker> future) {

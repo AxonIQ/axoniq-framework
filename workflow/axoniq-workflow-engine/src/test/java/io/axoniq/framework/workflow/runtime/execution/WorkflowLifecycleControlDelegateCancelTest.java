@@ -168,9 +168,8 @@ class WorkflowLifecycleControlDelegateCancelTest {
         order.verify(workflowExecution).appendWorkflowEvent(any(EventMessage.class), any(ProcessingContext.class));
     }
 
-    @SuppressWarnings("unchecked")
     @Test
-    void cancelWorkflowInvokesCancelledStatusChangeListener() throws InterruptedException {
+    void cancelWorkflowInvokesCancelledStatusChangeListener() {
         var listener = mock(WorkflowStatusChangeListener.class);
         EventSourcedWorkflowState state = workflowState(Map.of(WorkflowStatus.CANCELLED, listener));
         when(workflowExecution.state()).thenReturn(state);
@@ -185,7 +184,7 @@ class WorkflowLifecycleControlDelegateCancelTest {
                                                          state.workflowDefinitionId(),
                                                          eventNameCustomizer), processingContext);
 
-        verify(listener).onWorkflowStatus(eq(WorkflowStatus.CANCELLED), eq(workflowContext));
+        verify(listener).onWorkflowStatus(eq(WorkflowStatus.CANCELLED), eq(workflowContext), eq(processingContext));
     }
 
     @Test
