@@ -18,15 +18,15 @@
  */
 package io.axoniq.framework.workflow.configuration;
 
-import io.axoniq.framework.workflow.runtime.api.annotation.Workflow;
-import io.axoniq.framework.workflow.runtime.api.annotation.WorkflowStatusChangedHandler;
-import io.axoniq.framework.workflow.runtime.api.execution.context.EventCondition;
-import io.axoniq.framework.workflow.runtime.api.execution.context.EventConditions;
+import io.axoniq.framework.workflow.annotation.Workflow;
+import io.axoniq.framework.workflow.annotation.WorkflowStatusChangedHandler;
+import io.axoniq.framework.workflow.dsl.api.EventCondition;
+import io.axoniq.framework.workflow.dsl.api.EventConditions;
 import io.axoniq.framework.workflow.runtime.api.execution.context.Version;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
+import io.axoniq.framework.workflow.dsl.api.WorkflowContext;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowIdProvider;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowStatusChangeListener;
-import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.association.Associations;
 import io.axoniq.framework.workflow.runtime.association.ValueComparisonOperatorRegistry;
 import io.axoniq.framework.workflow.runtime.execution.DefaultEventNameCustomizer;
@@ -64,7 +64,7 @@ import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
 import static io.axoniq.framework.workflow.configuration.WorkflowMethodParameterResolverFactory.*;
-import static io.axoniq.framework.workflow.runtime.api.annotation.Workflow.*;
+import static io.axoniq.framework.workflow.annotation.Workflow.*;
 import static org.axonframework.common.ObjectUtils.getNonEmptyOrDefault;
 import static org.axonframework.common.ObjectUtils.getOrDefault;
 import static org.axonframework.common.annotation.AnnotationUtils.findAnnotationAttributes;
