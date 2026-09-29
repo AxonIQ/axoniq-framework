@@ -10,7 +10,7 @@ For *new* processes, Axon Framework 5 provides several ways to implement them wi
 The xref:{page-component-version}@saga-guide:ROOT:index.adoc[Sagas and Process Managers] guide describes them in detail.
 
 For sagas that are *already running* (considering business processes running for months), rewriting is not an option.
-That case is served by the `axon-legacy` module, described in <<legacy-module>>.
+That case is served by the `axoniq-legacy` module, described in <<legacy-module>>.
 
 [IMPORTANT]
 ====
@@ -19,27 +19,27 @@ For saga migration you need to consider two scenarios:
 *Writing new processes:* Pick an approach from the
 xref:{page-component-version}@saga-guide:ROOT:index.adoc[Sagas and Process Managers] guide and write it today.
 
-*Migrating running sagas:* Use the Axon Framework 4 compatible APIs of the `axon-legacy` module to keep existing saga classes running until all legacy saga instances are drained naturally.
+*Migrating running sagas:* Use the Axon Framework 4 compatible APIs of the `axoniq-legacy` module to keep existing saga classes running until all legacy saga instances are drained naturally.
 The legacy module should be treated as a way to finish existing instances, not to keep sagas in Axon Framework 5.
 ====
 
 [#legacy-module]
 == Running existing sagas on Axon Framework 5
 
-The `axon-legacy` module allows migrating to Axon Framework 5 while saga instances started on Axon Framework 4 are still running.
+The `axoniq-legacy` module allows migrating to Axon Framework 5 while saga instances started on Axon Framework 4 are still running.
 Business processes covered by sagas can span weeks or months.
-`axon-legacy` lets running saga instances continue while new instances start on an Axon Framework 5 native implementation of the business process.
+`axoniq-legacy` lets running saga instances continue while new instances start on an Axon Framework 5 native implementation of the business process.
 
-The `axon-legacy` module brings forward the following Axon Framework 4 saga infrastructure, adapted to the Axon Framework 5 APIs:
+The `axoniq-legacy` module brings forward the following Axon Framework 4 saga infrastructure, adapted to the Axon Framework 5 APIs:
 
 * `@SagaEventHandler`, `@StartSaga`, `@EndSaga`, `SagaLifecycle` and the association-value mechanism
 * `SagaStore` and its concrete implementations, to support existing saga stores
 * `SagaConfigurer`, with its Axon Framework 4 package and fluent manager, repository, and store configuration hooks
 
 The `org.axonframework.spring.stereotype.Saga` annotation itself keeps its Axon Framework 4 package. Spring Boot autoconfiguration for legacy sagas activates only
-when both `axon-legacy` and `axon-spring-boot-starter` are on the classpath; see <<spring-boot-sagas>>.
+when both `axoniq-legacy` and `axon-spring-boot-starter` are on the classpath; see <<spring-boot-sagas>>.
 
-Add `axon-legacy` as a dependency to the project. The legacy module preserves the Saga annotations, association
+Add `axoniq-legacy` as a dependency to the project. The legacy module preserves the Saga annotations, association
 values, and `SagaStore` contract. Saga classes require the following source changes:
 
 * Replace static `SagaLifecycle` calls with calls on a `SagaLifecycle` parameter of the `@SagaEventHandler` method.
@@ -53,7 +53,7 @@ handler.
 
 === Synchronous event handlers
 
-An `@SagaEventHandler` in `axon-legacy` must complete on the thread that invoked it. Do not return
+An `@SagaEventHandler` in `axoniq-legacy` must complete on the thread that invoked it. Do not return
 `CompletableFuture`, `Mono`, `Publisher`, or another asynchronous result type from a legacy Saga event handler.
 
 Axon Framework 4 invoked Saga event handlers synchronously and ignored their return values. The legacy module keeps
@@ -66,7 +66,7 @@ handler returns.
 
 [NOTE]
 ====
-The saga side of `axon-legacy` (link:https://github.com/AxonFramework/AxonFramework/issues/3728[GitHub Issue #3728]),
+The saga side of `axoniq-legacy` (link:https://github.com/AxonFramework/AxonFramework/issues/3728[GitHub Issue #3728]),
 including Spring Boot autoconfiguration, targets 5.4.0. Deadlines
 (link:https://github.com/AxonFramework/AxonFramework/issues/3065[GitHub Issue #3065] and
 link:https://github.com/AxonFramework/AxonFramework/issues/5006[GitHub Issue #5006]) are not yet ported: `DeadlineManager`
@@ -74,7 +74,7 @@ and `@DeadlineHandler` remain outstanding. Until they land, plan on the code-lev
 drainage strategy in <<strategy>> for the deadline part of a saga.
 ====
 
-The `axon-legacy` module is a migration aid, not a supported way to write new processes. `@StartSaga` is deprecated.
+The `axoniq-legacy` module is a migration aid, not a supported way to write new processes. `@StartSaga` is deprecated.
 Use the legacy module to let existing instances receive their events and run to completion while new work goes to the
 Axon Framework 5 implementation written alongside it. A ported `@StartSaga` handler can still create instances until
 you remove or disable that annotation as part of the drainage strategy.
@@ -82,8 +82,8 @@ you remove or disable that annotation as part of the drainage strategy.
 [#spring-boot-sagas]
 == Configuring legacy sagas with Spring Boot
 
-Add `axon-legacy` next to `axon-spring-boot-starter` as a dependency. Autoconfiguration for legacy sagas activates
-once `axon-legacy` is on the classpath; no further setup is needed for a `@Saga`-annotated, component-scanned class to
+Add `axoniq-legacy` next to `axon-spring-boot-starter` as a dependency. Autoconfiguration for legacy sagas activates
+once `axoniq-legacy` is on the classpath; no further setup is needed for a `@Saga`-annotated, component-scanned class to
 start receiving events.
 
 === Processor assignment

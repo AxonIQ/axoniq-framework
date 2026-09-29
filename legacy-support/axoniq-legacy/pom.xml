@@ -18,15 +18,15 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
     <parent>
-        <groupId>org.axonframework</groupId>
-        <artifactId>axon-parent</artifactId>
+        <groupId>io.axoniq.framework</groupId>
+        <artifactId>axoniq-framework-parent</artifactId>
         <version>${revision}</version>
-        <relativePath>../build/parent/pom.xml</relativePath>
+        <relativePath>../../build/parent/pom.xml</relativePath>
     </parent>
 
-    <artifactId>axon-legacy</artifactId>
+    <artifactId>axoniq-legacy</artifactId>
 
-    <name>Axon Framework - Legacy</name>
+    <name>Axoniq Framework - Legacy</name>
     <description>
         This module contains legacy solutions of Axon Framework 4, such as sagas and deadlines. Use this dependency to
         ease the migration period for projects that cannot move off these APIs in one go.
@@ -44,12 +44,12 @@
         <dependency>
             <groupId>org.axonframework</groupId>
             <artifactId>axon-messaging</artifactId>
-            <version>${project.version}</version>
+            <version>${axon-framework.version}</version>
         </dependency>
         <dependency>
             <groupId>org.axonframework</groupId>
             <artifactId>axon-conversion</artifactId>
-            <version>${project.version}</version>
+            <version>${axon-framework.version}</version>
         </dependency>
 
         <!-- JPA saga store -->
@@ -81,12 +81,12 @@
         <!-- Spring integration for the ported Sagas. Optional: a migrating Spring application already provides
              these on its classpath, while a non-Spring application keeps them off the graph entirely. -->
         <!-- The Spring Saga wiring builds on axon-spring's EventProcessorDefinition processor-configuration SPI, so
-             axon-legacy compiles against axon-spring. Kept optional: only a Spring application (which already has
+             axoniq-legacy compiles against axon-spring. Kept optional: only a Spring application (which already has
              axon-spring) uses these classes. -->
         <dependency>
             <groupId>org.axonframework.extensions.spring</groupId>
             <artifactId>axon-spring</artifactId>
-            <version>${project.version}</version>
+            <version>${axon-framework.version}</version>
             <optional>true</optional>
         </dependency>
         <dependency>
@@ -97,13 +97,11 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-autoconfigure</artifactId>
-            <version>${spring.boot.version}</version>
             <optional>true</optional>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-autoconfigure-processor</artifactId>
-            <version>${spring.boot.version}</version>
             <optional>true</optional>
         </dependency>
 
@@ -116,14 +114,14 @@
         <dependency>
             <groupId>org.axonframework</groupId>
             <artifactId>axon-messaging</artifactId>
-            <version>${project.version}</version>
+            <version>${axon-framework.version}</version>
             <type>test-jar</type>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.axonframework</groupId>
             <artifactId>axon-conversion</artifactId>
-            <version>${project.version}</version>
+            <version>${axon-framework.version}</version>
             <type>test-jar</type>
             <scope>test</scope>
         </dependency>
@@ -131,7 +129,7 @@
         <dependency>
             <groupId>org.axonframework</groupId>
             <artifactId>axon-messaging</artifactId>
-            <version>${project.version}</version>
+            <version>${axon-framework.version}</version>
             <type>test-jar</type>
             <scope>test</scope>
         </dependency>

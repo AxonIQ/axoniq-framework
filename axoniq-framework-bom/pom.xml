@@ -46,6 +46,20 @@
                 <scope>import</scope>
             </dependency>
 
+            <!-- Axoniq Framework: Legacy Support -->
+            <dependency>
+                <groupId>io.axoniq.framework</groupId>
+                <artifactId>axoniq-legacy</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>io.axoniq.framework</groupId>
+                <artifactId>axoniq-legacy-test</artifactId>
+                <version>${project.version}</version>
+                <scope>test</scope>
+            </dependency>
+
             <!-- Axoniq Framework: Connectors -->
             <dependency>
                 <groupId>io.axoniq.framework</groupId>
