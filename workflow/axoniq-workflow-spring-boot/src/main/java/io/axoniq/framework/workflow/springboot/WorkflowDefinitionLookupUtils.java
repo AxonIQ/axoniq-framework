@@ -19,7 +19,7 @@
 package io.axoniq.framework.workflow.springboot;
 
 import io.axoniq.framework.workflow.configuration.AutoDetectionUtils.MethodWithWorkflowAttributes;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
+import io.axoniq.framework.workflow.dsl.api.WorkflowContext;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContextFactory;
 import org.axonframework.common.annotation.Internal;
 import org.springframework.beans.factory.config.BeanDefinition;
