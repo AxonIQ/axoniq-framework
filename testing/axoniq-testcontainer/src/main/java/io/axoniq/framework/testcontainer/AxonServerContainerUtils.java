@@ -59,6 +59,16 @@ public class AxonServerContainerUtils {
     public static final boolean NO_DCB_CONTEXT = false;
 
     /**
+     * Connect/read timeout for every HTTP call in this class, in milliseconds.
+     * <p>
+     * {@link HttpURLConnection} defaults to no timeout at all, so a shared Axon Server instance that accepts a
+     * connection but stops responding (e.g. under CPU/disk pressure on a busy CI runner) would otherwise hang the
+     * calling thread indefinitely -- observed in practice as a build silently stuck until the CI job's own timeout
+     * killed it, rather than the test failing (and retrying) promptly.
+     */
+    private static final int HTTP_TIMEOUT_MILLIS = 10_000;
+
+    /**
      * Initialize the cluster of the Axon Server instance located at the given {@code hostname} and {@code port}
      * combination.
      * <p>
@@ -78,7 +88,7 @@ public class AxonServerContainerUtils {
         final URL url = URI.create(String.format("http://%s:%d/v2/cluster/init?dcb=%s", hostname, port, dcbContext)).toURL();
         HttpURLConnection connection = null;
         try {
-            connection = (HttpURLConnection) url.openConnection();
+            connection = openConnection(url);
             connection.setDoOutput(true);
             connection.setRequestMethod("POST");
             connection.getInputStream().close();
@@ -111,7 +121,7 @@ public class AxonServerContainerUtils {
         final URL url = URI.create(String.format("http://%s:%d/v1/public/context", hostname, port)).toURL();
         HttpURLConnection connection = null;
         try {
-            connection = (HttpURLConnection) url.openConnection();
+            connection = openConnection(url);
             connection.setRequestProperty("Accept", "application/json");
             connection.setDoOutput(true);
             connection.setRequestMethod("GET");
@@ -142,7 +152,7 @@ public class AxonServerContainerUtils {
         final URL url = new URL(String.format("http://%s:%d/internal/raft/contexts", hostname, port));
         HttpURLConnection connection = null;
         try {
-            connection = (HttpURLConnection) url.openConnection();
+            connection = openConnection(url);
             connection.setRequestProperty("Accept", "application/json");
             connection.setDoOutput(true);
             connection.setRequestMethod("GET");
@@ -250,7 +260,7 @@ public class AxonServerContainerUtils {
         URL url = URI.create(String.format("http://%s:%d/v1/context/%s", hostname, port, context)).toURL();
         HttpURLConnection connection = null;
         try {
-            connection = (HttpURLConnection) url.openConnection();
+            connection = openConnection(url);
             connection.setDoOutput(true);
             connection.setRequestMethod("DELETE");
             connection.getInputStream().close();
@@ -303,7 +313,7 @@ public class AxonServerContainerUtils {
                     dcbContext,
                     replicationGroup
             );
-            connection = (HttpURLConnection) url.openConnection();
+            connection = openConnection(url);
             connection.setRequestProperty("Content-Type", "application/json");
             connection.setRequestProperty("Accept", "application/json");
             connection.setDoOutput(true);
@@ -321,6 +331,17 @@ public class AxonServerContainerUtils {
             }
         }
         waitForContextsCondition(hostname, port, contexts -> contexts.contains(context));
+    }
+
+    /**
+     * Opens the given {@code url}'s connection with {@link #HTTP_TIMEOUT_MILLIS} applied as both the connect and
+     * read timeout.
+     */
+    private static HttpURLConnection openConnection(URL url) throws IOException {
+        HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+        connection.setConnectTimeout(HTTP_TIMEOUT_MILLIS);
+        connection.setReadTimeout(HTTP_TIMEOUT_MILLIS);
+        return connection;
     }
 
     private AxonServerContainerUtils() {
