@@ -28,7 +28,7 @@ import org.springframework.context.annotation.Configuration;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * The workflow properties are the application-facing surface of the {@code axoniq.workflow} prefix, so the binding of
+ * The workflow properties are the application-facing surface of the {@code axon.workflow} prefix, so the binding of
  * every property is asserted here: a renamed prefix or setter still starts the application, silently on the default.
  */
 class WorkflowPropertiesTest {
@@ -38,7 +38,7 @@ class WorkflowPropertiesTest {
 
     @Test
     void initialSegmentCountBindsFromTheApplicationProperties() {
-        contextRunner.withPropertyValues("axoniq.workflow.initial-segment-count=16")
+        contextRunner.withPropertyValues("axon.workflow.initial-segment-count=16")
                      .run(context -> Assertions.assertThat(context.getBean(WorkflowProperties.class).getInitialSegmentCount())
                              .isEqualTo(16));
     }

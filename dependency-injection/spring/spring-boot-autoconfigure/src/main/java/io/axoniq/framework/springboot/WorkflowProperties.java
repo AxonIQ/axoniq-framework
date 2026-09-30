@@ -22,12 +22,12 @@ import org.jspecify.annotations.Nullable;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
- * The workflow properties exposed to Spring Boot applications under the {@code axoniq.workflow} prefix.
+ * The workflow properties exposed to Spring Boot applications under the {@code axon.workflow} prefix.
  *
  * @author Stefan Dragisic
  * @since 5.4.0
  */
-@ConfigurationProperties(prefix = "axoniq.workflow")
+@ConfigurationProperties(prefix = "axon.workflow")
 public class WorkflowProperties {
 
     /**
