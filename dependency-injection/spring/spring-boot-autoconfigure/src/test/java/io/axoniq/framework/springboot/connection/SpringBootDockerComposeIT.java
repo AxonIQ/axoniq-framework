@@ -39,7 +39,9 @@ class SpringBootDockerComposeIT {
     void setUp() {
         application = SpringApplication.run(SpringBootApplication.class,
                                             "--spring.docker.compose.file=test-docker-compose.yml",
-                                            "--spring.docker.compose.skip.in-tests=false");
+                                            "--spring.docker.compose.skip.in-tests=false",
+                                            "--spring.main.web-application-type=none",
+                                            "--axon.springcloud.enabled=false");
     }
 
     @AfterEach
