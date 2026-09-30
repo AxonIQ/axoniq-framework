@@ -264,7 +264,7 @@ class SimpleWorkflowExecutionTest {
 
     @Test
     void futureResolutionTimeoutStopsAndCleansUpRuntimeWithoutTerminatingWorkflow() throws Exception {
-        var timeout = new FutureResolutionTimeoutException(new TimeoutException("publication timed out"));
+        var timeout = new FutureResolutionTimeoutException(new TimeoutException("expected publication timed out"));
         var eventSink = failingEventStore(timeout);
         var execution = execution(eventSink, new DirectExecutorService());
         var terminationHandlerCalled = new CountDownLatch(1);
@@ -291,7 +291,7 @@ class SimpleWorkflowExecutionTest {
 
     @Test
     void futureResolutionTimeoutDuringCompletionLeavesWorkflowStarted() throws Exception {
-        var timeout = new FutureResolutionTimeoutException(new TimeoutException("completion publication timed out"));
+        var timeout = new FutureResolutionTimeoutException(new TimeoutException("expected completion publication timed out"));
         var eventSink = failingEventStore(timeout);
         var execution = execution(eventSink, new DirectExecutorService());
         markStarted(execution);
@@ -309,7 +309,7 @@ class SimpleWorkflowExecutionTest {
 
     @Test
     void futureResolutionTimeoutDuringCancellationCompletesRequesterExceptionally() {
-        var timeout = new FutureResolutionTimeoutException(new TimeoutException("cancellation publication timed out"));
+        var timeout = new FutureResolutionTimeoutException(new TimeoutException("expected cancellation publication timed out"));
         var execution = execution(failingEventStore(timeout), new DirectExecutorService());
         markStarted(execution);
         var cancellation = (WorkflowCancellation.Request) execution.workflowCancellation();
@@ -326,7 +326,7 @@ class SimpleWorkflowExecutionTest {
 
     @Test
     void checkedPublicationFailureDuringCancellationCompletesRequesterExceptionally() {
-        var failure = new IOException("cancellation publication failed");
+        var failure = new IOException("expected cancellation publication failed");
         var execution = execution(
                 failingEventStore(failure),
                 new DirectExecutorService()
@@ -346,7 +346,7 @@ class SimpleWorkflowExecutionTest {
 
     @Test
     void futureResolutionTimeoutWhilePublishingFailureLeavesWorkflowNonTerminal() {
-        var timeout = new FutureResolutionTimeoutException(new TimeoutException("failure publication timed out"));
+        var timeout = new FutureResolutionTimeoutException(new TimeoutException("expected failure publication timed out"));
         var execution = execution(
                 failingEventStore(timeout),
                 new DirectExecutorService(),
@@ -542,7 +542,7 @@ class SimpleWorkflowExecutionTest {
         @Test
         void recoverableBodyExceptionPausesTheWorkflow() throws Exception {
             var execution = execution(eventStore(), new DirectExecutorService(), ignored -> {
-                throw new RuntimeException(new IOException("backend did not answer"));
+                throw new RuntimeException(new IOException("expected backend did not answer"));
             });
 
             assertPausedForRecovery(execution);
