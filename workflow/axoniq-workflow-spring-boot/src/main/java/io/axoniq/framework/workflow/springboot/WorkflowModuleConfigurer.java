@@ -32,7 +32,6 @@ import org.springframework.context.ApplicationContextAware;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 
 /**
  * Configuration enhancer responsible for creation of {@link WorkflowModule} instances, based on workflow definitions
@@ -46,7 +45,6 @@ import java.util.Objects;
 public class WorkflowModuleConfigurer implements ConfigurationEnhancer, ApplicationContextAware {
 
     private final Map<Class<? extends WorkflowContext>, List<String>> workflowDefinitionBeanRefs;
-    private final Map<Class<? extends WorkflowContext>, String> workflowContextFactoryBeanRefs;
     private ApplicationContext applicationContext;
 
 
@@ -54,17 +52,15 @@ public class WorkflowModuleConfigurer implements ConfigurationEnhancer, Applicat
      * Creates a new configurer responsible for registration of found workflows definitions using in a single module.
      */
     @Internal
-    WorkflowModuleConfigurer(
-            Map<Class<? extends WorkflowContext>, String> workflowContextFactoryBeanRefs,
-            Map<Class<? extends WorkflowContext>, List<String>> workflowDefinitionBeanRefs
-    ) {
+    WorkflowModuleConfigurer(Map<Class<? extends WorkflowContext>, List<String>> workflowDefinitionBeanRefs) {
         this.workflowDefinitionBeanRefs = workflowDefinitionBeanRefs;
-        this.workflowContextFactoryBeanRefs = workflowContextFactoryBeanRefs;
     }
 
     @Override
     public void enhance(ComponentRegistry registry) {
-        Objects.requireNonNull(applicationContext, "ApplicationContext must not be null");
+        if (applicationContext == null) {
+            throw new IllegalStateException("ApplicationContext must not be null");
+        }
         workflowDefinitionBeanRefs
                 .forEach((workflowContextType, workflowBeanNames) -> register(registry,
                                                                               workflowContextType,
@@ -76,15 +72,6 @@ public class WorkflowModuleConfigurer implements ConfigurationEnhancer, Applicat
             ComponentRegistry registry,
             Class<C> workflowContextType,
             List<String> workflowBeanNames) {
-        var factoryName = workflowContextFactoryBeanRefs.get(workflowContextType);
-        if (factoryName == null) {
-            throw new BadWorkflowConfigurationException(String.format(
-                    "Detected workflow definition in '%s' without a WorkflowContextFactory for the workflow type %s.",
-                    String.join(",", workflowBeanNames.stream().toList()),
-                    workflowContextType.getSimpleName()
-            ));
-        }
-        var workflowContextFactory = (WorkflowContextFactory<C>) applicationContext.getBean(factoryName);
         // All @Workflow beans of the same context type share one module (engine + registry + repository)
         // so version siblings can see each other for multi-version routing.
         var moduleName = workflowContextType.getSimpleName();
@@ -93,7 +80,13 @@ public class WorkflowModuleConfigurer implements ConfigurationEnhancer, Applicat
         }
         var withFactory = WorkflowModule
                 .defaults(moduleName, workflowContextType)
-                .workflowContextFactory(c -> workflowContextFactory);
+                .workflowContextFactory(configuration -> (WorkflowContextFactory<C>) configuration
+                        .getOptionalComponent(WorkflowContextFactory.class, workflowContextType.getName())
+                        .orElseThrow(() -> new BadWorkflowConfigurationException(String.format(
+                                "Detected workflow definition in '%s' without a WorkflowContextFactory for the workflow type %s.",
+                                String.join(",", workflowBeanNames),
+                                workflowContextType.getSimpleName()
+                        ))));
         var firstBean = workflowBeanNames.get(0);
         ComponentBuilder<Object> firstBuilder = c -> applicationContext.getBean(firstBean);
         WorkflowModule<C> module = withFactory.definition(d -> d.autodetected(firstBuilder));

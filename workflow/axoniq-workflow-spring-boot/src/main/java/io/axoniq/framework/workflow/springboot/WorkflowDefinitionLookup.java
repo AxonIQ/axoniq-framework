@@ -32,7 +32,6 @@ import java.util.List;
 import java.util.Map;
 
 import static io.axoniq.framework.workflow.springboot.WorkflowDefinitionLookupUtils.workflowBeanDefinitions;
-import static io.axoniq.framework.workflow.springboot.WorkflowDefinitionLookupUtils.workflowContextFactoryBeans;
 
 /**
  * Workflow definition lookup looking for beans with {@link @Workflow} annotated methods.
@@ -58,14 +57,10 @@ public class WorkflowDefinitionLookup implements BeanDefinitionRegistryPostProce
             return; // don't register an empty configurer; wait until workflows are visible
         }
 
-        Map<Class<? extends WorkflowContext>, String> factoryBeanDefinitions =
-                workflowContextFactoryBeans(beanFactory, false);
-
         String configurerBeanName = "WorkflowModuleConfigurer$$Axon$$WorkflowDefinition";
         AbstractBeanDefinition beanDefinition =
                 BeanDefinitionBuilder
                         .genericBeanDefinition(WorkflowModuleConfigurer.class)
-                        .addConstructorArgValue(factoryBeanDefinitions)
                         .addConstructorArgValue(workflowBeanDefinitions)
                         .getBeanDefinition();
 

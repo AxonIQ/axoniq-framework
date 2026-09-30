@@ -45,6 +45,7 @@
         <module>conformance</module>
         <module>tracing</module>
         <module>dead-letter</module>
+        <module>legacy</module>
         <module>multitenancy</module>
         <module>workflow</module>
     </modules>
