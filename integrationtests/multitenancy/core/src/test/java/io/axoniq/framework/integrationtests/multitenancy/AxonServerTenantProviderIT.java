@@ -25,11 +25,14 @@ import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
 import io.axoniq.framework.messaging.multitenancy.axonserver.api.AxonServerTenantConnectPredicate;
 import io.axoniq.framework.messaging.multitenancy.axonserver.api.AxonServerTenantProvider;
+import io.axoniq.framework.messaging.multitenancy.configuration.StaticTenantConnectPredicate;
 import io.axoniq.framework.messaging.multitenancy.util.RecordingTenantAwareComponent;
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.common.configuration.DefaultAxonApplication;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.extension.*;
+
+import java.util.Properties;
 
 import static io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration.ADMIN_CONTEXT;
 import static io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration.DEFAULT_CONTEXT;
@@ -67,7 +70,8 @@ class AxonServerTenantProviderIT {
                 .componentRegistry(INFRASTRUCTURE::configureInfrastructure)
                 .start();
 
-        AxonServerTenantProvider tenantProvider = (AxonServerTenantProvider) application.getComponent(TenantProvider.class);
+        AxonServerTenantProvider tenantProvider =
+                (AxonServerTenantProvider) application.getComponent(TenantProvider.class);
 
 
         await().untilAsserted(
@@ -98,7 +102,8 @@ class AxonServerTenantProviderIT {
                 .componentRegistry(cr -> cr.registerComponent(TenantConnectPredicate.class, c -> predicate))
                 .start();
 
-        AxonServerTenantProvider tenantProvider = (AxonServerTenantProvider) application.getComponent(TenantProvider.class);
+        AxonServerTenantProvider tenantProvider =
+                (AxonServerTenantProvider) application.getComponent(TenantProvider.class);
 
         // the default predicate must have been replaced
         assertThat(application.getComponent(TenantConnectPredicate.class)).rejects(tenantWithId(DEFAULT_CONTEXT));
@@ -120,5 +125,34 @@ class AxonServerTenantProviderIT {
         contextManager.deleteContext("foo");
         await().untilAsserted(() -> assertThat(tenantProvider.tenants()).isEmpty());
         await().untilAsserted(() -> assertThat(tenantDescriptorRecorder.tenants()).isEmpty());
+    }
+
+    @Test
+    void connectsOnlyTenantsConfiguredThroughStaticTenantProperty() {
+        // given Axon Server contexts and a properties-backed static tenant predicate
+        contextManager.createContext("tenant-a");
+        contextManager.createContext("tenant-b");
+        Properties properties = new Properties();
+        properties.setProperty(StaticTenantConnectPredicate.TENANTS_PROPERTY, "tenant-a");
+
+        // when starting an application with the static tenant predicate
+        AxonConfiguration application = new DefaultAxonApplication()
+                .componentRegistry(INFRASTRUCTURE::configureInfrastructure)
+                .componentRegistry(registry -> registry.registerComponent(
+                        TenantConnectPredicate.class,
+                        config -> StaticTenantConnectPredicate.from(
+                                properties.getProperty(StaticTenantConnectPredicate.TENANTS_PROPERTY))))
+                .start();
+        try {
+            AxonServerTenantProvider tenantProvider =
+                    (AxonServerTenantProvider) application.getComponent(TenantProvider.class);
+
+            // then only the configured context becomes a tenant
+            await().untilAsserted(() -> assertThat(tenantProvider.tenants())
+                    .extracting(TenantDescriptor::tenantId)
+                    .containsExactly("tenant-a"));
+        } finally {
+            application.shutdown();
+        }
     }
 }
