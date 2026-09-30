@@ -92,7 +92,6 @@ final class EventWaitConditions implements DescribableComponent {
         for (var entry : waitConditions.entrySet()) {
             var condition = entry.getValue().eventCondition;
             var stepName = entry.getKey();
-            // The conditional remove claims the match atomically, so concurrent callers never apply it twice.
             if (eventMessage.type().qualifiedName().equals(condition.qualifiedName())
                     && condition.predicate().test(eventMessage, processingContext)
                     && waitConditions.remove(stepName, entry.getValue())) {

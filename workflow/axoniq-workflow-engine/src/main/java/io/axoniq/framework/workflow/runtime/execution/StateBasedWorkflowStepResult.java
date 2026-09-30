@@ -141,8 +141,6 @@ public class StateBasedWorkflowStepResult implements WorkflowStepResult {
 
     @Override
     public void await() {
-        // Exits once the step is terminal, or when shutdown, cancellation or a rejected append interrupts the
-        // driver thread.
         while (!WorkflowStateUtils.isStepTerminal(workflowExecution.state(), stepName)) {
             try {
                 stateChangeTrigger.awaitStateChange();
