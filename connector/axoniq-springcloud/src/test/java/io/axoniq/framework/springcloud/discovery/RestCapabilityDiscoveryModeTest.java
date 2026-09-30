@@ -38,6 +38,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * Tests how {@link RestCapabilityDiscoveryMode} discovers capabilities over HTTP, and how it treats the answers it
  * gets.
  *
+ * @author Steven van Beelen
  * @author Allard Buijze
  */
 class RestCapabilityDiscoveryModeTest {

@@ -48,6 +48,7 @@ import java.util.Objects;
  * {@link RestCapabilityDiscoveryMode#DEFAULT_CAPABILITIES_ENDPOINT}. Every member of the cluster must agree on it.
  *
  * @author Allard Buijze
+ * @author Steven van Beelen
  * @since 5.4.0
  */
 @RestController

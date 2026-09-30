@@ -53,6 +53,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Tests which beans {@link SpringCloudAutoConfiguration} contributes, and under which conditions.
  *
  * @author Allard Buijze
+ * @author Steven van Beelen
  */
 class SpringCloudAutoConfigurationTest {
 
