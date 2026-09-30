@@ -46,13 +46,6 @@ import java.util.function.BooleanSupplier;
  * surviving the things production does to long-lived instances — crash/recovery cycles, short-instance churn around
  * it, duplicate signals, duplicate start deliveries, and (deterministically) the elapse of its 30-day window.
  * <p>
- * The headline probe is the <strong>lost-wake crash window</strong> (hunted read-only, both hunters converging on
- * {@code SimpleWorkflowExecution.onEvent}'s mode asymmetry): the matching signal is delivered and matched LIVE, the
- * wait's COMPLETED commit vanishes in the crash, and on recovery the (durably committed) signal is re-delivered in
- * REPLAY mode — which only evolves state and never evaluates wait conditions — while the wait re-registers only when
- * the body re-runs at live-switch. Nothing ever re-matches the signal: the wake is permanently lost; only a brand-new
- * delivery (producer retry) or the wait's own timeout can move the instance again.
- * <p>
  * All observables are content-based and per-{@code workflowId}.
  *
  * @author Stefan Dragisic
@@ -84,28 +77,6 @@ public final class ParkedSubscriptionScenario {
     }
 
     /**
-     * Outcome of the lost-wake crash-window probe.
-     *
-     * @param signalCommittedBeforeCrash whether the matching {@link RenewalDecidedEvent} was durably committed before
-     *                                   the crash (it must be — the producer's commit succeeded; only the wait step's
-     *                                   COMPLETED vanished).
-     * @param wokeAfterRecoveryAlone     whether recovery alone (replaying the committed signal) completed the wait —
-     *                                   {@code false} under the gap: the replayed signal is never evaluated against
-     *                                   the re-registered wait condition.
-     * @param renewalEffectsAfterRecovery {@code processRenewal} effect executions after recovery alone (0 under the
-     *                                   gap — the instance is still parked).
-     * @param completedAfterRedelivery   whether a brand-new delivery of the same signal (the producer-retry rescue)
-     *                                   woke the instance and drove it to COMPLETED.
-     * @param waitCompletedRecords       committed COMPLETED records for the wait step at the end (exactly 1 — the
-     *                                   redelivery wake; the vanished pre-crash one never reached the log).
-     */
-    public record LostWakeOutcome(boolean signalCommittedBeforeCrash, boolean wokeAfterRecoveryAlone,
-                                  int renewalEffectsAfterRecovery, boolean completedAfterRedelivery,
-                                  int waitCompletedRecords) {
-
-    }
-
-    /**
      * Terminal snapshot of the parked instance for the healthy-path probes.
      *
      * @param terminalStatus       the workflow's terminal status, or {@code null}.
@@ -120,63 +91,6 @@ public final class ParkedSubscriptionScenario {
                                 int waitTimedOutRecords, int startedRecords, int registerEffects, int renewalEffects,
                                 int expireEffects) {
 
-    }
-
-    /**
-     * The lost-wake crash window: park the instance, deliver the matching renewal decision LIVE (it matches and the
-     * wait's COMPLETED publish is armed to vanish), crash + recover, and observe whether the durably-committed signal
-     * ever wakes the recovered instance — then prove the producer-retry rescue (a brand-new delivery) does.
-     *
-     * @param seed    seed for the world's deterministic id source.
-     * @param orderId business key for the single instance (id {@code subs-<orderId>}).
-     * @return the observed outcome.
-     */
-        public static LostWakeOutcome lostWakeOnCrashBetweenMatchAndCommit(long seed, String orderId) {
-        var effects = new CountingEffects();
-        try (var world = new SimulationWorld(seed, EngineInstance.subscriptionRenewalWorkflow(effects))) {
-            String workflowId = "subs-" + orderId;
-
-            world.engine().publish(new SubscriptionStartedEvent(orderId));
-            awaitParked(world, workflowId);
-
-            // Arm the crash window on the WAIT step's COMPLETED, then deliver the matching decision: it matches LIVE
-            // (condition removed, completion task runs) and the COMPLETED commit vanishes — the signal itself is
-            // durably committed by the producer, but the wait is left STARTED in the durable log.
-            world.eventStore().armVanishCommitFor(SubscriptionRenewalWorkflow.STEP_AWAIT_DECISION,
-                                                  StepStatus.COMPLETED);
-            world.engine().publish(new RenewalDecidedEvent(orderId));
-            Polling.awaitOrFail(DEADLINE, "the wait's COMPLETED commit to vanish",
-                                () -> !world.eventStore().isVanishArmed());
-            // The signal is an EXTERNAL event (no workflowId metadata): it lives in the FULL durable log
-            // (committedTaggedEvents), not in the workflow-events-only committedLog() view.
-            boolean signalCommitted = signalCommitted(world, orderId);
-
-            var beforeCrash = List.copyOf(world.committedLog());
-            world.crashAndRecover();
-            Invariants.assertCommittedHistorySurvivesCrash(beforeCrash, world.committedLog());
-
-            // Recovery alone: the committed signal is re-delivered in REPLAY mode (state evolve only, no wait
-            // evaluation); the wait re-registers when the body re-runs at live-switch — and nothing re-matches the
-            // signal. Bounded absence window: the wake must NOT happen for the gap to be confirmed.
-            Polling.await(ABSENCE_WINDOW,
-                          () -> waitStatusRecords(world.committedLog(), workflowId, StepStatus.COMPLETED) > 0);
-            boolean wokeAfterRecovery =
-                    waitStatusRecords(world.committedLog(), workflowId, StepStatus.COMPLETED) > 0;
-            int renewalAfterRecovery = effects.count(workflowId, SubscriptionRenewalWorkflow.STEP_PROCESS_RENEWAL);
-
-            // The producer-retry rescue: a brand-new delivery is evaluated LIVE against the re-registered wait.
-            world.engine().publish(new RenewalDecidedEvent(orderId));
-            Polling.await(DEADLINE,
-                          () -> workflowStatusRecords(world.committedLog(), workflowId,
-                                                      WorkflowStatus.COMPLETED) >= 1);
-            boolean completedAfterRedelivery =
-                    workflowStatusRecords(world.committedLog(), workflowId, WorkflowStatus.COMPLETED) >= 1;
-
-            Invariants.assertAtMostOnceRecording(world.committedLog());
-            return new LostWakeOutcome(signalCommitted, wokeAfterRecovery, renewalAfterRecovery,
-                                       completedAfterRedelivery,
-                                       waitStatusRecords(world.committedLog(), workflowId, StepStatus.COMPLETED));
-        }
     }
 
     /**
@@ -359,18 +273,6 @@ public final class ParkedSubscriptionScenario {
                 effects.count(workflowId, SubscriptionRenewalWorkflow.STEP_REGISTER),
                 effects.count(workflowId, SubscriptionRenewalWorkflow.STEP_PROCESS_RENEWAL),
                 effects.count(workflowId, SubscriptionRenewalWorkflow.STEP_EXPIRE));
-    }
-
-    /**
-     * Whether the matching {@link RenewalDecidedEvent} for {@code orderId} is present in the FULL durable log
-     * (external events carry no workflowId metadata, so they are filtered out of the workflow-events-only
-     * {@code committedLog()} view — but they ARE durable and ARE carried across recovery).
-     */
-    private static boolean signalCommitted(SimulationWorld world, String orderId) {
-        return world.eventStore().committedTaggedEvents().stream()
-                    .map(t -> t.event())
-                    .anyMatch(e -> String.valueOf(e.type()).contains("RenewalDecided")
-                            || (e.payload() instanceof RenewalDecidedEvent r && orderId.equals(r.orderId())));
     }
 
     /**

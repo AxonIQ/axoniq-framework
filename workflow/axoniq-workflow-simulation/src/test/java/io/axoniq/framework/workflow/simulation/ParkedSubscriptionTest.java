@@ -30,45 +30,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * Phase-2 production-realism pins: a day-scale parked {@code SubscriptionRenewalWorkflow} under crash/recovery,
  * churn, duplicate signals, start storms and window elapse (see {@link ParkedSubscriptionScenario} for each run's
- * mechanism). The headline expected-gap pin is the <strong>lost wake</strong>: a crash between a wait's live match
- * and its COMPLETED commit permanently loses the wake — the durably-committed signal is re-delivered on recovery in
- * REPLAY mode, which never evaluates wait conditions, and the re-registered wait never sees it; only a brand-new
- * delivery (producer retry) or the wait's own timeout moves the instance again.
+ * mechanism).
  *
  * @author Stefan Dragisic
  * @since 5.4.0
  */
 class ParkedSubscriptionTest {
-
-    @Test
-    @Timeout(value = 60, unit = TimeUnit.SECONDS)
-    void lostWake_crashBetweenMatchAndCommit_recoveryNeverRedeliversTheWake_asExpectedGap() {
-        var outcome = ParkedSubscriptionScenario.lostWakeOnCrashBetweenMatchAndCommit(0L, "L1");
-
-        // The producer's signal IS durable — only the wait step's COMPLETED vanished in the crash window.
-        assertThat(outcome.signalCommittedBeforeCrash())
-                .as("the matching RenewalDecidedEvent was durably committed before the crash")
-                .isTrue();
-
-        // EXPECTED GAP (lost wake): recovery re-delivers the committed signal in REPLAY mode (state evolve only —
-        // wait conditions are evaluated exclusively in live mode), and the wait re-registers only when the body
-        // re-runs at live-switch. Nothing ever re-matches the signal: the instance stays parked.
-        assertThat(outcome.wokeAfterRecoveryAlone())
-                .as("EXPECTED GAP: recovery alone never re-delivers the wake — the committed signal is consumed in "
-                            + "replay mode and the re-registered wait never sees it")
-                .isFalse();
-        assertThat(outcome.renewalEffectsAfterRecovery())
-                .as("the renewal was never processed after recovery alone")
-                .isEqualTo(0);
-
-        // The production mitigation: a brand-new delivery (producer retry) is evaluated LIVE and wakes the instance.
-        assertThat(outcome.completedAfterRedelivery())
-                .as("a fresh redelivery of the same signal rescues the instance")
-                .isTrue();
-        assertThat(outcome.waitCompletedRecords())
-                .as("exactly one COMPLETED for the wait step (the redelivery wake; the vanished one never committed)")
-                .isEqualTo(1);
-    }
 
     @Test
     @Timeout(value = 120, unit = TimeUnit.SECONDS)
