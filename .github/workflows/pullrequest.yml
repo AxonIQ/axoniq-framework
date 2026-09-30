@@ -86,9 +86,11 @@ jobs:
           (
             while true; do
               echo "=== $(date -u +%Y-%m-%dT%H:%M:%S.%3NZ) ==="
-              docker ps -a --filter ancestor=docker.axoniq.io/axoniq/axonserver \
-                --format 'table {{.ID}}\t{{.Status}}\t{{.Label "org.testcontainers.hash"}}\t{{.Label "io.axoniq.container-pool"}}' \
-                2>/dev/null
+              for id in $(docker ps -aq --filter ancestor=docker.axoniq.io/axoniq/axonserver 2>/dev/null); do
+                docker inspect --format \
+                  '{{.Id}} status={{.State.Status}} hash={{index .Config.Labels "org.testcontainers.hash"}} pool={{index .Config.Labels "io.axoniq.container-pool"}}' \
+                  "$id" 2>/dev/null
+              done
               sleep 3
             done
           ) > container-lifecycle.log 2>&1 &
