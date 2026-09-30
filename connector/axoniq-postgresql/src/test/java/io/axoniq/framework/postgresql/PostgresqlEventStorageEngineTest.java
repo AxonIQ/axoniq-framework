@@ -73,7 +73,7 @@ class PostgresqlEventStorageEngineTest extends StorageEngineTestSuite<Postgresql
     protected PostgresqlEventStorageEngine createStorageEngine() throws SQLException {
         if (postgresContainer == null) {
             entitlementManager = Mockito.mock(EnforcingEntitlementManager.class);
-            postgresContainer = new PostgreSQLContainer("postgres:16.2")
+            postgresContainer = new PostgreSQLContainer("postgres:16.2-alpine")
                     .withDatabaseName("testdb")
                     .withUsername("test")
                     .withPassword("test");
