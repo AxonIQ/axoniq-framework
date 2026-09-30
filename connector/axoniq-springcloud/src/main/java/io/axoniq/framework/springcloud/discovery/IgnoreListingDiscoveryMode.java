@@ -49,6 +49,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * ring as a member handling nothing.
  *
  * @author Allard Buijze
+ * @author Steven van Beelen
  * @since 5.4.0
  */
 public class IgnoreListingDiscoveryMode implements CapabilityDiscoveryMode {

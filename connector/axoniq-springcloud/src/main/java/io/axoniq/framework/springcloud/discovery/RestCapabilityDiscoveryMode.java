@@ -63,6 +63,7 @@ import java.util.concurrent.atomic.AtomicReference;
  * </ul>
  *
  * @author Allard Buijze
+ * @author Steven van Beelen
  * @since 5.4.0
  */
 public class RestCapabilityDiscoveryMode implements CapabilityDiscoveryMode {

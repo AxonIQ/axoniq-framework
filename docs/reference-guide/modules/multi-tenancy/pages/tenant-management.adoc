@@ -58,7 +58,25 @@ With multi-tenancy active, the contexts of the connected Axon Server are discove
 === Filtering which contexts are tenants
 
 By default, every Axon Server context except the `_admin` context is treated as a tenant.
-To narrow the set, register a `TenantConnectPredicate`, for example to include only contexts matching a naming convention:
+For a fixed set of known contexts in a Spring Boot application, configure their identifiers with `axoniq.multitenancy.tenants`:
+
+[source,properties]
+----
+axoniq.multitenancy.tenants=tenant-a,tenant-b,tenant-c
+----
+
+This property registers a `TenantConnectPredicate` that accepts only those identifiers, including when matching
+contexts are created after the application starts.
+When using the Configuration API, load the properties in your application and register the predicate created from them:
+
+[source,java]
+----
+include::example$multitenancy/tenantmanagement/DeclarativeTenantConfiguration.java[tag=static-tenant-connect-predicate,indent=0]
+----
+
+Register the predicate only when the property is present; without it, the default discovery predicate remains active.
+To select contexts dynamically, register a `TenantConnectPredicate`, for example to include only contexts matching a
+naming convention:
 
 [tabs]
 ====

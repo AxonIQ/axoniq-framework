@@ -85,6 +85,7 @@ import java.util.function.Predicate;
  * requires a servlet web application; see {@link NonWebApplicationGuard} and {@link ReactiveWebApplicationGuard}.
  *
  * @author Allard Buijze
+ * @author Steven van Beelen
  * @since 5.4.0
  */
 @AutoConfiguration(afterName = "io.axoniq.framework.springboot.autoconfig.AxonServerAutoConfiguration")

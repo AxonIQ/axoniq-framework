@@ -21,6 +21,8 @@ package io.axoniq.framework.springboot.autoconfig;
 
 import io.axoniq.framework.messaging.multitenancy.api.MetadataBasedTenantResolver;
 import io.axoniq.framework.messaging.multitenancy.api.TenantComponentProvider;
+import io.axoniq.framework.messaging.multitenancy.api.TenantConnectPredicate;
+import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantResolver;
 import io.axoniq.framework.messaging.multitenancy.axonserver.configuration.AxonServerMultiTenancyConfigurationDefaults;
@@ -29,6 +31,11 @@ import io.axoniq.framework.messaging.multitenancy.configuration.TenantComponentP
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.MultiTenantEventStorageEngine;
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.MultiTenantSnapshotStore;
 import io.axoniq.framework.messaging.multitenancy.util.StubTenantProvider;
+import org.apache.logging.log4j.Level;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.core.LogEvent;
+import org.apache.logging.log4j.core.Logger;
+import org.apache.logging.log4j.core.test.appender.ListAppender;
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.axonframework.conversion.Converter;
@@ -43,8 +50,10 @@ import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import java.util.List;
 import java.util.stream.Stream;
 
+import static io.axoniq.framework.messaging.multitenancy.configuration.StaticTenantConnectPredicate.TENANTS_PROPERTY;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -58,6 +67,8 @@ class MultiTenancyAutoConfigurationTest {
 
     private static final String DISABLE_ENHANCER = "disableMultiTenancyConfigurationEnhancer";
     private static final String AXON_SERVER_WARNING = "multiTenancyRequiresAxonServerWarning";
+    private static final String STATIC_TENANT_CONNECT_PREDICATE = "staticTenantConnectPredicate";
+    private static final String LEGACY_TENANTS_PROPERTY = "axon.axonserver.contexts";
 
     /**
      * Verifies which enhancer beans the auto-configuration contributes for each combination of the
@@ -135,6 +146,115 @@ class MultiTenancyAutoConfigurationTest {
                              // then the single disabling enhancer is contributed exactly once
                              assertThat(context).hasSingleBean(ConfigurationEnhancer.class);
                              assertThat(context).hasBean(DISABLE_ENHANCER);
+                         });
+        }
+    }
+
+    @Nested
+    class StaticTenantConfiguration {
+
+        private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
+                .withConfiguration(AutoConfigurations.of(MultiTenancyAutoConfiguration.class));
+
+        private Logger configLogger;
+        private Level previousLevel;
+        private ListAppender appender;
+
+        @BeforeEach
+        void attachAppender() {
+            configLogger = (Logger) LogManager.getLogger(MultiTenancyAutoConfiguration.class);
+            previousLevel = configLogger.getLevel();
+            configLogger.setLevel(Level.WARN);
+            appender = new ListAppender("MultiTenancyAutoConfigurationTest");
+            appender.start();
+            configLogger.addAppender(appender);
+        }
+
+        @AfterEach
+        void detachAppender() {
+            configLogger.removeAppender(appender);
+            appender.stop();
+            configLogger.setLevel(previousLevel);
+        }
+
+        @Test
+        void createsAPredicateForConfiguredTenants() {
+            // given a comma-separated set of static tenant identifiers
+            contextRunner.withPropertyValues("axoniq.multitenancy.tenants=tenant-a, tenant-b")
+                         // when the context starts
+                         .run(context -> {
+                             // then its predicate accepts precisely those tenant identifiers
+                             TenantConnectPredicate predicate = context.getBean(TenantConnectPredicate.class);
+                             assertThat(predicate.test(TenantDescriptor.tenantWithId("tenant-a"))).isTrue();
+                             assertThat(predicate.test(TenantDescriptor.tenantWithId("tenant-b"))).isTrue();
+                             assertThat(predicate.test(TenantDescriptor.tenantWithId("tenant-c"))).isFalse();
+                             assertThat(warnings()).isEmpty();
+                         });
+        }
+
+        @Test
+        void createsAPredicateForLegacyConfiguredTenants() {
+            // given the legacy comma-separated static tenant property
+            contextRunner.withPropertyValues(LEGACY_TENANTS_PROPERTY + "=legacy-tenant")
+                         // when the context starts
+                         .run(context -> {
+                             // then its predicate accepts the legacy tenant
+                             TenantConnectPredicate predicate = context.getBean(TenantConnectPredicate.class);
+                             assertThat(predicate.test(TenantDescriptor.tenantWithId("legacy-tenant"))).isTrue();
+                             assertThat(warnings())
+                                     .singleElement()
+                                     .matches(event -> event.getMessage().getFormattedMessage().contains(
+                                             "Property 'axon.axonserver.contexts' is deprecated and will be removed in a future release; please migrate to 'axoniq.multitenancy.tenants'."));
+                         });
+        }
+
+        @Test
+        void currentPropertyTakesPrecedenceOverLegacyProperty() {
+            // given both property names with different tenant sets
+            contextRunner.withPropertyValues(
+                                 TENANTS_PROPERTY + "=current-tenant",
+                                 LEGACY_TENANTS_PROPERTY + "=legacy-tenant")
+                          // when the context starts
+                          .run(context -> {
+                              // then the current property determines the predicate
+                              TenantConnectPredicate predicate = context.getBean(TenantConnectPredicate.class);
+                              assertThat(predicate.test(TenantDescriptor.tenantWithId("current-tenant"))).isTrue();
+                              assertThat(predicate.test(TenantDescriptor.tenantWithId("legacy-tenant"))).isFalse();
+                              assertThat(warnings())
+                                      .singleElement()
+                                      .matches(event -> event.getMessage().getFormattedMessage().contains(
+                                              "Both 'axoniq.multitenancy.tenants' and deprecated 'axon.axonserver.contexts' are configured; using 'axoniq.multitenancy.tenants'."));
+                          });
+        }
+
+        private List<LogEvent> warnings() {
+            return appender.getEvents()
+                           .stream()
+                           .filter(event -> event.getLevel() == Level.WARN)
+                           .toList();
+        }
+
+        @Test
+        void doesNotCreateAPredicateWithoutConfiguredTenants() {
+            // when no static tenant identifiers are configured
+            contextRunner.run(context -> {
+                // then discovery retains the default predicate
+                assertThat(context).doesNotHaveBean(STATIC_TENANT_CONNECT_PREDICATE);
+            });
+        }
+
+        @Test
+        void applicationPredicateTakesPrecedenceOverStaticTenantConfiguration() {
+            // given an application predicate and configured static tenant identifiers
+            contextRunner.withUserConfiguration(CustomTenantConnectPredicateConfiguration.class)
+                         .withPropertyValues("axoniq.multitenancy.tenants=tenant-a")
+                         // when the context starts
+                         .run(context -> {
+                             // then the application predicate is left in control
+                             TenantConnectPredicate predicate = context.getBean(TenantConnectPredicate.class);
+                             assertThat(predicate.test(TenantDescriptor.tenantWithId("custom-tenant"))).isTrue();
+                             assertThat(predicate.test(TenantDescriptor.tenantWithId("tenant-a"))).isFalse();
+                             assertThat(context).doesNotHaveBean(STATIC_TENANT_CONNECT_PREDICATE);
                          });
         }
     }
@@ -289,5 +409,14 @@ class MultiTenancyAutoConfigurationTest {
 
     private record TenantResource(String tenantId) {
 
+    }
+
+    @Configuration
+    static class CustomTenantConnectPredicateConfiguration {
+
+        @Bean
+        TenantConnectPredicate customTenantConnectPredicate() {
+            return tenant -> "custom-tenant".equals(tenant.tenantId());
+        }
     }
 }

@@ -38,6 +38,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * Tests how {@link IgnoreListingDiscoveryMode} keeps instances that do not serve capabilities out of the way.
  *
  * @author Allard Buijze
+ * @author Steven van Beelen
  */
 class IgnoreListingDiscoveryModeTest {
 

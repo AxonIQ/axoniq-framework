@@ -36,6 +36,7 @@ import java.util.Set;
  * {@link RestCapabilityDiscoveryMode} does.
  *
  * @author Allard Buijze
+ * @author Steven van Beelen
  * @since 5.4.0
  */
 public interface CapabilityDiscoveryMode {

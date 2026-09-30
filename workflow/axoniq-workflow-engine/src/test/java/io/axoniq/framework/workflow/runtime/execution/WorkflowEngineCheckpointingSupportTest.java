@@ -20,7 +20,10 @@ package io.axoniq.framework.workflow.runtime.execution;
 
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.GlobalSequenceTrackingToken;
+import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.junit.jupiter.api.*;
+
+import java.util.ArrayList;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -69,16 +72,57 @@ class WorkflowEngineCheckpointingSupportTest {
         assertThat(coordinator.scheduledBarriers).isEqualTo(2);
     }
 
+    @Nested
+    class WhileTheCoordinatorHoldsTheCheckpoint {
+
+        @Test
+        void dropsACheckpointRequest() {
+            // given
+            var coordinator = new InlineCheckpointLatchCoordinator();
+            coordinator.held = true;
+            var support = new WorkflowEngineCheckpointingSupport(coordinator);
+            var requests = new ArrayList<TrackingToken>();
+            support.onSegmentClaimed(Segment.ROOT_SEGMENT, null, requests::add);
+
+            // when
+            support.requestCheckpoint(Segment.ROOT_SEGMENT, new GlobalSequenceTrackingToken(42));
+
+            // then
+            assertThat(requests).isEmpty();
+        }
+
+        @Test
+        void failsTheReleaseSoTheStoredTokenStaysBehindTheHeldWork() {
+            // given
+            var coordinator = new InlineCheckpointLatchCoordinator();
+            coordinator.held = true;
+            var support = new WorkflowEngineCheckpointingSupport(coordinator);
+
+            // when
+            var released = support.onSegmentReleased(Segment.ROOT_SEGMENT, new GlobalSequenceTrackingToken(42));
+
+            // then
+            assertThat(released).isCompletedExceptionally();
+            assertThat(coordinator.scheduledBarriers).isZero();
+        }
+    }
+
     private static final class InlineCheckpointLatchCoordinator
             implements WorkflowEngineCheckpointingSupport.CheckpointLatchCoordinator {
 
         private boolean pendingWork;
+        private boolean held;
         private Runnable barrier;
         private int scheduledBarriers;
 
         @Override
         public boolean hasUnsafeCheckpointWork(Segment segment) {
             return pendingWork;
+        }
+
+        @Override
+        public boolean holdsCheckpoint(Segment segment) {
+            return held;
         }
 
         @Override
@@ -101,6 +145,11 @@ class WorkflowEngineCheckpointingSupportTest {
         @Override
         public boolean hasUnsafeCheckpointWork(Segment segment) {
             return scheduledBarriers == 0 || workAppended;
+        }
+
+        @Override
+        public boolean holdsCheckpoint(Segment segment) {
+            return false;
         }
 
         @Override

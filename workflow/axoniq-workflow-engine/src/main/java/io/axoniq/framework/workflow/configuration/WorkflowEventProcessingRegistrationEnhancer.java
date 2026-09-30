@@ -181,6 +181,10 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
     private BiFunction<Configuration, PooledStreamingEventProcessorConfiguration,
             PooledStreamingEventProcessorConfiguration> processorCustomization() {
         return (cfg, processorConfiguration) -> withSegmentCount(processorConfiguration)
+                // Start at the head of the stream. A workflow reacts to events published after it was deployed.
+                // The pooled streaming default (first token) would start a workflow for every historical start
+                // event, which duplicates work still owned by the process it replaces.
+                .initialToken(source -> source.latestToken(null))
                 .eventCriteria(set -> set.isEmpty()
                         ? EventCriteria.havingAnyTag()
                         : EventCriteria.havingAnyTag().andBeingOneOfTypes(set))
@@ -234,18 +238,12 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
                                      // events and unique start candidates reach the owning segment and all other
                                      // business events are broadcast to every segment.
                                      var workflowEngine = workflowEngine(cfg);
-                                     EventHandlingComponentHandlingAny component;
-                                     if (engineComponentName != null) {
-                                         component = new EventHandlingComponentHandlingAny(
-                                                 workflowEngine,
-                                                 cfg.getComponent(WorkflowEngineCheckpointingSupport.class)
-                                         );
-                                     } else {
-                                         component = new EventHandlingComponentHandlingAny(workflowEngine);
-                                     }
                                      return new SequenceOverridingEventHandlingComponent(
                                              workflowEngine.segmentedRouting(),
-                                             component
+                                             new EventHandlingComponentHandlingAny(
+                                                     workflowEngine,
+                                                     cfg.getComponent(WorkflowEngineCheckpointingSupport.class)
+                                             )
                                      );
                                  }
                     );

@@ -39,7 +39,9 @@ import java.util.Set;
  *                   member off the ring entirely.
  * @param commands   the {@link QualifiedName names} of the commands this member subscribed to
  * @param queries    the {@link QualifiedName names} of the queries this member subscribed to
+ *
  * @author Allard Buijze
+ * @author Steven van Beelen
  * @since 5.4.0
  */
 public record MemberCapabilities(int loadFactor, Set<QualifiedName> commands, Set<QualifiedName> queries) {
