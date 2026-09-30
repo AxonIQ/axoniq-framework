@@ -36,6 +36,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * re-reading every member's capabilities on every discovery heartbeat.
  *
  * @author Allard Buijze
+ * @author Steven van Beelen
  */
 class MemberCapabilitiesControllerTest {
 

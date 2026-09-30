@@ -55,7 +55,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * A {@link CommandBusConnector} distributing commands across the nodes discovered through Spring Cloud Discovery,
- * without an Axon Server in between.
+ * .
  * <p>
  * With no server to route for it, this connector routes itself. Every dispatch resolves a {@link Member} from the
  * {@link SpringCloudMemberRegistry}'s consistent-hash ring, using the command's routing key and name, and then either

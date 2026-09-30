@@ -35,6 +35,7 @@ import java.io.Serial;
  * is expected back.
  *
  * @author Allard Buijze
+ * @author Steven van Beelen
  * @since 5.4.0
  */
 public class ServiceInstanceClientException extends AxonException {

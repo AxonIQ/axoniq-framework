@@ -44,8 +44,10 @@ import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -247,7 +249,7 @@ public class EventSourcedWorkflowState implements WorkflowState {
     }
 
     public Map<String, @Nullable Object> payload() {
-        return Map.copyOf(payload);
+        return Collections.unmodifiableMap(new LinkedHashMap<>(payload));
     }
 
     /**
@@ -349,7 +351,7 @@ public class EventSourcedWorkflowState implements WorkflowState {
                     addStep(WorkflowStep.retrying(stepName,
                                                   retryInfo,
                                                   eventMessage.timestamp(),
-                                                  processingContext)); // TODO copy resources of the context
+                                                  processingContext));
                     break;
                 case RETRY_STARTED:
                     addStep(WorkflowStep.retryStarted(stepName,

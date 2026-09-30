@@ -224,7 +224,6 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
                         }).build())
                         .entityFactory(c -> (identifier, firstEvent, context) -> new EventSourcedRunningWorkflows())
                         .criteriaResolver(c -> (identifier, context) -> EventSourcedRunningWorkflows.criteriaBuilder())
-                        // FIXME Register snapshot configuration eventually, see #245
                         .build());
         componentRegistry.registerIfNotPresent(Clock.class, cfg -> ClockUtils.get());
     }
@@ -244,7 +243,6 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
                                                         identifier)))))
                         .criteriaResolver(c -> (identifier, context) -> EventSourcedWorkflowState.criteriaBuilder(
                                 identifier))
-                        // FIXME Register snapshot configuration eventually, see #245
                         .build());
     }
 

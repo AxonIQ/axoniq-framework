@@ -136,21 +136,21 @@ If you happen to set `axon.multitenancy.enabled=true` at the same time, a warnin
 An application that carries the module but has no `AxonServerConnectionManager` fails at startup with an `AxonConfigurationException`, which names both ways forward.
 
 [#step-tenant-discovery]
-== Step 2: Replace `axon.axonserver.contexts` with a predicate
+== Step 2: Configure static tenants
 
-The extension gave you two ways to decide which contexts counted, and they ruled each other out.
-Either you listed them in `axon.axonserver.contexts`, or you registered a `TenantConnectPredicate` to catch contexts created later.
-Setting the property turned the runtime discovery off entirely.
+Use `axoniq.multitenancy.tenants` to configure the fixed set of tenant identifiers in a Spring Boot application.
+It registers a `TenantConnectPredicate`, so the same set also filters contexts created after the application starts.
+When using the Configuration API, load the property in your application and register a predicate through
+`StaticTenantConnectPredicate.from(properties.getProperty(StaticTenantConnectPredicate.TENANTS_PROPERTY))`.
+For dynamic selection, register your own predicate as described in
+xref:multi-tenancy:tenant-management.adoc#filtering-contexts[Filtering which contexts are tenants].
 
-The predicate is now the single mechanism, and it handles both cases.
-The Axon Framework 4 extension already filtered the contexts it discovered at startup through it, so what changed is that the property no longer bypasses it.
-xref:multi-tenancy:tenant-management.adoc#filtering-contexts[Filtering which contexts are tenants] goes through it properly.
+NOTE: For migration compatibility, Spring Boot also accepts the old `axon.axonserver.contexts` property. The new
+`axoniq.multitenancy.tenants` name is recommended and the old name is deprecated. If both are configured, the new
+property takes precedence.
 
 [#static-tenants]
 === Tenants you know up front
-
-There is no property for this any more.
-Write a predicate over the set you used to list.
 
 [tabs]
 ====
@@ -173,9 +173,9 @@ include::example$migration/paths/multitenancy/DeclarativeTenantConfiguration.jav
 Axon Framework 5 - Spring Boot::
 +
 --
-[source,java]
+[source,properties]
 ----
-include::example$migration/paths/multitenancy/springboot/SpringFixedTenantSetConfiguration.java[tag=predicate-from-fixed-set,indent=0]
+axoniq.multitenancy.tenants=tenant-a,tenant-b,tenant-c
 ----
 --
 ====
@@ -555,8 +555,9 @@ Every property the extension read, to check off against your `application.proper
 | The hyphen is dropped. Still defaults to enabled, so only an application that set it explicitly needs a change.
 
 | `axon.axonserver.contexts`
-| (unused)
-| Unused by multi-tenancy. Replaced by a `TenantConnectPredicate`, see <<step-tenant-discovery>>.
+| `axoniq.multitenancy.tenants`
+| Defines a fixed tenant set in Spring Boot. It is supported as a deprecated compatibility alias; the new property
+  takes precedence when both are configured. See <<step-tenant-discovery>>.
 
 | `axon.multi-tenancy.use-metadata-helper`
 | (removed)

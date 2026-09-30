@@ -78,7 +78,12 @@ Add the starter alongside a discovery implementation of your choosing:
 ----
 <dependency>
     <groupId>io.axoniq.framework</groupId>
-    <artifactId>axoniq-springcloud-spring-boot-starter</artifactId>
+    <artifactId>axoniq-springcloud</artifactId>
+    <version>${axoniq-framework.version}</version>
+</dependency>
+<dependency>
+    <groupId>io.axoniq.framework</groupId>
+    <artifactId>axoniq-spring-boot-starter</artifactId>
     <version>${axoniq-framework.version}</version>
 </dependency>
 <dependency>

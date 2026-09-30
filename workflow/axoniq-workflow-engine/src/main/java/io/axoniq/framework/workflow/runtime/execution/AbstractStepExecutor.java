@@ -129,12 +129,13 @@ public abstract class AbstractStepExecutor {
     public static WorkflowStepResult stateBased(String stepName,
                                                 EventNameCustomizer eventNameCustomizer,
                                                 WorkflowExecution workflowExecution) {
-        return new StateBasedWorkflowStepResult(stepName, () -> {
-            workflowExecution.awaitStateChange(s -> true);
-            return null;
-        }, cause -> workflowExecution.workflowExecutionOperations().cancelStep(PrimitiveCommands.cancelStep(
-                stepName, cause, eventNameCustomizer
-        )), workflowExecution);
+        return new StateBasedWorkflowStepResult(stepName,
+                                                () -> workflowExecution.awaitStateChange(s -> true),
+                                                cause -> workflowExecution.workflowExecutionOperations().cancelStep(
+                                                        PrimitiveCommands.cancelStep(stepName,
+                                                                                     cause,
+                                                                                     eventNameCustomizer)),
+                                                workflowExecution);
     }
 
     protected void acceptAllPendingTasksForStep(String stepName) {
