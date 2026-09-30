@@ -38,7 +38,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Stub saga used to test various scenarios of the {@link FixtureConfiguration}.
@@ -109,7 +109,7 @@ public class StubSaga {
                        CommandGateway commandGateway,
                        ProcessingContext context) {
         handledEvents.add(event);
-        assertFalse(assertion.get());
+        assertThat(assertion.get()).isFalse();
         assertion.set(true);
         commandGateway.send(new ResolveParameterCommand(event.getIdentifier(), assertion), context);
     }

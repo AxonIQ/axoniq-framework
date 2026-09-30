@@ -30,7 +30,8 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Test class validating numerous operations from the {@link SagaTestFixture}.
@@ -307,7 +308,7 @@ class AnnotatedSagaTest {
 
         FixtureExecutionResult fixtureExecutionResult = fixture.givenNoPriorActivity().whenAggregate(identifier)
                                                                .publishes(new TriggerSagaStartEvent(identifier));
-        assertDoesNotThrow(fixtureExecutionResult::expectSuccessfulHandlerExecution);
+        assertThatCode(fixtureExecutionResult::expectSuccessfulHandlerExecution).doesNotThrowAnyException();
     }
 
     /**
@@ -324,7 +325,8 @@ class AnnotatedSagaTest {
                 fixture.givenAPublished(new TriggerSagaStartEvent(identifier))
                        .whenAggregate(identifier)
                        .publishes(new TriggerExceptionWhileHandlingEvent(identifier));
-        assertThrows(AxonAssertionError.class, fixtureExecutionResult::expectSuccessfulHandlerExecution);
+        assertThatThrownBy(fixtureExecutionResult::expectSuccessfulHandlerExecution)
+                .isInstanceOf(AxonAssertionError.class);
     }
 
 //    TODO #5006

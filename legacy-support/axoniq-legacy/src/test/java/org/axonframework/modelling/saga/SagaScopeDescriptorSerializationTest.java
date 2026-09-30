@@ -25,7 +25,7 @@ import org.axonframework.conversion.jackson2.Jackson2Converter;
 import org.axonframework.modelling.OnlyAcceptConstructorPropertiesAnnotation;
 import org.junit.jupiter.api.*;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Tests conversion capabilities of {@link SagaScopeDescriptor}.
@@ -51,8 +51,8 @@ class SagaScopeDescriptorSerializationTest {
         byte[] serialized = converter.convert(testSubject, byte[].class);
         SagaScopeDescriptor result = converter.convert(serialized, SagaScopeDescriptor.class);
 
-        assertEquals(expectedType, result.getType());
-        assertEquals(expectedIdentifier, result.getIdentifier());
+        assertThat(result.getType()).isEqualTo(expectedType);
+        assertThat(result.getIdentifier()).isEqualTo(expectedIdentifier);
     }
 
     @Test
@@ -63,7 +63,7 @@ class SagaScopeDescriptorSerializationTest {
         byte[] serialized = converter.convert(testSubject, byte[].class);
         SagaScopeDescriptor result = converter.convert(serialized, SagaScopeDescriptor.class);
 
-        assertEquals(expectedType, result.getType());
-        assertEquals(expectedIdentifier, result.getIdentifier());
+        assertThat(result.getType()).isEqualTo(expectedType);
+        assertThat(result.getIdentifier()).isEqualTo(expectedIdentifier);
     }
 }

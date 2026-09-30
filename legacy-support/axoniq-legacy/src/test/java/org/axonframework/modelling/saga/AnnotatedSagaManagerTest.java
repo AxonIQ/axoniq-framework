@@ -45,8 +45,9 @@ import java.util.concurrent.CountDownLatch;
 import java.util.stream.Collectors;
 
 import static java.util.Collections.singletonMap;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.axonframework.messaging.eventhandling.EventTestUtils.asEventMessage;
-import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 /**
@@ -84,14 +85,14 @@ public class AnnotatedSagaManagerTest {
     @Test
     void creationPolicy_NoneExists() throws Exception {
         handle(new GenericEventMessage(new MessageType("event"), new StartingEvent("123")));
-        assertEquals(1, repositoryContents("123").size());
+        assertThat(repositoryContents("123")).hasSize(1);
     }
 
     @Test
     void creationPolicy_OneAlreadyExists() throws Exception {
         handle(new GenericEventMessage(new MessageType("event"), new StartingEvent("123")));
         handle(new GenericEventMessage(new MessageType("event"), new StartingEvent("123")));
-        assertEquals(1, repositoryContents("123").size());
+        assertThat(repositoryContents("123")).hasSize(1);
     }
 
     @Test
@@ -106,34 +107,34 @@ public class AnnotatedSagaManagerTest {
         handle(new GenericEventMessage(new MessageType("event"), startingEvent));
         handle(new GenericEventMessage(new MessageType("event"), new ForcingStartEvent("123")));
         Collection<MyTestSaga> sagas = repositoryContents("123");
-        assertEquals(2, sagas.size());
+        assertThat(sagas).hasSize(2);
         for (MyTestSaga saga : sagas) {
             if (saga.getCapturedEvents().contains(startingEvent)) {
-                assertEquals(2, saga.getCapturedEvents().size());
+                assertThat(saga.getCapturedEvents()).hasSize(2);
             }
-            assertFalse(saga.getCapturedEvents().isEmpty());
+            assertThat(saga.getCapturedEvents().isEmpty()).isFalse();
         }
     }
 
     @Test
     void creationPolicy_SagaNotCreated() throws Exception {
         handle(new GenericEventMessage(new MessageType("event"), new MiddleEvent("123")));
-        assertEquals(0, repositoryContents("123").size());
+        assertThat(repositoryContents("123")).hasSize(0);
     }
 
     @Test
     void mostSpecificHandlerEvaluatedFirst() throws Exception {
         handle(new GenericEventMessage(new MessageType("event"), new StartingEvent("12")));
         handle(new GenericEventMessage(new MessageType("event"), new StartingEvent("23")));
-        assertEquals(1, repositoryContents("12").size());
-        assertEquals(1, repositoryContents("23").size());
+        assertThat(repositoryContents("12")).hasSize(1);
+        assertThat(repositoryContents("23")).hasSize(1);
 
         handle(new GenericEventMessage(new MessageType("event"), new MiddleEvent("12")));
         handle(new GenericEventMessage(
                 new MessageType("event"), new MiddleEvent("23"), singletonMap("catA", "value")
         ));
-        assertEquals(0, repositoryContents("12").iterator().next().getSpecificHandlerInvocations());
-        assertEquals(1, repositoryContents("23").iterator().next().getSpecificHandlerInvocations());
+        assertThat(repositoryContents("12").iterator().next().getSpecificHandlerInvocations()).isEqualTo(0);
+        assertThat(repositoryContents("23").iterator().next().getSpecificHandlerInvocations()).isEqualTo(1);
     }
 
     @Test
@@ -152,16 +153,16 @@ public class AnnotatedSagaManagerTest {
                 new MessageType("event"), new MiddleEvent("23"), singletonMap("catA", "value")
         ));
 
-        assertEquals(1, repositoryContents("12").size());
-        assertEquals(1, repositoryContents("23").size());
-        assertEquals(0, repositoryContents("12").iterator().next().getSpecificHandlerInvocations());
-        assertEquals(1, repositoryContents("23").iterator().next().getSpecificHandlerInvocations());
+        assertThat(repositoryContents("12")).hasSize(1);
+        assertThat(repositoryContents("23")).hasSize(1);
+        assertThat(repositoryContents("12").iterator().next().getSpecificHandlerInvocations()).isEqualTo(0);
+        assertThat(repositoryContents("23").iterator().next().getSpecificHandlerInvocations()).isEqualTo(1);
         handle(new GenericEventMessage(new MessageType("event"), new EndingEvent("12")));
-        assertEquals(1, repositoryContents("23").size());
-        assertEquals(0, repositoryContents("12").size());
+        assertThat(repositoryContents("23")).hasSize(1);
+        assertThat(repositoryContents("12")).hasSize(0);
         handle(new GenericEventMessage(new MessageType("event"), new EndingEvent("23")));
-        assertEquals(0, repositoryContents("23").size());
-        assertEquals(0, repositoryContents("12").size());
+        assertThat(repositoryContents("23")).hasSize(0);
+        assertThat(repositoryContents("12")).hasSize(0);
     }
 
     @Test
@@ -173,29 +174,28 @@ public class AnnotatedSagaManagerTest {
     void lifeCycle_ExistingInstanceIgnoresEvent() throws Exception {
         handle(new GenericEventMessage(new MessageType("event"), new StartingEvent("12")));
         handle(new GenericEventMessage(new MessageType("event"), new UnrelatedDomainEvent()));
-        assertEquals(1, repositoryContents("12").size());
-        assertEquals(1, repositoryContents("12").iterator().next().getCapturedEvents().size());
+        assertThat(repositoryContents("12")).hasSize(1);
+        assertThat(repositoryContents("12").iterator().next().getCapturedEvents()).hasSize(1);
     }
 
     @Test
     void lifeCycle_IgnoredEventDoesNotCreateInstance() throws Exception {
         handle(new GenericEventMessage(new MessageType("event"), new UnrelatedDomainEvent()));
-        assertEquals(0, repositoryContents("12").size());
+        assertThat(repositoryContents("12")).hasSize(0);
     }
 
     @Test
     void doesNotSupportReset() {
-        assertFalse(testSubject.supportsReset());
+        assertThat(testSubject.supportsReset()).isFalse();
     }
 
     @Test
     void handlingAResetContextThrowsResetNotSupportedException() {
         var resetContext = new GenericResetContext(new MessageType(String.class), "reset-info");
 
-        assertThrows(
-                ResetNotSupportedException.class,
+        assertThatThrownBy(
                 () -> testSubject.handle(resetContext, StubProcessingContext.forMessage(resetContext))
-        );
+        ).isInstanceOf(ResetNotSupportedException.class);
     }
 
     /**
@@ -238,16 +238,16 @@ public class AnnotatedSagaManagerTest {
         void aSagaWhoseStartingHandlerDeclaresASagaLifecycleIsStarted() {
             handle(new GenericEventMessage(new MessageType("event"), new StartingEvent("123")));
 
-            assertEquals(1, sagaStore.findSagas(LifecycleInjectingTestSaga.class,
-                                                new AssociationValue("myIdentifier", "123")).size());
+            assertThat(sagaStore.findSagas(LifecycleInjectingTestSaga.class,
+                                           new AssociationValue("myIdentifier", "123"))).hasSize(1);
         }
 
         @Test
         void theAssociationTheHandlerAddedThroughTheLifecycleIsStored() {
             handle(new GenericEventMessage(new MessageType("event"), new StartingEvent("123")));
 
-            assertEquals(1, sagaStore.findSagas(LifecycleInjectingTestSaga.class,
-                                                new AssociationValue("secondaryIdentifier", "secondary-123")).size());
+            assertThat(sagaStore.findSagas(LifecycleInjectingTestSaga.class,
+                                           new AssociationValue("secondaryIdentifier", "secondary-123"))).hasSize(1);
         }
 
         @Test
@@ -258,8 +258,8 @@ public class AnnotatedSagaManagerTest {
             // the manager could see the handler and find the existing saga through it
             handle(new GenericEventMessage(new MessageType("event"), new StartingEvent("123")));
 
-            assertEquals(1, sagaStore.findSagas(LifecycleInjectingTestSaga.class,
-                                                new AssociationValue("myIdentifier", "123")).size());
+            assertThat(sagaStore.findSagas(LifecycleInjectingTestSaga.class,
+                                           new AssociationValue("myIdentifier", "123"))).hasSize(1);
         }
 
         private void handle(EventMessage event) {
@@ -298,10 +298,10 @@ public class AnnotatedSagaManagerTest {
             handle(new GenericEventMessage(new MessageType("event"), new StartingEvent("123")));
 
             Collection<SuppressingTestSaga> sagas = suppressingRepositoryContents();
-            assertEquals(1, sagas.size());
+            assertThat(sagas).hasSize(1);
             SuppressingTestSaga saga = sagas.iterator().next();
-            assertEquals(1, saga.getHandlerInvocations());
-            assertEquals(1, saga.getSuppressedFailures());
+            assertThat(saga.getHandlerInvocations()).isEqualTo(1);
+            assertThat(saga.getSuppressedFailures()).isEqualTo(1);
         }
 
         @Test
@@ -310,8 +310,8 @@ public class AnnotatedSagaManagerTest {
             handle(new GenericEventMessage(new MessageType("event"), new StartingEvent("123")));
 
             Collection<SuppressingTestSaga> sagas = suppressingRepositoryContents();
-            assertEquals(1, sagas.size());
-            assertEquals(2, sagas.iterator().next().getHandlerInvocations());
+            assertThat(sagas).hasSize(1);
+            assertThat(sagas.iterator().next().getHandlerInvocations()).isEqualTo(2);
         }
 
         @Test
@@ -322,7 +322,7 @@ public class AnnotatedSagaManagerTest {
 
             // the saga ends despite its @EndSaga handler failing, as in Axon Framework 4, where SagaLifecycle.end()
             // ran in a finally block; suppressing the failure lets the unit of work commit, which deletes the saga
-            assertEquals(0, suppressingRepositoryContents().size());
+            assertThat(suppressingRepositoryContents()).hasSize(0);
         }
 
         private void handle(EventMessage event) {

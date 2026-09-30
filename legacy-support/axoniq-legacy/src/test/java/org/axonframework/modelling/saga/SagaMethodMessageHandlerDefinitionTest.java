@@ -26,9 +26,9 @@ import org.axonframework.modelling.saga.metamodel.AnnotationSagaMetaModelFactory
 import org.axonframework.modelling.saga.metamodel.SagaModel;
 import org.junit.jupiter.api.*;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.axonframework.messaging.eventhandling.EventTestUtils.asEventMessage;
 import static org.axonframework.modelling.util.ConcurrencyUtils.testConcurrent;
-import static org.junit.jupiter.api.Assertions.*;
 
 class SagaMethodMessageHandlerDefinitionTest {
 
@@ -58,9 +58,10 @@ class SagaMethodMessageHandlerDefinitionTest {
     public void testWrapHandler(EventMessage eventMessage) {
         MessageHandlingMember<?> result = testSubject.wrapHandler(sagaModel.findHandlerMethods(eventMessage,
                                                                                                StubProcessingContext.forMessage(eventMessage)).get(0));
-        assertNotNull(result);
-        assertTrue(result instanceof SagaMethodMessageHandlingMember);
-        assertEquals(SagaCreationPolicy.NONE, ((SagaMethodMessageHandlingMember<?>) result).getCreationPolicy());
+        assertThat(result).isNotNull();
+        assertThat(result).isInstanceOf(SagaMethodMessageHandlingMember.class);
+        assertThat(((SagaMethodMessageHandlingMember<?>) result).getCreationPolicy())
+                .isEqualTo(SagaCreationPolicy.NONE);
     }
 
     @SagaEventHandler(associationProperty = TEST_PROPERTY_NAME)

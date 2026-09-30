@@ -40,8 +40,8 @@ import java.util.Optional;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.axonframework.messaging.eventhandling.EventTestUtils.asEventMessage;
-import static org.junit.jupiter.api.Assertions.*;
 
 class AnnotationSagaMetaModelFactoryTest {
 
@@ -59,9 +59,9 @@ class AnnotationSagaMetaModelFactoryTest {
 
         EventMessage event = asEventMessage(new MySagaStartEvent("value"));
         Optional<AssociationValue> actual = sagaModel.resolveAssociation(event, StubProcessingContext.forMessage(event));
-        assertTrue(actual.isPresent());
-        assertEquals("value", actual.get().getValue());
-        assertEquals("property", actual.get().getKey());
+        assertThat(actual.isPresent()).isTrue();
+        assertThat(actual.get().getValue()).isEqualTo("value");
+        assertThat(actual.get().getKey()).isEqualTo("property");
     }
 
     @Test
@@ -72,13 +72,13 @@ class AnnotationSagaMetaModelFactoryTest {
         EventMessage event = asEventMessage(new MySagaStartEvent("foo"));
         Optional<MessageHandlingMember<? super MySaga>> handler = sagaModel
                 .findHandlerMethods(event, StubProcessingContext.forMessage(event)).stream().findFirst();
-        assertTrue(handler.isPresent());
+        assertThat(handler.isPresent()).isTrue();
         MessageHandlerInterceptorMemberChain<MySaga> interceptorChain = testSubject.chainedInterceptor(MySaga.class);
-        assertThrows(FooException.class, () -> FutureUtils.joinAndUnwrap(
+        assertThatThrownBy(() -> FutureUtils.joinAndUnwrap(
                 interceptorChain.handle(event, StubProcessingContext.forMessage(event), saga, handler.get())
                                 .first()
                                 .asCompletableFuture()
-        ));
+        )).isInstanceOf(FooException.class);
     }
 
     @Test
@@ -89,7 +89,7 @@ class AnnotationSagaMetaModelFactoryTest {
         EventMessage event = asEventMessage(new MySagaStartEvent("foo"));
         Optional<MessageHandlingMember<? super MySagaWithErrorHandler>> handler = sagaModel
                 .findHandlerMethods(event, StubProcessingContext.forMessage(event)).stream().findFirst();
-        assertTrue(handler.isPresent());
+        assertThat(handler.isPresent()).isTrue();
         MessageHandlerInterceptorMemberChain<MySagaWithErrorHandler> interceptorChain = testSubject.chainedInterceptor(
                 MySagaWithErrorHandler.class);
         var entry = FutureUtils.joinAndUnwrap(
@@ -97,12 +97,12 @@ class AnnotationSagaMetaModelFactoryTest {
                                 .first()
                                 .asCompletableFuture()
         );
-        assertNull(entry);
+        assertThat(entry).isNull();
     }
 
     @Test
     void messageHandlerInterceptorShouldDefaultToNoMoreInterceptors() {
-        assertEquals(NoMoreInterceptors.class, testSubject.chainedInterceptor(MySaga.class).getClass());
+        assertThat(testSubject.chainedInterceptor(MySaga.class).getClass()).isEqualTo(NoMoreInterceptors.class);
     }
 
     @Nested

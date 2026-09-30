@@ -54,7 +54,8 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.jspecify.annotations.NonNull;
 
 import static java.util.Collections.singleton;
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.catchThrowableOfType;
 import static org.mockito.Mockito.*;
 
 @SuppressWarnings("unchecked")
@@ -90,7 +91,7 @@ class AnnotatedSagaRepositoryTest {
 
             Saga<Object> saga2 = testSubject.load(saga.getSagaIdentifier(), context);
 
-            assertSame(saga, saga2);
+            assertThat(saga2).isSameAs(saga);
         });
 
         FutureUtils.joinAndUnwrap(unitOfWork.execute(), TIMEOUT);
@@ -114,7 +115,7 @@ class AnnotatedSagaRepositoryTest {
             ProcessingContext branch = context.withResource(Context.ResourceKey.withLabel("branch"), "deeper");
             Saga<Object> saga2 = testSubject.load(saga.getSagaIdentifier(), branch);
 
-            assertSame(saga, saga2);
+            assertThat(saga2).isSameAs(saga);
         });
 
         FutureUtils.joinAndUnwrap(unitOfWork.execute(), TIMEOUT);
@@ -195,7 +196,7 @@ class AnnotatedSagaRepositoryTest {
         FutureUtils.joinAndUnwrap(unitOfWork.execute(), TIMEOUT);
 
         // then the write sees a Saga the handler is done with, and is still covered by whatever commits at COMMIT
-        assertIterableEquals(List.of("invocation", "prepare-commit", "saga-inserted", "commit"), order);
+        assertThat(order).containsExactlyElementsOf(List.of("invocation", "prepare-commit", "saga-inserted", "commit"));
     }
 
     @Test
@@ -218,7 +219,7 @@ class AnnotatedSagaRepositoryTest {
 
             Saga<Object> saga2 = testSubject.load(preparedSagaId.get(), context);
 
-            assertSame(saga, saga2);
+            assertThat(saga2).isSameAs(saga);
             verify(store).loadSaga(eq(Object.class), any());
             verify(store, never()).updateSaga(eq(Object.class), any(), any(), any());
         });
@@ -250,7 +251,7 @@ class AnnotatedSagaRepositoryTest {
         otherProcess.start();
 
         try {
-            assertTrue(sagaCreated.await(5, TimeUnit.SECONDS));
+            assertThat(sagaCreated.await(5, TimeUnit.SECONDS)).isTrue();
 
             UnitOfWork unitOfWork = unitOfWorkFactory.create();
             Set<String> found = FutureUtils.joinAndUnwrap(
@@ -260,7 +261,7 @@ class AnnotatedSagaRepositoryTest {
                     TIMEOUT
             );
 
-            assertEquals(singleton(sagaId), found);
+            assertThat(found).isEqualTo(singleton(sagaId));
         } finally {
             letTheOtherProcessFinish.countDown();
             otherProcess.join(Duration.ofMillis(50));
@@ -286,7 +287,7 @@ class AnnotatedSagaRepositoryTest {
 
         FutureUtils.joinAndUnwrap(unitOfWork.execute(), TIMEOUT);
 
-        assertEquals(1, CountingInterceptors.counter.get());
+        assertThat(CountingInterceptors.counter.get()).isEqualTo(1);
     }
 
     /**
@@ -357,7 +358,7 @@ class AnnotatedSagaRepositoryTest {
             // then only the active one was cleared. doCreateInstance removes the identifier inside its
             // "if (saga.isActive())" branch, where doLoad removes it unconditionally, so an ended new saga keeps
             // its entry for the rest of the context.
-            assertEquals(singleton("ended"), unsavedAfterPrepareCommit);
+            assertThat(unsavedAfterPrepareCommit).isEqualTo(singleton("ended"));
         }
 
         @Test
@@ -365,8 +366,8 @@ class AnnotatedSagaRepositoryTest {
             // given a context in which an unknown identifier is loaded twice
             UnitOfWork unitOfWork = unitOfWorkFactory.create();
             unitOfWork.runOnInvocation(context -> {
-                assertNull(testSubject.load("no-such-saga", context));
-                assertNull(testSubject.load("no-such-saga", context));
+                assertThat(testSubject.load("no-such-saga", context)).isNull();
+                assertThat(testSubject.load("no-such-saga", context)).isNull();
             });
 
             // when
@@ -403,7 +404,7 @@ class AnnotatedSagaRepositoryTest {
             // then the delete cleans up both, so the removed association cannot outlive the saga
             ArgumentCaptor<Set<AssociationValue>> deleted = ArgumentCaptor.forClass(Set.class);
             verify(store).deleteSaga(eq(Object.class), eq("re-associated"), deleted.capture());
-            assertEquals(Set.of(first, second), deleted.getValue());
+            assertThat(deleted.getValue()).isEqualTo(Set.of(first, second));
         }
 
         @Test
@@ -433,7 +434,7 @@ class AnnotatedSagaRepositoryTest {
 
             // then it is reported once rather than twice, and the identifiers come back in the order of the TreeSet
             // the repository merges them into
-            assertIterableEquals(List.of("a", "b", "c"), found);
+            assertThat(found).containsExactlyElementsOf(List.of("a", "b", "c"));
         }
 
         @Test
@@ -444,7 +445,7 @@ class AnnotatedSagaRepositoryTest {
 
             // when creating an instance with it
             unitOfWork.runOnInvocation(context -> {
-                SagaCreationException thrown = assertThrows(
+                SagaCreationException thrown = catchThrowableOfType(
                         SagaCreationException.class,
                         () -> testSubject.createInstance("never-created", () -> {
                             throw failure;
@@ -452,7 +453,7 @@ class AnnotatedSagaRepositoryTest {
                 );
 
                 // then the original failure is wrapped rather than propagated
-                assertSame(failure, thrown.getCause());
+                assertThat(thrown.getCause()).isSameAs(failure);
             });
 
             FutureUtils.joinAndUnwrap(unitOfWork.execute(), TIMEOUT);
@@ -490,8 +491,10 @@ class AnnotatedSagaRepositoryTest {
 
                 // then the repository managed that instance rather than one it prepared itself, and left its
                 // collaborator field untouched
-                assertSame(produced, saga.invoke(s -> s));
-                assertNull(saga.invoke(s -> s.collaborator));
+                CollaboratingSaga managed = saga.invoke(s -> s);
+                Collaborator managedCollaborator = saga.invoke(s -> s.collaborator);
+                assertThat(managed).isSameAs(produced);
+                assertThat(managedCollaborator).isNull();
             });
 
             FutureUtils.joinAndUnwrap(unitOfWork.execute(), TIMEOUT);
@@ -517,8 +520,9 @@ class AnnotatedSagaRepositoryTest {
                 Saga<CollaboratingSaga> loaded = repository.load("stored-saga", context);
 
                 // then the collaborator is the one the factory supplied, not one the repository put there
-                assertNotNull(loaded);
-                assertSame(collaborator, loaded.invoke(s -> s.collaborator));
+                assertThat(loaded).isNotNull();
+                Collaborator loadedCollaborator = loaded.invoke(s -> s.collaborator);
+                assertThat(loadedCollaborator).isSameAs(collaborator);
             });
             FutureUtils.joinAndUnwrap(loading.execute(), TIMEOUT);
         }

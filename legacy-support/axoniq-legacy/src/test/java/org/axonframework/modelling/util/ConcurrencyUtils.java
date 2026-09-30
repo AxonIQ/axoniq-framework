@@ -27,7 +27,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Utility methods related to testing concurency
@@ -61,8 +61,8 @@ public abstract class ConcurrencyUtils {
         } catch (InterruptedException e) {
             exceptions.add(e);
         }
-        assertEquals(Collections.emptyList(), exceptions);
-        assertEquals(threadCount, successCounter.get(), "Not all threads have completed successfully");
+        assertThat(exceptions).isEqualTo(Collections.emptyList());
+        assertThat(successCounter.get()).as("Not all threads have completed successfully").isEqualTo(threadCount);
     }
 
     private ConcurrencyUtils() {

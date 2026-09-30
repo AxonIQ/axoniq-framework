@@ -31,7 +31,7 @@ import org.junit.jupiter.api.*;
 import java.util.ArrayList;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Ported from Axon Framework 4 with the assertions unchanged. What changed is how the validator is given the events:
@@ -74,7 +74,8 @@ class EventValidatorTest {
         EventMessage eventMessage = asEventMessage(new StubDomainEvent());
         published.add(eventMessage);
 
-        assertThrows(AxonAssertionError.class, () -> testSubject.assertPublishedEventsMatching(Matchers.noEvents()));
+        assertThatThrownBy(() -> testSubject.assertPublishedEventsMatching(Matchers.noEvents()))
+                .isInstanceOf(AxonAssertionError.class);
     }
 
     @Test
@@ -82,7 +83,7 @@ class EventValidatorTest {
         EventMessage eventMessage = asEventMessage(new StubDomainEvent());
         published.add(eventMessage);
 
-        assertThrows(AxonAssertionError.class, testSubject::assertPublishedEvents);
+        assertThatThrownBy(testSubject::assertPublishedEvents).isInstanceOf(AxonAssertionError.class);
     }
 
     @Test
