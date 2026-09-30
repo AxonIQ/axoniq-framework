@@ -29,10 +29,11 @@ import io.axoniq.framework.workflow.runtime.test.utils.TestEventPublisher;
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.junit.jupiter.api.*;
 
+import java.util.Map;
 import java.util.Optional;
 
+import static io.axoniq.framework.workflow.runtime.test.fixture.WorkflowTestServices.DEFAULT_MODULE_NAME;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.*;
 
 /**
@@ -53,7 +54,8 @@ class WorkflowTestServicesTest {
         TestClock clock = mock(TestClock.class);
         ManualExecuteStepActionResolver actionResolver = mock(ManualExecuteStepActionResolver.class);
         ManualWorkflowScheduler timeoutScheduler = mock(ManualWorkflowScheduler.class);
-        when(configuration.getComponent(WorkflowEngine.class)).thenReturn(workflowEngine);
+        when(configuration.getComponents(WorkflowEngine.class))
+                .thenReturn(Map.of("WorkflowEngine[" + DEFAULT_MODULE_NAME + "]", workflowEngine));
         when(configuration.getComponent(DelayedPublisher.class)).thenReturn(delayedPublisher);
         when(configuration.getComponent(TestEventPublisher.class)).thenReturn(eventPublisher);
         when(configuration.getComponent(WorkflowConfigurationRegistry.class)).thenReturn(workflowRegistry);
@@ -61,8 +63,8 @@ class WorkflowTestServicesTest {
         when(configuration.getOptionalComponent(TestClock.class)).thenReturn(Optional.of(clock));
         when(configuration.getOptionalComponent(ManualExecuteStepActionResolver.class)).thenReturn(
                 Optional.of(actionResolver));
-        when(configuration.getOptionalComponent(ManualWorkflowScheduler.class)).thenReturn(
-                Optional.of(timeoutScheduler));
+        when(configuration.getOptionalComponent(ManualWorkflowScheduler.class))
+                .thenReturn(Optional.of(timeoutScheduler));
 
         WorkflowTestServices services = WorkflowTestServices.from(configuration);
 
@@ -90,7 +92,7 @@ class WorkflowTestServicesTest {
     @Test
     void shutdownStopsEngineConfigurationAndClearsHistory() {
         AxonConfiguration configuration = baseConfiguration();
-        WorkflowEngine workflowEngine = configuration.getComponent(WorkflowEngine.class);
+        WorkflowEngine workflowEngine = configuration.getComponents(WorkflowEngine.class).values().iterator().next();
         MutableWorkflowHistoryRepository historyRepository = configuration.getComponent(
                 MutableWorkflowHistoryRepository.class);
         WorkflowTestServices services = WorkflowTestServices.from(configuration);
@@ -104,7 +106,8 @@ class WorkflowTestServicesTest {
 
     private static AxonConfiguration baseConfiguration() {
         AxonConfiguration configuration = mock(AxonConfiguration.class);
-        when(configuration.getComponent(WorkflowEngine.class)).thenReturn(mock(WorkflowEngine.class));
+        when(configuration.getComponents(WorkflowEngine.class)).thenReturn(
+                Map.of("WorkflowEngine[" + DEFAULT_MODULE_NAME + "]", mock(WorkflowEngine.class)));
         when(configuration.getComponent(DelayedPublisher.class)).thenReturn(mock(DelayedPublisher.class));
         when(configuration.getComponent(TestEventPublisher.class)).thenReturn(mock(TestEventPublisher.class));
         when(configuration.getComponent(WorkflowConfigurationRegistry.class)).thenReturn(

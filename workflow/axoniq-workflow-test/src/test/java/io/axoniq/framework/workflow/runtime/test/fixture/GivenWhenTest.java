@@ -44,6 +44,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 
+import static io.axoniq.framework.workflow.runtime.test.fixture.WorkflowTestServices.DEFAULT_MODULE_NAME;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.*;
 
@@ -170,9 +171,9 @@ class GivenWhenTest {
     }
 
     private WorkflowTestDriver driverWith(TestEventPublisher eventPublisher, boolean steppingMode) {
-
         var configuration = mock(AxonConfiguration.class);
-        when(configuration.getComponent(WorkflowEngine.class)).thenReturn(mock(WorkflowEngine.class));
+        when(configuration.getComponents(WorkflowEngine.class))
+                .thenReturn(Map.of("WorkflowEngine[" + DEFAULT_MODULE_NAME + "]", mock(WorkflowEngine.class)));
         when(configuration.getComponent(DelayedPublisher.class)).thenReturn(mock(DelayedPublisher.class));
         when(configuration.getComponent(TestEventPublisher.class)).thenReturn(eventPublisher);
         when(configuration.getComponent(WorkflowConfigurationRegistry.class)).thenReturn(mock(WorkflowConfigurationRegistry.class));
@@ -202,7 +203,8 @@ class GivenWhenTest {
                 List.of(new WorkflowHistory("wf-1", state))
         ));
         var configuration = mock(AxonConfiguration.class);
-        when(configuration.getComponent(WorkflowEngine.class)).thenReturn(mock(WorkflowEngine.class));
+        when(configuration.getComponents(WorkflowEngine.class))
+                .thenReturn(Map.of("WorkflowEngine[" + DEFAULT_MODULE_NAME + "]", mock(WorkflowEngine.class)));
         when(configuration.getComponent(DelayedPublisher.class)).thenReturn(mock(DelayedPublisher.class));
         when(configuration.getComponent(TestEventPublisher.class)).thenReturn(mock(TestEventPublisher.class));
         when(configuration.getComponent(WorkflowConfigurationRegistry.class)).thenReturn(mock(WorkflowConfigurationRegistry.class));
@@ -213,7 +215,6 @@ class GivenWhenTest {
         when(configuration.getOptionalComponent(ManualWorkflowScheduler.class)).thenReturn(Optional.of(scheduler));
 
         var services = WorkflowTestServices.from(configuration);
-
 
         var testingState = new MutableWorkflowEngineTestingState();
         testingState.setHistory(new WorkflowHistory("wf-1", state));

@@ -47,7 +47,7 @@ class WorkflowStagedTimeoutFeatureTest {
     @BeforeEach
     void setUp() {
         var module = WorkflowModule.defaults("TimeoutHandling", SimpleWorkflowContext.class)
-                                   .workflowContextFactory(c -> new SimpleWorkflowContextFactory())
+                                   .contextFactory(c -> new SimpleWorkflowContextFactory())
                                    .definition(d -> d.autodetected(c -> new TimeoutHandlingWorkflow()));
         fixture = WorkflowTestFixture.of(module, UnaryOperator.identity());
     }

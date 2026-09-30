@@ -45,6 +45,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 
+import static io.axoniq.framework.workflow.runtime.test.fixture.WorkflowTestServices.DEFAULT_MODULE_NAME;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.*;
@@ -249,7 +250,8 @@ class ThenTest {
         when(workflowEngine.workflowExecutions()).thenReturn(Set.of());
 
         var configuration = mock(AxonConfiguration.class);
-        when(configuration.getComponent(WorkflowEngine.class)).thenReturn(workflowEngine);
+        when(configuration.getComponents(WorkflowEngine.class))
+                .thenReturn(Map.of("WorkflowEngine[" + DEFAULT_MODULE_NAME + "]", workflowEngine));
         when(configuration.getComponent(DelayedPublisher.class)).thenReturn(mock(DelayedPublisher.class));
         when(configuration.getComponent(TestEventPublisher.class)).thenReturn(mock(TestEventPublisher.class));
         when(configuration.getComponent(WorkflowConfigurationRegistry.class)).thenReturn(
@@ -259,9 +261,7 @@ class ThenTest {
         when(configuration.getOptionalComponent(ManualExecuteStepActionResolver.class)).thenReturn(Optional.empty());
         when(configuration.getOptionalComponent(ManualWorkflowScheduler.class)).thenReturn(Optional.empty());
 
-        var services = WorkflowTestServices.from(
-                configuration
-        );
+        var services = WorkflowTestServices.from(configuration);
 
         var testingState = new MutableWorkflowEngineTestingState();
         if (selectedState != null) {

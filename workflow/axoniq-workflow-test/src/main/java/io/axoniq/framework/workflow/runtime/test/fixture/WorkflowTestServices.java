@@ -27,8 +27,9 @@ import io.axoniq.framework.workflow.runtime.test.utils.ManualExecuteStepActionRe
 import io.axoniq.framework.workflow.runtime.test.utils.ManualWorkflowScheduler;
 import io.axoniq.framework.workflow.runtime.test.utils.TestClock;
 import io.axoniq.framework.workflow.runtime.test.utils.TestEventPublisher;
-import org.jspecify.annotations.Nullable;
 import org.axonframework.common.configuration.AxonConfiguration;
+import org.axonframework.common.configuration.ComponentBuilder;
+import org.jspecify.annotations.Nullable;
 
 import java.util.Objects;
 import java.util.Optional;
@@ -47,6 +48,12 @@ import java.util.Optional;
  */
 public class WorkflowTestServices {
 
+    /**
+     * Name every {@link io.axoniq.framework.workflow.configuration.WorkflowModule} built through
+     * {@link WorkflowTestFixture#workflowModule(Class, ComponentBuilder, ComponentBuilder)} is registered under.
+     */
+    public static final String DEFAULT_MODULE_NAME = "test";
+
     private final AxonConfiguration configuration;
     private final WorkflowEngine workflowEngine;
     private final DelayedPublisher delayedPublisher;
@@ -61,18 +68,36 @@ public class WorkflowTestServices {
     private final ManualWorkflowScheduler timeoutScheduler;
 
     /**
-     * Constructs a new {@link WorkflowTestServices} from the given {@link AxonConfiguration}.
+     * Constructs a new {@code WorkflowTestServices} from the given {@link AxonConfiguration}.
      *
      * @param configuration configuration to use
      * @return initialized services
      */
     public static WorkflowTestServices from(AxonConfiguration configuration) {
-        return new WorkflowTestServices(Objects.requireNonNull(configuration, "Configuration must not be null"));
+        return from(configuration, DEFAULT_MODULE_NAME);
     }
 
-    private WorkflowTestServices(AxonConfiguration configuration) {
-        this.configuration = Objects.requireNonNull(configuration, "Configuration must not be null");
-        this.workflowEngine = configuration.getComponent(WorkflowEngine.class);
+    /**
+     * Constructs a new {@code WorkflowTestServices} from the given {@link AxonConfiguration}, using the given
+     * {@code moduleName} as the name for the {@link io.axoniq.framework.workflow.configuration.WorkflowModule} under
+     * test.
+     *
+     * @param configuration configuration to use
+     * @param moduleName    name of the {@link io.axoniq.framework.workflow.configuration.WorkflowModule} under test
+     * @return initialized services
+     */
+    public static WorkflowTestServices from(AxonConfiguration configuration, String moduleName) {
+        return new WorkflowTestServices(
+                Objects.requireNonNull(configuration, "Configuration must not be null"),
+                Objects.requireNonNull(moduleName, "Module name must not be null")
+        );
+    }
+
+    private WorkflowTestServices(AxonConfiguration configuration, String moduleName) {
+        this.configuration = configuration;
+        String engineName = "WorkflowEngine[" + moduleName + "]";
+        this.workflowEngine = Objects.requireNonNull(configuration.getComponents(WorkflowEngine.class).get(engineName),
+                                                     "WorkflowEngine with name [" + engineName + "] must not be null.");
         this.delayedPublisher = configuration.getComponent(DelayedPublisher.class);
         this.eventPublisher = configuration.getComponent(TestEventPublisher.class);
         this.workflowRegistry = configuration.getComponent(WorkflowConfigurationRegistry.class);
