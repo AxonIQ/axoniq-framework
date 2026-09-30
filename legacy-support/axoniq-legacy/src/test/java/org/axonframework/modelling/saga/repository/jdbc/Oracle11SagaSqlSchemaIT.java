@@ -45,8 +45,11 @@ class Oracle11SagaSqlSchemaIT {
     private static final String USERNAME = "test";
     private static final String PASSWORD = "test";
 
+    // Oracle XE 11g matches the dialect under test, and its slim variant is a fraction of the size of the 21c
+    // ":latest" image. 11g has no pluggable database, so the connection goes through the "xe" SID instead.
     @Container
-    private static final OracleContainer ORACLE_CONTAINER = new OracleContainer("gvenzl/oracle-xe");
+    private static final OracleContainer ORACLE_CONTAINER =
+            new OracleContainer("gvenzl/oracle-xe:11-slim").usingSid();
 
     private Oracle11SagaSqlSchema testSubject;
     private Connection connection;
