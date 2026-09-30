@@ -143,7 +143,7 @@ class WorkflowEngineCrossSegmentCheckpointTest {
     /**
      * Runs under both processor modes so the result cannot be blamed on the mode: fully-deferred (every handler is
      * {@code Checkpointing}) and auto (an ordinary handler such as the workflow history projector is co-located, which
-     * is the production wiring of {@code WorkflowEventProcessingRegistrationEnhancer}).
+     * is the production wiring {@code SimpleWorkflowModule} builds).
      */
     @ParameterizedTest(name = "autoCheckpointing={0}")
     @ValueSource(booleans = {false, true})
