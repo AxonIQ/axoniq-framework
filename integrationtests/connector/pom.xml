@@ -39,5 +39,6 @@
 
     <modules>
         <module>axon-server</module>
+        <module>spring-cloud</module>
     </modules>
 </project>

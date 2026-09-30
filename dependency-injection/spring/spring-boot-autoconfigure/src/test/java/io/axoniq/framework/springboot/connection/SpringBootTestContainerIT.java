@@ -36,7 +36,7 @@ import java.time.Duration;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
-@SpringBootTest
+@SpringBootTest(properties = "axon.springcloud.enabled=false")
 @Testcontainers
 class SpringBootTestContainerIT {
 
