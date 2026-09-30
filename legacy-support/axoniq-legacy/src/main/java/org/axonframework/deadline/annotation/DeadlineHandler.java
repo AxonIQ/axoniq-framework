@@ -1,17 +1,20 @@
 /*
- * Copyright (c) 2010-2026. Axon Framework
+ * Copyright (c) 2010-2026. AxonIQ B.V.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * Licensed under the AXONIQ TERMS OF SERVICE,
+ * Version 29 April 2026 (the "License");
  *
- *    http://www.apache.org/licenses/LICENSE-2.0
+ * The software is available for evaluation use without registration.
+ * Continued use beyond the evaluation period requires registration
+ * and a commercial license. See the License for the specific language
+ * governing permissions and limitations under the License.
+ * You may not use this file except in compliance with the License.
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * You may obtain a copy of the License at:
+ *  https://www.axoniq.io/legal/terms-of-service
+ *
+ * For licensing information and to register, visit:
+ *  https://www.axoniq.io/pricing
  */
 
 package org.axonframework.deadline.annotation;
@@ -26,8 +29,8 @@ import java.lang.annotation.Target;
 
 /**
  * Annotation used to mark handlers which are capable of handling a {@link DeadlineMessage}. It is a specialization of
- * {@link MessageHandler} were the {@code messageType} is set to DeadlineMessage. Hence, any parameter injections which
- * works for event handlers work for deadline handlers as well.
+ * {@link MessageHandler} where the {@code messageType} is set to {@link DeadlineMessage}. Hence, any parameter
+ * injection that works for event handlers works for deadline handlers as well.
  *
  * @author Milan Savic
  * @author Steven van Beelen
@@ -40,10 +43,10 @@ import java.lang.annotation.Target;
 public @interface DeadlineHandler {
 
     /**
-     * The name of the Deadline this handler listens to. Defaults to the fully qualified class name of the payload type
-     * (i.e. first parameter).
+     * The name of the deadline this handler listens to. Defaults to an empty {@link String}, meaning the handler
+     * accepts deadlines of any name. A handler declaring a specific name takes precedence over one accepting any name.
      *
-     * @return The name of the deadline as a {@link String}
+     * @return the name of the deadline this handler listens to, or an empty {@link String} to accept any deadline
      */
     String deadlineName() default "";
 
@@ -51,7 +54,7 @@ public @interface DeadlineHandler {
      * Specifies the type of message payload that can be handled by the member method. The payload of the message should
      * be assignable to this type. Defaults to any {@link Object}.
      *
-     * @return The payload type handled by the function annotated with {@code @DeadlineHandler}.
+     * @return the payload type handled by the function annotated with {@code @DeadlineHandler}
      */
     Class<?> payloadType() default Object.class;
 }

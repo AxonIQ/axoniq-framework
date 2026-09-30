@@ -1,32 +1,44 @@
 /*
- * Copyright (c) 2010-2026. Axon Framework
+ * Copyright (c) 2010-2026. AxonIQ B.V.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * Licensed under the AXONIQ TERMS OF SERVICE,
+ * Version 29 April 2026 (the "License");
  *
- *    http://www.apache.org/licenses/LICENSE-2.0
+ * The software is available for evaluation use without registration.
+ * Continued use beyond the evaluation period requires registration
+ * and a commercial license. See the License for the specific language
+ * governing permissions and limitations under the License.
+ * You may not use this file except in compliance with the License.
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * You may obtain a copy of the License at:
+ *  https://www.axoniq.io/legal/terms-of-service
+ *
+ * For licensing information and to register, visit:
+ *  https://www.axoniq.io/pricing
  */
 
 package org.axonframework.deadline;
 
-import org.jspecify.annotations.Nullable;
-import org.axonframework.messaging.core.Scope;
-import org.axonframework.messaging.core.ScopeDescriptor;
+import org.axonframework.common.ClockUtils;
 import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.Metadata;
+import org.axonframework.messaging.core.Scope;
+import org.axonframework.messaging.core.ScopeDescriptor;
+import org.jspecify.annotations.Nullable;
 
 import java.time.Duration;
 import java.time.Instant;
 
 /**
  * Contract for deadline managers. Contains methods for scheduling a deadline and for cancelling a deadline.
+ * <p>
+ * The overloads that take no {@link ScopeDescriptor} use {@link Scope#describeCurrentScope()}, as in Axon Framework
+ * 4. A Saga is the current {@link Scope} while one of its handler methods runs, so calling them from a Saga handler
+ * schedules or cancels within that Saga's scope, regardless of how the {@code DeadlineManager} was obtained. Calling
+ * them while no scope is active throws an {@link IllegalStateException}.
+ * <p>
+ * This contract exists to keep deadlines that were scheduled with Axon Framework 4 firing while migrating. Scheduling
+ * new deadlines is therefore deprecated, while cancelling them stays fully supported.
  *
  * @author Milan Savic
  * @author Steven van Beelen
@@ -40,10 +52,15 @@ public interface DeadlineManager {
      * deadlineName} combination can be used to cancel the scheduled deadline. The scope within which this call is made
      * will be retrieved by the DeadlineManager itself.
      *
-     * @param triggerDateTime A {@link java.time.Instant} denoting the moment to trigger the deadline handling
-     * @param deadlineName    A {@link String} representing the name of the deadline to schedule
+     * @param triggerDateTime a {@link java.time.Instant} denoting the moment to trigger the deadline handling
+     * @param deadlineName    a {@link String} representing the name of the deadline to schedule
      * @return the {@code scheduleId} as a {@link String} to use when cancelling the schedule
+     * @deprecated scheduling new deadlines through a {@code DeadlineManager} is supported only to keep Axon Framework
+     *             4 code running while migrating. Schedule a command with a scheduler of choice that dispatches it
+     *             through the {@link org.axonframework.messaging.commandhandling.gateway.CommandGateway} instead, or
+     *             replace the Saga with a Workflow
      */
+    @Deprecated(since = "5.4.0")
     default String schedule(Instant triggerDateTime, String deadlineName) {
         return schedule(triggerDateTime, deadlineName, null);
     }
@@ -59,12 +76,17 @@ public interface DeadlineManager {
      * {@link DeadlineMessage}.
      * </p>
      *
-     * @param triggerDateTime  A {@link java.time.Instant} denoting the moment to trigger the deadline handling
-     * @param deadlineName     A {@link String} representing the name of the deadline to schedule
-     * @param messageOrPayload A {@link Message} or payload for a message as an
+     * @param triggerDateTime  a {@link java.time.Instant} denoting the moment to trigger the deadline handling
+     * @param deadlineName     a {@link String} representing the name of the deadline to schedule
+     * @param messageOrPayload a {@link Message} or payload for a message as an
      *                         {@link Object}
      * @return the {@code scheduleId} as a {@link String} to use when cancelling the schedule
+     * @deprecated scheduling new deadlines through a {@code DeadlineManager} is supported only to keep Axon Framework
+     *             4 code running while migrating. Schedule a command with a scheduler of choice that dispatches it
+     *             through the {@link org.axonframework.messaging.commandhandling.gateway.CommandGateway} instead, or
+     *             replace the Saga with a Workflow
      */
+    @Deprecated(since = "5.4.0")
     default String schedule(Instant triggerDateTime, String deadlineName,
                             @Nullable Object messageOrPayload) {
         return schedule(triggerDateTime, deadlineName, messageOrPayload, Scope.describeCurrentScope());
@@ -80,13 +102,18 @@ public interface DeadlineManager {
      * {@link DeadlineMessage}.
      * </p>
      *
-     * @param triggerDateTime  A {@link Instant} denoting the moment to trigger the deadline handling
-     * @param deadlineName     A {@link String} representing the name of the deadline to schedule
-     * @param messageOrPayload A {@link Message} or payload for a message as an
+     * @param triggerDateTime  a {@link Instant} denoting the moment to trigger the deadline handling
+     * @param deadlineName     a {@link String} representing the name of the deadline to schedule
+     * @param messageOrPayload a {@link Message} or payload for a message as an
      *                         {@link Object}
-     * @param deadlineScope    A {@link ScopeDescriptor} describing the scope within which the deadline was scheduled
+     * @param deadlineScope    a {@link ScopeDescriptor} describing the scope within which the deadline was scheduled
      * @return the {@code scheduleId} as a {@link String} to use when cancelling the schedule
+     * @deprecated scheduling new deadlines through a {@code DeadlineManager} is supported only to keep Axon Framework
+     *             4 code running while migrating. Schedule a command with a scheduler of choice that dispatches it
+     *             through the {@link org.axonframework.messaging.commandhandling.gateway.CommandGateway} instead, or
+     *             replace the Saga with a Workflow
      */
+    @Deprecated(since = "5.4.0")
     String schedule(Instant triggerDateTime,
                     String deadlineName,
                     @Nullable Object messageOrPayload,
@@ -98,10 +125,15 @@ public interface DeadlineManager {
      * deadlineName} combination can be used to cancel the scheduled deadline. The scope within which this call is made
      * will be retrieved by the DeadlineManager itself.
      *
-     * @param triggerDuration A {@link java.time.Duration} describing the waiting period before handling the deadline
-     * @param deadlineName    A {@link String} representing the name of the deadline to schedule
+     * @param triggerDuration a {@link java.time.Duration} describing the waiting period before handling the deadline
+     * @param deadlineName    a {@link String} representing the name of the deadline to schedule
      * @return the {@code scheduleId} as a {@link String} to use when cancelling the schedule
+     * @deprecated scheduling new deadlines through a {@code DeadlineManager} is supported only to keep Axon Framework
+     *             4 code running while migrating. Schedule a command with a scheduler of choice that dispatches it
+     *             through the {@link org.axonframework.messaging.commandhandling.gateway.CommandGateway} instead, or
+     *             replace the Saga with a Workflow
      */
+    @Deprecated(since = "5.4.0")
     default String schedule(Duration triggerDuration, String deadlineName) {
         return schedule(triggerDuration, deadlineName, null);
     }
@@ -118,12 +150,17 @@ public interface DeadlineManager {
      * {@link DeadlineMessage}.
      * </p>
      *
-     * @param triggerDuration  A {@link java.time.Duration} describing the waiting period before handling the deadline
-     * @param deadlineName     A {@link String} representing the name of the deadline to schedule
-     * @param messageOrPayload A {@link Message} or payload for a message as an
+     * @param triggerDuration  a {@link java.time.Duration} describing the waiting period before handling the deadline
+     * @param deadlineName     a {@link String} representing the name of the deadline to schedule
+     * @param messageOrPayload a {@link Message} or payload for a message as an
      *                         {@link Object}
      * @return the {@code scheduleId} as a {@link String} to use when cancelling the schedule
+     * @deprecated scheduling new deadlines through a {@code DeadlineManager} is supported only to keep Axon Framework
+     *             4 code running while migrating. Schedule a command with a scheduler of choice that dispatches it
+     *             through the {@link org.axonframework.messaging.commandhandling.gateway.CommandGateway} instead, or
+     *             replace the Saga with a Workflow
      */
+    @Deprecated(since = "5.4.0")
     default String schedule(Duration triggerDuration, String deadlineName,
                             @Nullable Object messageOrPayload) {
         return schedule(triggerDuration, deadlineName, messageOrPayload, Scope.describeCurrentScope());
@@ -139,18 +176,23 @@ public interface DeadlineManager {
      * {@link DeadlineMessage}.
      * </p>
      *
-     * @param triggerDuration  A {@link Duration} describing the waiting period before handling the deadline
-     * @param deadlineName     A {@link String} representing the name of the deadline to schedule
-     * @param messageOrPayload A {@link Message} or payload for a message as an
+     * @param triggerDuration  a {@link Duration} describing the waiting period before handling the deadline
+     * @param deadlineName     a {@link String} representing the name of the deadline to schedule
+     * @param messageOrPayload a {@link Message} or payload for a message as an
      *                         {@link Object}
-     * @param deadlineScope    A {@link ScopeDescriptor} describing the scope within which the deadline was scheduled
+     * @param deadlineScope    a {@link ScopeDescriptor} describing the scope within which the deadline was scheduled
      * @return the {@code scheduleId} as a {@link String} to use when cancelling the schedule
+     * @deprecated scheduling new deadlines through a {@code DeadlineManager} is supported only to keep Axon Framework
+     *             4 code running while migrating. Schedule a command with a scheduler of choice that dispatches it
+     *             through the {@link org.axonframework.messaging.commandhandling.gateway.CommandGateway} instead, or
+     *             replace the Saga with a Workflow
      */
+    @Deprecated(since = "5.4.0")
     default String schedule(Duration triggerDuration,
                             String deadlineName,
                             @Nullable Object messageOrPayload,
                             ScopeDescriptor deadlineScope) {
-        return schedule(Instant.now().plus(triggerDuration),
+        return schedule(ClockUtils.instant().plus(triggerDuration),
                         deadlineName,
                         messageOrPayload,
                         deadlineScope);
@@ -174,8 +216,8 @@ public interface DeadlineManager {
     void cancelAll(String deadlineName);
 
     /**
-     * Cancels all deadlines corresponding to the given {@code deadlineName} that are scheduled within {@link
-     * Scope#describeCurrentScope()}. This method has no impact on deadlines which have already been triggered.
+     * Cancels all deadlines corresponding to the given {@code deadlineName} that are scheduled within
+     * {@link Scope#describeCurrentScope()}. This method has no impact on deadlines which have already been triggered.
      *
      * @param deadlineName a {@link String} representing the name of the deadlines to cancel
      */

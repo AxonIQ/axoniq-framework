@@ -25,6 +25,8 @@ import org.axonframework.conversion.jackson2.Jackson2Converter;
 import org.axonframework.modelling.OnlyAcceptConstructorPropertiesAnnotation;
 import org.junit.jupiter.api.*;
 
+import java.util.concurrent.atomic.AtomicInteger;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -57,7 +59,7 @@ class AggregateScopeDescriptorSerializationTest {
     }
 
     @Test
-    void responseTypeShouldBeSerializableWithJacksonUsingConstructorProperties() {
+    void jacksonSerializationWorksUsingOnlyConstructorProperties() {
         // given
         ObjectMapper objectMapper = OnlyAcceptConstructorPropertiesAnnotation.attachTo(new ObjectMapper());
         Converter converter = new Jackson2Converter(objectMapper);
@@ -72,20 +74,23 @@ class AggregateScopeDescriptorSerializationTest {
     }
 
     @Test
-    void lazyIdentifierSupplierIsOnlyResolvedOnFirstAccess() {
+    void lazyIdentifierSupplierIsResolvedOnlyOnceOnFirstAccess() {
         // given
-        boolean[] supplierInvoked = {false};
+        AtomicInteger supplierInvocations = new AtomicInteger();
         AggregateScopeDescriptor lazyDescriptor = new AggregateScopeDescriptor(expectedType, () -> {
-            supplierInvoked[0] = true;
+            supplierInvocations.incrementAndGet();
             return expectedIdentifier;
         });
-        assertThat(supplierInvoked[0]).isFalse();
+        // nothing is resolved while constructing the descriptor
+        assertThat(supplierInvocations).hasValue(0);
 
         // when
-        Object identifier = lazyDescriptor.getIdentifier();
+        Object firstAccess = lazyDescriptor.getIdentifier();
+        Object secondAccess = lazyDescriptor.getIdentifier();
 
         // then
-        assertThat(identifier).isEqualTo(expectedIdentifier);
-        assertThat(supplierInvoked[0]).isTrue();
+        assertThat(firstAccess).isEqualTo(expectedIdentifier);
+        assertThat(secondAccess).isEqualTo(expectedIdentifier);
+        assertThat(supplierInvocations).hasValue(1);
     }
 }
