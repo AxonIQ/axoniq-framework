@@ -52,18 +52,18 @@ public class SpringCloudQueryController {
      */
     public static final String DEFAULT_QUERY_ENDPOINT = "/axoniq-springcloud/query";
 
-    private final IncomingQueryInvoker gateway;
+    private final IncomingQueryInvoker invoker;
     private final Duration timeout;
 
     /**
-     * Constructs a {@code SpringCloudQueryController} handing received queries to the given {@code gateway}.
+     * Constructs a {@code SpringCloudQueryController} handing received queries to the given {@code invoker}.
      *
-     * @param gateway the gateway invoking this application's local query handler
+     * @param invoker the component invoking this application's local query handler
      * @param timeout how long a response stream may stay open before the container closes it. A query still being
      *                answered when it elapses is reported to the member that asked as a failed stream.
      */
-    public SpringCloudQueryController(IncomingQueryInvoker gateway, Duration timeout) {
-        this.gateway = Objects.requireNonNull(gateway, "The gateway must not be null.");
+    public SpringCloudQueryController(IncomingQueryInvoker invoker, Duration timeout) {
+        this.invoker = Objects.requireNonNull(invoker, "The invoker must not be null.");
         this.timeout = Objects.requireNonNull(timeout, "The timeout must not be null.");
     }
 
@@ -76,7 +76,7 @@ public class SpringCloudQueryController {
     @PostMapping(produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter receiveQuery(@RequestBody QueryDispatchRequest request) {
         SseEmitter emitter = new SseEmitter(timeout.toMillis());
-        gateway.handle(request, new SseQueryResponseSink(emitter));
+        invoker.handle(request, new SseQueryResponseSink(emitter));
         return emitter;
     }
 }
