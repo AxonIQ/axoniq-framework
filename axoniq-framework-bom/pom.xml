@@ -57,6 +57,12 @@
                 <artifactId>axon-server-connector</artifactId>
                 <version>${project.version}</version>
             </dependency>
+            <!-- force the protobuf version to stay in sync with the protobuf-gen version used by axonserver-java-connector -->
+            <dependency>
+                <groupId>com.google.protobuf</groupId>
+                <artifactId>protobuf-java</artifactId>
+                <version>${protobuf-java.version}</version>
+            </dependency>
 
             <!-- Axoniq Framework: Messaging -->
             <dependency>
