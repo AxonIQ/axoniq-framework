@@ -39,7 +39,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 
 import static java.util.Collections.singleton;
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.*;
 import static org.junit.jupiter.api.Assumptions.*;
 import static org.mockito.Mockito.*;
 
@@ -129,9 +129,9 @@ class SagaManagerTest {
         // handle before the loop reached them. The manager offers the event to its sagas in no particular order,
         // which is why both fail here and the count pins that exactly one of them ran.
         CompletionException exception =
-                assertThrows(CompletionException.class, () -> result.asCompletableFuture().join());
-        assertEquals(toBeThrown, exception.getCause());
-        assertEquals(1, invokedSagas.get());
+                catchThrowableOfType(CompletionException.class, () -> result.asCompletableFuture().join());
+        assertThat(exception.getCause()).isEqualTo(toBeThrown);
+        assertThat(invokedSagas.get()).isEqualTo(1);
         verify(mockSaga3, never()).handle(eq(event), any());
     }
 
@@ -154,7 +154,7 @@ class SagaManagerTest {
 
         // when
         MessageStream.Empty<Message> result = testSubject.handle(event, StubProcessingContext.forMessage(event));
-        assertThrows(CompletionException.class, () -> result.asCompletableFuture().join());
+        assertThatThrownBy(() -> result.asCompletableFuture().join()).isInstanceOf(CompletionException.class);
 
         // then the new saga was never constructed, so neither its resources nor its handler have run. Axon
         // Framework 4 got this from the exception leaving handle before creation was considered.
@@ -381,13 +381,13 @@ class SagaManagerTest {
         verify(mockSagaRepository).createInstance(any(), any(), any());
 
         createdSaga.getAllValues()
-                   .forEach(sagaId -> assertTrue(
-                           matchingSegment.matches(sagaId),
-                           "Saga ID doesn't match segment that should have created it: " + sagaId
-                   ));
+                   .forEach(sagaId -> assertThat(matchingSegment.matches(sagaId))
+                           .as("Saga ID doesn't match segment that should have created it: " + sagaId)
+                           .isTrue());
         createdSaga.getAllValues()
-                   .forEach(sagaId -> assertFalse(otherSegment.matches(sagaId),
-                                                  "Saga ID matched against the wrong segment: " + sagaId));
+                   .forEach(sagaId -> assertThat(otherSegment.matches(sagaId))
+                           .as("Saga ID matched against the wrong segment: " + sagaId)
+                           .isFalse());
     }
 
     @Test
@@ -430,10 +430,8 @@ class SagaManagerTest {
 
         // Identity, not equality: the sentinel is recognized by reference, which is what stops an association value
         // that merely reads like it from being treated as a broadcast
-        assertSame(
-                SequencingPolicy.BROADCAST,
-                testSubject.sequenceIdentifierFor(event, StubProcessingContext.forMessage(event))
-        );
+        assertThat(testSubject.sequenceIdentifierFor(event, StubProcessingContext.forMessage(event)))
+                .isSameAs(SequencingPolicy.BROADCAST);
     }
 
     private ProcessingContext contextFor(EventMessage event, Segment segment) {

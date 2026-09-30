@@ -30,9 +30,9 @@ import java.util.Optional;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.axonframework.messaging.eventhandling.EventTestUtils.asEventMessage;
 import static org.axonframework.modelling.util.ConcurrencyUtils.testConcurrent;
-import static org.junit.jupiter.api.Assertions.*;
 
 class PayloadAssociationResolverTest {
 
@@ -60,7 +60,7 @@ class PayloadAssociationResolverTest {
     private void testResolveOnce() {
         EventMessage eventMessage = asEventMessage(new TestEvent(TEST_PROPERTY_VALUE));
         Object result = testSubject.resolve(TEST_PROPERTY_NAME, eventMessage, handlingMember);
-        assertEquals(TEST_PROPERTY_VALUE, result);
+        assertThat(result).isEqualTo(TEST_PROPERTY_VALUE);
     }
 
     private record TestEvent(int testProperty) {

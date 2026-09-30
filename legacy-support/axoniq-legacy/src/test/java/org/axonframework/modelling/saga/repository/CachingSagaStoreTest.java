@@ -46,7 +46,8 @@ import java.util.function.Supplier;
 import java.util.stream.IntStream;
 
 import static java.util.Collections.singleton;
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.fail;
 import static org.mockito.Mockito.*;
 
 /**
@@ -154,14 +155,14 @@ public abstract class CachingSagaStoreTest extends SagaStoreTestSuite {
         final AssociationValue associationValue = new AssociationValue("key", "value");
 
         Set<String> actual = testSubject.findSagas(StubSaga.class, associationValue);
-        assertEquals(singleton("id"), actual);
+        assertThat(actual).isEqualTo(singleton("id"));
         //noinspection unchecked
         ArgumentCaptor<Supplier<?>> captor = ArgumentCaptor.forClass(Supplier.class);
         verify(associationsCache, atLeast(1)).computeIfAbsent(
                 eq("org.axonframework.modelling.saga.repository.StubSaga/key=value"),
                 captor.capture()
         );
-        assertEquals(Collections.singleton("id"), captor.getValue().get());
+        assertThat(captor.getValue().get()).isEqualTo(Collections.singleton("id"));
     }
 
     @Test
@@ -173,7 +174,7 @@ public abstract class CachingSagaStoreTest extends SagaStoreTestSuite {
         reset(sagaCache, associationsCache);
 
         SagaStore.Entry<StubSaga> actual = testSubject.loadSaga(StubSaga.class, "id");
-        assertSame(saga, actual.saga());
+        assertThat(actual.saga()).isSameAs(saga);
 
         verify(sagaCache).get("id");
         verify(sagaCache).put(eq("id"), any());
@@ -186,7 +187,7 @@ public abstract class CachingSagaStoreTest extends SagaStoreTestSuite {
         reset(sagaCache, associationsCache);
 
         SagaStore.Entry<StubSaga> actual = testSubject.loadSaga(StubSaga.class, "id");
-        assertNull(actual);
+        assertThat(actual).isNull();
 
         verify(sagaCache).get("id");
         verify(sagaCache, never()).put(eq("id"), any());
@@ -213,23 +214,23 @@ public abstract class CachingSagaStoreTest extends SagaStoreTestSuite {
 
         // Insert a Saga into the store, thus adding it to the cache.
         testSubject.insertSaga(StubSaga.class, testSagaId, new StubSaga(), singleton(testAssociationValue));
-        assertTrue(sagaCache.containsKey(testSagaId));
+        assertThat(sagaCache.containsKey(testSagaId)).isTrue();
 
         // Find the Saga, as this will set the association values in the cache.
         // Insert only adds association values to the cache, if they were already present.
         testSubject.findSagas(StubSaga.class, testAssociationValue);
-        assertTrue(sagaCache.containsKey(testSagaId));
-        assertTrue(associationsCache.containsKey(expectedAssociationKey));
+        assertThat(sagaCache.containsKey(testSagaId)).isTrue();
+        assertThat(associationsCache.containsKey(expectedAssociationKey)).isTrue();
 
         // Update the Saga instance, to ensure updating the Saga and adding "new" associations to the cache works.
         testSubject.updateSaga(StubSaga.class, testSagaId, new StubSaga(), testUpdatedAssociations);
-        assertTrue(sagaCache.containsKey(testSagaId));
-        assertTrue(associationsCache.containsKey(expectedAssociationKey));
+        assertThat(sagaCache.containsKey(testSagaId)).isTrue();
+        assertThat(associationsCache.containsKey(expectedAssociationKey)).isTrue();
 
         // Delete the Saga, to ensure it's removed from the cache.
         testSubject.deleteSaga(StubSaga.class, testSagaId, singleton(testAssociationValue));
-        assertFalse(sagaCache.containsKey(testSagaId));
-        assertFalse(associationsCache.containsKey(expectedAssociationKey));
+        assertThat(sagaCache.containsKey(testSagaId)).isFalse();
+        assertThat(associationsCache.containsKey(expectedAssociationKey)).isFalse();
     }
 
     @Test

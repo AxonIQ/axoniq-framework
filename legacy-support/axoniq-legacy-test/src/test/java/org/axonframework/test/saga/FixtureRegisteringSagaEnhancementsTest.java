@@ -30,7 +30,6 @@ import static java.time.Duration.ofSeconds;
 import static java.time.Instant.now;
 import static org.hamcrest.CoreMatchers.equalTo;
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Test class dedicated to validating custom, saga specific, registered components on {@link SagaTestFixture}.

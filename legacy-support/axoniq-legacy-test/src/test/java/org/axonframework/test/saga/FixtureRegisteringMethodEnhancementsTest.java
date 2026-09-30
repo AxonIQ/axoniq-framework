@@ -44,9 +44,9 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.axonframework.test.matchers.Matchers.listWithAnyOf;
 import static org.axonframework.test.matchers.Matchers.predicate;
-import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * This test class is intended to test whether the registration of a {@link HandlerDefinition} and a
@@ -73,7 +73,7 @@ public class FixtureRegisteringMethodEnhancementsTest {
                    .whenPublishingA(new ParameterResolvedEvent(TEST_AGGREGATE_IDENTIFIER))
                    .expectDispatchedCommandsMatching(listWithAnyOf(predicate(commandMessage -> {
                        Object payload = commandMessage.payload();
-                       assertInstanceOf(ResolveParameterCommand.class, payload);
+                       assertThat(payload).isInstanceOf(ResolveParameterCommand.class);
                        AtomicBoolean assertion = ((ResolveParameterCommand) payload).getAssertion();
                        return assertion.get();
                    })));

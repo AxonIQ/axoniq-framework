@@ -21,7 +21,7 @@ package org.axonframework.modelling.saga.repository.jdbc;
 
 import org.junit.jupiter.api.Test;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.assertj.core.api.Assertions.assertThat;
 
 class SagaSchemaTest {
 
@@ -30,14 +30,14 @@ class SagaSchemaTest {
         SagaSchema sagaSchema = SagaSchema.builder()
             .build();
 
-        assertEquals("SagaEntry", sagaSchema.sagaEntryTable());
-        assertEquals("revision", sagaSchema.revisionColumn());
-        assertEquals("serializedSaga", sagaSchema.serializedSagaColumn());
-        assertEquals("AssociationValueEntry", sagaSchema.associationValueEntryTable());
-        assertEquals("associationKey", sagaSchema.associationKeyColumn());
-        assertEquals("associationValue", sagaSchema.associationValueColumn());
-        assertEquals("sagaId", sagaSchema.sagaIdColumn());
-        assertEquals("sagaType", sagaSchema.sagaTypeColumn());
+        assertThat(sagaSchema.sagaEntryTable()).isEqualTo("SagaEntry");
+        assertThat(sagaSchema.revisionColumn()).isEqualTo("revision");
+        assertThat(sagaSchema.serializedSagaColumn()).isEqualTo("serializedSaga");
+        assertThat(sagaSchema.associationValueEntryTable()).isEqualTo("AssociationValueEntry");
+        assertThat(sagaSchema.associationKeyColumn()).isEqualTo("associationKey");
+        assertThat(sagaSchema.associationValueColumn()).isEqualTo("associationValue");
+        assertThat(sagaSchema.sagaIdColumn()).isEqualTo("sagaId");
+        assertThat(sagaSchema.sagaTypeColumn()).isEqualTo("sagaType");
     }
 
     @Test
@@ -53,14 +53,14 @@ class SagaSchemaTest {
             .sagaTypeColumn("sagaTypeModified")
             .build();
 
-        assertEquals("SagaEntryModified", sagaSchema.sagaEntryTable());
-        assertEquals("revisionModified", sagaSchema.revisionColumn());
-        assertEquals("serializedSagaModified", sagaSchema.serializedSagaColumn());
-        assertEquals("AssociationValueEntryModified", sagaSchema.associationValueEntryTable());
-        assertEquals("associationKeyModified", sagaSchema.associationKeyColumn());
-        assertEquals("associationValueModified", sagaSchema.associationValueColumn());
-        assertEquals("sagaIdModified", sagaSchema.sagaIdColumn());
-        assertEquals("sagaTypeModified", sagaSchema.sagaTypeColumn());
+        assertThat(sagaSchema.sagaEntryTable()).isEqualTo("SagaEntryModified");
+        assertThat(sagaSchema.revisionColumn()).isEqualTo("revisionModified");
+        assertThat(sagaSchema.serializedSagaColumn()).isEqualTo("serializedSagaModified");
+        assertThat(sagaSchema.associationValueEntryTable()).isEqualTo("AssociationValueEntryModified");
+        assertThat(sagaSchema.associationKeyColumn()).isEqualTo("associationKeyModified");
+        assertThat(sagaSchema.associationValueColumn()).isEqualTo("associationValueModified");
+        assertThat(sagaSchema.sagaIdColumn()).isEqualTo("sagaIdModified");
+        assertThat(sagaSchema.sagaTypeColumn()).isEqualTo("sagaTypeModified");
     }
 
 }
