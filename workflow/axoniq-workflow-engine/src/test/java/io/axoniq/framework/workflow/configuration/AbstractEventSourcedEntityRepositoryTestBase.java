@@ -22,6 +22,7 @@ import io.axoniq.framework.workflow.dsl.api.EventConditions;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations;
 import io.axoniq.framework.workflow.runtime.execution.AbstractWorkflowContext;
+import io.axoniq.framework.workflow.runtime.execution.WorkflowEngine;
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.eventsourcing.eventstore.EventStore;
 import org.axonframework.messaging.core.QualifiedName;
@@ -55,7 +56,7 @@ abstract class AbstractEventSourcedEntityRepositoryTestBase {
 
     protected AxonConfiguration configuration(String moduleName) {
         var module = WorkflowModule.defaults(moduleName, TestContext.class)
-                                   .workflowContextFactory(c -> TestContext::new)
+                                   .contextFactory(c -> TestContext::new)
                                    .definition(d -> d
                                            .declarative(c -> ctx -> {
                                            })
@@ -102,6 +103,11 @@ abstract class AbstractEventSourcedEntityRepositoryTestBase {
         when(context.processingContext()).thenReturn(processingContext);
         when(processingContext.component(EventConverter.class)).thenReturn(mock(EventConverter.class));
         return context;
+    }
+
+    protected WorkflowEngine getWorkflowEngine(String moduleName) {
+        return configuration.getComponents(WorkflowEngine.class)
+                            .get("WorkflowEngine[" + moduleName + "]");
     }
 
     static class TestContext extends AbstractWorkflowContext {

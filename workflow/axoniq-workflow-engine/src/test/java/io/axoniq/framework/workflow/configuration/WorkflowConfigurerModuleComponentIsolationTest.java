@@ -56,7 +56,7 @@ class WorkflowConfigurerModuleComponentIsolationTest {
 
         // 1. Global module (uses global defaults)
         var globalModule = WorkflowModule.defaults("global-module", TestContext.class)
-                                         .workflowContextFactory(c -> TestContext::new)
+                                         .contextFactory(c -> TestContext::new)
                                          .definition(d -> d.declarative(c -> (ctx) -> {
                                                            })
                                                            .workflowName("wf-global")
@@ -70,11 +70,12 @@ class WorkflowConfigurerModuleComponentIsolationTest {
         MutableWorkflowHistoryRepository localHistoryRepository = new InMemoryWorkflowHistoryRepository();
 
         var localWithHistoryModule = WorkflowModule.configure("local-with-history-module", TestContext.class)
-                                                   .workflowConfigurationRegistry(cfg -> localRegistryWithHistory)
-                                                   .workflowExecutionRepository(cfg -> localRepositoryWithHistory)
+                                                   .configurationRegistry(cfg -> localRegistryWithHistory)
+                                                   .executionRepository(cfg -> localRepositoryWithHistory)
                                                    .withHistory(cfg -> new WorkflowHistoryProjector(
-                                                           localHistoryRepository))
-                                                   .workflowContextFactory(c -> TestContext::new)
+                                                           localHistoryRepository
+                                                   ))
+                                                   .contextFactory(c -> TestContext::new)
                                                    .definition(d -> d.declarative(c -> (ctx) -> {
                                                                      })
                                                                      .workflowName("wf-local-history")
@@ -87,10 +88,10 @@ class WorkflowConfigurerModuleComponentIsolationTest {
         WorkflowExecutionRepository localRepositoryWithoutHistory = new InMemoryWorkflowExecutionRepository();
 
         var localWithoutHistoryModule = WorkflowModule.configure("local-without-history-module", TestContext.class)
-                                                      .workflowConfigurationRegistry(cfg -> localRegistryWithoutHistory)
-                                                      .workflowExecutionRepository(cfg -> localRepositoryWithoutHistory)
+                                                      .configurationRegistry(cfg -> localRegistryWithoutHistory)
+                                                      .executionRepository(cfg -> localRepositoryWithoutHistory)
                                                       .withoutHistory()
-                                                      .workflowContextFactory(c -> TestContext::new)
+                                                      .contextFactory(c -> TestContext::new)
                                                       .definition(d -> d.declarative(c -> (ctx) -> {
                                                                         })
                                                                         .workflowName("wf-local-no-history")
@@ -112,7 +113,7 @@ class WorkflowConfigurerModuleComponentIsolationTest {
                 .isInstanceOf(SimpleWorkflowConfigurationRegistry.class);
         assertThat(configuration.getComponent(WorkflowExecutionRepository.class))
                 .isInstanceOf(InMemoryWorkflowExecutionRepository.class);
-        assertThat(configuration.getComponent(WorkflowEngine.class))
+        assertThat(configuration.getComponents(WorkflowEngine.class).get("WorkflowEngine[global-module]"))
                 .isNotNull();
 
         // Local modules with custom components.
@@ -135,27 +136,18 @@ class WorkflowConfigurerModuleComponentIsolationTest {
         };
 
         var module1 = WorkflowModule.defaults("wf1", TestContext1.class)
-                                    .workflowContextFactory(c -> TestContext1::new)
-                                    .definition(d -> d
-                                            .declarative(c -> definition1)
-                                            .workflowName("wf1")
-                                            .on(c -> startCondition1)
-                                            .notCustomized()
-                                    );
+                                    .contextFactory(c -> TestContext1::new)
+                                    .definition(d -> d.declarative(c -> definition1)
+                                                      .workflowName("wf1")
+                                                      .on(c -> startCondition1)
+                                                      .notCustomized());
 
         var module2 = WorkflowModule.defaults("wf2", TestContext2.class)
-                                    .workflowContextFactory(c -> (payload, workflowId, processingContext, workflowConfiguration) -> new TestContext2(
-                                            payload,
-                                            workflowId,
-                                            processingContext,
-                                            workflowConfiguration))
-                                    .definition(d -> d
-                                            .declarative(c -> (WorkflowDefinition<TestContext2>) (ctx) -> definition2.accept(
-                                                    ctx))
-                                            .workflowName("wf2")
-                                            .on(c -> startCondition2)
-                                            .notCustomized()
-                                    );
+                                    .contextFactory(c -> TestContext2::new)
+                                    .definition(d -> d.declarative(c -> definition2)
+                                                      .workflowName("wf2")
+                                                      .on(c -> startCondition2)
+                                                      .notCustomized());
 
         configurer.componentRegistry(componentRegistry -> componentRegistry.registerModule(module1)
                                                                            .registerModule(module2));

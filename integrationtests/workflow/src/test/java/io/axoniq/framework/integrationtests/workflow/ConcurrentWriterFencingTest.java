@@ -212,7 +212,7 @@ class ConcurrentWriterFencingTest {
     private WorkflowTestDriver startNode() {
         var workflow = new FencedWorkflow(bodyRuns, stepActionRuns);
         var module = WorkflowModule.defaults("concurrent-writer-fencing", SimpleWorkflowContext.class)
-                                   .workflowContextFactory(c -> new SimpleWorkflowContextFactory())
+                                   .contextFactory(c -> new SimpleWorkflowContextFactory())
                                    .definition(d -> d.autodetected(c -> workflow));
 
         return WorkflowTestDriver.live(module, configurer -> configurer

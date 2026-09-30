@@ -48,7 +48,7 @@ class FullConfigurationTest {
         WorkflowConfigurer configurer = WorkflowConfigurer.create();
 
         var module = WorkflowModule.defaults("defaults-module", TestContext.class)
-                                   .workflowContextFactory(c -> TestContext::new)
+                                   .contextFactory(c -> TestContext::new)
                                    .definition(d -> d
                                            .declarative(c -> (ctx) -> {
                                            })
@@ -75,10 +75,10 @@ class FullConfigurationTest {
         WorkflowExecutionRepository customRepository = new InMemoryWorkflowExecutionRepository();
 
         var module = WorkflowModule.configure("custom-module", TestContext.class)
-                                   .workflowConfigurationRegistry(cfg -> customRegistry)
-                                   .workflowExecutionRepository(cfg -> customRepository)
+                                   .configurationRegistry(cfg -> customRegistry)
+                                   .executionRepository(cfg -> customRepository)
                                    .withoutHistory()
-                                   .workflowContextFactory(c -> TestContext::new)
+                                   .contextFactory(c -> TestContext::new)
                                    .definition(d -> d
                                            .declarative(c -> (ctx) -> {
                                            })

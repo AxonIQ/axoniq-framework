@@ -24,7 +24,6 @@ import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecut
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations;
 import io.axoniq.framework.workflow.runtime.execution.DefaultEventNameCustomizer;
 import io.axoniq.framework.workflow.runtime.execution.EventSourcedWorkflowState;
-import io.axoniq.framework.workflow.runtime.execution.WorkflowEngine;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowEventTags;
 import io.axoniq.framework.workflow.runtime.util.EventMessageUtils;
 import org.axonframework.common.configuration.AxonConfiguration;
@@ -151,22 +150,23 @@ class ClaimRestoreSelfFenceTest extends AbstractEventSourcedEntityRepositoryTest
      * processor's claim callback does.
      */
     private void restoreSegment() {
-        var workflowEngine = configuration.getComponent(WorkflowEngine.class);
         configuration.getComponent(UnitOfWorkFactory.class)
                      .create("segment-claim")
-                     .executeWithResult(claim -> workflowEngine
+                     .executeWithResult(claim -> getWorkflowEngine(MODULE)
                              .restoreWorkflowsFor(Segment.ROOT_SEGMENT, null, claim, claim)
                              .thenApply(ignored -> null))
                      .join();
     }
 
+
     private WorkflowExecution runningExecution(String workflowId) {
-        return configuration.getComponent(WorkflowEngine.class)
-                            .workflowExecutions()
-                            .stream()
-                            .filter(execution -> execution.workflowId().equals(workflowId))
-                            .findFirst()
-                            .orElseThrow(() -> new AssertionError("Workflow '" + workflowId + "' was not restored"));
+        return getWorkflowEngine(MODULE).workflowExecutions()
+                                        .stream()
+                                        .filter(execution -> execution.workflowId().equals(workflowId))
+                                        .findFirst()
+                                        .orElseThrow(() -> new AssertionError(
+                                                "Workflow '" + workflowId + "' was not restored"
+                                        ));
     }
 
     private Throwable appendFailure(WorkflowExecution execution, EventMessage event) {
@@ -185,7 +185,7 @@ class ClaimRestoreSelfFenceTest extends AbstractEventSourcedEntityRepositoryTest
 
     private AxonConfiguration configurationWith(PreviousOwnerWritingStorageEngine storageEngine) {
         var module = WorkflowModule.defaults(MODULE, TestContext.class)
-                                   .workflowContextFactory(c -> TestContext::new)
+                                   .contextFactory(c -> TestContext::new)
                                    .definition(d -> d
                                            .declarative(c -> ctx -> {
                                            })
