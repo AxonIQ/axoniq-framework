@@ -17,10 +17,26 @@
  *  https://www.axoniq.io/pricing
  */
 
-/**
- * Aggregate scope types carried over from Axon Framework 4.
- */
-@NullMarked
-package org.axonframework.modelling.command;
+package org.axonframework.messaging.core;
 
-import org.jspecify.annotations.NullMarked;
+/**
+ * A {@link ScopeDescriptor} describing no active scope.
+ *
+ * @author Steven van Beelen
+ * @since 4.5
+ */
+public class NoScopeDescriptor implements ScopeDescriptor {
+
+    /**
+     * A statically available instance of the {@link NoScopeDescriptor}.
+     */
+    public static final NoScopeDescriptor INSTANCE = new NoScopeDescriptor();
+
+    private NoScopeDescriptor() {
+    }
+
+    @Override
+    public String scopeDescription() {
+        return "NoActiveScope";
+    }
+}

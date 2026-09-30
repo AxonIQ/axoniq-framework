@@ -1,35 +1,34 @@
 /*
- * Copyright (c) 2010-2026. Axon Framework
+ * Copyright (c) 2010-2026. AxonIQ B.V.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * Licensed under the AXONIQ TERMS OF SERVICE,
+ * Version 29 April 2026 (the "License");
  *
- *    http://www.apache.org/licenses/LICENSE-2.0
+ * The software is available for evaluation use without registration.
+ * Continued use beyond the evaluation period requires registration
+ * and a commercial license. See the License for the specific language
+ * governing permissions and limitations under the License.
+ * You may not use this file except in compliance with the License.
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * You may obtain a copy of the License at:
+ *  https://www.axoniq.io/legal/terms-of-service
+ *
+ * For licensing information and to register, visit:
+ *  https://www.axoniq.io/pricing
  */
 
 package org.axonframework.modelling.command;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.axonframework.conversion.Converter;
+import org.axonframework.conversion.jackson2.Jackson2Converter;
 import org.axonframework.modelling.OnlyAcceptConstructorPropertiesAnnotation;
-import org.axonframework.conversion.SerializedObject;
-import org.axonframework.conversion.json.JacksonSerializer;
 import org.junit.jupiter.api.*;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * This test class tests whether the {@link AggregateScopeDescriptor} is serializable as expected, by Java, XStream and
- * Jackson. It does so because an AggregateScopeDescriptor can be instantiated with a
- * {@link java.util.function.Supplier} for the {@code identifier}. We do not want to serialize a Supplier, but rather
- * the actual identifier it supplies, hence functionality is added which ensure the Supplier is called to fill the
- * {@code identifier} field just prior to the complete conversion. This test ensures this works as designed.
+ * Tests conversion capabilities of {@link AggregateScopeDescriptor}.
  */
 class AggregateScopeDescriptorSerializationTest {
 
@@ -45,25 +44,48 @@ class AggregateScopeDescriptorSerializationTest {
 
     @Test
     void jacksonSerializationWorksAsExpected() {
-        JacksonSerializer jacksonSerializer = JacksonSerializer.defaultSerializer();
+        // given
+        Converter converter = new Jackson2Converter();
 
+        // when
+        byte[] serialized = converter.convert(testSubject, byte[].class);
+        AggregateScopeDescriptor result = converter.convert(serialized, AggregateScopeDescriptor.class);
 
-        SerializedObject<String> serializedObject = jacksonSerializer.serialize(testSubject, String.class);
-        AggregateScopeDescriptor result = jacksonSerializer.deserialize(serializedObject);
-
-        assertEquals(expectedType, result.getType());
-        assertEquals(expectedIdentifier, result.getIdentifier());
+        // then
+        assertThat(result.getType()).isEqualTo(expectedType);
+        assertThat(result.getIdentifier()).isEqualTo(expectedIdentifier);
     }
 
     @Test
     void responseTypeShouldBeSerializableWithJacksonUsingConstructorProperties() {
+        // given
         ObjectMapper objectMapper = OnlyAcceptConstructorPropertiesAnnotation.attachTo(new ObjectMapper());
-        JacksonSerializer jacksonSerializer = JacksonSerializer.builder().objectMapper(objectMapper).build();
+        Converter converter = new Jackson2Converter(objectMapper);
 
-        SerializedObject<String> serializedObject = jacksonSerializer.serialize(testSubject, String.class);
-        AggregateScopeDescriptor result = jacksonSerializer.deserialize(serializedObject);
+        // when
+        byte[] serialized = converter.convert(testSubject, byte[].class);
+        AggregateScopeDescriptor result = converter.convert(serialized, AggregateScopeDescriptor.class);
 
-        assertEquals(expectedType, result.getType());
-        assertEquals(expectedIdentifier, result.getIdentifier());
+        // then
+        assertThat(result.getType()).isEqualTo(expectedType);
+        assertThat(result.getIdentifier()).isEqualTo(expectedIdentifier);
+    }
+
+    @Test
+    void lazyIdentifierSupplierIsOnlyResolvedOnFirstAccess() {
+        // given
+        boolean[] supplierInvoked = {false};
+        AggregateScopeDescriptor lazyDescriptor = new AggregateScopeDescriptor(expectedType, () -> {
+            supplierInvoked[0] = true;
+            return expectedIdentifier;
+        });
+        assertThat(supplierInvoked[0]).isFalse();
+
+        // when
+        Object identifier = lazyDescriptor.getIdentifier();
+
+        // then
+        assertThat(identifier).isEqualTo(expectedIdentifier);
+        assertThat(supplierInvoked[0]).isTrue();
     }
 }

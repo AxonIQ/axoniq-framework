@@ -18,3 +18,4 @@
 #
 
 org.axonframework.modelling.saga.SagaLifecycleParameterResolverFactory
+org.axonframework.messaging.core.annotation.ScopeDescriptorParameterResolverFactory
