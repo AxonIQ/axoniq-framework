@@ -68,6 +68,7 @@ jobs:
             printf '%s' "$AXON_SERVER_LICENSE" > "$dir/src/test/resources/axon-server-test.license"
             echo "Axon Server test license written to $dir/src/test/resources/axon-server-test.license"
             echo "License file size: $(wc -c < "$dir/src/test/resources/axon-server-test.license") bytes"
+            ls -la "$dir/src/test/resources/axon-server-test.license"
           done
         env:
           AXON_SERVER_LICENSE: ${{ secrets.AXON_SERVER_LICENSE }}
@@ -83,12 +84,17 @@ jobs:
           # differs between attempts -- findContainerForReuse() only matches currently-running containers with a
           # matching org.testcontainers.hash label, so either explains why reuse never succeeds, but they call
           # for different fixes.
+          # Also captures org.testcontainers.copied_files.hash: Testcontainers computes this from the content AND
+          # unix file mode of every file copied into the container (e.g. the Axon Server test license), and folds
+          # it into the overall reuse hash via a label set before the hash is computed. A prior run confirmed the
+          # env map is byte-identical across "shared" pool containers yet the overall hash still differs -- this
+          # narrows down whether the copied-files hash specifically is the varying component.
           (
             while true; do
               echo "=== $(date -u +%Y-%m-%dT%H:%M:%S.%3NZ) ==="
               for id in $(docker ps -aq --filter ancestor=docker.axoniq.io/axoniq/axonserver 2>/dev/null); do
                 docker inspect --format \
-                  '{{.Id}} status={{.State.Status}} hash={{index .Config.Labels "org.testcontainers.hash"}} pool={{index .Config.Labels "io.axoniq.container-pool"}}' \
+                  '{{.Id}} status={{.State.Status}} hash={{index .Config.Labels "org.testcontainers.hash"}} copiedFilesHash={{index .Config.Labels "org.testcontainers.copied_files.hash"}} pool={{index .Config.Labels "io.axoniq.container-pool"}}' \
                   "$id" 2>/dev/null
               done
               sleep 3
