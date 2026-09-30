@@ -26,6 +26,7 @@ import org.axonframework.common.annotation.RegistrationScope;
 import org.axonframework.common.configuration.ComponentBuilder;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
+import org.axonframework.messaging.eventhandling.processing.streaming.pooled.PooledStreamingEventProcessorConfiguration;
 import org.springframework.beans.BeansException;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.ApplicationContextAware;
@@ -65,17 +66,19 @@ public class WorkflowModuleConfigurer implements ConfigurationEnhancer, Applicat
     @Override
     public void enhance(ComponentRegistry registry) {
         Objects.requireNonNull(applicationContext, "ApplicationContext must not be null");
-        workflowDefinitionBeanRefs
-                .forEach((workflowContextType, workflowBeanNames) -> register(registry,
-                                                                              workflowContextType,
-                                                                              workflowBeanNames));
+        var workflowProperties = applicationContext.getBean(WorkflowProperties.class);
+        workflowDefinitionBeanRefs.forEach((workflowContextType, workflowBeanNames) -> register(
+                registry, workflowContextType, workflowBeanNames, workflowProperties
+        ));
     }
 
     @SuppressWarnings("unchecked")
     private <C extends WorkflowContext> void register(
             ComponentRegistry registry,
             Class<C> workflowContextType,
-            List<String> workflowBeanNames) {
+            List<String> workflowBeanNames,
+            WorkflowProperties workflowProperties
+    ) {
         var factoryName = workflowContextFactoryBeanRefs.get(workflowContextType);
         if (factoryName == null) {
             throw new BadWorkflowConfigurationException(String.format(
@@ -91,10 +94,15 @@ public class WorkflowModuleConfigurer implements ConfigurationEnhancer, Applicat
         if (workflowBeanNames.isEmpty()) {
             return;
         }
-        var withFactory = WorkflowModule
-                .defaults(moduleName, workflowContextType)
-                .workflowContextFactory(c -> workflowContextFactory);
-        var firstBean = workflowBeanNames.get(0);
+        var withFactory = WorkflowModule.configure(moduleName, workflowContextType)
+                                        .processorConfiguration(processorConfiguration -> applyProperties(
+                                                workflowProperties, processorConfiguration
+                                        ))
+                                        .historyProcessorConfiguration(processorConfiguration -> applyHistoryProperties(
+                                                workflowProperties, processorConfiguration
+                                        ))
+                                        .contextFactory(c -> workflowContextFactory);
+        var firstBean = workflowBeanNames.getFirst();
         ComponentBuilder<Object> firstBuilder = c -> applicationContext.getBean(firstBean);
         WorkflowModule<C> module = withFactory.definition(d -> d.autodetected(firstBuilder));
         for (var beanName : workflowBeanNames.subList(1, workflowBeanNames.size())) {
@@ -102,6 +110,57 @@ public class WorkflowModuleConfigurer implements ConfigurationEnhancer, Applicat
             module = module.definition(d -> d.autodetected(builder));
         }
         registry.registerModule(module);
+    }
+
+    static PooledStreamingEventProcessorConfiguration applyProperties(
+            WorkflowProperties workflowProperties,
+            PooledStreamingEventProcessorConfiguration processorConfiguration
+    ) {
+        return applyProcessorProperties(
+                workflowProperties.getInitialSegmentCount(),
+                workflowProperties.getBatchSize(),
+                workflowProperties.getThreadCount(),
+                workflowProperties.getTokenClaimInterval(),
+                workflowProperties.getClaimExtensionThreshold(),
+                workflowProperties.getCoordinatorClaimExtension(),
+                processorConfiguration
+        );
+    }
+
+    static PooledStreamingEventProcessorConfiguration applyHistoryProperties(
+            WorkflowProperties workflowProperties,
+            PooledStreamingEventProcessorConfiguration processorConfiguration
+    ) {
+        WorkflowProperties.HistoryProcessorProperties history = workflowProperties.getHistory();
+        return applyProcessorProperties(
+                history.getInitialSegmentCount(),
+                history.getBatchSize(),
+                history.getThreadCount(),
+                history.getTokenClaimInterval(),
+                history.getClaimExtensionThreshold(),
+                history.getCoordinatorClaimExtension(),
+                processorConfiguration
+        );
+    }
+
+    private static PooledStreamingEventProcessorConfiguration applyProcessorProperties(
+            int initialSegmentCount,
+            int batchSize,
+            int threadCount,
+            long tokenClaimInterval,
+            long claimExtensionThreshold,
+            boolean coordinatorClaimExtension,
+            PooledStreamingEventProcessorConfiguration processorConfiguration
+    ) {
+        processorConfiguration.initialSegmentCount(initialSegmentCount);
+        processorConfiguration.batchSize(batchSize);
+        processorConfiguration.maxClaimedSegments(threadCount);
+        processorConfiguration.tokenClaimInterval(tokenClaimInterval);
+        processorConfiguration.claimExtensionThreshold(claimExtensionThreshold);
+        if (coordinatorClaimExtension) {
+            processorConfiguration.enableCoordinatorClaimExtension();
+        }
+        return processorConfiguration;
     }
 
     @Override

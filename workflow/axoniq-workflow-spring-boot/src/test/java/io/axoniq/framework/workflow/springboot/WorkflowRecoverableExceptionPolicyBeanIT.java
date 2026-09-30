@@ -18,10 +18,11 @@
  */
 package io.axoniq.framework.workflow.springboot;
 
-import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.framework.workflow.annotation.Workflow;
+import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.framework.workflow.runtime.api.execution.context.RecoverableWorkflowExceptionPolicy;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowConfigurationRegistry;
+import org.axonframework.common.configuration.Configuration;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
 import org.axonframework.eventsourcing.eventstore.inmemory.InMemoryEventStorageEngine;
 import org.axonframework.messaging.core.QualifiedName;
@@ -53,11 +54,14 @@ class WorkflowRecoverableExceptionPolicyBeanIT {
     private static final RecoverableWorkflowExceptionPolicy BEAN_POLICY = e -> e instanceof IllegalStateException;
 
     @Autowired
-    private WorkflowConfigurationRegistry<?> registry;
+    private Configuration configuration;
 
     @Test
     void annotatedWorkflowUsesThePolicyBean() {
         // when
+        WorkflowConfigurationRegistry<?> registry =
+                configuration.getComponents(WorkflowConfigurationRegistry.class)
+                             .get("WorkflowConfigurationRegistry[SimpleWorkflowContext]");
         var configurations = registry.getWorkflowsConfigurations(new QualifiedName("io.namespace.PolicyTestEvent"));
 
         // then

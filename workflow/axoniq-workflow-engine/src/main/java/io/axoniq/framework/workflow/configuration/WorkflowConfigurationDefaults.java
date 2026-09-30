@@ -19,11 +19,8 @@
 package io.axoniq.framework.workflow.configuration;
 
 import io.axoniq.framework.workflow.dsl.api.EventNameCustomizer;
-import io.axoniq.framework.workflow.history.api.WorkflowHistoryRepository;
 import io.axoniq.framework.workflow.history.inmemory.InMemoryWorkflowHistoryRepository;
 import io.axoniq.framework.workflow.history.inmemory.MutableWorkflowHistoryRepository;
-import io.axoniq.framework.workflow.history.inmemory.WorkflowHistoryProjector;
-import io.axoniq.framework.workflow.runtime.api.manager.WorkflowManager;
 import io.axoniq.framework.workflow.runtime.execution.DefaultEventNameCustomizer;
 import io.axoniq.framework.workflow.runtime.execution.DefaultExecuteStepActionResolver;
 import io.axoniq.framework.workflow.runtime.execution.DefaultWorkflowScheduler;
@@ -31,15 +28,8 @@ import io.axoniq.framework.workflow.runtime.execution.EventSourcedRunningWorkflo
 import io.axoniq.framework.workflow.runtime.execution.EventSourcedWorkflowState;
 import io.axoniq.framework.workflow.runtime.execution.EventSourcedWorkflowStore;
 import io.axoniq.framework.workflow.runtime.execution.ExecuteStepActionResolver;
-import io.axoniq.framework.workflow.runtime.execution.InMemoryWorkflowExecutionRepository;
-import io.axoniq.framework.workflow.runtime.execution.SimpleWorkflowConfigurationRegistry;
-import io.axoniq.framework.workflow.runtime.execution.SimpleWorkflowManager;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowCancellationService;
-import io.axoniq.framework.workflow.runtime.execution.WorkflowConfigurationRegistry;
-import io.axoniq.framework.workflow.runtime.execution.WorkflowEngine;
-import io.axoniq.framework.workflow.runtime.execution.WorkflowEngineCheckpointingSupport;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowEventTagResolver;
-import io.axoniq.framework.workflow.runtime.execution.WorkflowExecutionRepository;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowScheduler;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowStateParameterResolverFactory;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowStore;
@@ -58,7 +48,6 @@ import org.axonframework.eventsourcing.configuration.EventSourcingConfigurationD
 import org.axonframework.eventsourcing.eventstore.MultiTagResolver;
 import org.axonframework.eventsourcing.eventstore.TagResolver;
 import org.axonframework.messaging.core.configuration.reflection.ParameterResolverFactoryUtils;
-import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.modelling.repository.Repository;
 import org.jspecify.annotations.Nullable;
 
@@ -84,14 +73,6 @@ import static org.axonframework.eventsourcing.configuration.EventSourcedEntityMo
 public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
 
     /**
-     * Name of the event handling component used for workflow history projector.
-     */
-    public static final String COMPONENT_WORKFLOW_HISTORY_PROJECTOR = "WorkflowHistoryProjector";
-    /**
-     * Name of the event handling component used for the workflow engine.
-     */
-    public static final String COMPONENT_WORKFLOW_ENGINE = "WorkflowEngine";
-    /**
      * Name of the dedicated executor service component used for workflow-body work and workflow-event publication.
      * <p>
      * The default uses a virtual thread per task. A bounded future-resolution wait therefore blocks only its workflow
@@ -107,16 +88,6 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
      */
     public static final int WORKFLOW_DEFAULTS_ENHANCER_ORDER = EventSourcingConfigurationDefaults.ENHANCER_ORDER - 10;
     static final int DEFAULT_WORKFLOW_TIMER_THREAD_COUNT = 4;
-    /**
-     * Phase in which the engine's executions are dropped on shutdown: a workflow is a message handler, extensively
-     * wrapped, so it is dropped where message handlers are.
-     * <p>
-     * Shutdown handlers run from the highest phase down, so this runs after the event processor has stopped at
-     * {@link Phase#INBOUND_EVENT_CONNECTORS} and its drain has stored the token. Sharing the processor's own phase
-     * would make the two race: clearing the repository first leaves the drain with nothing to hold the token back, and
-     * it stores a position whose wakes were never applied.
-     */
-    private static final int POST_PROCESSOR_SHUTDOWN_PHASE = Phase.LOCAL_MESSAGE_HANDLER_REGISTRATIONS;
 
     private static FutureResolver loadFutureResolver() {
         var contextClassLoader = Thread.currentThread().getContextClassLoader();
@@ -147,11 +118,6 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
         );
     }
 
-    /**
-     * Registers default components.
-     *
-     * @param componentRegistry registry to use.
-     */
     @Override
     public void enhance(ComponentRegistry componentRegistry) {
         registerPayloadReducerRegistry(componentRegistry);
@@ -164,16 +130,10 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
         registerWorkflowTimeoutScheduler(componentRegistry);
         registerRunningWorkflowsModule(componentRegistry);
         registerWorkflowEngineExecutor(componentRegistry);
-        registerWorkflowExecutionRepository(componentRegistry);
         registerWorkflowCancellationService(componentRegistry);
         registerMutableWorkflowHistoryRepository(componentRegistry);
-        registerWorkflowManager(componentRegistry);
-        registerWorkflowConfigurationRegistry(componentRegistry);
         registerWorkflowStore(componentRegistry);
-        registerWorkflowEngine(componentRegistry);
-        registerWorkflowHistoryProjector(componentRegistry);
         registerWorkflowStateParameterResolverFactory(componentRegistry);
-        registerCheckpointingSupport(componentRegistry);
     }
 
     private void registerPayloadReducerRegistry(ComponentRegistry componentRegistry) {
@@ -187,7 +147,8 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
     void registerEventNameCustomizer(ComponentRegistry componentRegistry) {
         componentRegistry.registerIfNotPresent(
                 EventNameCustomizer.class,
-                cfg -> DefaultEventNameCustomizer.Builder.defaults());
+                cfg -> DefaultEventNameCustomizer.Builder.defaults()
+        );
     }
 
     void registerClock(ComponentRegistry componentRegistry) {
@@ -197,7 +158,8 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
     void registerExecuteStepActionResolver(ComponentRegistry componentRegistry) {
         componentRegistry.registerIfNotPresent(
                 ExecuteStepActionResolver.class,
-                cfg -> new DefaultExecuteStepActionResolver());
+                cfg -> new DefaultExecuteStepActionResolver()
+        );
     }
 
     void registerWorkflowTimeoutScheduler(ComponentRegistry componentRegistry) {
@@ -206,15 +168,19 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
                                    .withBuilder(cfg -> new DefaultWorkflowScheduler(
                                            cfg.getComponent(Clock.class), defaultWorkflowTimerExecutor()
                                    ))
-                                   .onShutdown(Phase.INBOUND_EVENT_CONNECTORS,
-                                               scheduler -> ((DefaultWorkflowScheduler) scheduler).shutdown()));
+                                   .onShutdown(
+                                           Phase.INBOUND_EVENT_CONNECTORS,
+                                           scheduler -> ((DefaultWorkflowScheduler) scheduler).shutdown()
+                                   )
+        );
     }
 
     void decorateTagResolver(ComponentRegistry componentRegistry) {
         componentRegistry.registerDecorator(
-                DecoratorDefinition
-                        .forType(TagResolver.class)
-                        .with((cfg, name, delegate) -> new MultiTagResolver(delegate, new WorkflowEventTagResolver()))
+                DecoratorDefinition.forType(TagResolver.class)
+                                   .with((cfg, name, delegate) -> new MultiTagResolver(
+                                           delegate, new WorkflowEventTagResolver()
+                                   ))
         );
     }
 
@@ -258,24 +224,6 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
                 cfg -> Executors.newVirtualThreadPerTaskExecutor());
     }
 
-    void registerWorkflowEngine(ComponentRegistry componentRegistry) {
-        componentRegistry.registerIfNotPresent(
-                ComponentDefinition.ofType(WorkflowEngine.class)
-                                   .withBuilder(cfg -> new WorkflowEngine(
-                                           cfg.getComponent(WorkflowConfigurationRegistry.class),
-                                           cfg.getComponent(WorkflowExecutionRepository.class),
-                                           cfg.getComponent(WorkflowCancellationService.class),
-                                           cfg.getComponent(WorkflowStore.class),
-                                           cfg.getComponent(UnitOfWorkFactory.class)
-                                   ))
-                                   .onStart(Phase.LOCAL_MESSAGE_HANDLER_REGISTRATIONS, (config, engine) -> {
-                                       engine.setCheckpointingSupport(
-                                               config.getComponent(WorkflowEngineCheckpointingSupport.class));
-                                   })
-                                   .onShutdown(POST_PROCESSOR_SHUTDOWN_PHASE,
-                                               WorkflowEngine::shutdown));
-    }
-
     void registerWorkflowStore(ComponentRegistry componentRegistry) {
         componentRegistry.registerIfNotPresent(
                 WorkflowStore.class, cfg -> {
@@ -302,61 +250,22 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
                 });
     }
 
-    void registerWorkflowHistoryProjector(ComponentRegistry componentRegistry) {
-        componentRegistry.registerIfNotPresent(
-                WorkflowHistoryProjector.class,
-                cfg -> new WorkflowHistoryProjector(cfg.getComponent(
-                        MutableWorkflowHistoryRepository.class)));
-    }
-
-    void registerWorkflowExecutionRepository(ComponentRegistry componentRegistry) {
-        componentRegistry.registerComponent(
-                WorkflowExecutionRepository.class,
-                cfg -> new InMemoryWorkflowExecutionRepository());
-    }
-
     void registerWorkflowCancellationService(ComponentRegistry componentRegistry) {
         componentRegistry.registerIfNotPresent(WorkflowCancellationService.class,
                                                cfg -> new WorkflowCancellationService());
     }
 
-    void registerWorkflowManager(ComponentRegistry componentRegistry) {
-        componentRegistry.registerIfNotPresent(
-                WorkflowManager.class,
-                cfg -> new SimpleWorkflowManager(
-                        cfg.getComponent(WorkflowHistoryRepository.class),
-                        cfg.getComponent(WorkflowExecutionRepository.class),
-                        cfg.getComponent(WorkflowCancellationService.class),
-                        cfg.getComponent(WorkflowStore.class),
-                        cfg.getComponent(UnitOfWorkFactory.class),
-                        cfg.getComponent(ExecutorService.class, WORKFLOW_ENGINE_EXECUTOR)
-                )
-        );
-    }
-
     void registerMutableWorkflowHistoryRepository(ComponentRegistry componentRegistry) {
         componentRegistry.registerIfNotPresent(
                 MutableWorkflowHistoryRepository.class,
-                cfg -> new InMemoryWorkflowHistoryRepository());
-    }
-
-    void registerWorkflowConfigurationRegistry(ComponentRegistry componentRegistry) {
-        componentRegistry.registerComponent(
-                WorkflowConfigurationRegistry.class,
-                cfg -> new SimpleWorkflowConfigurationRegistry());
+                cfg -> new InMemoryWorkflowHistoryRepository()
+        );
     }
 
     void registerWorkflowStateParameterResolverFactory(ComponentRegistry componentRegistry) {
         ParameterResolverFactoryUtils.registerToComponentRegistry(
-                componentRegistry,
-                WorkflowStateParameterResolverFactory::new);
-    }
-
-    void registerCheckpointingSupport(ComponentRegistry componentRegistry) {
-        componentRegistry.registerIfNotPresent(WorkflowEngineCheckpointingSupport.class,
-                                               cfg -> new WorkflowEngineCheckpointingSupport(cfg.getComponent(
-                                                       WorkflowEngine.class)
-                                               ));
+                componentRegistry, WorkflowStateParameterResolverFactory::new
+        );
     }
 
     @Override

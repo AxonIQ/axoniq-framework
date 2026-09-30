@@ -27,7 +27,6 @@ import org.axonframework.eventsourcing.configuration.EventSourcingConfigurer;
 import java.util.Objects;
 import java.util.function.Consumer;
 
-import static io.axoniq.framework.workflow.configuration.WorkflowEventProcessingRegistrationEnhancer.DEFAULT_MODULE_NAME;
 import static java.util.Objects.requireNonNull;
 
 /**
@@ -36,22 +35,49 @@ import static java.util.Objects.requireNonNull;
  * Provides register operations for {@link #registerWorkflowModule(WorkflowModule) the workflow module} infrastructure
  * components.
  * <p>
- * This configurer registers the following defaults:
+ * Through {@link io.axoniq.framework.workflow.configuration.WorkflowConfigurationDefaults}, this configurer registers
+ * the following defaults, each only if the application has not already registered one of its own:
  * <ul>
- *     <li>Registers a {@link io.axoniq.framework.workflow.runtime.execution.DefaultEventNameCustomizer} for class {@link io.axoniq.framework.workflow.dsl.api.EventNameCustomizer}</li>
- *     <li>Registers a {@link io.axoniq.framework.workflow.runtime.execution.InMemoryWorkflowExecutionRepository} </li>
- *     <li>Registers a {@link io.axoniq.framework.workflow.history.inmemory.InMemoryWorkflowHistoryRepository}</li>
- *     <li>Registers a {@link io.axoniq.framework.workflow.runtime.execution.SimpleWorkflowConfigurationRegistry}</li>
- *     <li>Registers a {@link io.axoniq.framework.workflow.runtime.execution.WorkflowEngine}</li>
- *     <li>Registers a {@link io.axoniq.framework.workflow.history.inmemory.WorkflowHistoryProjector}</li>
+ *     <li>{@link io.axoniq.framework.workflow.runtime.execution.payload.PayloadReducerRegistry}</li>
+ *     <li>{@link io.axoniq.framework.workflow.runtime.util.FutureResolver} - discovered through the
+ *     {@code ServiceLoader}, falling back to a
+ *     {@link io.axoniq.framework.workflow.runtime.util.DefaultTimeoutFutureResolver}</li>
+ *     <li>{@link io.axoniq.framework.workflow.dsl.api.EventNameCustomizer} - defaulting to a
+ *     {@link io.axoniq.framework.workflow.runtime.execution.DefaultEventNameCustomizer}</li>
+ *     <li>{@link java.time.Clock} - defaulting to {@link org.axonframework.common.ClockUtils#get()}</li>
+ *     <li>A decorator wrapping the registered {@link org.axonframework.eventsourcing.eventstore.TagResolver} with a
+ *     {@link io.axoniq.framework.workflow.runtime.execution.WorkflowEventTagResolver}</li>
+ *     <li>A declarative event-sourced entity module for
+ *     {@link io.axoniq.framework.workflow.runtime.execution.EventSourcedWorkflowState}</li>
+ *     <li>{@link io.axoniq.framework.workflow.runtime.execution.ExecuteStepActionResolver} - defaulting to a
+ *     {@link io.axoniq.framework.workflow.runtime.execution.DefaultExecuteStepActionResolver}</li>
+ *     <li>{@link io.axoniq.framework.workflow.runtime.execution.WorkflowScheduler} - defaulting to a
+ *     {@link io.axoniq.framework.workflow.runtime.execution.DefaultWorkflowScheduler}</li>
+ *     <li>A declarative event-sourced entity module for
+ *     {@link io.axoniq.framework.workflow.runtime.execution.EventSourcedRunningWorkflows}</li>
+ *     <li>A named {@link java.util.concurrent.ExecutorService} for workflow-body work and workflow-event
+ *     publication (see {@link io.axoniq.framework.workflow.configuration.WorkflowConfigurationDefaults#WORKFLOW_ENGINE_EXECUTOR}),
+ *     defaulting to a virtual-thread-per-task executor</li>
+ *     <li>{@link io.axoniq.framework.workflow.runtime.execution.WorkflowCancellationService}</li>
+ *     <li>{@link io.axoniq.framework.workflow.history.inmemory.MutableWorkflowHistoryRepository} - defaulting to an
+ *     {@link io.axoniq.framework.workflow.history.inmemory.InMemoryWorkflowHistoryRepository}</li>
+ *     <li>{@link io.axoniq.framework.workflow.runtime.execution.WorkflowStore} - defaulting to an
+ *     {@link io.axoniq.framework.workflow.runtime.execution.EventSourcedWorkflowStore}</li>
+ *     <li>{@link io.axoniq.framework.workflow.runtime.execution.WorkflowStateParameterResolverFactory}, so handler
+ *     methods can inject the current workflow state</li>
  * </ul>
- * To replace or decorate any of these defaults, use their respective interfaces as the identifier. For example, to
- * adjust the {@code InMemoryWorkflowHistoryRepository}, do
+ * Every {@link io.axoniq.framework.workflow.runtime.execution.WorkflowConfigurationRegistry},
+ * {@link io.axoniq.framework.workflow.runtime.execution.WorkflowExecutionRepository}, and
+ * {@link io.axoniq.framework.workflow.runtime.api.manager.WorkflowManager} is, by contrast, <em>not</em> among these
+ * app-wide defaults: each {@link WorkflowModule} registers its own instance of these three, named after itself, so
+ * several {@code WorkflowModule}s in one application never share - or collide over - any of them.
+ * <p>
+ * To replace or decorate any of the app-wide defaults above, use their respective type as the identifier. For example,
+ * to replace the default {@code MutableWorkflowHistoryRepository}, do
  * <pre><code>
  *     configurer.componentRegistry(cr ->
- *                  cr.registerComponent(InMemoryWorkflowHistoryRepository.class, c -> new CustomWorkflowHistoryRepository()))
+ *                  cr.registerComponent(MutableWorkflowHistoryRepository.class, c -> new CustomWorkflowHistoryRepository()))
  * </code></pre>
- * to replace it.
  *
  * @author Simon Zambrovski
  * @since 5.4.0
@@ -65,31 +91,12 @@ public class WorkflowConfigurer implements ApplicationConfigurer {
     }
 
     /**
-     * Creates a new  with the defaults required by the Workflow Engine.
+     * Creates a new configurer with the defaults required by the Workflow Engine.
      *
      * @return configurer.
      */
     public static WorkflowConfigurer create() {
-        return enhance(EventSourcingConfigurer.create());
-    }
-
-    /**
-     * Enhances the given {@link EventSourcingConfigurer} with the defaults required by the Workflow Engine.
-     *
-     * @param eventSourcingConfigurer the event sourcing configurer to enhance.
-     * @return enhanced configurer.
-     */
-    static WorkflowConfigurer enhance(EventSourcingConfigurer eventSourcingConfigurer) {
-        return new WorkflowConfigurer(eventSourcingConfigurer)
-                .componentRegistry(cr -> cr
-                        .registerEnhancer(new WorkflowEventProcessingRegistrationEnhancer(
-                                                  DEFAULT_MODULE_NAME,
-                                                  null,
-                                                  null,
-                                                  true
-                                          )
-                        )
-                );
+        return new WorkflowConfigurer(EventSourcingConfigurer.create());
     }
 
     /**
@@ -103,7 +110,6 @@ public class WorkflowConfigurer implements ApplicationConfigurer {
         delegate.componentRegistry(cr -> cr.registerModule(workflowModule));
         return this;
     }
-
 
     /**
      * Delegates the given {@code configurerTask} to the {@link EventSourcingConfigurer} this
