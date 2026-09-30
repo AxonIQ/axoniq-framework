@@ -58,7 +58,8 @@ class WorkflowTestServicesTest {
                 .thenReturn(Map.of("WorkflowEngine[" + DEFAULT_MODULE_NAME + "]", workflowEngine));
         when(configuration.getComponent(DelayedPublisher.class)).thenReturn(delayedPublisher);
         when(configuration.getComponent(TestEventPublisher.class)).thenReturn(eventPublisher);
-        when(configuration.getComponent(WorkflowConfigurationRegistry.class)).thenReturn(workflowRegistry);
+        when(configuration.getComponents(WorkflowConfigurationRegistry.class))
+                .thenReturn(Map.of("WorkflowConfigurationRegistry[" + DEFAULT_MODULE_NAME + "]", workflowRegistry));
         when(configuration.getComponent(MutableWorkflowHistoryRepository.class)).thenReturn(workflowHistoryRepository);
         when(configuration.getOptionalComponent(TestClock.class)).thenReturn(Optional.of(clock));
         when(configuration.getOptionalComponent(ManualExecuteStepActionResolver.class)).thenReturn(
@@ -110,8 +111,11 @@ class WorkflowTestServicesTest {
                 Map.of("WorkflowEngine[" + DEFAULT_MODULE_NAME + "]", mock(WorkflowEngine.class)));
         when(configuration.getComponent(DelayedPublisher.class)).thenReturn(mock(DelayedPublisher.class));
         when(configuration.getComponent(TestEventPublisher.class)).thenReturn(mock(TestEventPublisher.class));
-        when(configuration.getComponent(WorkflowConfigurationRegistry.class)).thenReturn(
-                mock(WorkflowConfigurationRegistry.class));
+        when(configuration.getComponents(WorkflowConfigurationRegistry.class))
+                .thenReturn(Map.of(
+                        "WorkflowConfigurationRegistry[" + DEFAULT_MODULE_NAME + "]",
+                        mock(WorkflowConfigurationRegistry.class)
+                ));
         when(configuration.getComponent(MutableWorkflowHistoryRepository.class)).thenReturn(
                 mock(MutableWorkflowHistoryRepository.class));
         when(configuration.getOptionalComponent(TestClock.class)).thenReturn(

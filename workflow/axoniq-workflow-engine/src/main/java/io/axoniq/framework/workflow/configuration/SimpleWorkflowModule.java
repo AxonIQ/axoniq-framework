@@ -20,12 +20,17 @@ package io.axoniq.framework.workflow.configuration;
 
 import io.axoniq.framework.workflow.dsl.api.EventCondition;
 import io.axoniq.framework.workflow.dsl.api.WorkflowContext;
+import io.axoniq.framework.workflow.history.api.WorkflowHistoryRepository;
 import io.axoniq.framework.workflow.history.inmemory.MutableWorkflowHistoryRepository;
 import io.axoniq.framework.workflow.history.inmemory.WorkflowHistoryProjector;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContextFactory;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowDefinition;
+import io.axoniq.framework.workflow.runtime.api.manager.WorkflowManager;
 import io.axoniq.framework.workflow.runtime.execution.EventHandlingComponentHandlingAny;
+import io.axoniq.framework.workflow.runtime.execution.InMemoryWorkflowExecutionRepository;
+import io.axoniq.framework.workflow.runtime.execution.SimpleWorkflowConfigurationRegistry;
+import io.axoniq.framework.workflow.runtime.execution.SimpleWorkflowManager;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowCancellationService;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowConfigurationRegistry;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowEngine;
@@ -51,11 +56,13 @@ import org.axonframework.messaging.eventhandling.processing.streaming.segmenting
 import org.axonframework.messaging.eventhandling.processing.streaming.token.store.TokenStore;
 import org.axonframework.messaging.eventstreaming.EventCriteria;
 import org.axonframework.messaging.eventstreaming.StreamableEventSource;
+import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
 import java.util.function.Function;
 
 import static java.util.Objects.requireNonNull;
@@ -99,15 +106,17 @@ class SimpleWorkflowModule<C extends WorkflowContext>
     private final Class<C> contextType;
     private final List<ComponentBuilder<List<ConditionedWorkflowConfiguration<C>>>> configBuilders = new ArrayList<>();
 
-    private Function<PooledStreamingEventProcessorConfiguration, PooledStreamingEventProcessorConfiguration> engineConfigCustomizer = psepConfig -> psepConfig;
-    @Nullable
-    private ComponentBuilder<WorkflowExecutionRepository> executionRepository;
-    @Nullable
-    private ComponentBuilder<WorkflowConfigurationRegistry<?>> configurationRegistry;
+    private Function<PooledStreamingEventProcessorConfiguration, PooledStreamingEventProcessorConfiguration> engineConfigCustomizer =
+            psepConfig -> psepConfig;
+    private ComponentBuilder<WorkflowExecutionRepository> executionRepository =
+            config -> new InMemoryWorkflowExecutionRepository();
+    private ComponentBuilder<WorkflowConfigurationRegistry<?>> configurationRegistry =
+            config -> new SimpleWorkflowConfigurationRegistry();
     private boolean useHistory = true;
     private ComponentBuilder<WorkflowHistoryProjector> historyProjector =
             config -> new WorkflowHistoryProjector(config.getComponent(MutableWorkflowHistoryRepository.class));
-    private Function<PooledStreamingEventProcessorConfiguration, PooledStreamingEventProcessorConfiguration> historyConfigCustomizer = psepConfig -> psepConfig;
+    private Function<PooledStreamingEventProcessorConfiguration, PooledStreamingEventProcessorConfiguration> historyConfigCustomizer =
+            psepConfig -> psepConfig;
     @Nullable
     private ComponentBuilder<WorkflowContextFactory<C>> contextFactory;
 
@@ -224,7 +233,10 @@ class SimpleWorkflowModule<C extends WorkflowContext>
 
     private void registerComponents() {
         componentRegistry(cr -> {
+            cr.registerComponent(workflowConfigurationRegistry());
+            cr.registerComponent(workflowExecutionRepository());
             cr.registerComponent(workflowEngine());
+            cr.registerComponent(workflowManager());
             cr.registerComponent(workflowSegmentChangeListener());
             cr.registerIfNotPresent(WorkflowCancellationService.class, c -> new WorkflowCancellationService());
             cr.registerIfNotPresent(
@@ -232,13 +244,6 @@ class SimpleWorkflowModule<C extends WorkflowContext>
                     c -> new WorkflowEngineCheckpointingSupport(c.getComponent(WorkflowEngine.class, engineName()))
             );
             cr.registerModule(workflowEngineEventProcessor());
-
-            if (configurationRegistry != null) {
-                cr.registerComponent(WorkflowConfigurationRegistry.class, configurationRegistry);
-            }
-            if (executionRepository != null) {
-                cr.registerComponent(WorkflowExecutionRepository.class, executionRepository);
-            }
             if (useHistory) {
                 cr.registerComponent(historyProjector());
                 cr.registerModule(historyEventProcessor());
@@ -246,11 +251,30 @@ class SimpleWorkflowModule<C extends WorkflowContext>
         });
     }
 
+    private ComponentDefinition<WorkflowExecutionRepository> workflowExecutionRepository() {
+        return ComponentDefinition.ofTypeAndName(WorkflowExecutionRepository.class, executionRepositoryName())
+                                  .withBuilder(executionRepository);
+    }
+
+    private String executionRepositoryName() {
+        return "WorkflowExecutionRepository[" + name + "]";
+    }
+
+    private ComponentDefinition<WorkflowConfigurationRegistry> workflowConfigurationRegistry() {
+        return ComponentDefinition.ofTypeAndName(WorkflowConfigurationRegistry.class, configurationRegistryName())
+                                  .withBuilder(configurationRegistry);
+    }
+
+    private String configurationRegistryName() {
+        return "WorkflowConfigurationRegistry[" + name + "]";
+    }
+
     private ComponentDefinition<WorkflowEngine> workflowEngine() {
         return ComponentDefinition.ofTypeAndName(WorkflowEngine.class, engineName())
                                   .withBuilder(c -> new WorkflowEngine(
-                                          c.getComponent(WorkflowConfigurationRegistry.class),
-                                          c.getComponent(WorkflowExecutionRepository.class),
+                                          c.getComponent(WorkflowConfigurationRegistry.class,
+                                                         configurationRegistryName()),
+                                          c.getComponent(WorkflowExecutionRepository.class, executionRepositoryName()),
                                           c.getComponent(WorkflowCancellationService.class),
                                           c.getComponent(WorkflowStore.class),
                                           c.getComponent(UnitOfWorkFactory.class)
@@ -265,6 +289,25 @@ class SimpleWorkflowModule<C extends WorkflowContext>
 
     private String engineName() {
         return "WorkflowEngine[" + name + "]";
+    }
+
+    private ComponentDefinition<WorkflowManager> workflowManager() {
+        return ComponentDefinition.ofTypeAndName(WorkflowManager.class, managerName())
+                                  .withBuilder(c -> new SimpleWorkflowManager(
+                                          c.getComponent(WorkflowHistoryRepository.class),
+                                          c.getComponent(WorkflowExecutionRepository.class, executionRepositoryName()),
+                                          c.getComponent(WorkflowCancellationService.class),
+                                          c.getComponent(WorkflowStore.class),
+                                          c.getComponent(UnitOfWorkFactory.class),
+                                          c.getComponent(
+                                                  ExecutorService.class,
+                                                  WorkflowConfigurationDefaults.WORKFLOW_ENGINE_EXECUTOR
+                                          )
+                                  ));
+    }
+
+    private String managerName() {
+        return "WorkflowManager[" + name + "]";
     }
 
     private ComponentDefinition<WorkflowSegmentChangeListener> workflowSegmentChangeListener() {
@@ -401,7 +444,8 @@ class SimpleWorkflowModule<C extends WorkflowContext>
     }
 
     protected void registerWorkflowDefinitions(Configuration config) {
-        WorkflowConfigurationRegistry<?> registry = config.getComponent(WorkflowConfigurationRegistry.class);
+        WorkflowConfigurationRegistry<?> registry =
+                config.getComponent(WorkflowConfigurationRegistry.class, configurationRegistryName());
         List<ConditionedWorkflowConfiguration<C>> workflowConfigs =
                 configBuilders.stream()
                               .flatMap(b -> b.build(config).stream())

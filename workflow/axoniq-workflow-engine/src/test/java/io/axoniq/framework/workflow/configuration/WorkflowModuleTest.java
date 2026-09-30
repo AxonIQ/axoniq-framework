@@ -67,7 +67,9 @@ class WorkflowModuleTest {
         configuration = mock(Configuration.class);
         registry = mock(WorkflowConfigurationRegistry.class);
         messageTypeResolver = mock(MessageTypeResolver.class);
-        when(configuration.getComponent(WorkflowConfigurationRegistry.class)).thenReturn(registry);
+        when(configuration.getComponent(
+                WorkflowConfigurationRegistry.class, "WorkflowConfigurationRegistry[" + module.name() + "]")
+        ).thenReturn(registry);
         when(configuration.getComponent(MessageTypeResolver.class)).thenReturn(messageTypeResolver);
         when(configuration.getComponent(eq(ValueComparisonOperatorRegistry.class), any(Supplier.class)))
                 .thenAnswer(invocation -> {

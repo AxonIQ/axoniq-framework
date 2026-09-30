@@ -7,7 +7,8 @@ code, support tooling, or administration services. Use `WorkflowContext` inside 
 
 == Retrieve the manager instance
 
-The default workflow configuration registers `WorkflowManager` as a component:
+Each `WorkflowModule` registers its own `WorkflowManager`, named after the module it belongs to, so several
+`WorkflowModule` instances in one application never share one:
 
 [source,java]
 ----

@@ -60,11 +60,13 @@ class FullConfigurationTest {
         configurer.componentRegistry(cr -> cr.registerModule(module));
         AxonConfiguration configuration = configurer.build();
 
-        // Should use global components
-        assertThat(configuration.getComponent(WorkflowConfigurationRegistry.class)).isInstanceOf(
-                SimpleWorkflowConfigurationRegistry.class);
-        assertThat(configuration.getComponent(WorkflowExecutionRepository.class)).isInstanceOf(
-                InMemoryWorkflowExecutionRepository.class);
+        // The module registers its own, default-implementation components, named after itself.
+        assertThat(configuration.getComponents(WorkflowConfigurationRegistry.class)
+                                .get("WorkflowConfigurationRegistry[defaults-module]"))
+                .isInstanceOf(SimpleWorkflowConfigurationRegistry.class);
+        assertThat(configuration.getComponents(WorkflowExecutionRepository.class)
+                                .get("WorkflowExecutionRepository[defaults-module]"))
+                .isInstanceOf(InMemoryWorkflowExecutionRepository.class);
     }
 
     @Test
@@ -90,14 +92,13 @@ class FullConfigurationTest {
         configurer.componentRegistry(cr -> cr.registerModule(module));
         AxonConfiguration configuration = configurer.build();
 
-        // The module-local configuration should have these components.
-        // We can verify that they are different from the global ones
-        assertThat(configuration.getComponent(WorkflowConfigurationRegistry.class)).isNotSameAs(customRegistry);
-        assertThat(configuration.getComponent(WorkflowExecutionRepository.class)).isNotSameAs(customRepository);
-
-        // To verify module-local ones, we would need to access the module's component registry.
-        // But we can check if they are registered in the global configuration under the module name if they were exported.
-        // SimpleWorkflowModule doesn't export them with a name, but it registers them in the local registry.
+        // The module registers the exact custom instances it was given, named after itself.
+        assertThat(configuration.getComponents(WorkflowConfigurationRegistry.class)
+                                .get("WorkflowConfigurationRegistry[custom-module]"))
+                .isSameAs(customRegistry);
+        assertThat(configuration.getComponents(WorkflowExecutionRepository.class)
+                                .get("WorkflowExecutionRepository[custom-module]"))
+                .isSameAs(customRepository);
     }
 
     static class TestContext extends AbstractWorkflowContext {

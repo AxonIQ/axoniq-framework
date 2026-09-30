@@ -18,11 +18,11 @@
  */
 package io.axoniq.framework.workflow.runtime.test.fixture;
 
+import io.axoniq.framework.workflow.dsl.api.WorkflowState;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStep;
 import io.axoniq.framework.workflow.history.api.WorkflowHistory;
 import io.axoniq.framework.workflow.history.inmemory.MutableWorkflowHistoryRepository;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
-import io.axoniq.framework.workflow.dsl.api.WorkflowState;
-import io.axoniq.framework.workflow.dsl.api.WorkflowStep;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowConfigurationRegistry;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowEngine;
 import io.axoniq.framework.workflow.runtime.test.utils.DelayedPublisher;
@@ -30,8 +30,8 @@ import io.axoniq.framework.workflow.runtime.test.utils.ManualExecuteStepActionRe
 import io.axoniq.framework.workflow.runtime.test.utils.ManualWorkflowScheduler;
 import io.axoniq.framework.workflow.runtime.test.utils.TestClock;
 import io.axoniq.framework.workflow.runtime.test.utils.TestEventPublisher;
-import org.axonframework.common.configuration.AxonConfiguration;
 import org.awaitility.Awaitility;
+import org.axonframework.common.configuration.AxonConfiguration;
 import org.junit.jupiter.api.*;
 
 import java.time.Duration;
@@ -288,8 +288,11 @@ class WorkflowTestDriverTest {
                 .thenReturn(Map.of("WorkflowEngine[" + DEFAULT_MODULE_NAME + "]", workflowEngine));
         when(configuration.getComponent(DelayedPublisher.class)).thenReturn(mock(DelayedPublisher.class));
         when(configuration.getComponent(TestEventPublisher.class)).thenReturn(mock(TestEventPublisher.class));
-        when(configuration.getComponent(WorkflowConfigurationRegistry.class)).thenReturn(
-                mock(WorkflowConfigurationRegistry.class));
+        when(configuration.getComponents(WorkflowConfigurationRegistry.class))
+                .thenReturn(Map.of(
+                        "WorkflowConfigurationRegistry[" + DEFAULT_MODULE_NAME + "]",
+                        mock(WorkflowConfigurationRegistry.class)
+                ));
         when(configuration.getComponent(MutableWorkflowHistoryRepository.class)).thenReturn(historyRepository);
         when(configuration.getOptionalComponent(TestClock.class)).thenReturn(Optional.empty());
         when(configuration.getOptionalComponent(ManualExecuteStepActionResolver.class)).thenReturn(Optional.of(resolver));
@@ -313,8 +316,11 @@ class WorkflowTestDriverTest {
                 .thenReturn(Map.of("WorkflowEngine[" + DEFAULT_MODULE_NAME + "]", mock(WorkflowEngine.class)));
         when(configuration.getComponent(DelayedPublisher.class)).thenReturn(mock(DelayedPublisher.class));
         when(configuration.getComponent(TestEventPublisher.class)).thenReturn(mock(TestEventPublisher.class));
-        when(configuration.getComponent(WorkflowConfigurationRegistry.class)).thenReturn(
-                mock(WorkflowConfigurationRegistry.class));
+        when(configuration.getComponents(WorkflowConfigurationRegistry.class))
+                .thenReturn(Map.of(
+                        "WorkflowConfigurationRegistry[" + DEFAULT_MODULE_NAME + "]",
+                        mock(WorkflowConfigurationRegistry.class)
+                ));
         when(configuration.getComponent(MutableWorkflowHistoryRepository.class)).thenReturn(historyRepository);
         when(configuration.getOptionalComponent(TestClock.class)).thenReturn(Optional.empty());
         when(configuration.getOptionalComponent(ManualExecuteStepActionResolver.class))

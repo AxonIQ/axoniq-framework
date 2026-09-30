@@ -254,8 +254,11 @@ class ThenTest {
                 .thenReturn(Map.of("WorkflowEngine[" + DEFAULT_MODULE_NAME + "]", workflowEngine));
         when(configuration.getComponent(DelayedPublisher.class)).thenReturn(mock(DelayedPublisher.class));
         when(configuration.getComponent(TestEventPublisher.class)).thenReturn(mock(TestEventPublisher.class));
-        when(configuration.getComponent(WorkflowConfigurationRegistry.class)).thenReturn(
-                mock(WorkflowConfigurationRegistry.class));
+        when(configuration.getComponents(WorkflowConfigurationRegistry.class))
+                .thenReturn(Map.of(
+                        "WorkflowConfigurationRegistry[" + DEFAULT_MODULE_NAME + "]",
+                        mock(WorkflowConfigurationRegistry.class)
+                ));
         when(configuration.getComponent(MutableWorkflowHistoryRepository.class)).thenReturn(historyRepository);
         when(configuration.getOptionalComponent(TestClock.class)).thenReturn(Optional.empty());
         when(configuration.getOptionalComponent(ManualExecuteStepActionResolver.class)).thenReturn(Optional.empty());

@@ -100,7 +100,11 @@ public class WorkflowTestServices {
                                                      "WorkflowEngine with name [" + engineName + "] must not be null.");
         this.delayedPublisher = configuration.getComponent(DelayedPublisher.class);
         this.eventPublisher = configuration.getComponent(TestEventPublisher.class);
-        this.workflowRegistry = configuration.getComponent(WorkflowConfigurationRegistry.class);
+        String registryName = "WorkflowConfigurationRegistry[" + moduleName + "]";
+        this.workflowRegistry = Objects.requireNonNull(
+                configuration.getComponents(WorkflowConfigurationRegistry.class).get(registryName),
+                "WorkflowConfigurationRegistry with name [" + registryName + "] must not be null."
+        );
         this.workflowHistoryRepository = configuration.getComponent(MutableWorkflowHistoryRepository.class);
         this.clock = configuration.getOptionalComponent(TestClock.class).orElse(null);
         this.executeStepActionResolver = configuration.getOptionalComponent(ManualExecuteStepActionResolver.class)

@@ -36,9 +36,10 @@ public class WorkflowManagerExamples {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(WorkflowManagerExamples.class);
 
-    public WorkflowManager retrieveManager(Configuration configuration) {
+    public WorkflowManager retrieveManager(Configuration configuration, String workflowModuleName) {
         // tag::retrieve-manager[]
-        WorkflowManager workflowManager = configuration.getComponent(WorkflowManager.class);
+        WorkflowManager workflowManager =
+                configuration.getComponents(WorkflowManager.class).get("WorkflowManager[" + workflowModuleName + "]");
         // end::retrieve-manager[]
         return workflowManager;
     }

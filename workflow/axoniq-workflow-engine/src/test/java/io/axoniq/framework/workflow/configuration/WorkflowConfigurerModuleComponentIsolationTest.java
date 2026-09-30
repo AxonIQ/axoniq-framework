@@ -26,35 +26,57 @@ import io.axoniq.framework.workflow.history.inmemory.MutableWorkflowHistoryRepos
 import io.axoniq.framework.workflow.history.inmemory.WorkflowHistoryProjector;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowDefinition;
+import io.axoniq.framework.workflow.runtime.api.manager.WorkflowManager;
 import io.axoniq.framework.workflow.runtime.execution.AbstractWorkflowContext;
 import io.axoniq.framework.workflow.runtime.execution.InMemoryWorkflowExecutionRepository;
 import io.axoniq.framework.workflow.runtime.execution.SimpleWorkflowConfigurationRegistry;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowConfigurationRegistry;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowEngine;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowExecutionRepository;
+import org.awaitility.Awaitility;
 import org.axonframework.common.configuration.AxonConfiguration;
+import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
+import org.axonframework.eventsourcing.eventstore.inmemory.InMemoryEventStorageEngine;
+import org.axonframework.messaging.core.Metadata;
+import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
+import org.axonframework.messaging.eventhandling.EventMessage;
+import org.axonframework.messaging.eventhandling.GenericEventMessage;
+import org.axonframework.eventsourcing.eventstore.EventStore;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.*;
 
+import java.time.Duration;
 import java.util.Map;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Test demonstrating that different modules use different components (global, local with history, local without
- * history).
+ * history), and that one module's {@link WorkflowEngine} never reacts to another module's workflow.
  *
  * @author Simon Zambrovski
+ * @author Steven van Beelen
  */
 class WorkflowConfigurerModuleComponentIsolationTest {
 
+    private AxonConfiguration configuration;
+
+    @AfterEach
+    void tearDownConfiguration() {
+        if (configuration != null) {
+            configuration.shutdown();
+        }
+    }
+
     @Test
-    void testModuleComponentIsolation() {
+    void moduleComponentIsolation() {
         WorkflowConfigurer configurer = WorkflowConfigurer.create();
 
-        // 1. Global module (uses global defaults)
+        // 1. Global module (uses per-module defaults, no explicit override)
         var globalModule = WorkflowModule.defaults("global-module", TestContext.class)
                                          .contextFactory(c -> TestContext::new)
                                          .definition(d -> d.declarative(c -> (ctx) -> {
@@ -64,7 +86,7 @@ class WorkflowConfigurerModuleComponentIsolationTest {
                                                                    "start")))
                                                            .notCustomized());
 
-        // 2. Local module with history
+        // 2. Local module with history and explicit component overrides
         WorkflowConfigurationRegistry<?> localRegistryWithHistory = new SimpleWorkflowConfigurationRegistry();
         WorkflowExecutionRepository localRepositoryWithHistory = new InMemoryWorkflowExecutionRepository();
         MutableWorkflowHistoryRepository localHistoryRepository = new InMemoryWorkflowHistoryRepository();
@@ -83,7 +105,7 @@ class WorkflowConfigurerModuleComponentIsolationTest {
                                                                              "start")))
                                                                      .notCustomized());
 
-        // 3. Local module without history
+        // 3. Local module without history, also with explicit component overrides
         WorkflowConfigurationRegistry<?> localRegistryWithoutHistory = new SimpleWorkflowConfigurationRegistry();
         WorkflowExecutionRepository localRepositoryWithoutHistory = new InMemoryWorkflowExecutionRepository();
 
@@ -105,26 +127,43 @@ class WorkflowConfigurerModuleComponentIsolationTest {
                 .registerModule(localWithoutHistoryModule)
         );
 
-        AxonConfiguration configuration = configurer.build();
+        configuration = configurer.build();
 
-        // Verify Global Module
-        // It uses the global components. We can just check the global components in the main configuration.
-        assertThat(configuration.getComponent(WorkflowConfigurationRegistry.class))
-                .isInstanceOf(SimpleWorkflowConfigurationRegistry.class);
-        assertThat(configuration.getComponent(WorkflowExecutionRepository.class))
-                .isInstanceOf(InMemoryWorkflowExecutionRepository.class);
+        // then: each module resolves its own, distinctly named registry/repository/manager instance
+        var registries = configuration.getComponents(WorkflowConfigurationRegistry.class);
+        var repositories = configuration.getComponents(WorkflowExecutionRepository.class);
+        var managers = configuration.getComponents(WorkflowManager.class);
+
+        var globalRegistry = registries.get("WorkflowConfigurationRegistry[global-module]");
+        var withHistoryRegistry = registries.get("WorkflowConfigurationRegistry[local-with-history-module]");
+        var withoutHistoryRegistry = registries.get("WorkflowConfigurationRegistry[local-without-history-module]");
+        var globalRepository = repositories.get("WorkflowExecutionRepository[global-module]");
+        var withHistoryRepository = repositories.get("WorkflowExecutionRepository[local-with-history-module]");
+        var withoutHistoryRepository = repositories.get("WorkflowExecutionRepository[local-without-history-module]");
+
+        assertThat(globalRegistry).isNotNull();
+        assertThat(withHistoryRegistry).isSameAs(localRegistryWithHistory);
+        assertThat(withoutHistoryRegistry).isSameAs(localRegistryWithoutHistory);
+        assertThat(globalRepository).isNotNull();
+        assertThat(withHistoryRepository).isSameAs(localRepositoryWithHistory);
+        assertThat(withoutHistoryRepository).isSameAs(localRepositoryWithoutHistory);
+
+        // no two modules ever share the same registry/repository/manager instance
+        assertThat(Set.of(globalRegistry, withHistoryRegistry, withoutHistoryRegistry)).hasSize(3);
+        assertThat(Set.of(globalRepository, withHistoryRepository, withoutHistoryRepository)).hasSize(3);
+        assertThat(managers.keySet()).containsExactlyInAnyOrder(
+                "WorkflowManager[global-module]",
+                "WorkflowManager[local-with-history-module]",
+                "WorkflowManager[local-without-history-module]"
+        );
+        assertThat(Set.copyOf(managers.values())).hasSize(3);
+
         assertThat(configuration.getComponents(WorkflowEngine.class).get("WorkflowEngine[global-module]"))
                 .isNotNull();
-
-        // Local modules with custom components.
-        // Even if we cannot easily verify isolation via AxonConfiguration API without knowing the internals of BaseModule's registration,
-        // we have demonstrated the configuration of such modules.
-        // As a proxy, we verify that the configurer build succeeded with multiple modules.
-        assertThat(configuration).isNotNull();
     }
 
     @Test
-    void testMultipleModulesHaveDifferentEngines() {
+    void multipleModulesHaveDifferentEngines() {
         WorkflowConfigurer configurer = WorkflowConfigurer.create();
 
         EventCondition startCondition1 = EventConditions.fromQualifiedName(new QualifiedName("startEvent1"));
@@ -151,13 +190,69 @@ class WorkflowConfigurerModuleComponentIsolationTest {
 
         configurer.componentRegistry(componentRegistry -> componentRegistry.registerModule(module1)
                                                                            .registerModule(module2));
-        AxonConfiguration configuration = configurer.build();
+        configuration = configurer.build();
 
-        // Verify that we have two workflow modules registered
-        // Actually AxonConfiguration doesn't expose modules easily.
-        // But if configurer.build() succeeded, it means the SPI issue is gone
-        // and the modules were initialized.
-        assertThat(configuration).isNotNull();
+        assertThat(configuration.getComponents(WorkflowEngine.class).get("WorkflowEngine[wf1]")).isNotNull();
+        assertThat(configuration.getComponents(WorkflowEngine.class).get("WorkflowEngine[wf2]")).isNotNull();
+    }
+
+    @Test
+    void engineDoesNotStartAnotherModulesWorkflow() {
+        var storageEngine = new InMemoryEventStorageEngine();
+        var moduleA = WorkflowModule.defaults("module-a", TestContext.class)
+                                    .contextFactory(c -> TestContext::new)
+                                    .definition(d -> d
+                                            .declarative(c -> ctx -> {
+                                            })
+                                            .workflowName("wf-a")
+                                            .on(c -> EventConditions.fromQualifiedName(new QualifiedName("startA")))
+                                            .notCustomized()
+                                    );
+        var moduleB = WorkflowModule.defaults("module-b", TestContext.class)
+                                    .contextFactory(c -> TestContext::new)
+                                    .definition(d -> d
+                                            .declarative(c -> ctx -> {
+                                            })
+                                            .workflowName("wf-b")
+                                            .on(c -> EventConditions.fromQualifiedName(new QualifiedName("startB")))
+                                            .notCustomized()
+                                    );
+
+        var configurer = WorkflowConfigurer.create();
+        configurer.componentRegistry(cr -> cr
+                .registerComponent(EventStorageEngine.class, cfg -> storageEngine)
+                .registerModule(moduleA)
+                .registerModule(moduleB)
+        );
+        configuration = configurer.build();
+        configuration.start();
+
+        // when: only module A's start event is published
+        var startEventForA = new GenericEventMessage(
+                new MessageType(new QualifiedName("startA"), "0.0.1"),
+                Map.<String, Object>of("orderId", "order-1"),
+                Metadata.emptyInstance()
+        );
+        publish(startEventForA);
+
+        // then: only module A's own engine started an execution; module B's engine never saw it
+        Awaitility.await()
+                  .atMost(Duration.ofSeconds(5))
+                  .untilAsserted(() -> assertThat(engineOf("module-a").workflowExecutions()).hasSize(1));
+        assertThat(engineOf("module-b").workflowExecutions()).isEmpty();
+    }
+
+    private WorkflowEngine engineOf(String moduleName) {
+        return configuration.getComponents(WorkflowEngine.class).get("WorkflowEngine[" + moduleName + "]");
+    }
+
+    private void publish(EventMessage eventMessage) {
+        var eventStore = configuration.getComponent(EventStore.class);
+        var unitOfWorkFactory = configuration.getComponent(UnitOfWorkFactory.class);
+        unitOfWorkFactory.create("publish-isolation-test")
+                         .executeWithResult(context -> eventStore.publish(context, eventMessage)
+                                                                 .thenApply(ignored -> eventMessage))
+                         .join();
     }
 
     static class TestContext1 extends AbstractWorkflowContext {
