@@ -75,7 +75,6 @@ import static org.axonframework.common.annotation.AnnotationUtils.findAnnotation
  * @author Simon Zambrovski
  * @author Steven van Beelen
  * @since 5.4.0
- * TODO #494 - This class deserves further clean-up.
  */
 @Internal
 public final class AutoDetectionUtils {
@@ -141,7 +140,6 @@ public final class AutoDetectionUtils {
         Class<?> type = instance.getClass();
         Collection<Method> mc = (Collection<Method>) ReflectionUtils.methodsOf(type);
 
-        // TODO: consider registration based on workflow name?
         detectAndAddListener(mc,
                              WorkflowStatusChangedHandler.class,
                              workflowName,

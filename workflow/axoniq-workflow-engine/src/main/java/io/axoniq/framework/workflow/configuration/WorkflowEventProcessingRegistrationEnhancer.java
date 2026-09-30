@@ -259,8 +259,6 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
                                     var projector = projectorComponentName != null
                                             ? cfg.getComponent(WorkflowHistoryProjector.class, projectorComponentName)
                                             : cfg.getComponent(WorkflowHistoryProjector.class);
-                                    // FIXME: eventually history projector doesn't need to be replayed.
-                                    // configure this separately InMemoryHistoryRepo = InMemoryTokeStore and replay
                                     return new SequenceOverridingEventHandlingComponent(
                                             workflowEngine(cfg).segmentedRouting(),
                                             new EventHandlingComponentHandlingAny(projector)

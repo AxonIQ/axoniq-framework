@@ -71,7 +71,6 @@ import static io.axoniq.framework.workflow.configuration.WorkflowMethodParameter
  * @author Simon Zambrovski
  * @author Steven van Beelen
  * @since 5.4.0
- * TODO #494 - This class deserves further clean-up.
  */
 @Internal
 class AutoDetectingWorkflowBuilder<C extends WorkflowContext>
