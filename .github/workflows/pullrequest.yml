@@ -75,6 +75,25 @@ jobs:
       - name: Enable Testcontainers reuse
         run: printf 'testcontainers.reuse.enable=true\n' > ~/.testcontainers.properties
 
+      - name: Start Axon Server container lifecycle poller
+        run: |
+          # Snapshots every AxonServer container's status and Testcontainers reuse-hash label every 3s for the
+          # whole build, so we can see directly whether a container that should be reusable (matching hash) is
+          # simply not RUNNING anymore by the time a later attempt looks for it, or whether the hash itself
+          # differs between attempts -- findContainerForReuse() only matches currently-running containers with a
+          # matching org.testcontainers.hash label, so either explains why reuse never succeeds, but they call
+          # for different fixes.
+          (
+            while true; do
+              echo "=== $(date -u +%Y-%m-%dT%H:%M:%S.%3NZ) ==="
+              docker ps -a --filter ancestor=docker.axoniq.io/axoniq/axonserver \
+                --format 'table {{.ID}}\t{{.Status}}\t{{.Label "org.testcontainers.hash"}}\t{{.Label "io.axoniq.container-pool"}}' \
+                2>/dev/null
+              sleep 3
+            done
+          ) > container-lifecycle.log 2>&1 &
+          echo "poller_pid=$!" >> "$GITHUB_ENV"
+
       - name: Regular Build
         run: |
           set -o pipefail
@@ -83,6 +102,56 @@ jobs:
           -Dparallel=classes -DthreadCount=1 -DforkCount=2 -DforkedProcessTimeoutInSeconds=600 2>&1 | tee build.log
         env:
           AXONIQ_LICENSE: ${{ secrets.AXON_SERVER_LICENSE }}
+
+      - name: Stop container lifecycle poller
+        if: always()
+        run: kill "$poller_pid" 2>/dev/null || true
+
+      - name: Upload container lifecycle log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: container-lifecycle-jdk${{ matrix.java-version }}
+          path: container-lifecycle.log
+          retention-days: 3
+          if-no-files-found: ignore
+
+      - name: Capture Axon Server container logs
+        if: always()
+        run: |
+          # Not every AxonServerContainer used in the build carries the "shared" pool label -- e.g. ad-hoc,
+          # not-yet-shared containers reuse separately from SharedAxonServerContainer.INSTANCE. Filter by image
+          # instead to catch all of them, running or already exited.
+          for id in $(docker ps -aq --filter "ancestor=docker.axoniq.io/axoniq/axonserver"); do
+            docker logs "$id" > "axonserver-container-${id}.log" 2>&1 || true
+          done
+
+      - name: Upload Axon Server container logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: axonserver-logs-jdk${{ matrix.java-version }}
+          path: axonserver-container-*.log
+          retention-days: 3
+          if-no-files-found: ignore
+
+      - name: Disk usage breakdown after build
+        if: always()
+        run: |
+          df -h / > disk-usage.log
+          echo >> disk-usage.log
+          echo "--- docker system df -v ---" >> disk-usage.log
+          docker system df -v >> disk-usage.log 2>&1 || true
+          cat disk-usage.log
+
+      - name: Upload disk usage breakdown
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: disk-usage-jdk${{ matrix.java-version }}
+          path: disk-usage.log
+          retention-days: 3
+          if-no-files-found: ignore
 
       - name: Generate build status report
         if: always()
