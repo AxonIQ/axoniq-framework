@@ -25,8 +25,6 @@ package io.axoniq.framework.workflow.runtime.execution;
  * This internal bridge keeps cancellation out of the {@code WorkflowExecution} contract while an execution repository
  * still stores executions directly. A future user-facing {@code WorkflowManager} will own the external cancellation
  * API; its final design will determine whether it replaces this bridge or exposes the capability through its own API.
- * <p>
- * FIXME: https://github.com/AxonIQ/extension-workflow/issues/195 should either integrate this or provide own abstraction
  *
  * @author Simon Zambrovski
  * @since 5.4.0
