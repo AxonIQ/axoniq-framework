@@ -87,11 +87,11 @@ public class AxonServerContainerUtils {
             return;
         }
         try {
-            await().atMost(Duration.ofSeconds(30))
+            await().atMost(Duration.ofSeconds(90))
                    .pollInterval(1, TimeUnit.SECONDS)
                    .until(() -> tryInitCluster(hostname, port, dcbContext));
         } catch (ConditionTimeoutException e) {
-            throw new IOException("Failed to initialize the Axon Server cluster within 30 seconds of retrying", e);
+            throw new IOException("Failed to initialize the Axon Server cluster within 90 seconds of retrying", e);
         }
         waitForContextsCondition(
                 hostname, port,
@@ -103,9 +103,10 @@ public class AxonServerContainerUtils {
      * Attempts a single cluster-init POST, returning whether it succeeded.
      * <p>
      * A container that has just passed its readiness checks (log message and health endpoint) can still return a
-     * transient 500 here for a few seconds, since those checks don't guarantee the cluster-init endpoint itself is
-     * ready yet. Failures are swallowed rather than thrown so {@link #initCluster} can retry within its own budget
-     * instead of failing the whole container start on the first attempt.
+     * transient 500 here, sometimes for a minute or more under CPU/disk pressure on a busy CI runner, since those
+     * checks don't guarantee the cluster-init endpoint itself is ready yet. Failures are swallowed rather than
+     * thrown so {@link #initCluster} can retry within its own budget instead of failing the whole container start
+     * on the first attempt.
      */
     private static boolean tryInitCluster(String hostname, int port, boolean dcbContext) {
         HttpURLConnection connection = null;
