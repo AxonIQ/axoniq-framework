@@ -41,6 +41,7 @@ import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.*;
 
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.Map;
 
 import static io.axoniq.framework.workflow.runtime.execution.payload.CombineGlobalAndLocalPayloadReducer.NAME;
@@ -87,6 +88,22 @@ class EventSourcedWorkflowStateTest {
         WorkflowStep step = state.getStep(stepName);
         assertThat(step.status()).isEqualTo(StepStatus.STARTED);
         assertThat(step.result()).isEqualTo(payload);
+    }
+
+    @Test
+    void payloadKeepsNullValues() {
+        // given
+        Map<String, @Nullable Object> payload = new HashMap<>();
+        payload.put("orderId", "o-1");
+        payload.put("note", null);
+        state = new EventSourcedWorkflowState(WORKFLOW_ID, payload, DEFINITION_ID);
+
+        // when
+        Map<String, @Nullable Object> result = state.payload();
+
+        // then
+        assertThat(result).containsEntry("orderId", "o-1")
+                          .containsEntry("note", null);
     }
 
     @Test
