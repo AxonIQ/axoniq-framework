@@ -89,13 +89,12 @@ final class EventWaitConditions implements DescribableComponent {
     public void evaluateAndApply(EventMessage eventMessage,
                                  ProcessingContext processingContext,
                                  Consumer<Awaited> action) {
-        // TODO synchronized ?
         for (var entry : waitConditions.entrySet()) {
             var condition = entry.getValue().eventCondition;
             var stepName = entry.getKey();
             if (eventMessage.type().qualifiedName().equals(condition.qualifiedName())
-                    && condition.predicate().test(eventMessage, processingContext)) {
-                remove(stepName);
+                    && condition.predicate().test(eventMessage, processingContext)
+                    && waitConditions.remove(stepName, entry.getValue())) {
                 action.accept(
                         new Awaited(eventMessage,
                                     processingContext,

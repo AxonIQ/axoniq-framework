@@ -351,7 +351,7 @@ public class EventSourcedWorkflowState implements WorkflowState {
                     addStep(WorkflowStep.retrying(stepName,
                                                   retryInfo,
                                                   eventMessage.timestamp(),
-                                                  processingContext)); // TODO copy resources of the context
+                                                  processingContext));
                     break;
                 case RETRY_STARTED:
                     addStep(WorkflowStep.retryStarted(stepName,

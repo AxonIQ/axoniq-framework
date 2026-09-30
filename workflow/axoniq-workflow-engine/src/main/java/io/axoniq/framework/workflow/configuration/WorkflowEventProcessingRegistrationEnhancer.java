@@ -174,9 +174,6 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
      * The processor claims its segments in the unnamed {@link TokenStore} component of the application, as a durable
      * store makes those claims visible across nodes, the precondition for multi-node sharding. Without one, an
      * {@link InMemoryTokenStore} is used and claims stay process-local (single-node operation).
-     * <p>
-     * Note that a batch size above 1 is not supported yet, see
-     * <a href="https://github.com/AxonIQ/AxonFramework/issues/4323">AxonFramework#4323</a>.
      */
     private BiFunction<Configuration, PooledStreamingEventProcessorConfiguration,
             PooledStreamingEventProcessorConfiguration> processorCustomization() {
@@ -259,8 +256,6 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
                                     var projector = projectorComponentName != null
                                             ? cfg.getComponent(WorkflowHistoryProjector.class, projectorComponentName)
                                             : cfg.getComponent(WorkflowHistoryProjector.class);
-                                    // FIXME: eventually history projector doesn't need to be replayed.
-                                    // configure this separately InMemoryHistoryRepo = InMemoryTokeStore and replay
                                     return new SequenceOverridingEventHandlingComponent(
                                             workflowEngine(cfg).segmentedRouting(),
                                             new EventHandlingComponentHandlingAny(projector)
