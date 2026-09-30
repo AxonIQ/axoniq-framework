@@ -62,8 +62,6 @@
         <mysql-connector-java.version>26.7.0</mysql-connector-java.version>
         <postgresql.version>42.7.13</postgresql.version>
         <ojdbc.version>23.26.1.0.0</ojdbc.version>
-        <!-- gRPC -->
-        <protobuf-java.version>4.36.2</protobuf-java.version>
         <!-- Jakarta -->
         <jakarta.annotation.version>3.0.0</jakarta.annotation.version>
         <jakarta.el.version>6.0.1</jakarta.el.version>
