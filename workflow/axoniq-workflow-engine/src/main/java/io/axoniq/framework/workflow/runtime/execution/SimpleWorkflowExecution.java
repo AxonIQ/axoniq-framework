@@ -82,7 +82,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
     private final WorkflowExecutionOperationsDelegation contextDelegate;
     // Why one of this execution's own appends stopped it. Set by the store callback before the body sees the failure.
     private final AtomicReference<StopReason> stopReason = new AtomicReference<>();
-    private final BlockingQueue<Consumer<WorkflowExecution>> taskQueue = new ArrayBlockingQueue<>(1000); // FIXME size
+    private final BlockingQueue<Consumer<WorkflowExecution>> taskQueue = new ArrayBlockingQueue<>(1000);
     private final EventWaitConditions eventWaitConditions;
     private final RunningSteps runningSteps;
     private final ReachedSteps reachedSteps;
@@ -107,7 +107,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
                                 return;
                             }
                             // whoops, we're overloading this workflow with events. STOP!!!
-                            throw new RuntimeException("Too many tasks to perform workflow instance"); // FIXME <- task queue is full, backpressure?
+                            throw new RuntimeException("Too many tasks to perform workflow instance");
                         }
                     },
                     CheckpointWorkStateListener.NO_OP

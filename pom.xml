@@ -74,6 +74,7 @@
 
         <module>connector/axoniq-postgresql</module>
         <module>connector/axon-server-connector</module>
+        <module>connector/axoniq-springcloud</module>
 
         <module>dependency-injection/spring</module>
 
@@ -131,6 +132,10 @@
                 <plugin>
                     <artifactId>maven-install-plugin</artifactId>
                     <version>${maven-install.version}</version>
+                </plugin>
+                <plugin>
+                    <artifactId>maven-jar-plugin</artifactId>
+                    <version>${maven-jar.version}</version>
                 </plugin>
             </plugins>
         </pluginManagement>

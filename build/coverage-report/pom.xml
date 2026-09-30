@@ -49,6 +49,13 @@
             <scope>runtime</scope>
         </dependency>
 
+        <dependency>
+            <groupId>io.axoniq.framework</groupId>
+            <artifactId>axoniq-springcloud</artifactId>
+            <version>${project.version}</version>
+            <scope>runtime</scope>
+        </dependency>
+
         <!-- Axoniq Framework:  Legacy -->
         <dependency>
             <groupId>io.axoniq.framework</groupId>
@@ -132,8 +139,6 @@
             <artifactId>axoniq-workflow-spring-boot</artifactId>
             <version>${project.version}</version>
         </dependency>
-
-
     </dependencies>
 
     <profiles>

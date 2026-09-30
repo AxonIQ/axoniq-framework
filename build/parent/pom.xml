@@ -51,8 +51,8 @@
         <!-- Explicit heap/metaspace caps for forked test JVMs, so total memory use across concurrent forks is
              predictable instead of relying on each JVM's default ergonomics (a fraction of visible host memory),
              which risks over-committing the runner's limited memory when several forks/containers run at once. -->
-        <surefire.jvm.argLine>-Xmx512m -XX:MaxMetaspaceSize=128m</surefire.jvm.argLine>
-        <failsafe.jvm.argLine>-Xmx512m -XX:MaxMetaspaceSize=128m</failsafe.jvm.argLine>
+        <surefire.jvm.argLine>-Xmx512m -XX:MaxMetaspaceSize=1024m</surefire.jvm.argLine>
+        <failsafe.jvm.argLine>-Xmx512m -XX:MaxMetaspaceSize=1024m</failsafe.jvm.argLine>
 
         <!-- Database -->
         <c3p0.version>0.9.1.2</c3p0.version>
@@ -102,6 +102,7 @@
         <spring-boot.version>3.5.16</spring-boot.version>
         <spring-data.version>2025.0.7</spring-data.version>
         <spring-security.version>6.5.11</spring-security.version>
+        <spring-cloud-commons.version>4.3.3</spring-cloud-commons.version>
         <!-- Testing -->
         <assertj.version>3.27.7</assertj.version>
         <archunit.version>1.5.0</archunit.version>
@@ -562,6 +563,13 @@
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
+            <!-- Only spring-cloud-commons is managed; importing the full spring-cloud-dependencies BOM
+                 would pull discovery implementations into the framework's dependency management. -->
+            <dependency>
+                <groupId>org.springframework.cloud</groupId>
+                <artifactId>spring-cloud-commons</artifactId>
+                <version>${spring-cloud-commons.version}</version>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 
@@ -624,6 +632,11 @@
                     <groupId>org.jacoco</groupId>
                     <artifactId>jacoco-maven-plugin</artifactId>
                     <version>${jacoco-maven.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-failsafe-plugin</artifactId>
+                    <version>${maven-failsafe.version}</version>
                 </plugin>
                 <plugin>
                     <artifactId>maven-jar-plugin</artifactId>
