@@ -18,11 +18,12 @@
  */
 package io.axoniq.framework.workflow.springboot;
 
+import io.axoniq.framework.workflow.annotation.Workflow;
 import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContextFactory;
-import io.axoniq.framework.workflow.annotation.Workflow;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowConfigurationRegistry;
+import org.axonframework.common.configuration.Configuration;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
 import org.axonframework.eventsourcing.eventstore.inmemory.InMemoryEventStorageEngine;
 import org.axonframework.messaging.core.MessageType;
@@ -55,13 +56,16 @@ import static org.mockito.Mockito.*;
 public class WorkflowAutodetectionIT {
 
     @Autowired
-    private WorkflowConfigurationRegistry<?> registry;
+    private Configuration configuration;
 
     @Autowired
     private TestWorkflow testWorkflow;
 
     @Test
     void autodetectsWorkflow() {
+        WorkflowConfigurationRegistry<?> registry =
+                configuration.getComponents(WorkflowConfigurationRegistry.class)
+                             .get("WorkflowConfigurationRegistry[SimpleWorkflowContext]");
 
         var configurations = registry.getWorkflowsConfigurations(new QualifiedName("io.namespace.TestEvent"));
         assertThat(configurations).isNotNull();
