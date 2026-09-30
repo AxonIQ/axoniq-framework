@@ -21,8 +21,10 @@ package io.axoniq.framework.integrationtests.springcloud;
 
 import org.axonframework.messaging.commandhandling.annotation.Command;
 import org.axonframework.messaging.commandhandling.annotation.CommandHandler;
+import org.axonframework.messaging.queryhandling.annotation.QueryHandler;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.cloud.client.DefaultServiceInstance;
 import org.springframework.cloud.client.ServiceInstance;
 import org.springframework.cloud.client.discovery.DiscoveryClient;
@@ -63,6 +65,15 @@ final class SpringCloudNodes {
      */
     @Command(routingKey = "courseId")
     record CreateCourse(String courseId, String name) {
+
+    }
+
+    /**
+     * A query used by the test to observe query routing independently of command routing.
+     *
+     * @param courseId the course to find
+     */
+    record FindCourse(String courseId) {
 
     }
 
@@ -126,6 +137,25 @@ final class SpringCloudNodes {
 
         @CommandHandler
         String handle(CreateCourse command) {
+            return nodeName;
+        }
+    }
+
+    /**
+     * Handles {@link FindCourse} on the node where this test enables the handler, answering with that node's name.
+     */
+    @Component
+    @ConditionalOnProperty(name = "test.query-handler.enabled", havingValue = "true")
+    static class FindCourseHandler {
+
+        private final String nodeName;
+
+        FindCourseHandler(@Value("${test.node.name}") String nodeName) {
+            this.nodeName = nodeName;
+        }
+
+        @QueryHandler
+        String handle(FindCourse query) {
             return nodeName;
         }
     }

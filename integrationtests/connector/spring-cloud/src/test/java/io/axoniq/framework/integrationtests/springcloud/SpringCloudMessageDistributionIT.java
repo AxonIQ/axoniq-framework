@@ -20,11 +20,13 @@
 package io.axoniq.framework.integrationtests.springcloud;
 
 import io.axoniq.framework.integrationtests.springcloud.SpringCloudNodes.CreateCourse;
+import io.axoniq.framework.integrationtests.springcloud.SpringCloudNodes.FindCourse;
 import io.axoniq.framework.springcloud.SpringCloudMemberRegistry;
 import io.axoniq.framework.springcloud.discovery.MemberCapabilitiesPayload;
 import io.axoniq.framework.springcloud.discovery.RestCapabilityDiscoveryMode;
 import io.axoniq.framework.springcloud.routing.Member;
 import org.axonframework.messaging.commandhandling.gateway.CommandGateway;
+import org.axonframework.messaging.queryhandling.gateway.QueryGateway;
 import org.junit.jupiter.api.*;
 import org.awaitility.Awaitility;
 import org.springframework.boot.WebApplicationType;
@@ -42,21 +44,22 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.IntStream;
 import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * A two-node test of the Spring Cloud connector, distributing commands over HTTP between two Spring Boot applications
+ * A two-node test of the Spring Cloud connector, distributing messages over HTTP between two Spring Boot applications
  * in one JVM.
  * <p>
- * Both nodes handle the same command, so where a command is handled is decided by the routing ring alone. Each node's
+ * Both nodes handle the same message, so where a message is handled is decided by the routing ring alone. Each node's
  * handler answers with its own name, which is how the test observes routing without reaching into either node.
  *
  * @author Allard Buijze
  */
-class SpringCloudCommandDistributionIT {
+class SpringCloudMessageDistributionIT {
 
     private static final String NODE_A = "node-a";
     private static final String NODE_B = "node-b";
@@ -96,6 +99,7 @@ class SpringCloudCommandDistributionIT {
                 .properties("server.port=" + port,
                             "test.node.name=" + nodeName,
                             "test.cluster.ports=" + portA + "," + portB,
+                            "test.query-handler.enabled=" + NODE_B.equals(nodeName),
                             "axon.multitenancy.enabled=false",
                             "spring.main.banner-mode=off",
                             "logging.level.root=WARN")
@@ -149,6 +153,17 @@ class SpringCloudCommandDistributionIT {
         return handledBy;
     }
 
+    private static List<String> findCoursesFrom(ConfigurableApplicationContext node, int count) {
+        QueryGateway gateway = node.getBean(QueryGateway.class);
+        List<String> handledBy = new ArrayList<>();
+        for (int i = 0; i < count; i++) {
+            handledBy.add(gateway.query(new FindCourse("course-" + i), String.class, null)
+                                  .orTimeout(20, TimeUnit.SECONDS)
+                                  .join());
+        }
+        return handledBy;
+    }
+
     @Nested
     class DistributingCommands {
 
@@ -187,6 +202,19 @@ class SpringCloudCommandDistributionIT {
 
             // then — if the two nodes disagreed on where a key belongs, one course would be handled in two places
             assertThat(viaA).isEqualTo(viaB);
+        }
+    }
+
+    @Nested
+    class DistributingQueries {
+
+        @Test
+        void routesAQueryToTheMemberAdvertisingItsHandler() {
+            // when
+            List<String> handledBy = findCoursesFrom(nodeA, COMMAND_COUNT);
+
+            // then — node A has no local handler, so the distributed query bus must use node B's advertisement
+            assertThat(Set.copyOf(handledBy)).containsExactly(NODE_B);
         }
     }
 
@@ -242,14 +270,14 @@ class SpringCloudCommandDistributionIT {
         }
 
         @Test
-        void reportsAnEmptyQuerySet() {
+        void reportsTheQueriesANodeHandles() {
             // when
             MemberCapabilitiesPayload payload = capabilitiesOf(portB).getBody();
 
-            // then — the field is served from the first release so the endpoint shape does not change when
-            // query distribution arrives
+            // then
             assertThat(payload).isNotNull();
-            assertThat(payload.queries()).isEmpty();
+            assertThat(payload.queries())
+                    .contains(FindCourse.class.getPackageName() + ".FindCourse");
         }
 
         @Test

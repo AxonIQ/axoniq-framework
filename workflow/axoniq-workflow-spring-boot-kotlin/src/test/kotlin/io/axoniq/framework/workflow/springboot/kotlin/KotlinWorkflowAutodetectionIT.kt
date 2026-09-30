@@ -20,6 +20,7 @@ package io.axoniq.framework.workflow.springboot.kotlin
 
 import io.axoniq.framework.workflow.dsl.kotlin.Kontext
 import io.axoniq.framework.workflow.dsl.kotlin.WorkflowKontext
+import io.axoniq.framework.workflow.dsl.kotlin.WorkflowKontextFactory
 import io.axoniq.framework.workflow.annotation.Workflow
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowDefinition
 import io.axoniq.framework.workflow.runtime.execution.WorkflowConfigurationRegistry
@@ -65,6 +66,7 @@ class KotlinWorkflowAutodetectionIT {
         assertThat(configurations).hasSize(1)
         val conf = configurations.first()
         assertThat(conf.configuration().workflowName()).isEqualTo("KotlinWorkflow")
+        assertThat(conf.configuration().workflowContextFactory()).isInstanceOf(WorkflowKontextFactory::class.java)
 
         val kontext = WorkflowKontext(
             workflowId = "workflow-id",
