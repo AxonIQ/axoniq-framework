@@ -16,26 +16,24 @@
  * For licensing information and to register, visit:
  *  https://www.axoniq.io/pricing
  */
-package io.axoniq.framework.workflow.springboot.kotlin
+package io.axoniq.framework.workflow.dsl.kotlin
 
-import io.axoniq.framework.workflow.dsl.kotlin.WorkflowKontextFactory
-import org.springframework.boot.autoconfigure.AutoConfiguration
-import org.springframework.context.annotation.Bean
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContextFactory
+import org.axonframework.common.configuration.ComponentRegistry
+import org.axonframework.common.configuration.ConfigurationEnhancer
 
 /**
- * Autoconfiguration for the Kotlin workflow context factory.
+ * ServiceLoader-discovered [ConfigurationEnhancer] that registers the Kotlin DSL workflow context factory.
  *
  * @author Simon Zambrovski
  * @since 5.4.0
  */
-@AutoConfiguration
-class WorkflowKotlinContextFactoryAutoConfiguration {
+class WorkflowKotlinDslConfigurationEnhancer : ConfigurationEnhancer {
 
-    /**
-     * Provides a context factory for the Kotlin workflow DSL.
-     *
-     * @return context factory.
-     */
-    @Bean
-    fun workflowKontextFactory(): WorkflowKontextFactory = WorkflowKontextFactory()
+    override fun enhance(registry: ComponentRegistry) {
+        registry.registerIfNotPresent(
+            WorkflowContextFactory::class.java,
+            WorkflowKontext::class.java.name,
+        ) { WorkflowKontextFactory() }
+    }
 }
