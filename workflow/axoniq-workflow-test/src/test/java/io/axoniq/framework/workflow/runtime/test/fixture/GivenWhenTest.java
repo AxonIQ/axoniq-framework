@@ -24,6 +24,7 @@ import io.axoniq.framework.workflow.dsl.api.WorkflowState;
 import io.axoniq.framework.workflow.dsl.api.WorkflowStep;
 import io.axoniq.framework.workflow.history.api.WorkflowHistory;
 import io.axoniq.framework.workflow.history.inmemory.MutableWorkflowHistoryRepository;
+import io.axoniq.framework.workflow.runtime.execution.WorkflowCancellationService;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowConfigurationRegistry;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowEngine;
 import io.axoniq.framework.workflow.runtime.test.utils.DelayedPublisher;
@@ -180,6 +181,11 @@ class GivenWhenTest {
                         "WorkflowConfigurationRegistry[" + DEFAULT_MODULE_NAME + "]",
                         mock(WorkflowConfigurationRegistry.class)
                 ));
+        when(configuration.getComponents(WorkflowCancellationService.class))
+                .thenReturn(Map.of(
+                        "WorkflowCancellationService[" + DEFAULT_MODULE_NAME + "]",
+                        mock(WorkflowCancellationService.class)
+                ));
         when(configuration.getComponent(MutableWorkflowHistoryRepository.class)).thenReturn(
                 mock(MutableWorkflowHistoryRepository.class));
 
@@ -214,6 +220,11 @@ class GivenWhenTest {
                 .thenReturn(Map.of(
                         "WorkflowConfigurationRegistry[" + DEFAULT_MODULE_NAME + "]",
                         mock(WorkflowConfigurationRegistry.class)
+                ));
+        when(configuration.getComponents(WorkflowCancellationService.class))
+                .thenReturn(Map.of(
+                        "WorkflowCancellationService[" + DEFAULT_MODULE_NAME + "]",
+                        mock(WorkflowCancellationService.class)
                 ));
         when(configuration.getComponent(MutableWorkflowHistoryRepository.class)).thenReturn(historyRepository);
 

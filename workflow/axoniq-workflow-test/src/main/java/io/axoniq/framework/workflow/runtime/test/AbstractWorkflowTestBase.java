@@ -25,8 +25,8 @@ import io.axoniq.framework.workflow.configuration.WorkflowModule.WorkflowDefinit
 import io.axoniq.framework.workflow.history.api.WorkflowHistoryRepository;
 import io.axoniq.framework.workflow.dsl.api.WorkflowContext;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContextFactory;
-import io.axoniq.framework.workflow.runtime.execution.WorkflowConfigurationRegistry;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowCancellationService;
+import io.axoniq.framework.workflow.runtime.execution.WorkflowConfigurationRegistry;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowEngine;
 import io.axoniq.framework.workflow.runtime.test.fixture.WorkflowTestDriver;
 import io.axoniq.framework.workflow.runtime.test.utils.DelayedPublisher;
@@ -81,7 +81,7 @@ public abstract class AbstractWorkflowTestBase<T extends WorkflowContext> {
     void setUp() {
         this.configuration = testDriver.workflowTestServices().configuration();
         this.workflowEngine = testDriver.workflowTestServices().workflowEngine();
-        this.workflowCancellationService = configuration.getComponent(WorkflowCancellationService.class);
+        this.workflowCancellationService = testDriver.workflowTestServices().workflowCancellationService();
         this.delayedPublisher = testDriver.workflowTestServices().delayedPublisher();
         this.workflowRegistry = testDriver.workflowTestServices().workflowRegistry();
         this.workflowHistoryRepository = testDriver.workflowTestServices().workflowHistoryRepository();

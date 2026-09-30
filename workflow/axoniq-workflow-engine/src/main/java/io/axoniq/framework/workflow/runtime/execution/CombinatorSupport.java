@@ -78,7 +78,7 @@ import java.util.stream.Collectors;
                                                              Predicate<WorkflowStepResult> matchPredicate,
                                                              WorkflowState workflowState) {
         var matchedNames = Arrays.stream(results)
-                                 .filter(WorkflowStepResult::isCompleted) //todo, should we remove this predicate? so people can do notCompleted predicate?
+                                 .filter(WorkflowStepResult::isCompleted)
                                  .filter(matchPredicate)
                                  .map(WorkflowStepResult::getStepName)
                                  .collect(Collectors.toSet());

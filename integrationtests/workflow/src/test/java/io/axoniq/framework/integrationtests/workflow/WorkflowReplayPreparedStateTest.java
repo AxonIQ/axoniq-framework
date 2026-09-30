@@ -363,7 +363,8 @@ class WorkflowReplayPreparedStateTest {
 
         private WorkflowTestApp(AxonConfiguration configuration) {
             this.configuration = configuration;
-            this.workflowEngine = configuration.getComponent(WorkflowEngine.class);
+            this.workflowEngine = configuration.getComponents(WorkflowEngine.class)
+                                               .get("WorkflowEngine[" + PreparedState.MODULE_NAME + "]");
             this.eventSink = configuration.getComponent(EventSink.class);
             this.messageTypeResolver = configuration.getComponent(MessageTypeResolver.class);
             this.eventConverter = configuration.getComponent(EventConverter.class);

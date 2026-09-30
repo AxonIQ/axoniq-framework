@@ -238,7 +238,11 @@ class SimpleWorkflowModule<C extends WorkflowContext>
             cr.registerComponent(workflowEngine());
             cr.registerComponent(workflowManager());
             cr.registerComponent(workflowSegmentChangeListener());
-            cr.registerIfNotPresent(WorkflowCancellationService.class, c -> new WorkflowCancellationService());
+            cr.registerComponent(
+                    WorkflowCancellationService.class,
+                    cancellationServiceName(),
+                    c -> new WorkflowCancellationService()
+            );
             cr.registerIfNotPresent(
                     WorkflowEngineCheckpointingSupport.class,
                     c -> new WorkflowEngineCheckpointingSupport(c.getComponent(WorkflowEngine.class, engineName()))
@@ -260,6 +264,10 @@ class SimpleWorkflowModule<C extends WorkflowContext>
         return "WorkflowExecutionRepository[" + name + "]";
     }
 
+    private String cancellationServiceName() {
+        return "WorkflowCancellationService[" + name + "]";
+    }
+
     private ComponentDefinition<WorkflowConfigurationRegistry> workflowConfigurationRegistry() {
         return ComponentDefinition.ofTypeAndName(WorkflowConfigurationRegistry.class, configurationRegistryName())
                                   .withBuilder(configurationRegistry);
@@ -275,7 +283,7 @@ class SimpleWorkflowModule<C extends WorkflowContext>
                                           c.getComponent(WorkflowConfigurationRegistry.class,
                                                          configurationRegistryName()),
                                           c.getComponent(WorkflowExecutionRepository.class, executionRepositoryName()),
-                                          c.getComponent(WorkflowCancellationService.class),
+                                          c.getComponent(WorkflowCancellationService.class, cancellationServiceName()),
                                           c.getComponent(WorkflowStore.class),
                                           c.getComponent(UnitOfWorkFactory.class)
                                   ))
@@ -296,7 +304,7 @@ class SimpleWorkflowModule<C extends WorkflowContext>
                                   .withBuilder(c -> new SimpleWorkflowManager(
                                           c.getComponent(WorkflowHistoryRepository.class),
                                           c.getComponent(WorkflowExecutionRepository.class, executionRepositoryName()),
-                                          c.getComponent(WorkflowCancellationService.class),
+                                          c.getComponent(WorkflowCancellationService.class, cancellationServiceName()),
                                           c.getComponent(WorkflowStore.class),
                                           c.getComponent(UnitOfWorkFactory.class),
                                           c.getComponent(
@@ -353,6 +361,11 @@ class SimpleWorkflowModule<C extends WorkflowContext>
             PooledStreamingEventProcessorConfiguration psepConfig
     ) {
         return engineConfigCustomizer.apply(defaultProcessorConfig(config, psepConfig))
+                                     // Start at the head of the stream. A workflow reacts to events published after
+                                     // it was deployed. The pooled streaming default (first token) would start a
+                                     // workflow for every historical start event, duplicating work still owned by
+                                     // the process it replaces.
+                                     .initialToken(source -> source.latestToken(null))
                                      .eventCriteria(SimpleWorkflowModule::eventCriteria)
                                      .addSegmentChangeListener(config.getComponent(
                                              WorkflowSegmentChangeListener.class, segmentChangeListenerName()

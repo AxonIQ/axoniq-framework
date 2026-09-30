@@ -81,7 +81,8 @@ class ExternalStepCancellationWorkflowTest extends AbstractWorkflowIntegrationTe
         ));
         delayedPublisher.start();
 
-        var executionRepository = configuration.getComponent(WorkflowExecutionRepository.class);
+        var executionRepository = configuration.getComponents(WorkflowExecutionRepository.class)
+                                                .get("WorkflowExecutionRepository[" + getClass().getSimpleName() + "]");
 
         // Wait until the workflow is up and blocked awaiting approval.
         await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {

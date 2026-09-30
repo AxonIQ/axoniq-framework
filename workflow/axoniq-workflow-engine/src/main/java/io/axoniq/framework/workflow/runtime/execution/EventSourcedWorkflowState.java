@@ -44,8 +44,10 @@ import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -247,7 +249,7 @@ public class EventSourcedWorkflowState implements WorkflowState {
     }
 
     public Map<String, @Nullable Object> payload() {
-        return Map.copyOf(payload);
+        return Collections.unmodifiableMap(new LinkedHashMap<>(payload));
     }
 
     /**
@@ -363,7 +365,7 @@ public class EventSourcedWorkflowState implements WorkflowState {
                     addStep(WorkflowStep.retrying(stepName,
                                                   retryInfo,
                                                   eventMessage.timestamp(),
-                                                  processingContext)); // TODO copy resources of the context
+                                                  processingContext));
                     break;
                 case RETRY_STARTED:
                     addStep(WorkflowStep.retryStarted(stepName,
@@ -411,7 +413,7 @@ public class EventSourcedWorkflowState implements WorkflowState {
                                  }
                              }
                          }
-                         setStatus(status, terminationCause, notifyStatusListeners);
+                         setStatus(status, terminationCause, notifyStatusListeners, processingContext);
                      });
         logger.trace("Finished applying event {} in thread {}", eventMessage.type(), Thread.currentThread());
         return this;
@@ -489,12 +491,13 @@ public class EventSourcedWorkflowState implements WorkflowState {
     void setStatus(
             WorkflowStatus workflowStatus,
             @Nullable Throwable terminationCause,
-            boolean notifyStatusListeners
+            boolean notifyStatusListeners,
+            ProcessingContext processingContext
     ) {
         this.status = workflowStatus;
         this.terminationCause = terminationCause;
         if (notifyStatusListeners) {
-            this.listenerSupport.notify(workflowStatus);
+            this.listenerSupport.notify(workflowStatus, processingContext);
         }
     }
 
@@ -570,12 +573,12 @@ public class EventSourcedWorkflowState implements WorkflowState {
          *
          * @param status status to notify about.
          */
-        public void notify(WorkflowStatus status) {
+        public void notify(WorkflowStatus status, ProcessingContext processingContext) {
             // only notify if we have a workflow context, this allows the usage without the context
             if (this.workflowContext != null && this.listeners != null) {
                 var listener = this.listeners.get(status);
                 if (listener != null) {
-                    listener.onWorkflowStatus(status, workflowContext);
+                    listener.onWorkflowStatus(status, workflowContext, processingContext);
                 }
             }
         }

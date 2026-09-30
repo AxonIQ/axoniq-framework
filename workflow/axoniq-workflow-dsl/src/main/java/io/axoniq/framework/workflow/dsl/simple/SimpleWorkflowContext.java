@@ -40,6 +40,7 @@ import org.axonframework.messaging.eventhandling.GenericEventMessage;
 import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 
 import java.time.Duration;
+import java.util.Collections;
 import java.util.Map;
 import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
@@ -130,7 +131,7 @@ public class SimpleWorkflowContext extends BaseWorkflowContext {
         return resultType.cast(awaitExecute(
                 stepName,
                 Map.of(),
-                (pc, payload) -> Map.of(resultKey, action.get())
+                (pc, payload) -> Collections.singletonMap(resultKey, action.get())
         ).get(resultKey));
     }
 

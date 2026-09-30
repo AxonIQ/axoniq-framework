@@ -28,10 +28,8 @@ import io.axoniq.framework.workflow.runtime.execution.EventSourcedRunningWorkflo
 import io.axoniq.framework.workflow.runtime.execution.EventSourcedWorkflowState;
 import io.axoniq.framework.workflow.runtime.execution.EventSourcedWorkflowStore;
 import io.axoniq.framework.workflow.runtime.execution.ExecuteStepActionResolver;
-import io.axoniq.framework.workflow.runtime.execution.WorkflowCancellationService;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowEventTagResolver;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowScheduler;
-import io.axoniq.framework.workflow.runtime.execution.WorkflowStateParameterResolverFactory;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowStore;
 import io.axoniq.framework.workflow.runtime.execution.payload.PayloadReducerRegistry;
 import io.axoniq.framework.workflow.runtime.util.DefaultTimeoutFutureResolver;
@@ -47,7 +45,6 @@ import org.axonframework.common.lifecycle.Phase;
 import org.axonframework.eventsourcing.configuration.EventSourcingConfigurationDefaults;
 import org.axonframework.eventsourcing.eventstore.MultiTagResolver;
 import org.axonframework.eventsourcing.eventstore.TagResolver;
-import org.axonframework.messaging.core.configuration.reflection.ParameterResolverFactoryUtils;
 import org.axonframework.modelling.repository.Repository;
 import org.jspecify.annotations.Nullable;
 
@@ -130,10 +127,8 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
         registerWorkflowTimeoutScheduler(componentRegistry);
         registerRunningWorkflowsModule(componentRegistry);
         registerWorkflowEngineExecutor(componentRegistry);
-        registerWorkflowCancellationService(componentRegistry);
         registerMutableWorkflowHistoryRepository(componentRegistry);
         registerWorkflowStore(componentRegistry);
-        registerWorkflowStateParameterResolverFactory(componentRegistry);
     }
 
     private void registerPayloadReducerRegistry(ComponentRegistry componentRegistry) {
@@ -193,7 +188,6 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
                         }).build())
                         .entityFactory(c -> (identifier, firstEvent, context) -> new EventSourcedRunningWorkflows())
                         .criteriaResolver(c -> (identifier, context) -> EventSourcedRunningWorkflows.criteriaBuilder())
-                        // FIXME Register snapshot configuration eventually, see #245
                         .build());
         componentRegistry.registerIfNotPresent(Clock.class, cfg -> ClockUtils.get());
     }
@@ -213,7 +207,6 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
                                                         identifier)))))
                         .criteriaResolver(c -> (identifier, context) -> EventSourcedWorkflowState.criteriaBuilder(
                                 identifier))
-                        // FIXME Register snapshot configuration eventually, see #245
                         .build());
     }
 
@@ -250,21 +243,10 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
                 });
     }
 
-    void registerWorkflowCancellationService(ComponentRegistry componentRegistry) {
-        componentRegistry.registerIfNotPresent(WorkflowCancellationService.class,
-                                               cfg -> new WorkflowCancellationService());
-    }
-
     void registerMutableWorkflowHistoryRepository(ComponentRegistry componentRegistry) {
         componentRegistry.registerIfNotPresent(
                 MutableWorkflowHistoryRepository.class,
                 cfg -> new InMemoryWorkflowHistoryRepository()
-        );
-    }
-
-    void registerWorkflowStateParameterResolverFactory(ComponentRegistry componentRegistry) {
-        ParameterResolverFactoryUtils.registerToComponentRegistry(
-                componentRegistry, WorkflowStateParameterResolverFactory::new
         );
     }
 

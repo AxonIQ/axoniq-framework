@@ -67,7 +67,7 @@ public class ProcessingContextUtils {
         var uow = (id == null)
                 ? unitOfWorkFactory.create(customize -> customize.workScheduler(executor))
                 : unitOfWorkFactory.create(UUID.randomUUID().toString(),
-                                           customize -> customize.workScheduler(executor)); // FIXME
+                                           customize -> customize.workScheduler(executor));
         return uow.executeWithResult(c -> {
             var ctx = ProcessingContextUtils.copyResources(parentContext, c);
             ctx.whenComplete(completed ->

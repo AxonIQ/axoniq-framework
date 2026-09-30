@@ -590,6 +590,7 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
 
     void close() {  // for testing purposes, to avoid junk exceptions
         eventMonitor.close();
+        finalizer.close();
     }
 
     /*

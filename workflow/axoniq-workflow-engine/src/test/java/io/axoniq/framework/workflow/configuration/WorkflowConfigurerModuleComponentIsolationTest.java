@@ -21,6 +21,7 @@ package io.axoniq.framework.workflow.configuration;
 
 import io.axoniq.framework.workflow.dsl.api.EventCondition;
 import io.axoniq.framework.workflow.dsl.api.EventConditions;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
 import io.axoniq.framework.workflow.history.inmemory.InMemoryWorkflowHistoryRepository;
 import io.axoniq.framework.workflow.history.inmemory.MutableWorkflowHistoryRepository;
 import io.axoniq.framework.workflow.history.inmemory.WorkflowHistoryProjector;
@@ -28,6 +29,7 @@ import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowConfig
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowDefinition;
 import io.axoniq.framework.workflow.runtime.api.manager.WorkflowManager;
 import io.axoniq.framework.workflow.runtime.execution.AbstractWorkflowContext;
+import io.axoniq.framework.workflow.runtime.execution.EventSourcedWorkflowState;
 import io.axoniq.framework.workflow.runtime.execution.InMemoryWorkflowExecutionRepository;
 import io.axoniq.framework.workflow.runtime.execution.SimpleWorkflowConfigurationRegistry;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowConfigurationRegistry;
@@ -45,6 +47,7 @@ import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
 import org.axonframework.eventsourcing.eventstore.EventStore;
+import org.axonframework.modelling.repository.Repository;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.*;
 
@@ -233,17 +236,36 @@ class WorkflowConfigurerModuleComponentIsolationTest {
                 Map.<String, Object>of("orderId", "order-1"),
                 Metadata.emptyInstance()
         );
+        var workflowId = startEventForA.identifier();
         publish(startEventForA);
 
-        // then: only module A's own engine started an execution; module B's engine never saw it
+        // then: module A's own engine durably completed the workflow it owns
         Awaitility.await()
                   .atMost(Duration.ofSeconds(5))
-                  .untilAsserted(() -> assertThat(engineOf("module-a").workflowExecutions()).hasSize(1));
+                  .until(() -> durableStatus(workflowId) == WorkflowStatus.COMPLETED);
+        // and: module B's engine never reacted to it - its own repository never held an execution for it
         assertThat(engineOf("module-b").workflowExecutions()).isEmpty();
     }
 
     private WorkflowEngine engineOf(String moduleName) {
         return configuration.getComponents(WorkflowEngine.class).get("WorkflowEngine[" + moduleName + "]");
+    }
+
+    @SuppressWarnings("unchecked")
+    private WorkflowStatus durableStatus(String workflowId) {
+        var repository = (Repository<String, EventSourcedWorkflowState>) configuration
+                .getComponents(Repository.class)
+                .values()
+                .stream()
+                .filter(candidate -> candidate.entityType().equals(EventSourcedWorkflowState.class))
+                .findFirst()
+                .orElseThrow();
+        return configuration.getComponent(UnitOfWorkFactory.class)
+                            .create("read-" + workflowId)
+                            .executeWithResult(ctx -> repository.loadOrCreate(workflowId, ctx)
+                                                                .thenApply(managed -> managed.entity()
+                                                                                             .workflowStatus()))
+                            .join();
     }
 
     private void publish(EventMessage eventMessage) {

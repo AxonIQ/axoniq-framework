@@ -130,7 +130,8 @@ class CancelAllThenCancelWorkflowTest extends AbstractWorkflowIntegrationTestBas
     }
 
     private void awaitParked(String workflowId) {
-        var executionRepository = configuration.getComponent(WorkflowExecutionRepository.class);
+        var executionRepository = configuration.getComponents(WorkflowExecutionRepository.class)
+                                                .get("WorkflowExecutionRepository[" + getClass().getSimpleName() + "]");
         await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
             var execution = executionRepository.findById(workflowId);
             assertThat(execution).isPresent();

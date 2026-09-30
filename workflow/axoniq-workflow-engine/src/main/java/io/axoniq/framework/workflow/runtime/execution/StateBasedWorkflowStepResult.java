@@ -34,7 +34,6 @@ import java.lang.reflect.Type;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.concurrent.Callable;
 import java.util.function.Consumer;
 
 import static io.axoniq.framework.workflow.dsl.api.StepStatus.*;
@@ -52,7 +51,7 @@ import static io.axoniq.framework.workflow.runtime.association.PayloadPropertyVa
 public class StateBasedWorkflowStepResult implements WorkflowStepResult {
 
     private final String stepName;
-    private final Callable<Void> stateChangeTrigger;
+    private final StateChangeTrigger stateChangeTrigger;
     private final Consumer<Throwable> cancellation;
     private final WorkflowExecution workflowExecution;
 
@@ -65,7 +64,7 @@ public class StateBasedWorkflowStepResult implements WorkflowStepResult {
      * @param state              workflow execution providing the state
      */
     public StateBasedWorkflowStepResult(String stepName,
-                                        Callable<Void> stateChangeTrigger,
+                                        StateChangeTrigger stateChangeTrigger,
                                         Consumer<Throwable> cancellation,
                                         WorkflowExecution state) {
         this.stepName = Objects.requireNonNull(stepName, "Step name must not be null");
@@ -142,20 +141,15 @@ public class StateBasedWorkflowStepResult implements WorkflowStepResult {
 
     @Override
     public void await() {
-        do {
-            if (WorkflowStateUtils.isStepTerminal(workflowExecution.state(), stepName)) {
-                return;
-            }
+        while (!WorkflowStateUtils.isStepTerminal(workflowExecution.state(), stepName)) {
             try {
-                stateChangeTrigger.call();
+                stateChangeTrigger.awaitStateChange();
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 throw new StepInterruptedException("Step wait interrupted because the workflow reached a terminal state",
                                                    e);
-            } catch (Exception e) {
-                throw new RuntimeException(e); // FIXME -> replace callable with a better fit.
             }
-        } while (true /* FIXME workflow is not suspended */);
+        }
     }
 
     @Override
@@ -166,5 +160,19 @@ public class StateBasedWorkflowStepResult implements WorkflowStepResult {
     @Override
     public void cancel(String reason) {
         cancellation.accept(new StepCancellationException(reason));
+    }
+
+    /**
+     * Blocks until the workflow state changes.
+     */
+    @FunctionalInterface
+    public interface StateChangeTrigger {
+
+        /**
+         * Blocks the calling thread until the next workflow state change.
+         *
+         * @throws InterruptedException if the waiting thread is interrupted
+         */
+        void awaitStateChange() throws InterruptedException;
     }
 }

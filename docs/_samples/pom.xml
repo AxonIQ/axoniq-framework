@@ -47,7 +47,7 @@
         <!-- Several samples demonstrate Spring (Boot) configuration in compile scope; the root enforcer bans
              Spring outside test scope, so this compile-only, never-deployed module opts out of that rule. -->
         <maven-enforcer.allow-spring-dependencies>true</maven-enforcer.allow-spring-dependencies>
-        <build-helper-maven-plugin.version>3.6.1</build-helper-maven-plugin.version>
+        <build-helper-maven-plugin.version>3.6.2</build-helper-maven-plugin.version>
     </properties>
 
     <dependencyManagement>
@@ -65,6 +65,12 @@
 
     <dependencies>
         <!-- Axoniq Framework modules whose APIs the samples reference -->
+        <!-- Carries the Axon Framework 4 Saga APIs the migration path samples document. Optional in axon-spring, so
+             it has to be requested explicitly here, exactly as a migrating application requests it. -->
+        <dependency>
+            <groupId>io.axoniq.framework</groupId>
+            <artifactId>axoniq-legacy</artifactId>
+        </dependency>
         <dependency>
             <groupId>io.axoniq.framework</groupId>
             <artifactId>axoniq-dead-letter</artifactId>

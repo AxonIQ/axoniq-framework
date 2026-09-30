@@ -20,6 +20,7 @@ package io.axoniq.framework.workflow.runtime.test.fixture;
 
 import io.axoniq.framework.workflow.history.api.WorkflowHistoryRepository;
 import io.axoniq.framework.workflow.history.inmemory.MutableWorkflowHistoryRepository;
+import io.axoniq.framework.workflow.runtime.execution.WorkflowCancellationService;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowConfigurationRegistry;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowEngine;
 import io.axoniq.framework.workflow.runtime.test.utils.DelayedPublisher;
@@ -59,6 +60,7 @@ public class WorkflowTestServices {
     private final DelayedPublisher delayedPublisher;
     private final TestEventPublisher eventPublisher;
     private final WorkflowConfigurationRegistry<?> workflowRegistry;
+    private final WorkflowCancellationService workflowCancellationService;
     private final WorkflowHistoryRepository workflowHistoryRepository;
     @Nullable
     private final TestClock clock;
@@ -104,6 +106,11 @@ public class WorkflowTestServices {
         this.workflowRegistry = Objects.requireNonNull(
                 configuration.getComponents(WorkflowConfigurationRegistry.class).get(registryName),
                 "WorkflowConfigurationRegistry with name [" + registryName + "] must not be null."
+        );
+        String cancellationServiceName = "WorkflowCancellationService[" + moduleName + "]";
+        this.workflowCancellationService = Objects.requireNonNull(
+                configuration.getComponents(WorkflowCancellationService.class).get(cancellationServiceName),
+                "WorkflowCancellationService with name [" + cancellationServiceName + "] must not be null."
         );
         this.workflowHistoryRepository = configuration.getComponent(MutableWorkflowHistoryRepository.class);
         this.clock = configuration.getOptionalComponent(TestClock.class).orElse(null);
@@ -156,6 +163,15 @@ public class WorkflowTestServices {
      */
     public WorkflowConfigurationRegistry<?> workflowRegistry() {
         return workflowRegistry;
+    }
+
+    /**
+     * Returns the workflow cancellation service available to the test runtime
+     *
+     * @return workflow cancellation service
+     */
+    public WorkflowCancellationService workflowCancellationService() {
+        return workflowCancellationService;
     }
 
     /**

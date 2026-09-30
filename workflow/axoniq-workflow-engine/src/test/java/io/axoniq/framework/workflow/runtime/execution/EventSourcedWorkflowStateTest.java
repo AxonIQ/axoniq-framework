@@ -41,6 +41,7 @@ import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.*;
 
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.Map;
 
 import static io.axoniq.framework.workflow.runtime.execution.payload.CombineGlobalAndLocalPayloadReducer.NAME;
@@ -90,13 +91,29 @@ class EventSourcedWorkflowStateTest {
     }
 
     @Test
+    void payloadKeepsNullValues() {
+        // given
+        Map<String, @Nullable Object> payload = new HashMap<>();
+        payload.put("orderId", "o-1");
+        payload.put("note", null);
+        state = new EventSourcedWorkflowState(WORKFLOW_ID, payload, DEFINITION_ID);
+
+        // when
+        Map<String, @Nullable Object> result = state.payload();
+
+        // then
+        assertThat(result).containsEntry("orderId", "o-1")
+                          .containsEntry("note", null);
+    }
+
+    @Test
     void rehydratedStateRetainsSourcedDataAndUsesLiveStatusListeners() {
         var sourcedState = new EventSourcedWorkflowState(
                 WORKFLOW_ID,
                 Map.of("key", "value"),
                 DEFINITION_ID
         );
-        sourcedState.setStatus(WorkflowStatus.STARTED, null, true);
+        sourcedState.setStatus(WorkflowStatus.STARTED, null, true, processingContext);
         var workflowContext = mock(WorkflowContext.class);
         var listener = mock(WorkflowStatusChangeListener.class);
 
@@ -110,9 +127,9 @@ class EventSourcedWorkflowStateTest {
         assertThat(rehydratedState.payload()).containsEntry("key", "value");
         assertThat(rehydratedState.workflowStatus()).isEqualTo(WorkflowStatus.STARTED);
 
-        rehydratedState.setStatus(WorkflowStatus.COMPLETED, null, true);
+        rehydratedState.setStatus(WorkflowStatus.COMPLETED, null, true, processingContext);
 
-        verify(listener).onWorkflowStatus(WorkflowStatus.COMPLETED, workflowContext);
+        verify(listener).onWorkflowStatus(WorkflowStatus.COMPLETED, workflowContext, processingContext);
     }
 
     @Test
@@ -258,7 +275,7 @@ class EventSourcedWorkflowStateTest {
     @Test
     void ignoresCompletedStepAndPayloadUpdateAfterWorkflowBecomesTerminal() {
         state = new EventSourcedWorkflowState(WORKFLOW_ID, Map.of("before", "terminal"), DEFINITION_ID);
-        state.setStatus(WorkflowStatus.COMPLETED, null, false);
+        state.setStatus(WorkflowStatus.COMPLETED, null, false, processingContext);
         var metadata = MetadataUtils.create(WORKFLOW_ID, "late-step", StepStatus.COMPLETED)
                                     .and(MetadataUtils.METADATA_KEY_MODIFY_PAYLOAD, NAME);
         var eventMessage = mock(EventMessage.class);
@@ -275,7 +292,7 @@ class EventSourcedWorkflowStateTest {
 
     @Test
     void ignoresVersionMigrationAfterWorkflowBecomesTerminal() {
-        state.setStatus(WorkflowStatus.COMPLETED, null, false);
+        state.setStatus(WorkflowStatus.COMPLETED, null, false, processingContext);
         var eventMessage = mock(EventMessage.class);
         when(eventMessage.type()).thenReturn(new MessageType("TestWorkflow.Versioned", "0.0.2"));
         when(eventMessage.metadata()).thenReturn(
