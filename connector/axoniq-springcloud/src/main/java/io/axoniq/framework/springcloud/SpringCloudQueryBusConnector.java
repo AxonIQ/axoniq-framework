@@ -88,7 +88,7 @@ public class SpringCloudQueryBusConnector implements QueryBusConnector {
     private static final Logger logger = LoggerFactory.getLogger(SpringCloudQueryBusConnector.class);
 
     private final SpringCloudMemberRegistry registry;
-    private final IncomingQueryInvoker gateway;
+    private final IncomingQueryInvoker invoker;
     private final RemoteQueryDispatcher dispatcher;
     private final @Nullable MessageConverter converter;
     private final EntitlementManager entitlementManager;
@@ -102,17 +102,17 @@ public class SpringCloudQueryBusConnector implements QueryBusConnector {
      * Constructs a {@code SpringCloudQueryBusConnector} routing with the given {@code registry}.
      *
      * @param registry   the registry reporting which members handle which queries
-     * @param gateway    the gateway queries arriving from other members are handled through
+     * @param invoker    the invoker queries arriving from other members are handled through
      * @param dispatcher the dispatcher sending queries to other members
      * @param converter  the converter attached to queries routed to this application, so that a locally routed query
      *                   carries the same conversion capability as one that travelled over the wire, or {@code null}
      *                   when none is available.
      */
     public SpringCloudQueryBusConnector(SpringCloudMemberRegistry registry,
-                                        IncomingQueryInvoker gateway,
+                                        IncomingQueryInvoker invoker,
                                         RemoteQueryDispatcher dispatcher,
                                         @Nullable MessageConverter converter) {
-        this(registry, gateway, dispatcher, converter, EntitlementManager.INSTANCE);
+        this(registry, invoker, dispatcher, converter, EntitlementManager.INSTANCE);
         EntitlementManager.INSTANCE.registerAddon(SpringCloudAxoniqAddon.class);
     }
 
@@ -125,7 +125,7 @@ public class SpringCloudQueryBusConnector implements QueryBusConnector {
      * constructor exists so tests need not touch that singleton.
      *
      * @param registry           the registry reporting which members handle which queries
-     * @param gateway            the gateway queries arriving from other members are handled through
+     * @param invoker            the invoker queries arriving from other members are handled through
      * @param dispatcher         the dispatcher sending queries to other members
      * @param converter          the converter attached to queries routed to this application, or {@code null} when
      *                           none is available.
@@ -133,12 +133,12 @@ public class SpringCloudQueryBusConnector implements QueryBusConnector {
      */
     @Internal
     SpringCloudQueryBusConnector(SpringCloudMemberRegistry registry,
-                                 IncomingQueryInvoker gateway,
+                                 IncomingQueryInvoker invoker,
                                  RemoteQueryDispatcher dispatcher,
                                  @Nullable MessageConverter converter,
                                  EntitlementManager entitlementManager) {
         this.registry = Objects.requireNonNull(registry, "The registry must not be null.");
-        this.gateway = Objects.requireNonNull(gateway, "The gateway must not be null.");
+        this.invoker = Objects.requireNonNull(invoker, "The invoker must not be null.");
         this.dispatcher = Objects.requireNonNull(dispatcher, "The dispatcher must not be null.");
         this.converter = converter;
         this.entitlementManager = Objects.requireNonNull(entitlementManager,
@@ -429,7 +429,7 @@ public class SpringCloudQueryBusConnector implements QueryBusConnector {
         registry.publishLocalQueries(Set.of());
         // Safe to end here: event processors are stopped in the INBOUND_EVENT_CONNECTORS phase, which shutdown
         // reaches before this one, so nothing is left that could still emit an update onto these subscriptions.
-        gateway.endOpenSubscriptions();
+        invoker.endOpenSubscriptions();
         return FutureUtils.emptyCompletedFuture();
     }
 
@@ -674,7 +674,7 @@ public class SpringCloudQueryBusConnector implements QueryBusConnector {
     public void onIncomingQuery(Handler handler) {
         Objects.requireNonNull(handler, "The handler must not be null.");
         this.incomingHandler = handler;
-        gateway.bind(handler);
+        invoker.bind(handler);
     }
 
     @Override

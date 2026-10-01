@@ -356,9 +356,9 @@ public class SpringCloudAutoConfiguration {
         /**
          * Bean creation method for the {@link Executor} the blocking HTTP exchanges with other members run on.
          * <p>
-     * A virtual-thread-per-task executor, because the work on it is a blocking HTTP call and nothing else. Sizing
-     * a platform thread pool for that would cap the messages this member can have in flight for no reason other
-     * than the pool's own size.
+         * A virtual-thread-per-task executor, because the work on it is a blocking HTTP call and nothing else. Sizing
+         * a platform thread pool for that would cap the messages this member can have in flight for no reason other
+         * than the pool's own size.
          * <p>
          * Shut down with {@code shutdownNow} rather than the destroy method Spring would infer. That would be
          * {@link ExecutorService#close()}, which waits for every task to finish — and a task here is the reading of a
@@ -445,22 +445,22 @@ public class SpringCloudAutoConfiguration {
         /**
          * Bean creation method for the controller receiving commands from other members.
          *
-         * @param gateway the gateway handling commands sent by other members
+         * @param invoker the invoker handling commands sent by other members
          * @return the controller receiving commands from other members
          */
         @Bean
         @ConditionalOnMissingBean
         @ConditionalOnWebApplication(type = Type.SERVLET)
-        public SpringCloudCommandController axoniqSpringCloudCommandController(IncomingCommandInvoker gateway) {
-            return new SpringCloudCommandController(gateway);
+        public SpringCloudCommandController axoniqSpringCloudCommandController(IncomingCommandInvoker invoker) {
+            return new SpringCloudCommandController(invoker);
         }
 
         /**
          * Bean creation method for the {@link IncomingQueryInvoker} answering queries sent by other members.
          *
-         * @param registry          the registry naming this member in the failures the gateway reports
+         * @param registry          the registry naming this member in the failures the invoker reports
          * @param converterProvider provides the {@link MessageConverter}, if one is available
-         * @return the gateway answering queries sent by other members
+         * @return the invoker answering queries sent by other members
          */
         @Bean
         @ConditionalOnMissingBean
@@ -504,7 +504,7 @@ public class SpringCloudAutoConfiguration {
         /**
          * Bean creation method for the controller answering queries from other members.
          *
-         * @param gateway           the gateway answering queries sent by other members
+         * @param invoker           the invoker answering queries sent by other members
          * @param scheduler         the scheduler deciding when each open subscription is due a keep-alive
          * @param keepAliveExecutor the executor those keep-alives are written on
          * @param properties        the connector's properties
@@ -514,12 +514,12 @@ public class SpringCloudAutoConfiguration {
         @ConditionalOnMissingBean
         @ConditionalOnWebApplication(type = Type.SERVLET)
         public SpringCloudQueryController axoniqSpringCloudQueryController(
-                IncomingQueryInvoker gateway,
+                IncomingQueryInvoker invoker,
                 @Qualifier(QUERY_SCHEDULER_BEAN) ScheduledExecutorService scheduler,
                 @Qualifier(KEEP_ALIVE_EXECUTOR_BEAN) Executor keepAliveExecutor,
                 SpringCloudProperties properties
         ) {
-            return new SpringCloudQueryController(gateway,
+            return new SpringCloudQueryController(invoker,
                                                   properties.getQueryTimeout(),
                                                   properties.getSubscriptionKeepAliveInterval(),
                                                   scheduler,

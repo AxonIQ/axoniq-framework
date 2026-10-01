@@ -76,7 +76,7 @@ class SseQueryResponseSinkFramingTest {
     private final ObjectMapper objectMapper =
             JsonMapper.builder().disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES).build();
 
-    private IncomingQueryInvoker gateway;
+    private IncomingQueryInvoker invoker;
     private MockMvc mockMvc;
     private ScheduledExecutorService scheduler;
     private ExecutorService keepAliveExecutor;
@@ -85,9 +85,9 @@ class SseQueryResponseSinkFramingTest {
     void setUp() {
         scheduler = Executors.newSingleThreadScheduledExecutor();
         keepAliveExecutor = Executors.newVirtualThreadPerTaskExecutor();
-        gateway = new IncomingQueryInvoker(() -> "node-b", null);
+        invoker = new IncomingQueryInvoker(() -> "node-b", null);
         mockMvc = MockMvcBuilders
-                .standaloneSetup(new SpringCloudQueryController(gateway,
+                .standaloneSetup(new SpringCloudQueryController(invoker,
                                                                 Duration.ofSeconds(30),
                                                                 Duration.ofSeconds(20),
                                                                 scheduler,
@@ -148,7 +148,7 @@ class SseQueryResponseSinkFramingTest {
         @Test
         void writesOneEventPerResponseMessage() throws Exception {
             // given a handler answering with a stream of three responses
-            gateway.bind(new RecordingQueryHandler()
+            invoker.bind(new RecordingQueryHandler()
                                  .answeringWith(response("response-1"),
                                                 response("response-2"),
                                                 response("response-3")));
@@ -164,7 +164,7 @@ class SseQueryResponseSinkFramingTest {
         @Test
         void writesEachResponseWholeAndInOrder() throws Exception {
             // given
-            gateway.bind(new RecordingQueryHandler()
+            invoker.bind(new RecordingQueryHandler()
                                  .answeringWith(response("response-1"), response("response-2")));
 
             // when
@@ -183,7 +183,7 @@ class SseQueryResponseSinkFramingTest {
         @Test
         void writesOneEventForASingleResponse() throws Exception {
             // given a query answered once, which is the common case
-            gateway.bind(new RecordingQueryHandler().answeringWith(response("response-1")));
+            invoker.bind(new RecordingQueryHandler().answeringWith(response("response-1")));
 
             // when
             List<ServerSentEvent> wire = wireOf(dispatch());
@@ -196,7 +196,7 @@ class SseQueryResponseSinkFramingTest {
         @Test
         void writesNothingForAQueryWithNoAnswer() throws Exception {
             // given a handler producing no responses at all
-            gateway.bind(new RecordingQueryHandler());
+            invoker.bind(new RecordingQueryHandler());
 
             // when
             List<ServerSentEvent> wire = wireOf(dispatch());
@@ -210,7 +210,7 @@ class SseQueryResponseSinkFramingTest {
             // given metadata carrying the newlines the protocol frames events on
             Map<String, String> metadata = new LinkedHashMap<>();
             metadata.put("note", "line one\nline two\n\nline four");
-            gateway.bind(new RecordingQueryHandler().answeringWith(response("response-1", metadata)));
+            invoker.bind(new RecordingQueryHandler().answeringWith(response("response-1", metadata)));
 
             // when
             List<ServerSentEvent> wire = wireOf(dispatch());
@@ -228,7 +228,7 @@ class SseQueryResponseSinkFramingTest {
         void writesOneEventPerResponseAsEachArrives() throws Exception {
             // given a handler answering asynchronously, as one reading from a store does
             QueueMessageStream<QueryResponseMessage> responses = new QueueMessageStream<>();
-            gateway.bind(new RecordingQueryHandler() {
+            invoker.bind(new RecordingQueryHandler() {
                 @Override
                 public MessageStream<QueryResponseMessage> query(QueryMessage query) {
                     return responses;
@@ -257,7 +257,7 @@ class SseQueryResponseSinkFramingTest {
         void writesTheFailureAsAnEventOfItsOwn() throws Exception {
             // given a query answered once before its handler failed
             QueueMessageStream<QueryResponseMessage> responses = new QueueMessageStream<>();
-            gateway.bind(new RecordingQueryHandler() {
+            invoker.bind(new RecordingQueryHandler() {
                 @Override
                 public MessageStream<QueryResponseMessage> query(QueryMessage query) {
                     return responses;
@@ -278,7 +278,7 @@ class SseQueryResponseSinkFramingTest {
         @Test
         void writesNoErrorEventForAQueryAnsweredInFull() throws Exception {
             // given
-            gateway.bind(new RecordingQueryHandler().answeringWith(response("response-1")));
+            invoker.bind(new RecordingQueryHandler().answeringWith(response("response-1")));
 
             // when
             List<ServerSentEvent> wire = wireOf(dispatch());
@@ -290,7 +290,7 @@ class SseQueryResponseSinkFramingTest {
         @Test
         void writesTheFailureAsSomethingTheAskingMemberCanActOn() throws Exception {
             // given
-            gateway.bind(new RecordingQueryHandler()
+            invoker.bind(new RecordingQueryHandler()
                                  .failingWith(new QueryExecutionException("The course store is unavailable.", null)));
 
             // when

@@ -54,12 +54,12 @@ class SpringCloudQueryControllerTest {
     private static final Duration BEAT_OFTEN = Duration.ofMillis(50);
     private static final Duration NEVER_REACHED = Duration.ofHours(1);
 
-    private IncomingQueryInvoker gateway;
+    private IncomingQueryInvoker invoker;
     private ScheduledExecutorService scheduler;
 
     @BeforeEach
     void setUp() {
-        gateway = new IncomingQueryInvoker(() -> "node-b", null);
+        invoker = new IncomingQueryInvoker(() -> "node-b", null);
         scheduler = Executors.newSingleThreadScheduledExecutor();
     }
 
@@ -69,7 +69,7 @@ class SpringCloudQueryControllerTest {
     }
 
     private SpringCloudQueryController controller(Duration keepAliveInterval, Executor keepAliveExecutor) {
-        return new SpringCloudQueryController(gateway,
+        return new SpringCloudQueryController(invoker,
                                               Duration.ofSeconds(30),
                                               keepAliveInterval,
                                               scheduler,
@@ -141,7 +141,7 @@ class SpringCloudQueryControllerTest {
         @Test
         void writesTheFirstKeepAliveWithoutTheExecutor() {
             // given a bound handler, so that the subscription is registered rather than refused
-            gateway.bind(new RecordingQueryHandler());
+            invoker.bind(new RecordingQueryHandler());
             RecordingExecutor executor = RecordingExecutor.holding();
 
             // when the subscription is received
@@ -155,7 +155,7 @@ class SpringCloudQueryControllerTest {
         @Test
         void handsTheBeatsThatFollowToTheExecutor() throws InterruptedException {
             // given
-            gateway.bind(new RecordingQueryHandler());
+            invoker.bind(new RecordingQueryHandler());
             RecordingExecutor executor = RecordingExecutor.running(2);
             try {
                 // when
@@ -172,7 +172,7 @@ class SpringCloudQueryControllerTest {
         @Test
         void skipsABeatWhileThePreviousOneIsStillBeingWritten() throws InterruptedException {
             // given an executor that never finishes a keep-alive, as a subscriber that stopped reading leaves one
-            gateway.bind(new RecordingQueryHandler());
+            invoker.bind(new RecordingQueryHandler());
             RecordingExecutor executor = RecordingExecutor.holding();
 
             // when several intervals pass
@@ -187,7 +187,7 @@ class SpringCloudQueryControllerTest {
 
         @Test
         void stopsBeatingWhenTheFirstKeepAliveCannotBeWritten() throws InterruptedException {
-            // given no handler bound, so the gateway reports the subscription unhandled and ends the stream before
+            // given no handler bound, so the invoker reports the subscription unhandled and ends the stream before
             // the first keep-alive is attempted
             RecordingExecutor executor = RecordingExecutor.running(1);
             try {

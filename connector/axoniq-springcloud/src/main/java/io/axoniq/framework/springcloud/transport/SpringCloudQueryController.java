@@ -83,7 +83,7 @@ public class SpringCloudQueryController {
 
     private static final Logger logger = LoggerFactory.getLogger(SpringCloudQueryController.class);
 
-    private final IncomingQueryInvoker gateway;
+    private final IncomingQueryInvoker invoker;
     private final Duration timeout;
     private final Duration keepAliveInterval;
     private final ScheduledExecutorService scheduler;
@@ -93,23 +93,23 @@ public class SpringCloudQueryController {
      * Constructs a {@code SpringCloudQueryController} writing to an idle subscription every
      * {@link #DEFAULT_KEEP_ALIVE_INTERVAL}.
      *
-     * @param gateway           the gateway invoking this application's local query handler
+     * @param invoker           the component invoking this application's local query handler
      * @param timeout           how long a response stream may stay open before the container closes it. Does not
      *                          apply to a subscription query, which lasts as long as the subscriber wants it to.
      * @param scheduler         decides when each open subscription is due a keep-alive
      * @param keepAliveExecutor performs the keep-alive writes
      */
-    public SpringCloudQueryController(IncomingQueryInvoker gateway,
+    public SpringCloudQueryController(IncomingQueryInvoker invoker,
                                       Duration timeout,
                                       ScheduledExecutorService scheduler,
                                       Executor keepAliveExecutor) {
-        this(gateway, timeout, DEFAULT_KEEP_ALIVE_INTERVAL, scheduler, keepAliveExecutor);
+        this(invoker, timeout, DEFAULT_KEEP_ALIVE_INTERVAL, scheduler, keepAliveExecutor);
     }
 
     /**
-     * Constructs a {@code SpringCloudQueryController} handing received queries to the given {@code gateway}.
+     * Constructs a {@code SpringCloudQueryController} handing received queries to the given {@code invoker}.
      *
-     * @param gateway           the gateway invoking this application's local query handler
+     * @param invoker           the component invoking this application's local query handler
      * @param timeout           how long a response stream may stay open before the container closes it. A query still
      *                          being answered when it elapses is reported to the member that asked as a failed
      *                          stream. Does not apply to a subscription query, which lasts as long as the subscriber
@@ -125,12 +125,12 @@ public class SpringCloudQueryController {
      *                          executor that can hold as many blocked threads as there are open subscriptions suits
      *                          it -- a virtual-thread-per-task executor, for instance.
      */
-    public SpringCloudQueryController(IncomingQueryInvoker gateway,
+    public SpringCloudQueryController(IncomingQueryInvoker invoker,
                                       Duration timeout,
                                       Duration keepAliveInterval,
                                       ScheduledExecutorService scheduler,
                                       Executor keepAliveExecutor) {
-        this.gateway = Objects.requireNonNull(gateway, "The gateway must not be null.");
+        this.invoker = Objects.requireNonNull(invoker, "The invoker must not be null.");
         this.timeout = Objects.requireNonNull(timeout, "The timeout must not be null.");
         Objects.requireNonNull(keepAliveInterval, "The keepAliveInterval must not be null.");
         if (keepAliveInterval.isNegative() || keepAliveInterval.isZero()) {
@@ -152,7 +152,7 @@ public class SpringCloudQueryController {
     @PostMapping(produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter receiveQuery(@RequestBody QueryDispatchRequest request) {
         SseEmitter emitter = new SseEmitter(timeout.toMillis());
-        gateway.handle(request, new SseQueryResponseSink(emitter));
+        invoker.handle(request, new SseQueryResponseSink(emitter));
         return emitter;
     }
 
@@ -172,7 +172,7 @@ public class SpringCloudQueryController {
         SseQueryResponseSink sink = new SseQueryResponseSink(emitter);
         // Registered before anything is written, so that the response reaching the subscribing member means the
         // subscription is in place. That member asks for the initial result on the strength of it.
-        gateway.handleSubscription(request, sink);
+        invoker.handleSubscription(request, sink);
         new KeepAlive(sink, request.identifier()).start();
         return emitter;
     }

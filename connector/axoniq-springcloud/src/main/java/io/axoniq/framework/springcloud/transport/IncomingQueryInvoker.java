@@ -45,7 +45,7 @@ import java.util.function.Supplier;
  * Turns a {@link QueryDispatchRequest} received from another member into an invocation of this application's local
  * query handler, writing every response it produces to a {@link QueryResponseSink}.
  * <p>
- * This gateway is a component of its own, separate from the endpoint receiving the request, for the same reasons its
+ * This invoker is a component of its own, separate from the endpoint receiving the request, for the same reasons its
  * command counterpart is: the endpoint is a Spring bean built before the connector, while the
  * {@link QueryBusConnector.Handler handler} it invokes only exists once {@code DistributedQueryBus} registers one,
  * later still. The connector {@link #bind(QueryBusConnector.Handler) binds} the handler here when it receives it.
@@ -75,7 +75,7 @@ public class IncomingQueryInvoker {
      * {@code memberName} supplies.
      * <p>
      * Taken as a supplier because a member is not named until it has registered with discovery, which happens after
-     * this gateway is built. Resolving it per failure reports the name this member is actually known by, rather than
+     * this invoker is built. Resolving it per failure reports the name this member is actually known by, rather than
      * the provisional one it had at start-up.
      *
      * @param memberName supplies the name identifying this application in the failures it reports, used to point at
