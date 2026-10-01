@@ -103,7 +103,7 @@ public class WorkflowModuleConfigurer implements ConfigurationEnhancer, Applicat
                                                 ))));
         var firstBean = workflowBeanNames.getFirst();
         ComponentBuilder<Object> firstBuilder = c -> applicationContext.getBean(firstBean);
-        WorkflowModule<C> module = withFactory.definition(d -> d.autodetected(firstBuilder));
+        WorkflowModule.OptionalPhase<C> module = withFactory.definition(d -> d.autodetected(firstBuilder));
         for (var beanName : workflowBeanNames.subList(1, workflowBeanNames.size())) {
             ComponentBuilder<Object> builder = c -> applicationContext.getBean(beanName);
             module = module.definition(d -> d.autodetected(builder));
