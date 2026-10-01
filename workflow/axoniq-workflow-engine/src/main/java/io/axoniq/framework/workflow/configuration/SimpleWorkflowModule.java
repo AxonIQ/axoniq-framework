@@ -82,7 +82,6 @@ class SimpleWorkflowModule<C extends WorkflowContext>
         extends BaseModule<SimpleWorkflowModule<C>>
         implements WorkflowModule<C>,
         WorkflowModule.WorkflowConfigurationRegistryPhase<C>,
-        WorkflowModule.WorkflowExecutionRepositoryPhase<C>,
         WorkflowModule.WorkflowEngineEventProcessorPhase<C>,
         WorkflowModule.HistoryPhase<C>,
         WorkflowModule.WorkflowContextFactoryPhase<C>,
@@ -107,8 +106,6 @@ class SimpleWorkflowModule<C extends WorkflowContext>
 
     private Function<PooledStreamingEventProcessorConfiguration, PooledStreamingEventProcessorConfiguration> engineConfigCustomizer =
             psepConfig -> psepConfig;
-    private ComponentBuilder<WorkflowExecutionRepository> executionRepository =
-            config -> new InMemoryWorkflowExecutionRepository();
     private ComponentBuilder<WorkflowConfigurationRegistry<?>> configurationRegistry =
             config -> new SimpleWorkflowConfigurationRegistry();
     private boolean useHistory = true;
@@ -141,18 +138,11 @@ class SimpleWorkflowModule<C extends WorkflowContext>
     }
 
     @Override
-    public WorkflowExecutionRepositoryPhase<C> configurationRegistry(
+    public HistoryPhase<C> configurationRegistry(
             ComponentBuilder<WorkflowConfigurationRegistry<?>> configurationRegistry
     ) {
         this.configurationRegistry =
                 requireNonNull(configurationRegistry, "Workflow configuration registry must not be null.");
-        return this;
-    }
-
-    @Override
-    public HistoryPhase<C> executionRepository(ComponentBuilder<WorkflowExecutionRepository> executionRepository) {
-        this.executionRepository =
-                requireNonNull(executionRepository, "Workflow execution repository must not be null");
         return this;
     }
 
@@ -252,7 +242,7 @@ class SimpleWorkflowModule<C extends WorkflowContext>
 
     private ComponentDefinition<WorkflowExecutionRepository> workflowExecutionRepository() {
         return ComponentDefinition.ofTypeAndName(WorkflowExecutionRepository.class, executionRepositoryName())
-                                  .withBuilder(executionRepository);
+                                  .withBuilder(config -> new InMemoryWorkflowExecutionRepository());
     }
 
     private String executionRepositoryName() {

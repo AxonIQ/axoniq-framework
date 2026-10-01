@@ -30,7 +30,6 @@ import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowDefini
 import io.axoniq.framework.workflow.runtime.api.manager.WorkflowManager;
 import io.axoniq.framework.workflow.runtime.execution.AbstractWorkflowContext;
 import io.axoniq.framework.workflow.runtime.execution.EventSourcedWorkflowState;
-import io.axoniq.framework.workflow.runtime.execution.InMemoryWorkflowExecutionRepository;
 import io.axoniq.framework.workflow.runtime.execution.SimpleWorkflowConfigurationRegistry;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowConfigurationRegistry;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowEngine;
@@ -89,14 +88,12 @@ class WorkflowConfigurerModuleComponentIsolationTest {
                                                                    "start")))
                                                            .notCustomized());
 
-        // 2. Local module with history and explicit component overrides
+        // 2. Local module with history and an explicit registry override
         WorkflowConfigurationRegistry<?> localRegistryWithHistory = new SimpleWorkflowConfigurationRegistry();
-        WorkflowExecutionRepository localRepositoryWithHistory = new InMemoryWorkflowExecutionRepository();
         MutableWorkflowHistoryRepository localHistoryRepository = new InMemoryWorkflowHistoryRepository();
 
         var localWithHistoryModule = WorkflowModule.configure("local-with-history-module", TestContext.class)
                                                    .configurationRegistry(cfg -> localRegistryWithHistory)
-                                                   .executionRepository(cfg -> localRepositoryWithHistory)
                                                    .withHistory(cfg -> new WorkflowHistoryProjector(
                                                            localHistoryRepository
                                                    ))
@@ -108,13 +105,11 @@ class WorkflowConfigurerModuleComponentIsolationTest {
                                                                              "start")))
                                                                      .notCustomized());
 
-        // 3. Local module without history, also with explicit component overrides
+        // 3. Local module without history, also with an explicit registry override
         WorkflowConfigurationRegistry<?> localRegistryWithoutHistory = new SimpleWorkflowConfigurationRegistry();
-        WorkflowExecutionRepository localRepositoryWithoutHistory = new InMemoryWorkflowExecutionRepository();
 
         var localWithoutHistoryModule = WorkflowModule.configure("local-without-history-module", TestContext.class)
                                                       .configurationRegistry(cfg -> localRegistryWithoutHistory)
-                                                      .executionRepository(cfg -> localRepositoryWithoutHistory)
                                                       .withoutHistory()
                                                       .contextFactory(c -> TestContext::new)
                                                       .definition(d -> d.declarative(c -> (ctx) -> {
@@ -147,9 +142,10 @@ class WorkflowConfigurerModuleComponentIsolationTest {
         assertThat(globalRegistry).isNotNull();
         assertThat(withHistoryRegistry).isSameAs(localRegistryWithHistory);
         assertThat(withoutHistoryRegistry).isSameAs(localRegistryWithoutHistory);
+        // The execution repository is not user-configurable, so every module registers its own default.
         assertThat(globalRepository).isNotNull();
-        assertThat(withHistoryRepository).isSameAs(localRepositoryWithHistory);
-        assertThat(withoutHistoryRepository).isSameAs(localRepositoryWithoutHistory);
+        assertThat(withHistoryRepository).isNotNull();
+        assertThat(withoutHistoryRepository).isNotNull();
 
         // no two modules ever share the same registry/repository/manager instance
         assertThat(Set.of(globalRegistry, withHistoryRegistry, withoutHistoryRegistry)).hasSize(3);
