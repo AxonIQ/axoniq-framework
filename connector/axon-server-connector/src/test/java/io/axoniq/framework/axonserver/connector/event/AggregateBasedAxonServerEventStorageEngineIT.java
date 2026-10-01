@@ -24,6 +24,7 @@ import io.axoniq.axonserver.connector.AxonServerConnectionFactory;
 import io.axoniq.axonserver.connector.impl.ServerAddress;
 import io.axoniq.framework.testcontainer.AxonServerContainer;
 import io.axoniq.framework.testcontainer.AxonServerContainerUtils;
+import io.axoniq.framework.testcontainer.SharedAxonServerContainer;
 import org.axonframework.eventsourcing.eventstore.AggregateBasedStorageEngineTestSuite;
 import org.axonframework.eventsourcing.eventstore.AppendCondition;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
@@ -48,27 +49,16 @@ class AggregateBasedAxonServerEventStorageEngineIT extends
         AggregateBasedStorageEngineTestSuite<AggregateBasedAxonServerEventStorageEngine> {
 
     /*
-     * Not SharedAxonServerContainer.INSTANCE: this suite asserts GapAwareTrackingToken/non-DCB aggregate-based
-     * semantics and destructively recreates the "default" context as non-DCB for every engine build (see
-     * AggregateBasedAxonServerEventStorageEngine tests below), which would corrupt the shared container's default
-     * context for every DCB-dependent suite sharing it.
+     * A context of its own, rather than the shared container's DCB "default" context: this suite asserts
+     * GapAwareTrackingToken/non-DCB aggregate-based semantics, which needs a non-DCB context -- a different
+     * configuration than "default" carries. Named after the property it needs, not this suite, so any other
+     * non-DCB-dependent suite could use it too.
      */
-    private static final AxonServerContainer axonServerContainer = new AxonServerContainer()
-            .withAxonServerHostname("localhost")
-            .withDevMode(true)
-            .withReuse(true);
+    private static final String CONTEXT = "non-dcb";
+
+    private static final AxonServerContainer axonServerContainer = SharedAxonServerContainer.INSTANCE;
 
     private AxonServerConnection connection;
-
-    @BeforeAll
-    static void beforeAll() {
-        axonServerContainer.start();
-    }
-
-    @AfterAll
-    static void afterAll() {
-        axonServerContainer.stop();
-    }
 
     @AfterEach
     void tearDown() {
@@ -84,15 +74,23 @@ class AggregateBasedAxonServerEventStorageEngineIT extends
 
     @Override
     protected AggregateBasedAxonServerEventStorageEngine buildStorageEngine() throws IOException {
-        AxonServerContainerUtils.purgeEventsFromAxonServer(axonServerContainer.getHost(),
-                                                           axonServerContainer.getHttpPort(),
-                                                           "default",
-                                                           AxonServerContainerUtils.NO_DCB_CONTEXT);
+        SharedAxonServerContainer.ensureStarted();
+
+        try {
+            AxonServerContainerUtils.deleteContext(axonServerContainer.getHost(), axonServerContainer.getHttpPort(), CONTEXT);
+        } catch (IOException ignored) {
+            // Context didn't exist yet.
+        }
+        AxonServerContainerUtils.createContext(axonServerContainer.getHost(),
+                                               axonServerContainer.getHttpPort(),
+                                               CONTEXT,
+                                               AxonServerContainerUtils.NO_DCB_CONTEXT);
+
         connection = AxonServerConnectionFactory.forClient("Test")
                                                 .routingServers(new ServerAddress(axonServerContainer.getHost(),
                                                                                   axonServerContainer.getGrpcPort()))
                                                 .build()
-                                                .connect("default");
+                                                .connect(CONTEXT);
         return new AggregateBasedAxonServerEventStorageEngine(connection, converter);
     }
 
