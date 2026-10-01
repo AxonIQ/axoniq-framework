@@ -30,10 +30,12 @@ import org.axonframework.messaging.core.RemoteHandlingException;
 import org.axonframework.messaging.core.RemoteNonTransientHandlingException;
 import org.axonframework.messaging.queryhandling.GenericQueryMessage;
 import org.axonframework.messaging.queryhandling.GenericQueryResponseMessage;
+import org.axonframework.messaging.queryhandling.GenericSubscriptionQueryUpdateMessage;
 import org.axonframework.messaging.queryhandling.NoHandlerForQueryException;
 import org.axonframework.messaging.queryhandling.QueryExecutionException;
 import org.axonframework.messaging.queryhandling.QueryMessage;
 import org.axonframework.messaging.queryhandling.QueryResponseMessage;
+import org.axonframework.messaging.queryhandling.SubscriptionQueryUpdateMessage;
 import org.jspecify.annotations.Nullable;
 
 import java.util.List;
@@ -73,7 +75,8 @@ final class QueryConverter {
      * The event type carrying one update to a subscription query.
      * <p>
      * Told apart from a {@link #RESPONSE_EVENT} because the two mean different things to the subscriber even though
-     * they carry the same shape: a response is part of the initial result, an update is a change after it.
+     * they carry the same shape: a response is part of the initial result, an update is a change after it. Read back
+     * with {@link #convertUpdate(QueryDispatchResponse, Converter)}, so the subscriber can tell them apart too.
      */
     public static final String UPDATE_EVENT = "update";
 
@@ -203,6 +206,28 @@ final class QueryConverter {
                 MessageType.fromString(response.type()),
                 response.payload(),
                 response.metadata()
+        )).withConverter(converter);
+    }
+
+    /**
+     * Converts the given {@code update}, received from a member holding a subscription, into an update message.
+     * <p>
+     * Rebuilt as a {@link SubscriptionQueryUpdateMessage} rather than as a plain response, because that type is what
+     * tells an update apart from the initial result on the subscriber's side: a subscriber to the updates alone keeps
+     * only the messages of that type.
+     *
+     * @param update    one update received from a member holding a subscription
+     * @param converter the converter to attach to the update for inline payload conversion, or {@code null} when none
+     *                  is available
+     * @return the update the given {@code update} represents
+     */
+    public static SubscriptionQueryUpdateMessage convertUpdate(QueryDispatchResponse update,
+                                                               @Nullable Converter converter) {
+        return new GenericSubscriptionQueryUpdateMessage(new GenericMessage(
+                update.identifier(),
+                MessageType.fromString(update.type()),
+                update.payload(),
+                update.metadata()
         )).withConverter(converter);
     }
 

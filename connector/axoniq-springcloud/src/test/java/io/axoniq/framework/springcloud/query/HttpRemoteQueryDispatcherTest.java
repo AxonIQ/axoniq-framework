@@ -35,6 +35,7 @@ import org.axonframework.messaging.queryhandling.GenericQueryMessage;
 import org.axonframework.messaging.queryhandling.NoHandlerForQueryException;
 import org.axonframework.messaging.queryhandling.QueryMessage;
 import org.axonframework.messaging.queryhandling.QueryResponseMessage;
+import org.axonframework.messaging.queryhandling.SubscriptionQueryUpdateMessage;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.*;
 import org.springframework.http.HttpHeaders;
@@ -370,6 +371,30 @@ class HttpRemoteQueryDispatcherTest {
             });
             assertThat(received).extracting(QueryResponseMessage::identifier)
                                 .containsExactly("update-1", "update-2");
+        }
+
+        @Test
+        void readsTheUpdatesTheMemberEmitsAsSubscriptionQueryUpdates() throws IOException {
+            // given
+            MessageStream<QueryResponseMessage> updates =
+                    dispatcher(1024).openSubscriptionQueryUpdateStream(MEMBER, query(), 16, NO_OP);
+
+            // when
+            body.write(updateEvent("update-1"));
+
+            // then an update is told apart from an initial result by its type, which is what a subscriber to the
+            // updates alone filters on
+            List<QueryResponseMessage> received = new ArrayList<>();
+            awaitUntil(() -> {
+                drainInto(updates, received);
+                return !received.isEmpty();
+            });
+            assertThat(received).singleElement().satisfies(update -> {
+                assertThat(update).isInstanceOf(SubscriptionQueryUpdateMessage.class);
+                assertThat(update.identifier()).isEqualTo("update-1");
+                assertThat(update.type()).isEqualTo(RESPONSE_TYPE);
+                assertThat(update.payloadAs(String.class)).isEqualTo(PAYLOAD);
+            });
         }
 
         @Test

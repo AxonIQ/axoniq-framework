@@ -19,6 +19,8 @@
 
 package io.axoniq.framework.springcloud.query;
 
+import io.axoniq.framework.messaging.queryhandling.distributed.DistributedQueryBus;
+import io.axoniq.framework.messaging.queryhandling.distributed.DistributedQueryBusConfiguration;
 import io.axoniq.framework.springcloud.discovery.RecordingCapabilityDiscoveryMode;
 import io.axoniq.framework.springcloud.routing.Member;
 import io.axoniq.framework.springcloud.routing.MemberCapabilities;
@@ -31,10 +33,12 @@ import io.axoniq.license.entitlement.EntitlementMessageType;
 import org.axonframework.common.lifecycle.ShutdownInProgressException;
 import org.axonframework.messaging.core.Context;
 import org.axonframework.messaging.core.GenericMessage;
+import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.QueueMessageStream;
+import org.axonframework.messaging.core.unitofwork.UnitOfWorkTestUtils;
 import org.axonframework.messaging.queryhandling.GenericQueryMessage;
 import org.axonframework.messaging.queryhandling.GenericQueryResponseMessage;
 import org.axonframework.messaging.queryhandling.GenericSubscriptionQueryUpdateMessage;
@@ -42,20 +46,24 @@ import org.axonframework.messaging.queryhandling.NoHandlerForQueryException;
 import org.axonframework.messaging.queryhandling.QueryExecutionException;
 import org.axonframework.messaging.queryhandling.QueryMessage;
 import org.axonframework.messaging.queryhandling.QueryResponseMessage;
+import org.axonframework.messaging.queryhandling.SimpleQueryBus;
 import org.axonframework.messaging.queryhandling.SubscriptionQueryUpdateMessage;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.*;
 
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.awaitility.Awaitility.await;
 
 /**
  * Tests how {@link SpringCloudQueryBusConnector} routes queries across the cluster and reports what it cannot carry.
@@ -110,8 +118,8 @@ class SpringCloudQueryBusConnectorTest {
         );
     }
 
-    private static List<QueryResponseMessage> drain(MessageStream<QueryResponseMessage> stream) {
-        List<QueryResponseMessage> collected = new ArrayList<>();
+    private static <M extends Message> List<M> drain(MessageStream<M> stream) {
+        List<M> collected = new ArrayList<>();
         while (stream.hasNextAvailable()) {
             stream.next().ifPresent(entry -> collected.add(entry.message()));
         }
@@ -825,6 +833,42 @@ class SpringCloudQueryBusConnectorTest {
             assertThatThrownBy(() -> testSubject.subscriptionQuery(query(), null, 0))
                     .isInstanceOf(IllegalArgumentException.class)
                     .hasMessageContaining("update buffer size");
+        }
+    }
+
+    @Nested
+    class SubscribingToUpdatesThroughTheQueryBus {
+
+        private DistributedQueryBus queryBus;
+
+        @BeforeEach
+        void setUpTheQueryBus() {
+            queryBus = new DistributedQueryBus(new SimpleQueryBus(UnitOfWorkTestUtils.SIMPLE_FACTORY),
+                                               testSubject,
+                                               DistributedQueryBusConfiguration.DEFAULT);
+            queryBus.subscribe(FIND_COURSE, (query, context) -> MessageStream.fromItems(response("initial-1")));
+        }
+
+        @Test
+        void receivesTheUpdatesThisMemberEmitsWithoutTheInitialResult() {
+            // given
+            MessageStream<SubscriptionQueryUpdateMessage> updates = queryBus.subscribeToUpdates(query(), 16);
+
+            // when
+            queryBus.emitUpdate(query -> true, () -> update("update-1"), null)
+                    .orTimeout(5, TimeUnit.SECONDS)
+                    .join();
+
+            // then the bus tells the updates apart from the initial result by their type, so an update carried as
+            // any other response would never reach a subscriber to the updates alone. The initial result is
+            // produced on the bus's query executor, and the updates only follow once it has been.
+            List<SubscriptionQueryUpdateMessage> received = new ArrayList<>();
+            await().atMost(Duration.ofSeconds(5)).until(() -> {
+                received.addAll(drain(updates));
+                return !received.isEmpty();
+            });
+            assertThat(received).extracting(SubscriptionQueryUpdateMessage::identifier)
+                                .containsExactly("update-1");
         }
     }
 

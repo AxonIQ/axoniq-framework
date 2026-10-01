@@ -42,7 +42,6 @@ import org.axonframework.messaging.core.QueueMessageStream;
 import org.axonframework.messaging.core.conversion.MessageConverter;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.queryhandling.GenericQueryMessage;
-import org.axonframework.messaging.queryhandling.GenericQueryResponseMessage;
 import org.axonframework.messaging.queryhandling.NoHandlerForQueryException;
 import org.axonframework.messaging.queryhandling.QueryMessage;
 import org.axonframework.messaging.queryhandling.QueryResponseMessage;
@@ -356,7 +355,8 @@ public class SpringCloudQueryBusConnector implements QueryBusConnector {
 
         @Override
         public CompletableFuture<Void> sendUpdate(SubscriptionQueryUpdateMessage update) {
-            if (!updates.offer(new GenericQueryResponseMessage(update), Context.empty())) {
+            // Offered as it is: its type is what tells an update apart from the initial result to the subscriber.
+            if (!updates.offer(update, Context.empty())) {
                 IllegalStateException cause = new IllegalStateException(
                         ("This member produced more updates to query [%s] than the subscriber consumed. Consume them "
                                 + "sooner, or raise the update buffer size.").formatted(query.type())
