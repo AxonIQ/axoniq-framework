@@ -40,11 +40,7 @@ import org.jspecify.annotations.Nullable;
 import java.util.List;
 import java.util.UUID;
 
-import static io.axoniq.framework.springcloud.shared.WireCodec.decode;
-import static io.axoniq.framework.springcloud.shared.WireCodec.descriptionsOf;
-import static io.axoniq.framework.springcloud.shared.WireCodec.encode;
-import static io.axoniq.framework.springcloud.shared.WireCodec.messageOf;
-import static io.axoniq.framework.springcloud.shared.WireCodec.serializedDetailsOf;
+import static io.axoniq.framework.springcloud.shared.WireCodec.*;
 
 /**
  * Converts commands and their outcomes between {@link CommandMessage}/{@link CommandResultMessage} and the
@@ -146,7 +142,7 @@ final class CommandConverter {
                                                           String requestIdentifier,
                                                           String origin,
                                                           @Nullable Converter converter) {
-        byte[] details = serializedDetailsOf(cause, converter);
+        byte[] details = convertedDetailsOf(cause, converter);
         Object rawDetails = HandlerExecutionException.resolveDetails(cause).orElse(null);
         return CommandDispatchReply.error(
                 UUID.randomUUID().toString(),

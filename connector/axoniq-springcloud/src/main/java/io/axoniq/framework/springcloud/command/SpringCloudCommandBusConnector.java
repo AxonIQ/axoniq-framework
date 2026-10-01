@@ -53,8 +53,7 @@ import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * A {@link CommandBusConnector} distributing commands across the nodes discovered through Spring Cloud Discovery,
- * .
+ * A {@link CommandBusConnector} distributing commands across the nodes discovered through Spring Cloud Discovery.
  * <p>
  * With no server to route for it, this connector routes itself. Every dispatch resolves a {@link Member} from the
  * {@link SpringCloudMemberRegistry}'s consistent-hash ring, using the command's routing key and name, and then either
@@ -227,7 +226,7 @@ public class SpringCloudCommandBusConnector implements CommandBusConnector {
      * <p>
      * The distinction rests on {@link MemberUnreachableException}, which only the transport raises, and never on
      * {@link CommandDispatchException} itself: a member reporting that it could not dispatch a command answers with
-     * {@link io.axoniq.framework.springcloud.command.CommandErrorCode#COMMAND_DISPATCH_ERROR}, which is reconstructed
+     * {@link CommandErrorCode#COMMAND_DISPATCH_ERROR}, which is reconstructed
      * as a plain {@code CommandDispatchException} on this side and must not evict it.
      *
      * @param cause the failure that completed a remote dispatch

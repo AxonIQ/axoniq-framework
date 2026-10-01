@@ -21,15 +21,18 @@
  * The query side of the Spring Cloud connector: the connector distributing queries and subscription queries, and the
  * HTTP transport carrying them between members of the cluster.
  * <p>
- * {@link io.axoniq.framework.springcloud.query.SpringCloudQueryBusConnector} rotates each query over the members
- * advertising its name and hands it to the transport. A query may be answered any number of times, so it is one
- * request answered by a stream of Server-Sent Events: {@link
- * io.axoniq.framework.springcloud.query.QueryDispatchRequest} carries it out, {@link io.axoniq.framework.springcloud.query.QueryDispatchResponse} and {@link
- * io.axoniq.framework.springcloud.query.QueryDispatchFailure} carry the answer back, and {@link
- * io.axoniq.framework.springcloud.query.ServerSentEventReader} reads them without a reactive stack. {@link
- * io.axoniq.framework.springcloud.query.RemoteQueryDispatcher} sends a query, {@link
- * io.axoniq.framework.springcloud.query.SpringCloudQueryController} receives it, and {@link
- * io.axoniq.framework.springcloud.query.IncomingQueryInvoker} invokes the local handler with it.
+ * {@link SpringCloudQueryBusConnector} rotates each query over the members advertising its name, and either invokes
+ * this application's own handler when the chosen member is the local one, or hands the query to the transport. A query
+ * may be answered any number of times, so it is one request answered by a stream of Server-Sent Events:
+ * {@link QueryDispatchRequest} carries it out, {@link QueryDispatchResponse} and {@link QueryDispatchFailure} carry the
+ * answer back, and {@link ServerSentEventReader} reads them without a reactive stack. {@link RemoteQueryDispatcher}
+ * sends a query, {@link SpringCloudQueryController} receives it, and {@link IncomingQueryInvoker} invokes the local
+ * handler with it, writing every response to a {@link QueryResponseSink}, which {@link SseQueryResponseSink} adapts to
+ * the response stream.
+ * <p>
+ * A subscription query reaches every member advertising its name: each one receives a
+ * {@link SubscriptionQueryRequest}, registers the subscription, and streams the updates it emits back over the same
+ * kind of response stream. The initial result is asked for as a regular query.
  */
 @NullMarked
 package io.axoniq.framework.springcloud.query;

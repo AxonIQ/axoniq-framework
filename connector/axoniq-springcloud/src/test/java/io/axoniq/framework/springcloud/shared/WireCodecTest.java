@@ -29,7 +29,6 @@ import java.lang.reflect.Type;
 import java.nio.charset.StandardCharsets;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Tests the encoding members share when writing messages to each other, whichever kind of message they are.
@@ -113,12 +112,12 @@ class WireCodecTest {
             Throwable cause = new CommandExecutionException("Rejected.", null, details);
 
             // when / then
-            assertThat(WireCodec.serializedDetailsOf(cause, null)).isEqualTo(details);
+            assertThat(WireCodec.convertedDetailsOf(cause, null)).isEqualTo(details);
         }
 
         @Test
         void carriesNothingForAFailureWithoutDetails() {
-            assertThat(WireCodec.serializedDetailsOf(new IllegalStateException("Plain."), null)).isNull();
+            assertThat(WireCodec.convertedDetailsOf(new IllegalStateException("Plain."), null)).isNull();
         }
 
         @Test
@@ -127,7 +126,7 @@ class WireCodecTest {
             Throwable cause = new CommandExecutionException("Rejected.", null, new Object());
 
             // when / then reporting the failure matters more than reporting its details in full
-            assertThat(WireCodec.serializedDetailsOf(cause, new FailingConverter())).isNull();
+            assertThat(WireCodec.convertedDetailsOf(cause, new FailingConverter())).isNull();
         }
 
         @Test
@@ -136,7 +135,7 @@ class WireCodecTest {
             Throwable cause = new CommandExecutionException("Rejected.", null, new Object());
 
             // when / then
-            assertThat(WireCodec.serializedDetailsOf(cause, null)).isNull();
+            assertThat(WireCodec.convertedDetailsOf(cause, null)).isNull();
         }
     }
 

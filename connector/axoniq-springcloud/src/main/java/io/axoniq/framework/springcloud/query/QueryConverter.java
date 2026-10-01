@@ -222,7 +222,7 @@ final class QueryConverter {
                                                           String requestIdentifier,
                                                           String origin,
                                                           @Nullable Converter converter) {
-        byte[] details = serializedDetailsOf(cause, converter);
+        byte[] details = convertedDetailsOf(cause, converter);
         Object rawDetails = HandlerExecutionException.resolveDetails(cause).orElse(null);
         return new QueryDispatchFailure(
                 requestIdentifier,

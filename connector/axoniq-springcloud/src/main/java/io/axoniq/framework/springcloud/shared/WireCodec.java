@@ -115,7 +115,7 @@ public final class WireCodec {
      * @return the bytes to write for the given {@code cause}'s details, or {@code null} when it carries none that can
      * be written
      */
-    public static byte @Nullable [] serializedDetailsOf(Throwable cause, @Nullable Converter converter) {
+    public static byte @Nullable [] convertedDetailsOf(Throwable cause, @Nullable Converter converter) {
         Object details = HandlerExecutionException.resolveDetails(cause).orElse(null);
         if (details == null) {
             return null;
@@ -131,7 +131,7 @@ public final class WireCodec {
         try {
             return converter.convert(details, byte[].class);
         } catch (ConversionException e) {
-            logger.debug("Could not serialize exception details of type [{}]; omitting them from the reply.",
+            logger.debug("Could not convert exception details of type [{}]; omitting them from the reply.",
                          details.getClass().getName(), e);
             return null;
         }

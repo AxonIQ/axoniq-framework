@@ -70,7 +70,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * <p>
  * A query is answered with a stream of responses rather than a single result, so the responses arrive as they are
  * produced. A member answering faster than this application consumes fails the query rather than buffering without
- * limit; see {@code HttpRemoteQueryDispatcher}.
+ * limit; see {@link HttpRemoteQueryDispatcher}.
  * <p>
  * A subscription query reaches every member advertising its name, not just the one a plain query would route to: an
  * update is emitted on whichever member's state changed, and only reaches subscriptions that member holds a

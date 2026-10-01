@@ -19,15 +19,15 @@
 
 package io.axoniq.framework.springcloud.shared;
 
-import io.axoniq.framework.springcloud.command.SpringCloudCommandBusConnector;
-import io.axoniq.framework.springcloud.query.SpringCloudQueryBusConnector;
 import io.axoniq.license.entitlement.AxoniqAddon;
 
 /**
  * The {@link AxoniqAddon} identifying the Spring Cloud connector, so that it is detected and logged at start-up and
- * accounted for by the licence entitlement system.
+ * accounted for by the license entitlement system.
  * <p>
- * Registered with the entitlement system by {@link SpringCloudCommandBusConnector} and {@link SpringCloudQueryBusConnector} on construction, and discoverable
+ * Registered with the entitlement system by
+ * {@link io.axoniq.framework.springcloud.command.SpringCloudCommandBusConnector} and
+ * {@link io.axoniq.framework.springcloud.query.SpringCloudQueryBusConnector} on construction, and discoverable
  * through {@code META-INF/services/io.axoniq.license.entitlement.AxoniqAddon}.
  *
  * @author Allard Buijze

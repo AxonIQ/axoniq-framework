@@ -35,7 +35,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
  *
  * @author Allard Buijze
  */
-public class RecordingRemoteQueryDispatcher implements RemoteQueryDispatcher {
+class RecordingRemoteQueryDispatcher implements RemoteQueryDispatcher {
 
     private final List<Dispatch> dispatches = new CopyOnWriteArrayList<>();
     private final List<Subscription> subscriptions = new CopyOnWriteArrayList<>();

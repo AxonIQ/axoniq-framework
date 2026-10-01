@@ -20,11 +20,9 @@
 /**
  * The parts of the Spring Cloud connector that the command side and the query side both rely on.
  * <p>
- * {@link io.axoniq.framework.springcloud.shared.SpringCloudMemberRegistry} keeps track of the members of the cluster
- * and what each of them handles, for both connectors to route with. {@link
- * io.axoniq.framework.springcloud.shared.SpringCloudAxoniqAddon} identifies the connector to the licence entitlement
- * system, and {@link io.axoniq.framework.springcloud.shared.WireCodec} is the encoding of failures both sides write
- * to each other.
+ * {@link SpringCloudMemberRegistry} keeps track of the members of the cluster and what each of them handles, for both
+ * connectors to route with. {@link SpringCloudAxoniqAddon} identifies the connector to the license entitlement system,
+ * and {@link WireCodec} is the encoding of failures both sides write to each other.
  */
 @NullMarked
 package io.axoniq.framework.springcloud.shared;

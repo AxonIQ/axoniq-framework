@@ -29,7 +29,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
  *
  * @author Allard Buijze
  */
-public class RecordingQueryResponseSink implements QueryResponseSink {
+class RecordingQueryResponseSink implements QueryResponseSink {
 
     private final List<QueryDispatchResponse> responses = new CopyOnWriteArrayList<>();
     private final List<QueryDispatchResponse> updates = new CopyOnWriteArrayList<>();
