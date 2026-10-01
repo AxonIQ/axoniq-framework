@@ -65,6 +65,13 @@ public final class SharedAxonServerContainer {
                     // so it can't collapse onto this container regardless -- this label is just defense-in-depth
                     // documentation of that separation, in case reuse there is ever turned back on.
                     .withLabel("io.axoniq.container-pool", "shared")
+                    // AxonServerContainer's own constructor bakes the Surefire/Failsafe fork number into
+                    // TESTCONTAINERS_FORK_NUMBER, so ad-hoc containers in different concurrent forks don't
+                    // accidentally collide on the same Docker container. For this instance that's counterproductive:
+                    // it would otherwise vary the reuse hash per fork, so "the shared container" ends up as one
+                    // separate container per fork instead of truly one for the whole build. Override it back to a
+                    // constant so the reuse hash -- and thus the underlying container -- stays the same everywhere.
+                    .withEnv("TESTCONTAINERS_FORK_NUMBER", "shared")
                     .withDevMode(true)
                     .withReuse(true)
                     .withDcbContext(true)

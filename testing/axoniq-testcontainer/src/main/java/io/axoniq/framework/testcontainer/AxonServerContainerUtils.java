@@ -21,6 +21,7 @@ package io.axoniq.framework.testcontainer;
 
 import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
+import org.awaitility.core.ConditionTimeoutException;
 import org.axonframework.common.Assert;
 
 import java.io.BufferedReader;
@@ -30,7 +31,12 @@ import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URL;
+import java.nio.channels.FileChannel;
+import java.nio.channels.FileLock;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -59,41 +65,92 @@ public class AxonServerContainerUtils {
     public static final boolean NO_DCB_CONTEXT = false;
 
     /**
+     * Connect/read timeout for every HTTP call in this class, in milliseconds.
+     * <p>
+     * {@link HttpURLConnection} defaults to no timeout at all, so a shared Axon Server instance that accepts a
+     * connection but stops responding (e.g. under CPU/disk pressure on a busy CI runner) would otherwise hang the
+     * calling thread indefinitely -- observed in practice as a build silently stuck until the CI job's own timeout
+     * killed it, rather than the test failing (and retrying) promptly.
+     */
+    private static final int HTTP_TIMEOUT_MILLIS = 10_000;
+
+    /**
      * Initialize the cluster of the Axon Server instance located at the given {@code hostname} and {@code port}
      * combination.
      * <p>
      * Note that this constructs the contexts {@code _admin} and {@code default}.
+     * <p>
+     * A reusable container (e.g. {@link SharedAxonServerContainer#INSTANCE}) can be attached to by more than one
+     * Surefire/Failsafe JVM fork at nearly the same time -- {@code synchronized} in the caller only guards within a
+     * single JVM, not across forked processes. Two concurrent {@code /v2/cluster/init} requests against the same,
+     * still-uninitialized node corrupt its single-node Raft group membership: the node gets stuck in a perpetual
+     * pre-vote/follower loop and never becomes leader, so {@code initCluster} always times out (observed directly in
+     * CI: two "Request to initialize cluster" log lines 82ms apart on the same node, followed by an endless
+     * "Timeout in follower state" / "Starting pre-vote" cycle). A {@link FileLock} on a path derived from
+     * {@code hostname}/{@code port} serializes callers targeting the *same* instance across processes, without
+     * blocking callers initializing a different instance.
      *
      * @param hostname       The hostname of the Axon Server instance to initiate the cluster for.
      * @param port           The port of the Axon Server instance to initiate the cluster for.
      * @param shouldBeReused If set to {@code true}, ensure the cluster is not accidentally initialized twice.
      * @param dcbContext A {@code boolean} stating whether a DCB or non-DCB context is being created.
      * @throws IOException When there are issues with the HTTP connection to the Axon Server instance at the given
-     *                     {@code hostname} and {@code port}.
+     *                     {@code hostname} and {@code port}, or acquiring the cross-process init lock.
      */
     public static void initCluster(String hostname, int port, boolean shouldBeReused, boolean dcbContext) throws IOException {
         if (shouldBeReused && initialized(hostname, port)) {
             return;
         }
-        final URL url = URI.create(String.format("http://%s:%d/v2/cluster/init?dcb=%s", hostname, port, dcbContext)).toURL();
-        HttpURLConnection connection = null;
-        try {
-            connection = (HttpURLConnection) url.openConnection();
-            connection.setDoOutput(true);
-            connection.setRequestMethod("POST");
-            connection.getInputStream().close();
-
-            int responseCode = connection.getResponseCode();
-            Assert.isTrue(202 == responseCode, () -> "The response code [" + responseCode + "] did not match 202.");
-        } finally {
-            if (connection != null) {
-                connection.disconnect();
+        Path lockFile = Paths.get(
+                System.getProperty("java.io.tmpdir"),
+                "axon-server-cluster-init-" + hostname + "-" + port + ".lock"
+        );
+        try (FileChannel channel = FileChannel.open(lockFile, StandardOpenOption.CREATE, StandardOpenOption.WRITE);
+             FileLock lock = channel.lock()) {
+            // Re-check: whoever held the lock before us may have already finished initializing this instance.
+            if (shouldBeReused && initialized(hostname, port)) {
+                return;
+            }
+            try {
+                await().atMost(Duration.ofSeconds(90))
+                       .pollInterval(1, TimeUnit.SECONDS)
+                       .until(() -> tryInitCluster(hostname, port, dcbContext));
+            } catch (ConditionTimeoutException e) {
+                throw new IOException("Failed to initialize the Axon Server cluster within 90 seconds of retrying", e);
             }
         }
         waitForContextsCondition(
                 hostname, port,
                 contexts -> contexts.contains("_admin") && contexts.contains("default")
         );
+    }
+
+    /**
+     * Attempts a single cluster-init POST, returning whether it succeeded.
+     * <p>
+     * A container that has just passed its readiness checks (log message and health endpoint) can still return a
+     * transient 500 here, sometimes for a minute or more under CPU/disk pressure on a busy CI runner, since those
+     * checks don't guarantee the cluster-init endpoint itself is ready yet. Failures are swallowed rather than
+     * thrown so {@link #initCluster} can retry within its own budget instead of failing the whole container start
+     * on the first attempt.
+     */
+    private static boolean tryInitCluster(String hostname, int port, boolean dcbContext) {
+        HttpURLConnection connection = null;
+        try {
+            URL url = URI.create(String.format("http://%s:%d/v2/cluster/init?dcb=%s", hostname, port, dcbContext)).toURL();
+            connection = openConnection(url);
+            connection.setDoOutput(true);
+            connection.setRequestMethod("POST");
+            connection.getInputStream().close();
+
+            return 202 == connection.getResponseCode();
+        } catch (IOException e) {
+            return false;
+        } finally {
+            if (connection != null) {
+                connection.disconnect();
+            }
+        }
     }
 
     /**
@@ -111,7 +168,7 @@ public class AxonServerContainerUtils {
         final URL url = URI.create(String.format("http://%s:%d/v1/public/context", hostname, port)).toURL();
         HttpURLConnection connection = null;
         try {
-            connection = (HttpURLConnection) url.openConnection();
+            connection = openConnection(url);
             connection.setRequestProperty("Accept", "application/json");
             connection.setDoOutput(true);
             connection.setRequestMethod("GET");
@@ -142,7 +199,7 @@ public class AxonServerContainerUtils {
         final URL url = new URL(String.format("http://%s:%d/internal/raft/contexts", hostname, port));
         HttpURLConnection connection = null;
         try {
-            connection = (HttpURLConnection) url.openConnection();
+            connection = openConnection(url);
             connection.setRequestProperty("Accept", "application/json");
             connection.setDoOutput(true);
             connection.setRequestMethod("GET");
@@ -250,7 +307,7 @@ public class AxonServerContainerUtils {
         URL url = URI.create(String.format("http://%s:%d/v1/context/%s", hostname, port, context)).toURL();
         HttpURLConnection connection = null;
         try {
-            connection = (HttpURLConnection) url.openConnection();
+            connection = openConnection(url);
             connection.setDoOutput(true);
             connection.setRequestMethod("DELETE");
             connection.getInputStream().close();
@@ -303,7 +360,7 @@ public class AxonServerContainerUtils {
                     dcbContext,
                     replicationGroup
             );
-            connection = (HttpURLConnection) url.openConnection();
+            connection = openConnection(url);
             connection.setRequestProperty("Content-Type", "application/json");
             connection.setRequestProperty("Accept", "application/json");
             connection.setDoOutput(true);
@@ -321,6 +378,17 @@ public class AxonServerContainerUtils {
             }
         }
         waitForContextsCondition(hostname, port, contexts -> contexts.contains(context));
+    }
+
+    /**
+     * Opens the given {@code url}'s connection with {@link #HTTP_TIMEOUT_MILLIS} applied as both the connect and
+     * read timeout.
+     */
+    private static HttpURLConnection openConnection(URL url) throws IOException {
+        HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+        connection.setConnectTimeout(HTTP_TIMEOUT_MILLIS);
+        connection.setReadTimeout(HTTP_TIMEOUT_MILLIS);
+        return connection;
     }
 
     private AxonServerContainerUtils() {
