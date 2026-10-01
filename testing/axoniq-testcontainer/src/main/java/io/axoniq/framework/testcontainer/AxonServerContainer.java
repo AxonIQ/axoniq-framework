@@ -161,6 +161,16 @@ public class AxonServerContainer extends GenericContainer<AxonServerContainer> {
     protected void doStart() {
         Instant startingAt = Instant.now();
         super.doStart();
+        // TEMP diagnostic, at WARN so it's visible without extra config: dump everything that feeds
+        // Testcontainers' reuse hash, to compare across module JVMs and find why containers carrying the same
+        // "shared" pool label end up with different hashes. Logged *after* super.doStart() -- which calls
+        // configure() before computing the hash internally in tryStart() -- so this reflects the actual state
+        // the hash was computed from, not whatever was set at construction time before configure() ran. Once
+        // the root cause is confirmed, either drop this or downgrade to DEBUG to keep as a quieter permanent
+        // diagnostic -- no secrets here, env values are config (hostnames, the in-container license path),
+        // never license content, which is copied as a file.
+        LOG.warn("[reuse-diag] doStart() containerId={} envMap={} licensePath={} shouldBeReused={}",
+                 getContainerId(), getEnvMap(), licensePath, isShouldBeReused());
         Duration startupDuration = Duration.between(startingAt, Instant.now());
         if (startupDuration.compareTo(SLOW_STARTUP_THRESHOLD) > 0) {
             LOG.warn("Axon Server container [{}] took {} to become ready",

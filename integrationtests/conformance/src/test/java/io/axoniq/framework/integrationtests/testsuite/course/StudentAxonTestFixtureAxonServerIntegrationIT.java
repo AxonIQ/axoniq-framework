@@ -40,8 +40,10 @@ class StudentAxonTestFixtureAxonServerIntegrationIT {
     protected static final Logger logger = LoggerFactory.getLogger(StudentAxonTestFixtureAxonServerIntegrationIT.class);
 
     /*
-     * A context of its own, rather than the shared container's default context, so repeatedly recreating it
-     * (once per @BeforeEach, see testConfigurer()) can't collide with other suites sharing the container.
+     * A context of its own, rather than the shared container's default context, so it can't collide with other
+     * suites sharing the container. Created once in beforeAll(): each test uses a fresh random courseId (see the
+     * @RepeatedTest methods below), so event sourcing -- scoped per aggregate id -- already isolates repetitions
+     * without needing to purge the context between them.
      */
     private static final String CONTEXT = "student-axon-test-fixture-axon-server-it";
 
@@ -76,14 +78,6 @@ class StudentAxonTestFixtureAxonServerIntegrationIT {
 
     private EventSourcingConfigurer testConfigurer() {
         var configurer = EventSourcingConfigurer.create();
-        try {
-            AxonServerContainerUtils.purgeEventsFromAxonServer(container.getHost(),
-                                                               container.getHttpPort(),
-                                                               CONTEXT,
-                                                               AxonServerContainerUtils.DCB_CONTEXT);
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
         logger.info("Using Axon Server for integration test. UI is available at http://localhost:{}",
                     container.getHttpPort());
         AxonServerConfiguration axonServerConfiguration = new AxonServerConfiguration();

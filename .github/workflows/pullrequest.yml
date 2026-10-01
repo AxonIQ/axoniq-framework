@@ -63,17 +63,51 @@ jobs:
           # account for the license file copy, so whichever module's JVM starts the shared container first
           # determines whether it ends up licensed. Without the license present everywhere, an unlicensed
           # module could "poison" the shared container for modules that need multi-context support.
-          for dir in integrationtests/support connector/axon-server-connector integrationtests/connector/axon-server integrationtests/conformance; do
+          for dir in integrationtests/support connector/axon-server-connector integrationtests/connector/axon-server integrationtests/conformance dependency-injection/spring/spring-boot-autoconfigure; do
             mkdir -p "$dir/src/test/resources"
             printf '%s' "$AXON_SERVER_LICENSE" > "$dir/src/test/resources/axon-server-test.license"
             echo "Axon Server test license written to $dir/src/test/resources/axon-server-test.license"
             echo "License file size: $(wc -c < "$dir/src/test/resources/axon-server-test.license") bytes"
+            ls -la "$dir/src/test/resources/axon-server-test.license"
           done
         env:
           AXON_SERVER_LICENSE: ${{ secrets.AXON_SERVER_LICENSE }}
 
       - name: Enable Testcontainers reuse
         run: printf 'testcontainers.reuse.enable=true\n' > ~/.testcontainers.properties
+
+      - name: Start Axon Server container lifecycle poller
+        run: |
+          # Snapshots every AxonServer container's status and Testcontainers reuse-hash label every 3s for the
+          # whole build, so we can see directly whether a container that should be reusable (matching hash) is
+          # simply not RUNNING anymore by the time a later attempt looks for it, or whether the hash itself
+          # differs between attempts -- findContainerForReuse() only matches currently-running containers with a
+          # matching org.testcontainers.hash label, so either explains why reuse never succeeds, but they call
+          # for different fixes.
+          # Also captures org.testcontainers.copied_files.hash: Testcontainers computes this from the content AND
+          # unix file mode of every file copied into the container (e.g. the Axon Server test license), and folds
+          # it into the overall reuse hash via a label set before the hash is computed. A prior run confirmed the
+          # env map AND copied_files hash can both be identical between two "shared" pool containers that still get
+          # different overall org.testcontainers.hash values -- so something else in the create-container command
+          # (which is what the hash is actually computed over) varies. Dump each new container's full inspect JSON
+          # once, so the raw config (full label set, hostname, extra hosts, etc) can be diffed directly across
+          # containers that share identical env/copied-files but still land in different hash groups.
+          mkdir -p container-inspect
+          (
+            while true; do
+              echo "=== $(date -u +%Y-%m-%dT%H:%M:%S.%3NZ) ==="
+              for id in $(docker ps -aq --filter ancestor=docker.axoniq.io/axoniq/axonserver 2>/dev/null); do
+                docker inspect --format \
+                  '{{.Id}} status={{.State.Status}} hash={{index .Config.Labels "org.testcontainers.hash"}} copiedFilesHash={{index .Config.Labels "org.testcontainers.copied_files.hash"}} pool={{index .Config.Labels "io.axoniq.container-pool"}}' \
+                  "$id" 2>/dev/null
+                if [ ! -f "container-inspect/$id.json" ]; then
+                  docker inspect "$id" > "container-inspect/$id.json" 2>/dev/null
+                fi
+              done
+              sleep 3
+            done
+          ) > container-lifecycle.log 2>&1 &
+          echo "poller_pid=$!" >> "$GITHUB_ENV"
 
       - name: Regular Build
         run: |
@@ -83,6 +117,65 @@ jobs:
           -Dparallel=classes -DthreadCount=1 -DforkCount=2 -DforkedProcessTimeoutInSeconds=600 2>&1 | tee build.log
         env:
           AXONIQ_LICENSE: ${{ secrets.AXON_SERVER_LICENSE }}
+
+      - name: Stop container lifecycle poller
+        if: always()
+        run: kill "$poller_pid" 2>/dev/null || true
+
+      - name: Upload container lifecycle log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: container-lifecycle-jdk${{ matrix.java-version }}
+          path: container-lifecycle.log
+          retention-days: 3
+          if-no-files-found: ignore
+
+      - name: Upload container inspect dumps
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: container-inspect-jdk${{ matrix.java-version }}
+          path: container-inspect/*.json
+          retention-days: 3
+          if-no-files-found: ignore
+
+      - name: Capture Axon Server container logs
+        if: always()
+        run: |
+          # Not every AxonServerContainer used in the build carries the "shared" pool label -- e.g. ad-hoc,
+          # not-yet-shared containers reuse separately from SharedAxonServerContainer.INSTANCE. Filter by image
+          # instead to catch all of them, running or already exited.
+          for id in $(docker ps -aq --filter "ancestor=docker.axoniq.io/axoniq/axonserver"); do
+            docker logs "$id" > "axonserver-container-${id}.log" 2>&1 || true
+          done
+
+      - name: Upload Axon Server container logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: axonserver-logs-jdk${{ matrix.java-version }}
+          path: axonserver-container-*.log
+          retention-days: 3
+          if-no-files-found: ignore
+
+      - name: Disk usage breakdown after build
+        if: always()
+        run: |
+          df -h / > disk-usage.log
+          echo >> disk-usage.log
+          echo "--- docker system df -v ---" >> disk-usage.log
+          docker system df -v >> disk-usage.log 2>&1 || true
+          cat disk-usage.log
+
+      - name: Upload disk usage breakdown
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: disk-usage-jdk${{ matrix.java-version }}
+          path: disk-usage.log
+          retention-days: 3
+          if-no-files-found: ignore
 
       - name: Generate build status report
         if: always()

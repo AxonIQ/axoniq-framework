@@ -38,6 +38,37 @@
         <maven-enforcer.allow-spring-dependencies>true</maven-enforcer.allow-spring-dependencies>
     </properties>
 
+    <!-- Spring Boot's BOM (imported by the parent axoniq-framework-spring pom) manages
+         jackson-annotations below the version this project's tools.jackson:jackson-databind
+         needs (JsonApplyView, added in 2.22). Pin it back to the version managed by this
+         project's own jackson-bom (jackson2.version, ${jackson2.version}). Since Jackson 2.20,
+         jackson-annotations no longer takes a patch version, so this isn't simply
+         jackson2.version; keep it aligned with the jackson.version.annotations property of
+         the matching jackson-bom release instead.
+
+         Same issue for org.testcontainers:testcontainers: the spring-boot-testcontainers and
+         testcontainers dependencies below are declared without an explicit version, so Spring
+         Boot's BOM, being nearer in the graph than this project's own testcontainers-bom
+         import, wins conflict resolution and pins them to its own (older) managed Testcontainers
+         version. Besides being outdated, that version computes its container-reuse hash
+         differently (and non-deterministically per JVM for copied files), which silently
+         breaks SharedAxonServerContainer's reuse for every test class in this module. Pin back
+         to this project's own managed version. -->
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>com.fasterxml.jackson.core</groupId>
+                <artifactId>jackson-annotations</artifactId>
+                <version>2.22</version>
+            </dependency>
+            <dependency>
+                <groupId>org.testcontainers</groupId>
+                <artifactId>testcontainers</artifactId>
+                <version>${testcontainers.version}</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
     <dependencies>
         <!-- Axon -->
         <dependency>
