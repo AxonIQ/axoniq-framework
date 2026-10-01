@@ -67,8 +67,8 @@ import static org.awaitility.Awaitility.await;
  */
 final class TenantDataProtectionFixture {
 
-    static final String TENANT_A = "tenant-A";
-    static final String TENANT_B = "tenant-B";
+    static final String TENANT_A = "dataprotection-tenant-a";
+    static final String TENANT_B = "dataprotection-tenant-b";
     static final String CUSTOMER_ID = "customer-1";
 
     private static final QualifiedName CUSTOMER_SNAPSHOT = new QualifiedName("test", "CustomerSnapshot");

@@ -69,8 +69,8 @@ import static org.awaitility.Awaitility.await;
 class MultiTenantPersistentStreamIT {
 
     private static final AxonServerTestInfrastructure INFRASTRUCTURE = new AxonServerTestInfrastructure();
-    private static final String TENANT_A = "tenant-A";
-    private static final String TENANT_B = "tenant-B";
+    private static final String TENANT_A = "stream-tenant-a";
+    private static final String TENANT_B = "stream-tenant-b";
 
     private static AxonServerTestInfrastructure.ContextManager contextManager;
     private static AxonConfiguration application;

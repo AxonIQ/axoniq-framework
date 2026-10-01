@@ -87,8 +87,8 @@ import static org.junit.jupiter.api.Assumptions.assumeFalse;
 class MultiTenantQueryHandlingIT {
 
     private static final AxonServerTestInfrastructure INFRASTRUCTURE = new AxonServerTestInfrastructure();
-    private static final String TENANT_A = "tenant-A";
-    private static final String TENANT_B = "tenant-B";
+    private static final String TENANT_A = "query-tenant-a";
+    private static final String TENANT_B = "query-tenant-b";
 
     @Parameter
     private boolean preferLocalQueryHandler;
@@ -141,7 +141,11 @@ class MultiTenantQueryHandlingIT {
 
     @AfterAll
     void tearDownClass() {
-        application.shutdown();
+        // Guarded: if setUpClass() failed after creating the tenant contexts but before application was assigned,
+        // application.shutdown() would NPE and skip cleanup below, orphaning the contexts on the shared container.
+        if (application != null) {
+            application.shutdown();
+        }
         contextManager.deleteAllCustomContexts();
         INFRASTRUCTURE.stop();
     }
