@@ -39,13 +39,13 @@ class WorkflowPropertiesTest {
     @Test
     void initialSegmentCountBindsFromTheApplicationProperties() {
         contextRunner.withPropertyValues("axon.workflow.initial-segment-count=16")
-                     .run(context -> Assertions.assertThat(context.getBean(WorkflowProperties.class).getInitialSegmentCount())
+                     .run(context -> assertThat(context.getBean(WorkflowProperties.class).getInitialSegmentCount())
                              .isEqualTo(16));
     }
 
     @Test
     void initialSegmentCountIsUnsetUnlessTheApplicationConfiguresIt() {
-        contextRunner.run(context -> Assertions.assertThat(context.getBean(WorkflowProperties.class).getInitialSegmentCount())
+        contextRunner.run(context -> assertThat(context.getBean(WorkflowProperties.class).getInitialSegmentCount())
                 .as("""
                     An unset property must stay unset, so the event processing configuration keeps deciding the \
                     segment count. Defaulting it here would silently override whatever that configuration holds.""")
