@@ -57,6 +57,8 @@ import java.util.function.Function;
  *         backing this module's event processor.</li>
  *     <li>{@link WorkflowConfigurationRegistryPhase} - provide a custom {@link WorkflowConfigurationRegistry} for
  *         storing workflow configurations with their start conditions.</li>
+ *     <li>{@link WorkflowExecutionRepositoryPhase} - provide a custom {@link WorkflowExecutionRepository} for
+ *         persisting and retrieving workflow instances.</li>
  *     <li>{@link HistoryPhase} - enable or disable workflow history tracking.</li>
  * </ul>
  *
@@ -114,7 +116,7 @@ public interface WorkflowModule<C extends WorkflowContext> extends Module {
      * implementations for infrastructure components before defining the workflow language.
      * <p>
      * Use this entry point when you need to supply custom implementations for any of the infrastructure components,
-     * such as the {@link WorkflowConfigurationRegistry} or history tracking.
+     * such as the {@link WorkflowConfigurationRegistry}, {@link WorkflowExecutionRepository}, or history tracking.
      *
      * @param name        name of the workflow module
      * @param contextType the {@link WorkflowContext} type used by the workflows in this module
@@ -180,11 +182,32 @@ public interface WorkflowModule<C extends WorkflowContext> extends Module {
          *
          * @param workflowConfigurationRegistry a {@link ComponentBuilder} constructing the
          *                                      {@link WorkflowConfigurationRegistry}
-         * @return the {@link HistoryPhase} phase of this builder, for a fluent API
+         * @return the {@link WorkflowExecutionRepositoryPhase} phase of this builder, for a fluent API
          */
-        HistoryPhase<C> configurationRegistry(
+        WorkflowExecutionRepositoryPhase<C> configurationRegistry(
                 ComponentBuilder<WorkflowConfigurationRegistry<?>> workflowConfigurationRegistry
         );
+    }
+
+    /**
+     * Phase of the module's building process in which a custom {@link WorkflowExecutionRepository} can be provided.
+     * <p>
+     * The repository is responsible for persisting and retrieving workflow instances, where each instance is identified
+     * by a unique workflow identifier and bundles configuration, context, and execution state.
+     *
+     * @param <C> the type of {@link WorkflowContext} used by the workflows in this module
+     */
+    interface WorkflowExecutionRepositoryPhase<C extends WorkflowContext> extends HistoryPhase<C> {
+
+        /**
+         * Registers the given {@link ComponentBuilder} of a {@link WorkflowExecutionRepository} as the repository for
+         * the workflow module being built.
+         *
+         * @param workflowExecutionRepository a {@link ComponentBuilder} constructing the
+         *                                    {@link WorkflowExecutionRepository}
+         * @return the {@link HistoryPhase} phase of this builder, for a fluent API
+         */
+        HistoryPhase<C> executionRepository(ComponentBuilder<WorkflowExecutionRepository> workflowExecutionRepository);
     }
 
     /**
