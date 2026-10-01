@@ -191,6 +191,10 @@ First, an update stream is opened on every node advertising the query's name.
 Second, one of those nodes is asked for the initial result, which is a query like any other.
 The two are returned as a single stream: the initial result, and then the updates.
 
+The initial result is asked for only once every node has registered the subscription, not just the node answering it.
+It often reflects state other nodes change too, as when the segments of one event processor are spread over the nodes and all of them write one read model, and an update a node emits before registering reaches nobody.
+The nodes are subscribed to in parallel, so this waits for the slowest of them to answer.
+
 Every node advertising the name is subscribed to, not just the one a plain query would route to.
 An update is emitted on whichever node's state changed, and reaches only the subscriptions that node holds a registration for, so a subscriber reaching one node would miss every update emitted on the others.
 The updates of all of them arrive on the one stream the subscriber reads.
