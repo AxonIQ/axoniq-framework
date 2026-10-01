@@ -341,10 +341,10 @@ class WorkflowReplayPreparedStateTest {
             configurer.componentRegistry(r -> r.disableEnhancer(AxonServerConfigurationEnhancer.class))
                       .componentRegistry(cr -> cr
                               .registerComponent(EventStorageEngine.class, cfg -> eventStorageEngine)
-                              .registerComponent(MutableWorkflowHistoryRepository.class, cfg -> historyRepository)
                               .registerComponent(TokenStore.class, cfg -> processingTokenStore)
                               .registerModule(
-                                      WorkflowModule.defaults(MODULE_NAME, SimpleWorkflowContext.class)
+                                      WorkflowModule.configure(MODULE_NAME, SimpleWorkflowContext.class)
+                                                    .withHistory(cfg -> historyRepository)
                                                     .contextFactory(c -> new SimpleWorkflowContextFactory())
                                                     .definition(d -> d.autodetected(c -> workflow))
                               ));
@@ -383,7 +383,10 @@ class WorkflowReplayPreparedStateTest {
         }
 
         private Optional<io.axoniq.framework.workflow.history.api.WorkflowHistory> history(String workflowId) {
-            return configuration.getComponent(MutableWorkflowHistoryRepository.class).findById(workflowId).join();
+            return configuration.getComponents(MutableWorkflowHistoryRepository.class)
+                                .get("MutableWorkflowHistoryRepository[" + PreparedState.MODULE_NAME + "]")
+                                .findById(workflowId)
+                                .join();
         }
 
         @Override

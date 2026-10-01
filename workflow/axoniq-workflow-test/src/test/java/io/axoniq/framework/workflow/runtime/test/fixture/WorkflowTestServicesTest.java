@@ -67,7 +67,11 @@ class WorkflowTestServicesTest {
                         "WorkflowCancellationService[" + DEFAULT_MODULE_NAME + "]",
                         workflowCancellationService
                 ));
-        when(configuration.getComponent(MutableWorkflowHistoryRepository.class)).thenReturn(workflowHistoryRepository);
+        when(configuration.getComponents(MutableWorkflowHistoryRepository.class))
+                .thenReturn(Map.of(
+                        "MutableWorkflowHistoryRepository[" + DEFAULT_MODULE_NAME + "]",
+                        workflowHistoryRepository
+                ));
         when(configuration.getOptionalComponent(TestClock.class)).thenReturn(Optional.of(clock));
         when(configuration.getOptionalComponent(ManualExecuteStepActionResolver.class)).thenReturn(
                 Optional.of(actionResolver));
@@ -101,8 +105,8 @@ class WorkflowTestServicesTest {
     void shutdownStopsEngineConfigurationAndClearsHistory() {
         AxonConfiguration configuration = baseConfiguration();
         WorkflowEngine workflowEngine = configuration.getComponents(WorkflowEngine.class).values().iterator().next();
-        MutableWorkflowHistoryRepository historyRepository = configuration.getComponent(
-                MutableWorkflowHistoryRepository.class);
+        MutableWorkflowHistoryRepository historyRepository = configuration.getComponents(
+                MutableWorkflowHistoryRepository.class).get("MutableWorkflowHistoryRepository[" + DEFAULT_MODULE_NAME + "]");
         WorkflowTestServices services = WorkflowTestServices.from(configuration);
 
         services.shutdown();
@@ -128,8 +132,11 @@ class WorkflowTestServicesTest {
                         "WorkflowCancellationService[" + DEFAULT_MODULE_NAME + "]",
                         mock(WorkflowCancellationService.class)
                 ));
-        when(configuration.getComponent(MutableWorkflowHistoryRepository.class)).thenReturn(
-                mock(MutableWorkflowHistoryRepository.class));
+        when(configuration.getComponents(MutableWorkflowHistoryRepository.class))
+                .thenReturn(Map.of(
+                        "MutableWorkflowHistoryRepository[" + DEFAULT_MODULE_NAME + "]",
+                        mock(MutableWorkflowHistoryRepository.class)
+                ));
         when(configuration.getOptionalComponent(TestClock.class)).thenReturn(
                 Optional.of(mock(TestClock.class)));
         when(configuration.getOptionalComponent(ManualExecuteStepActionResolver.class)).thenReturn(

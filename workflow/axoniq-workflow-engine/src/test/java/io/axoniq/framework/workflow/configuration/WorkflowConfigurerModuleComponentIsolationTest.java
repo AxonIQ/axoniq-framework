@@ -24,7 +24,6 @@ import io.axoniq.framework.workflow.dsl.api.EventConditions;
 import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
 import io.axoniq.framework.workflow.history.inmemory.InMemoryWorkflowHistoryRepository;
 import io.axoniq.framework.workflow.history.inmemory.MutableWorkflowHistoryRepository;
-import io.axoniq.framework.workflow.history.inmemory.WorkflowHistoryProjector;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowDefinition;
 import io.axoniq.framework.workflow.runtime.api.manager.WorkflowManager;
@@ -91,9 +90,7 @@ class WorkflowConfigurerModuleComponentIsolationTest {
         MutableWorkflowHistoryRepository localHistoryRepository = new InMemoryWorkflowHistoryRepository();
 
         var localWithHistoryModule = WorkflowModule.configure("local-with-history-module", TestContext.class)
-                                                   .withHistory(cfg -> new WorkflowHistoryProjector(
-                                                           localHistoryRepository
-                                                   ))
+                                                   .withHistory(cfg -> localHistoryRepository)
                                                    .contextFactory(c -> TestContext::new)
                                                    .definition(d -> d.declarative(c -> (ctx) -> {
                                                                      })

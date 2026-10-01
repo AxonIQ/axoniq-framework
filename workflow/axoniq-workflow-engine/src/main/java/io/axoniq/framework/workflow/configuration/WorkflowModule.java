@@ -20,6 +20,7 @@ package io.axoniq.framework.workflow.configuration;
 
 import io.axoniq.framework.workflow.dsl.api.EventCondition;
 import io.axoniq.framework.workflow.dsl.api.WorkflowContext;
+import io.axoniq.framework.workflow.history.inmemory.MutableWorkflowHistoryRepository;
 import io.axoniq.framework.workflow.history.inmemory.WorkflowHistoryProjector;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContextFactory;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowDefinition;
@@ -161,22 +162,27 @@ public interface WorkflowModule<C extends WorkflowContext> extends Module {
     /**
      * Phase of the module's building process in which workflow history tracking can be enabled or disabled.
      * <p>
-     * When enabled, a {@link WorkflowHistoryProjector} collects historic information about workflow executions. When
-     * disabled, no history is tracked.
+     * When enabled, a {@link WorkflowHistoryProjector} collects historic information about workflow executions into
+     * the configured {@link MutableWorkflowHistoryRepository}. When disabled, no history is tracked.
      *
      * @param <C> the type of {@link WorkflowContext} used by the workflows in this module
      */
     interface HistoryPhase<C extends WorkflowContext> extends WorkflowContextFactoryPhase<C> {
 
         /**
-         * Enables workflow history tracking with the given {@link WorkflowHistoryProjector}.
+         * Enables workflow history tracking, storing collected history in the given
+         * {@link MutableWorkflowHistoryRepository}.
          * <p>
-         * The projector will collect historic information about workflow executions.
+         * The module creates its own {@link WorkflowHistoryProjector}, injecting the repository constructed by the
+         * given {@code workflowHistoryRepository}.
          *
-         * @param workflowHistoryProjector a {@link ComponentBuilder} constructing the {@link WorkflowHistoryProjector}
+         * @param workflowHistoryRepository a {@link ComponentBuilder} constructing the
+         *                                  {@link MutableWorkflowHistoryRepository}
          * @return the {@link WorkflowContextFactoryPhase} phase of this builder, for a fluent API
          */
-        WorkflowContextFactoryPhase<C> withHistory(ComponentBuilder<WorkflowHistoryProjector> workflowHistoryProjector);
+        WorkflowContextFactoryPhase<C> withHistory(
+                ComponentBuilder<MutableWorkflowHistoryRepository> workflowHistoryRepository
+        );
 
         /**
          * Disables workflow history tracking for this module.

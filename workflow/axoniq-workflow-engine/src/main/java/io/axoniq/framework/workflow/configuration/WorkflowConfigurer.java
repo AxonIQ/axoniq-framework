@@ -58,26 +58,23 @@ import static java.util.Objects.requireNonNull;
  *     <li>A named {@link java.util.concurrent.ExecutorService} for workflow-body work and workflow-event
  *     publication (see {@link io.axoniq.framework.workflow.configuration.WorkflowConfigurationDefaults#WORKFLOW_ENGINE_EXECUTOR}),
  *     defaulting to a virtual-thread-per-task executor</li>
- *     <li>{@link io.axoniq.framework.workflow.runtime.execution.WorkflowCancellationService}</li>
- *     <li>{@link io.axoniq.framework.workflow.history.inmemory.MutableWorkflowHistoryRepository} - defaulting to an
- *     {@link io.axoniq.framework.workflow.history.inmemory.InMemoryWorkflowHistoryRepository}</li>
  *     <li>{@link io.axoniq.framework.workflow.runtime.execution.WorkflowStore} - defaulting to an
  *     {@link io.axoniq.framework.workflow.runtime.execution.EventSourcedWorkflowStore}</li>
  *     <li>{@link io.axoniq.framework.workflow.runtime.execution.WorkflowStateParameterResolverFactory}, so handler
  *     methods can inject the current workflow state</li>
  * </ul>
  * Every {@link io.axoniq.framework.workflow.runtime.execution.WorkflowConfigurationRegistry},
- * {@link io.axoniq.framework.workflow.runtime.execution.WorkflowExecutionRepository}, and
+ * {@link io.axoniq.framework.workflow.runtime.execution.WorkflowExecutionRepository},
+ * {@link io.axoniq.framework.workflow.runtime.execution.WorkflowCancellationService},
+ * {@link io.axoniq.framework.workflow.history.inmemory.MutableWorkflowHistoryRepository}, and
  * {@link io.axoniq.framework.workflow.runtime.api.manager.WorkflowManager} is, by contrast, <em>not</em> among these
- * app-wide defaults: each {@link WorkflowModule} registers its own instance of these three, named after itself, so
- * several {@code WorkflowModule}s in one application never share - or collide over - any of them.
+ * app-wide defaults: each {@link WorkflowModule} registers its own instance of these, named after itself, so several
+ * {@code WorkflowModule}s in one application never share - or collide over - any of them. The default
+ * {@code MutableWorkflowHistoryRepository} is an
+ * {@link io.axoniq.framework.workflow.history.inmemory.InMemoryWorkflowHistoryRepository}; replace it per module
+ * through {@link WorkflowModule.HistoryPhase#withHistory(org.axonframework.common.configuration.ComponentBuilder)}.
  * <p>
- * To replace or decorate any of the app-wide defaults above, use their respective type as the identifier. For example,
- * to replace the default {@code MutableWorkflowHistoryRepository}, do
- * <pre><code>
- *     configurer.componentRegistry(cr ->
- *                  cr.registerComponent(MutableWorkflowHistoryRepository.class, c -> new CustomWorkflowHistoryRepository()))
- * </code></pre>
+ * To replace or decorate any of the remaining app-wide defaults above, use their respective type as the identifier.
  *
  * @author Simon Zambrovski
  * @since 5.4.0

@@ -61,7 +61,7 @@ public class WorkflowTestServices {
     private final TestEventPublisher eventPublisher;
     private final WorkflowConfigurationRegistry<?> workflowRegistry;
     private final WorkflowCancellationService workflowCancellationService;
-    private final WorkflowHistoryRepository workflowHistoryRepository;
+    private final MutableWorkflowHistoryRepository workflowHistoryRepository;
     @Nullable
     private final TestClock clock;
     @Nullable
@@ -112,7 +112,11 @@ public class WorkflowTestServices {
                 configuration.getComponents(WorkflowCancellationService.class).get(cancellationServiceName),
                 "WorkflowCancellationService with name [" + cancellationServiceName + "] must not be null."
         );
-        this.workflowHistoryRepository = configuration.getComponent(MutableWorkflowHistoryRepository.class);
+        String historyRepositoryName = "MutableWorkflowHistoryRepository[" + moduleName + "]";
+        this.workflowHistoryRepository = Objects.requireNonNull(
+                configuration.getComponents(MutableWorkflowHistoryRepository.class).get(historyRepositoryName),
+                "MutableWorkflowHistoryRepository with name [" + historyRepositoryName + "] must not be null."
+        );
         this.clock = configuration.getOptionalComponent(TestClock.class).orElse(null);
         this.executeStepActionResolver = configuration.getOptionalComponent(ManualExecuteStepActionResolver.class)
                                                       .orElse(null);
@@ -217,6 +221,6 @@ public class WorkflowTestServices {
     public void shutdown() {
         workflowEngine.shutdown();
         configuration.shutdown();
-        ((MutableWorkflowHistoryRepository) workflowHistoryRepository).clear();
+        workflowHistoryRepository.clear();
     }
 }

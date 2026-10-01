@@ -23,8 +23,6 @@ import io.axoniq.framework.workflow.configuration.WorkflowModule;
 import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
 import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContextFactory;
-import io.axoniq.framework.workflow.history.inmemory.InMemoryWorkflowHistoryRepository;
-import io.axoniq.framework.workflow.history.inmemory.MutableWorkflowHistoryRepository;
 import io.axoniq.framework.workflow.annotation.Workflow;
 import io.axoniq.framework.workflow.runtime.api.execution.context.Version;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
@@ -219,8 +217,6 @@ class ConcurrentWriterFencingTest {
                 .componentRegistry(r -> r.disableEnhancer(AxonServerConfigurationEnhancer.class))
                 .componentRegistry(cr -> cr
                         .registerComponent(EventStorageEngine.class, cfg -> eventStorageEngine)
-                        .registerComponent(MutableWorkflowHistoryRepository.class,
-                                           cfg -> new InMemoryWorkflowHistoryRepository())
                         .registerComponent(TokenStore.class, cfg -> new InMemoryTokenStore())));
     }
 

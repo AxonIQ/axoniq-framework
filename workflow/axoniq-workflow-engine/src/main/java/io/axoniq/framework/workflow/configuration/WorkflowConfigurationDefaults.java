@@ -19,8 +19,6 @@
 package io.axoniq.framework.workflow.configuration;
 
 import io.axoniq.framework.workflow.dsl.api.EventNameCustomizer;
-import io.axoniq.framework.workflow.history.inmemory.InMemoryWorkflowHistoryRepository;
-import io.axoniq.framework.workflow.history.inmemory.MutableWorkflowHistoryRepository;
 import io.axoniq.framework.workflow.runtime.execution.DefaultEventNameCustomizer;
 import io.axoniq.framework.workflow.runtime.execution.DefaultExecuteStepActionResolver;
 import io.axoniq.framework.workflow.runtime.execution.DefaultWorkflowScheduler;
@@ -127,7 +125,6 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
         registerWorkflowTimeoutScheduler(componentRegistry);
         registerRunningWorkflowsModule(componentRegistry);
         registerWorkflowEngineExecutor(componentRegistry);
-        registerMutableWorkflowHistoryRepository(componentRegistry);
         registerWorkflowStore(componentRegistry);
     }
 
@@ -241,13 +238,6 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
                                     )));
                     return new EventSourcedWorkflowStore(runningWorkflowsRepository, workflowStateRepository);
                 });
-    }
-
-    void registerMutableWorkflowHistoryRepository(ComponentRegistry componentRegistry) {
-        componentRegistry.registerIfNotPresent(
-                MutableWorkflowHistoryRepository.class,
-                cfg -> new InMemoryWorkflowHistoryRepository()
-        );
     }
 
     @Override

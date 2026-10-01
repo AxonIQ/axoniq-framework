@@ -265,7 +265,8 @@ class ThenTest {
                         "WorkflowCancellationService[" + DEFAULT_MODULE_NAME + "]",
                         mock(WorkflowCancellationService.class)
                 ));
-        when(configuration.getComponent(MutableWorkflowHistoryRepository.class)).thenReturn(historyRepository);
+        when(configuration.getComponents(MutableWorkflowHistoryRepository.class))
+                .thenReturn(Map.of("MutableWorkflowHistoryRepository[" + DEFAULT_MODULE_NAME + "]", historyRepository));
         when(configuration.getOptionalComponent(TestClock.class)).thenReturn(Optional.empty());
         when(configuration.getOptionalComponent(ManualExecuteStepActionResolver.class)).thenReturn(Optional.empty());
         when(configuration.getOptionalComponent(ManualWorkflowScheduler.class)).thenReturn(Optional.empty());

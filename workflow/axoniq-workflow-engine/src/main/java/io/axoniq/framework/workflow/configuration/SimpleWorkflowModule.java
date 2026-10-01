@@ -20,7 +20,7 @@ package io.axoniq.framework.workflow.configuration;
 
 import io.axoniq.framework.workflow.dsl.api.EventCondition;
 import io.axoniq.framework.workflow.dsl.api.WorkflowContext;
-import io.axoniq.framework.workflow.history.api.WorkflowHistoryRepository;
+import io.axoniq.framework.workflow.history.inmemory.InMemoryWorkflowHistoryRepository;
 import io.axoniq.framework.workflow.history.inmemory.MutableWorkflowHistoryRepository;
 import io.axoniq.framework.workflow.history.inmemory.WorkflowHistoryProjector;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowConfiguration;
@@ -107,8 +107,8 @@ class SimpleWorkflowModule<C extends WorkflowContext>
     private Function<PooledStreamingEventProcessorConfiguration, PooledStreamingEventProcessorConfiguration> engineConfigCustomizer =
             psepConfig -> psepConfig;
     private boolean useHistory = true;
-    private ComponentBuilder<WorkflowHistoryProjector> historyProjector =
-            config -> new WorkflowHistoryProjector(config.getComponent(MutableWorkflowHistoryRepository.class));
+    private ComponentBuilder<MutableWorkflowHistoryRepository> historyRepository =
+            config -> new InMemoryWorkflowHistoryRepository();
     private Function<PooledStreamingEventProcessorConfiguration, PooledStreamingEventProcessorConfiguration> historyConfigCustomizer =
             psepConfig -> psepConfig;
     @Nullable
@@ -136,8 +136,10 @@ class SimpleWorkflowModule<C extends WorkflowContext>
     }
 
     @Override
-    public WorkflowContextFactoryPhase<C> withHistory(ComponentBuilder<WorkflowHistoryProjector> historyProjector) {
-        this.historyProjector = requireNonNull(historyProjector, "Workflow history projector must not be null");
+    public WorkflowContextFactoryPhase<C> withHistory(
+            ComponentBuilder<MutableWorkflowHistoryRepository> historyRepository
+    ) {
+        this.historyRepository = requireNonNull(historyRepository, "Workflow history repository must not be null");
         this.useHistory = true;
         return this;
     }
@@ -219,6 +221,7 @@ class SimpleWorkflowModule<C extends WorkflowContext>
                     c -> new WorkflowEngineCheckpointingSupport(c.getComponent(WorkflowEngine.class, engineName()))
             );
             cr.registerComponent(workflowEngine());
+            cr.registerComponent(workflowHistoryRepository());
             cr.registerComponent(workflowManager());
             cr.registerComponent(workflowSegmentChangeListener());
             cr.registerModule(workflowEngineEventProcessor());
@@ -272,10 +275,19 @@ class SimpleWorkflowModule<C extends WorkflowContext>
         return "WorkflowEngine[" + name + "]";
     }
 
+    private ComponentDefinition<MutableWorkflowHistoryRepository> workflowHistoryRepository() {
+        return ComponentDefinition.ofTypeAndName(MutableWorkflowHistoryRepository.class, historyRepositoryName())
+                                  .withBuilder(historyRepository);
+    }
+
+    private String historyRepositoryName() {
+        return "MutableWorkflowHistoryRepository[" + name + "]";
+    }
+
     private ComponentDefinition<WorkflowManager> workflowManager() {
         return ComponentDefinition.ofTypeAndName(WorkflowManager.class, managerName())
                                   .withBuilder(c -> new SimpleWorkflowManager(
-                                          c.getComponent(WorkflowHistoryRepository.class),
+                                          c.getComponent(MutableWorkflowHistoryRepository.class, historyRepositoryName()),
                                           c.getComponent(WorkflowExecutionRepository.class, executionRepositoryName()),
                                           c.getComponent(WorkflowCancellationService.class, cancellationServiceName()),
                                           c.getComponent(WorkflowStore.class),
@@ -382,7 +394,9 @@ class SimpleWorkflowModule<C extends WorkflowContext>
 
     private ComponentDefinition<WorkflowHistoryProjector> historyProjector() {
         return ComponentDefinition.ofTypeAndName(WorkflowHistoryProjector.class, historyProjectorName())
-                                  .withBuilder(historyProjector);
+                                  .withBuilder(c -> new WorkflowHistoryProjector(c.getComponent(
+                                          MutableWorkflowHistoryRepository.class, historyRepositoryName()
+                                  )));
     }
 
     private PooledStreamingEventProcessorModule historyEventProcessor() {
