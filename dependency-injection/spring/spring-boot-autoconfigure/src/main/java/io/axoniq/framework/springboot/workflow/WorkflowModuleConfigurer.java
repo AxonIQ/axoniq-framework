@@ -18,6 +18,7 @@
  */
 package io.axoniq.framework.springboot.workflow;
 
+import io.axoniq.framework.springboot.WorkflowProperties;
 import io.axoniq.framework.workflow.configuration.WorkflowModule;
 import io.axoniq.framework.workflow.dsl.api.WorkflowContext;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContextFactory;

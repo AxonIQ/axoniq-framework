@@ -19,7 +19,6 @@
 package io.axoniq.framework.springboot.workflow;
 
 import io.axoniq.framework.springboot.WorkflowProperties;
-import org.assertj.core.api.Assertions;
 import org.junit.jupiter.api.*;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;

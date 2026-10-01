@@ -20,12 +20,10 @@ package io.axoniq.framework.springboot.autoconfig;
 
 import io.axoniq.framework.springboot.WorkflowProperties;
 import io.axoniq.framework.springboot.workflow.WorkflowDefinitionLookup;
-import io.axoniq.framework.workflow.configuration.WorkflowEventProcessingRegistrationEnhancer;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowEngine;
 import org.springframework.beans.factory.config.BeanDefinition;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
