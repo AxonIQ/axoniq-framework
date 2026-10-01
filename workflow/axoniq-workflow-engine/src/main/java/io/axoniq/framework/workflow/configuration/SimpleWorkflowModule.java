@@ -56,7 +56,6 @@ import org.axonframework.messaging.eventhandling.processing.streaming.segmenting
 import org.axonframework.messaging.eventhandling.processing.streaming.token.store.TokenStore;
 import org.axonframework.messaging.eventstreaming.EventCriteria;
 import org.axonframework.messaging.eventstreaming.StreamableEventSource;
-import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -235,18 +234,14 @@ class SimpleWorkflowModule<C extends WorkflowContext>
         componentRegistry(cr -> {
             cr.registerComponent(workflowConfigurationRegistry());
             cr.registerComponent(workflowExecutionRepository());
-            cr.registerComponent(workflowEngine());
-            cr.registerComponent(workflowManager());
-            cr.registerComponent(workflowSegmentChangeListener());
-            cr.registerComponent(
-                    WorkflowCancellationService.class,
-                    cancellationServiceName(),
-                    c -> new WorkflowCancellationService()
-            );
+            cr.registerComponent(workflowCancellationService());
             cr.registerIfNotPresent(
                     WorkflowEngineCheckpointingSupport.class,
                     c -> new WorkflowEngineCheckpointingSupport(c.getComponent(WorkflowEngine.class, engineName()))
             );
+            cr.registerComponent(workflowEngine());
+            cr.registerComponent(workflowManager());
+            cr.registerComponent(workflowSegmentChangeListener());
             cr.registerModule(workflowEngineEventProcessor());
             if (useHistory) {
                 cr.registerComponent(historyProjector());
@@ -264,10 +259,6 @@ class SimpleWorkflowModule<C extends WorkflowContext>
         return "WorkflowExecutionRepository[" + name + "]";
     }
 
-    private String cancellationServiceName() {
-        return "WorkflowCancellationService[" + name + "]";
-    }
-
     private ComponentDefinition<WorkflowConfigurationRegistry> workflowConfigurationRegistry() {
         return ComponentDefinition.ofTypeAndName(WorkflowConfigurationRegistry.class, configurationRegistryName())
                                   .withBuilder(configurationRegistry);
@@ -280,8 +271,9 @@ class SimpleWorkflowModule<C extends WorkflowContext>
     private ComponentDefinition<WorkflowEngine> workflowEngine() {
         return ComponentDefinition.ofTypeAndName(WorkflowEngine.class, engineName())
                                   .withBuilder(c -> new WorkflowEngine(
-                                          c.getComponent(WorkflowConfigurationRegistry.class,
-                                                         configurationRegistryName()),
+                                          c.getComponent(
+                                                  WorkflowConfigurationRegistry.class, configurationRegistryName()
+                                          ),
                                           c.getComponent(WorkflowExecutionRepository.class, executionRepositoryName()),
                                           c.getComponent(WorkflowCancellationService.class, cancellationServiceName()),
                                           c.getComponent(WorkflowStore.class),
@@ -329,6 +321,15 @@ class SimpleWorkflowModule<C extends WorkflowContext>
 
     private String segmentChangeListenerName() {
         return "WorkflowSegmentChangeListener[" + name + "]";
+    }
+
+    private ComponentDefinition<WorkflowCancellationService> workflowCancellationService() {
+        return ComponentDefinition.ofTypeAndName(WorkflowCancellationService.class, cancellationServiceName())
+                                  .withBuilder(c -> new WorkflowCancellationService());
+    }
+
+    private String cancellationServiceName() {
+        return "WorkflowCancellationService[" + name + "]";
     }
 
     private PooledStreamingEventProcessorModule workflowEngineEventProcessor() {

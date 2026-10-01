@@ -19,9 +19,9 @@
 
 package workflows.workflowmanager;
 
-import io.axoniq.framework.workflow.query.api.WorkflowStateQuery;
 import io.axoniq.framework.workflow.dsl.api.WorkflowState;
 import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
+import io.axoniq.framework.workflow.query.api.WorkflowStateQuery;
 import io.axoniq.framework.workflow.runtime.api.manager.WorkflowInstance;
 import io.axoniq.framework.workflow.runtime.api.manager.WorkflowManager;
 import org.axonframework.common.configuration.Configuration;
@@ -39,7 +39,8 @@ public class WorkflowManagerExamples {
     public WorkflowManager retrieveManager(Configuration configuration, String workflowModuleName) {
         // tag::retrieve-manager[]
         WorkflowManager workflowManager =
-                configuration.getComponents(WorkflowManager.class).get("WorkflowManager[" + workflowModuleName + "]");
+                configuration.getComponents(WorkflowManager.class)
+                             .get("WorkflowManager[" + workflowModuleName + "]");
         // end::retrieve-manager[]
         return workflowManager;
     }

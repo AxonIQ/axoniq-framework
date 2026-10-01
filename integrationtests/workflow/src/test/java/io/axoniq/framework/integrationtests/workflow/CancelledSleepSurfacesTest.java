@@ -18,6 +18,7 @@
  */
 package io.axoniq.framework.integrationtests.workflow;
 
+import io.axoniq.framework.workflow.annotation.Workflow;
 import io.axoniq.framework.workflow.configuration.WorkflowModule.WorkflowDefinitionPhase.DetectionPhase;
 import io.axoniq.framework.workflow.configuration.WorkflowModule.WorkflowDefinitionPhase.FinalizedPhase;
 import io.axoniq.framework.workflow.dsl.api.StepCancellationException;
@@ -25,7 +26,6 @@ import io.axoniq.framework.workflow.dsl.api.StepStatus;
 import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
 import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContextFactory;
-import io.axoniq.framework.workflow.annotation.Workflow;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowExecutionRepository;
 import org.axonframework.messaging.eventhandling.annotation.Event;
 import org.junit.jupiter.api.*;
@@ -68,7 +68,7 @@ class CancelledSleepSurfacesTest extends AbstractWorkflowIntegrationTestBase<Sim
         delayedPublisher.start();
 
         var executionRepository = configuration.getComponents(WorkflowExecutionRepository.class)
-                                                .get("WorkflowExecutionRepository[" + getClass().getSimpleName() + "]");
+                                               .get("WorkflowExecutionRepository[" + getClass().getSimpleName() + "]");
 
         // Wait until the workflow is parked in the sleep step.
         await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {

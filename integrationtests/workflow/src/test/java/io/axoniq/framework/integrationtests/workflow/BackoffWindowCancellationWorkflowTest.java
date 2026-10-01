@@ -18,6 +18,7 @@
  */
 package io.axoniq.framework.integrationtests.workflow;
 
+import io.axoniq.framework.workflow.annotation.Workflow;
 import io.axoniq.framework.workflow.configuration.WorkflowModule.WorkflowDefinitionPhase.DetectionPhase;
 import io.axoniq.framework.workflow.configuration.WorkflowModule.WorkflowDefinitionPhase.FinalizedPhase;
 import io.axoniq.framework.workflow.dsl.api.StepCancellationException;
@@ -27,7 +28,6 @@ import io.axoniq.framework.workflow.dsl.api.retry.BackoffStrategy;
 import io.axoniq.framework.workflow.dsl.api.retry.RetryPolicy;
 import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContextFactory;
-import io.axoniq.framework.workflow.annotation.Workflow;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowExecutionRepository;
 import org.axonframework.messaging.eventhandling.annotation.Event;
 import org.junit.jupiter.api.*;
@@ -82,7 +82,7 @@ class BackoffWindowCancellationWorkflowTest extends AbstractWorkflowIntegrationT
         delayedPublisher.start();
 
         var executionRepository = configuration.getComponents(WorkflowExecutionRepository.class)
-                                                .get("WorkflowExecutionRepository[" + getClass().getSimpleName() + "]");
+                                               .get("WorkflowExecutionRepository[" + getClass().getSimpleName() + "]");
 
         // Wait until attempt 1 has failed and the step is parked RETRYING in its backoff window.
         await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {

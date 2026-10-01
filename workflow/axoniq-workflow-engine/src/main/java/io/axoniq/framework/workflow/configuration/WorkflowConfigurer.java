@@ -91,12 +91,27 @@ public class WorkflowConfigurer implements ApplicationConfigurer {
     }
 
     /**
+     * Creates a {@code WorkflowConfigurer} that enhances an existing {@code EventSourcingConfigurer}.
+     * <p>
+     * This method is useful when applying multiple specialized Configurers to configure a single application.
+     *
+     * @param eventSourcingConfigurer the {@code EventSourcingConfigurer} to enhance with configuration of messaging
+     *                                components
+     * @return the current instance of the {@code Configurer} for a fluent API
+     * @see #create()
+     */
+    public static WorkflowConfigurer enhance(EventSourcingConfigurer eventSourcingConfigurer) {
+        return new WorkflowConfigurer(eventSourcingConfigurer)
+                .componentRegistry(cr -> cr.registerEnhancer(new WorkflowConfigurationDefaults()));
+    }
+
+    /**
      * Creates a new configurer with the defaults required by the Workflow Engine.
      *
-     * @return configurer.
+     * @return configurer
      */
     public static WorkflowConfigurer create() {
-        return new WorkflowConfigurer(EventSourcingConfigurer.create());
+        return enhance(EventSourcingConfigurer.create());
     }
 
     /**

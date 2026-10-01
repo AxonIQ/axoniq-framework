@@ -18,6 +18,7 @@
  */
 package io.axoniq.framework.integrationtests.workflow;
 
+import io.axoniq.framework.workflow.annotation.Workflow;
 import io.axoniq.framework.workflow.configuration.WorkflowModule.WorkflowDefinitionPhase.DetectionPhase;
 import io.axoniq.framework.workflow.configuration.WorkflowModule.WorkflowDefinitionPhase.FinalizedPhase;
 import io.axoniq.framework.workflow.dsl.api.StepFailedException;
@@ -27,7 +28,6 @@ import io.axoniq.framework.workflow.dsl.api.WorkflowCancelledException;
 import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
 import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContextFactory;
-import io.axoniq.framework.workflow.annotation.Workflow;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowExecutionRepository;
 import io.axoniq.framework.workflow.runtime.test.utils.SleepUtils;
 import org.axonframework.messaging.eventhandling.annotation.Event;
@@ -114,7 +114,7 @@ class CancelWorkflowInterruptsStepWithCatchableExceptionTest
 
     private void awaitParked(String workflowId) {
         var executionRepository = configuration.getComponents(WorkflowExecutionRepository.class)
-                                                .get("WorkflowExecutionRepository[" + getClass().getSimpleName() + "]");
+                                               .get("WorkflowExecutionRepository[" + getClass().getSimpleName() + "]");
         await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
             var execution = executionRepository.findById(workflowId);
             assertThat(execution).isPresent();
