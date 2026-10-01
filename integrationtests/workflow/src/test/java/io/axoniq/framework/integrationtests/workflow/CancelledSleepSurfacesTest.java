@@ -67,8 +67,7 @@ class CancelledSleepSurfacesTest extends AbstractWorkflowIntegrationTestBase<Sim
         ));
         delayedPublisher.start();
 
-        var executionRepository = configuration.getComponents(WorkflowExecutionRepository.class)
-                                               .get("WorkflowExecutionRepository[" + getClass().getSimpleName() + "]");
+        var executionRepository = executionRepository();
 
         // Wait until the workflow is parked in the sleep step.
         await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {

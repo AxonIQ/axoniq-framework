@@ -81,8 +81,7 @@ class BackoffWindowCancellationWorkflowTest extends AbstractWorkflowIntegrationT
         ));
         delayedPublisher.start();
 
-        var executionRepository = configuration.getComponents(WorkflowExecutionRepository.class)
-                                               .get("WorkflowExecutionRepository[" + getClass().getSimpleName() + "]");
+        var executionRepository = executionRepository();
 
         // Wait until attempt 1 has failed and the step is parked RETRYING in its backoff window.
         await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {

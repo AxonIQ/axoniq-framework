@@ -22,13 +22,14 @@ import io.axoniq.framework.axonserver.connector.configuration.AxonServerConfigur
 import io.axoniq.framework.workflow.configuration.WorkflowConfigurer;
 import io.axoniq.framework.workflow.dsl.api.WorkflowContext;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContextFactory;
+import io.axoniq.framework.workflow.runtime.execution.WorkflowExecutionRepository;
 import io.axoniq.framework.workflow.runtime.test.AbstractWorkflowTestBase;
 import org.axonframework.common.configuration.ComponentBuilder;
 
 import java.util.function.UnaryOperator;
 
 /**
- * Abstarct test base for Workflow integration tests, disabling Axon Server and Multi-Tenancy.
+ * Abstract test base for Workflow integration tests, disabling Axon Server and Multi-Tenancy.
  *
  * @param <T> workflow context type
  */
@@ -42,5 +43,15 @@ abstract class AbstractWorkflowIntegrationTestBase<T extends WorkflowContext> ex
     @Override
     protected UnaryOperator<WorkflowConfigurer> configure() {
         return c -> c.componentRegistry(r -> r.disableEnhancer(AxonServerConfigurationEnhancer.class));
+    }
+
+    /**
+     * Returns the {@link WorkflowExecutionRepository} tied to this test.
+     *
+     * @return the {@link WorkflowExecutionRepository} tied to this test
+     */
+    protected WorkflowExecutionRepository executionRepository() {
+        return configuration.getComponents(WorkflowExecutionRepository.class)
+                            .get("WorkflowExecutionRepository[" + getClass().getSimpleName() + "]");
     }
 }
