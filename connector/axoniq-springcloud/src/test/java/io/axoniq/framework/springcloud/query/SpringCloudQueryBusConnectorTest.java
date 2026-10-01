@@ -713,21 +713,37 @@ class SpringCloudQueryBusConnectorTest {
         }
 
         @Test
-        void keepsTheSubscriptionOpenWhileAnyMemberStillHoldsIt() {
+        void failsWhenAMemberStopsAnsweringWithoutEndingTheSubscription() {
             // given a subscription across two members
             twoRemoteMembersHandleTheQuery();
             MessageStream<QueryResponseMessage> responses = testSubject.subscriptionQuery(query(), null, 16);
             drain(responses);
 
-            // when one of them stops answering, as a member leaving the cluster does
+            // when one of them ends its stream without reporting the subscription over, as a member does that shut
+            // down, or whose connection a proxy closed
             dispatcher.stopAnswering(remoteMember());
             drain(responses);
 
-            // then the other still has updates to give
-            assertThat(responses.isCompleted()).isFalse();
-            dispatcher.emit(otherRemoteMember(), response("update-from-c"));
-            assertThat(drain(responses)).extracting(QueryResponseMessage::identifier)
-                                        .containsExactly("update-from-c");
+            // then nothing tells that member apart from one still emitting updates this subscriber no longer
+            // receives, so carrying on with the other would leave it believing it has all of them
+            assertThat(responses.error()).isPresent();
+            assertThat(responses.error().orElseThrow()).isInstanceOf(QueryDispatchException.class)
+                                                       .hasMessageContaining(remoteMember().name());
+        }
+
+        @Test
+        void releasesTheOtherMembersSubscriptionsWhenOneStopsAnswering() {
+            // given a subscription across two members
+            twoRemoteMembersHandleTheQuery();
+            MessageStream<QueryResponseMessage> responses = testSubject.subscriptionQuery(query(), null, 16);
+            drain(responses);
+
+            // when
+            dispatcher.stopAnswering(remoteMember());
+            drain(responses);
+
+            // then the member still answering is not left emitting into a subscription that has already failed
+            assertThat(dispatcher.subscriptions()).allMatch(RecordingRemoteQueryDispatcher.Subscription::released);
         }
 
         @Test
@@ -742,23 +758,6 @@ class SpringCloudQueryBusConnectorTest {
             drain(responses);
 
             // then waiting on the other members would be waiting for updates that are never coming
-            assertThat(responses.isCompleted()).isTrue();
-            assertThat(responses.error()).isEmpty();
-        }
-
-        @Test
-        void completesOnceEveryMemberHasCompleted() {
-            // given
-            twoRemoteMembersHandleTheQuery();
-            MessageStream<QueryResponseMessage> responses = testSubject.subscriptionQuery(query(), null, 16);
-            drain(responses);
-
-            // when
-            dispatcher.stopAnswering(remoteMember());
-            dispatcher.stopAnswering(otherRemoteMember());
-            drain(responses);
-
-            // then
             assertThat(responses.isCompleted()).isTrue();
             assertThat(responses.error()).isEmpty();
         }

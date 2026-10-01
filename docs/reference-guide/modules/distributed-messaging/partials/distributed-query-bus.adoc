@@ -216,9 +216,9 @@ They are opened on the client queries are sent with, which keeps them apart from
 
 A node that completes a subscription query says so explicitly, and that ends the subscription: there will never be another update to it, so the subscribing node stops waiting on the other nodes as well.
 
-A node that simply stops answering, having shut down or been partitioned away, is a different thing.
-That ends its own part in the subscription and says nothing about the subscription itself, so the remaining nodes carry on and the subscription ends once the last of them has.
-A node that fails, rather than ending quietly, fails the whole subscription: carrying on with the rest would leave the subscriber receiving some of the updates and believing it received all of them.
+Any other end of a node's part fails the whole subscription: the node reporting a failure, shutting down, sending nothing for longer than `axon.springcloud.subscription-inactivity-timeout`, or losing its connection.
+The subscribing node cannot tell such a node apart from one that is still emitting updates it no longer receives, so carrying on with the rest would leave the subscriber receiving some of the updates and believing it received all of them.
+Establish the subscription query again to get a fresh initial result and a complete stream of updates from the nodes still there.
 
 ===== A node that starts handling the query
 

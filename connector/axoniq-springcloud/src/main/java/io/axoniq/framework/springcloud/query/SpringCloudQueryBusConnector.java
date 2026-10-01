@@ -195,29 +195,27 @@ public class SpringCloudQueryBusConnector implements QueryBusConnector {
      * members -- an update belongs to whichever member's state changed -- so they are drained as they arrive rather
      * than interleaved by any rule.
      * <p>
-     * A member failing fails the whole subscription. Carrying on with the rest would leave the subscriber receiving
-     * some of the updates and believing it received all of them.
+     * Only a member reporting the subscription over ends it cleanly, and that ends it for every member. Any other end
+     * of a member's stream fails the whole subscription: the member failing, going silent, losing its connection, or
+     * closing its stream because it shut down. The subscriber cannot tell such a member apart from one that is still
+     * emitting updates it no longer receives, so carrying on with the rest would leave it receiving some of the
+     * updates and believing it received all of them.
      */
     private static final class SubscriptionUpdates {
 
         private final QueryMessage query;
         private final QueueMessageStream<QueryResponseMessage> merged;
         private final List<Source> sources = new CopyOnWriteArrayList<>();
-        private final AtomicInteger openSources;
         // Failed alongside the merged updates, so that a subscription one of whose members could not be reached
         // does not leave the initial result waiting on an opening that will never come.
         private final CompletableFuture<Void> everyMemberOpen;
 
         private SubscriptionUpdates(QueryMessage query,
                                     int updateBufferSize,
-                                    int memberCount,
                                     CompletableFuture<Void> everyMemberOpen) {
             this.query = query;
             this.everyMemberOpen = everyMemberOpen;
             this.merged = new QueueMessageStream<>(new ArrayBlockingQueue<>(updateBufferSize));
-            // Counted up front rather than as members are added: members are subscribed to concurrently, and one
-            // completing before the next is added would otherwise look like the last of them.
-            this.openSources = new AtomicInteger(memberCount);
         }
 
         private void add(Member member, MessageStream<QueryResponseMessage> updates) {
@@ -254,7 +252,9 @@ public class SpringCloudQueryBusConnector implements QueryBusConnector {
                         }
                     }
                     if (!source.stream.hasNextAvailable() && source.stream.isCompleted()) {
-                        end(source, () -> source.stream.error().ifPresentOrElse(this::fail, this::sourceCompleted));
+                        // A member reporting the subscription over has already ended the merged updates, so the
+                        // failure only reaches a subscription whose member stopped answering without saying so.
+                        end(source, () -> fail(source.stream.error().orElseGet(() -> stoppedAnswering(source))));
                     }
                 } catch (Exception e) {
                     logger.debug("Failed to read the updates member [{}] produced for query [{}].",
@@ -282,18 +282,19 @@ public class SpringCloudQueryBusConnector implements QueryBusConnector {
         /**
          * Ends the subscription because a member reported it over, however many members still hold one.
          * <p>
-         * A member saying so means there will never be another update, which is not what a member merely ceasing to
-         * answer means. Waiting for the rest would leave the subscriber holding a subscription that has run its
-         * course.
+         * A member saying so means there will never be another update. Waiting for the rest would leave the
+         * subscriber holding a subscription that has run its course.
          */
         private void completeAll() {
             merged.seal();
         }
 
-        private void sourceCompleted() {
-            if (openSources.decrementAndGet() == 0) {
-                merged.seal();
-            }
+        private QueryDispatchException stoppedAnswering(Source source) {
+            return new QueryDispatchException(
+                    ("Member [%s] stopped answering subscription query [%s] without reporting it over, so updates it "
+                            + "emits may no longer arrive. Establish the subscription query again to receive a "
+                            + "complete stream.").formatted(source.member.name(), query.type())
+            );
         }
 
         /**
@@ -505,7 +506,7 @@ public class SpringCloudQueryBusConnector implements QueryBusConnector {
         CompletableFuture<Void> everyMemberOpen = new CompletableFuture<>();
         AtomicInteger unopened = new AtomicInteger(members.size());
         SubscriptionUpdates updates =
-                new SubscriptionUpdates(query, updateBufferSize, members.size(), everyMemberOpen);
+                new SubscriptionUpdates(query, updateBufferSize, everyMemberOpen);
         for (Member member : members) {
             AtomicBoolean opened = new AtomicBoolean();
             SubscriptionListener listener = new SubscriptionListener() {

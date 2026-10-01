@@ -84,8 +84,8 @@ final class QueryConverter {
      * The event type reporting that a subscription query is over: there will never be another update to it.
      * <p>
      * Written rather than left to the stream simply ending, because the two mean different things. A member that
-     * shuts down or is partitioned away ends the stream as well, and that says only that this member has stopped
-     * answering, not that the subscription has run its course.
+     * shuts down or loses its connection ends the stream as well, and that says only that this member stopped
+     * answering, which fails the subscription rather than completing it.
      */
     public static final String COMPLETE_EVENT = "complete";
 
