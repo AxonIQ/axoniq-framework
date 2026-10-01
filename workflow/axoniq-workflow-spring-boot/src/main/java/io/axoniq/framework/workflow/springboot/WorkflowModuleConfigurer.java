@@ -21,6 +21,7 @@ package io.axoniq.framework.workflow.springboot;
 import io.axoniq.framework.workflow.configuration.WorkflowModule;
 import io.axoniq.framework.workflow.dsl.api.WorkflowContext;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContextFactory;
+import org.axonframework.common.AxonThreadFactory;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.annotation.RegistrationScope;
 import org.axonframework.common.configuration.ComponentBuilder;
@@ -33,6 +34,9 @@ import org.springframework.context.ApplicationContextAware;
 
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.function.Supplier;
 
 /**
  * Configuration enhancer responsible for creation of {@link WorkflowModule} instances, based on workflow definitions
@@ -111,6 +115,7 @@ public class WorkflowModuleConfigurer implements ConfigurationEnhancer, Applicat
             PooledStreamingEventProcessorConfiguration processorConfiguration
     ) {
         return applyProcessorProperties(
+                "workflowEngine",
                 workflowProperties.getInitialSegmentCount(),
                 workflowProperties.getBatchSize(),
                 workflowProperties.getThreadCount(),
@@ -127,6 +132,7 @@ public class WorkflowModuleConfigurer implements ConfigurationEnhancer, Applicat
     ) {
         WorkflowProperties.HistoryProcessorProperties history = workflowProperties.getHistory();
         return applyProcessorProperties(
+                "workflowHistoryProjector",
                 history.getInitialSegmentCount(),
                 history.getBatchSize(),
                 history.getThreadCount(),
@@ -138,6 +144,7 @@ public class WorkflowModuleConfigurer implements ConfigurationEnhancer, Applicat
     }
 
     private static PooledStreamingEventProcessorConfiguration applyProcessorProperties(
+            String name,
             int initialSegmentCount,
             int batchSize,
             int threadCount,
@@ -146,11 +153,16 @@ public class WorkflowModuleConfigurer implements ConfigurationEnhancer, Applicat
             boolean coordinatorClaimExtension,
             PooledStreamingEventProcessorConfiguration processorConfiguration
     ) {
-        processorConfiguration.initialSegmentCount(initialSegmentCount);
-        processorConfiguration.batchSize(batchSize);
-        processorConfiguration.maxClaimedSegments(threadCount);
-        processorConfiguration.tokenClaimInterval(tokenClaimInterval);
-        processorConfiguration.claimExtensionThreshold(claimExtensionThreshold);
+        String executorName = "WorkPackage[" + name + "]";
+        Supplier<ScheduledExecutorService> scheduledExecutorService = () -> Executors.newScheduledThreadPool(
+                threadCount,
+                new AxonThreadFactory(executorName)
+        );
+        processorConfiguration.workerExecutor(scheduledExecutorService)
+                              .tokenClaimInterval(tokenClaimInterval)
+                              .claimExtensionThreshold(claimExtensionThreshold)
+                              .batchSize(batchSize)
+                              .initialSegmentCount(initialSegmentCount);
         if (coordinatorClaimExtension) {
             processorConfiguration.enableCoordinatorClaimExtension();
         }
