@@ -128,9 +128,12 @@ import static java.util.Objects.requireNonNull;
      * Requests notification once the execution queue has crossed the current checkpoint latch, acting as an immediate
      * delegate from an {@link WorkflowExecution#addCheckpointLatch(Runnable)} invocation.
      * <p>
-     * If the execution is not live yet, the callback is invoked immediately because no asynchronous task queue is
-     * active. Otherwise, this method ensures that exactly one {@link CheckpointLatch} is queued for the current drain
-     * cycle.
+     * If the execution is genuinely idle - not running and with no queued or active work - the callback is invoked
+     * immediately because there is no asynchronous task queue work to wait for. A materialized but not yet started
+     * execution can still have queued work (for example replay-mode business events appended while nothing drains
+     * the queue yet); in that case this method falls through to the same queuing path used while running, so the
+     * callback fires only once that queued work is actually drained. Otherwise, this method ensures that exactly one
+     * {@link CheckpointLatch} is queued for the current drain cycle.
      * <p>
      * Repeated calls while that same intent is still pending do not enqueue more tasks. Instead, their callbacks are
      * composed into {@link #latchCallback} so they all fire when the single queued latch is consumed.
@@ -142,7 +145,11 @@ import static java.util.Objects.requireNonNull;
      */
     public void addCheckpointLatch(Runnable latch) {
         requireNonNull(latch, "The when-complete runnable must not be null");
-        if (!executionTaskQueue.isRunning()) {
+        boolean idle;
+        synchronized (this) {
+            idle = !executionTaskQueue.isRunning() && !unsafe();
+        }
+        if (idle) {
             latch.run();
             return;
         }

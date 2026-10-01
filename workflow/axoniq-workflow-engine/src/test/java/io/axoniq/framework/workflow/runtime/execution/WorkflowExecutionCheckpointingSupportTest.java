@@ -68,6 +68,27 @@ class WorkflowExecutionCheckpointingSupportTest {
     }
 
     @Test
+    void queuesTheLatchInsteadOfFiringImmediatelyWhenNotRunningButWorkIsQueued() {
+        var taskQueue = new InlineExecutionTaskQueue();
+        taskQueue.running = false;
+        taskQueue.tasks.add(ignored -> {
+        });
+        var support = new WorkflowExecutionCheckpointingSupport(taskQueue, CheckpointWorkStateListener.NO_OP);
+        var callbacks = new AtomicInteger();
+
+        support.addCheckpointLatch(callbacks::incrementAndGet);
+
+        assertThat(callbacks).hasValue(0);
+        assertThat(taskQueue.tasks).hasSize(2);
+
+        support.runTask(taskQueue.tasks.remove(), mock(WorkflowExecution.class));
+        assertThat(callbacks).hasValue(0);
+
+        support.runTask(taskQueue.tasks.remove(), mock(WorkflowExecution.class));
+        assertThat(callbacks).hasValue(1);
+    }
+
+    @Test
     void reportsCheckpointWorkStateTransitions() {
         var taskQueue = new InlineExecutionTaskQueue();
         var unsafeTransitions = new AtomicInteger();
