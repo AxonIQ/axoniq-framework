@@ -40,10 +40,12 @@ import static org.awaitility.Awaitility.await;
 @Testcontainers
 class SpringBootTestContainerIT {
 
+    // Deliberately not reused: this class and its sibling build an identical container, so with reuse the two
+    // concurrently running test forks can attach to the same instance, race on its cluster initialization, and stop
+    // it underneath each other when the first class finishes.
     @Container
     @ServiceConnection
-    private static final AxonServerContainer axonServer = new AxonServerContainer().withDevMode(true)
-                                                                                    .withReuse(true);
+    private static final AxonServerContainer axonServer = new AxonServerContainer().withDevMode(true);
 
     @Autowired
     private AxonServerConfiguration axonServerConfiguration;
