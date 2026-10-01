@@ -209,6 +209,9 @@ Keep the interval comfortably below the idle timeout of whatever sits between th
 Unlike a plain query, a subscription has no deadline of its own: it lasts as long as the subscriber wants it to, and a node with nothing to report is behaving correctly.
 What stands in for a deadline is silence, which is how a node that disappeared without its socket reporting so looks.
 
+Each open subscription holds a connection to every node advertising its query for as long as it lasts, so a node holding 50 subscriptions to a query three nodes handle holds 150 connections.
+They are opened on the client queries are sent with, which keeps them apart from the connections commands use.
+
 ===== Ending a subscription
 
 A node that completes a subscription query says so explicitly, and that ends the subscription: there will never be another update to it, so the subscribing node stops waiting on the other nodes as well.
