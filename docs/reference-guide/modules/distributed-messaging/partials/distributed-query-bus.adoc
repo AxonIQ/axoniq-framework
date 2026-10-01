@@ -145,7 +145,7 @@ If you exclude the `axon-server-connector` dependency you will fall back to the 
 === `SpringCloudQueryBusConnector`
 
 The `SpringCloudQueryBusConnector` distributes queries over HTTP between the nodes reported by a Spring Cloud `DiscoveryClient`, without an Axon Server in between.
-It is part of the same starter as the xref:distributed-command-bus.adoc#SpringCloudCommandBusConnector[`SpringCloudCommandBusConnector`], and shares its discovery, its capabilities endpoint, and its routing ring.
+It is part of the same starter as the xref:commands:infrastructure.adoc#SpringCloudCommandBusConnector[`SpringCloudCommandBusConnector`], and shares its discovery, its capabilities endpoint, and its routing ring.
 
 Where a command carries a routing key that pins it to one node, a query asks nothing of where it is handled: any node advertising the query's name may answer it.
 Successive queries of a name therefore rotate over the nodes advertising it, spreading the load rather than sending every query of a name to the same node.
