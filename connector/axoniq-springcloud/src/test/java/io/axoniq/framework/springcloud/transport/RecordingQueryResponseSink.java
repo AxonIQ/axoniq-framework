@@ -32,11 +32,13 @@ import java.util.concurrent.CopyOnWriteArrayList;
 public class RecordingQueryResponseSink implements QueryResponseSink {
 
     private final List<QueryDispatchResponse> responses = new CopyOnWriteArrayList<>();
+    private final List<QueryDispatchResponse> updates = new CopyOnWriteArrayList<>();
 
     private final List<Runnable> unavailableListeners = new CopyOnWriteArrayList<>();
 
     private volatile @Nullable QueryDispatchFailure error;
     private volatile boolean completed;
+    private volatile @Nullable String subscriptionCompletedFor;
     private volatile @Nullable RuntimeException failOnWrite;
 
     /**
@@ -73,6 +75,19 @@ public class RecordingQueryResponseSink implements QueryResponseSink {
     }
 
     @Override
+    public void update(QueryDispatchResponse update) {
+        RuntimeException failure = failOnWrite;
+        if (failure != null) {
+            throw failure;
+        }
+        updates.add(update);
+    }
+
+    public List<QueryDispatchResponse> updates() {
+        return List.copyOf(updates);
+    }
+
+    @Override
     public void response(QueryDispatchResponse response) {
         RuntimeException failure = failOnWrite;
         if (failure != null) {
@@ -89,5 +104,18 @@ public class RecordingQueryResponseSink implements QueryResponseSink {
     @Override
     public void complete() {
         this.completed = true;
+    }
+
+    @Override
+    public void subscriptionComplete(String requestIdentifier) {
+        this.subscriptionCompletedFor = requestIdentifier;
+        this.completed = true;
+    }
+
+    /**
+     * Returns the identifier of the subscription query reported over, or {@code null} when none was.
+     */
+    public @Nullable String subscriptionCompletedFor() {
+        return subscriptionCompletedFor;
     }
 }

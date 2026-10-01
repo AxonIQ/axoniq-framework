@@ -20,12 +20,19 @@
 package io.axoniq.framework.integrationtests.springcloud;
 
 import io.axoniq.framework.integrationtests.springcloud.SpringCloudNodes.CreateCourse;
+import io.axoniq.framework.integrationtests.springcloud.SpringCloudNodes.RenameCourse;
+import io.axoniq.framework.integrationtests.springcloud.SpringCloudNodes.FindCourseHandler;
 import io.axoniq.framework.integrationtests.springcloud.SpringCloudNodes.FindCourse;
 import io.axoniq.framework.springcloud.SpringCloudMemberRegistry;
 import io.axoniq.framework.springcloud.discovery.MemberCapabilitiesPayload;
 import io.axoniq.framework.springcloud.discovery.RestCapabilityDiscoveryMode;
 import io.axoniq.framework.springcloud.routing.Member;
 import org.axonframework.messaging.commandhandling.gateway.CommandGateway;
+import org.axonframework.messaging.core.MessageStream;
+import org.axonframework.messaging.core.MessageType;
+import org.axonframework.messaging.queryhandling.GenericQueryMessage;
+import org.axonframework.messaging.queryhandling.QueryBus;
+import org.axonframework.messaging.queryhandling.QueryResponseMessage;
 import org.axonframework.messaging.queryhandling.gateway.QueryGateway;
 import org.junit.jupiter.api.*;
 import org.awaitility.Awaitility;
@@ -100,6 +107,7 @@ class SpringCloudMessageDistributionIT {
                             "test.node.name=" + nodeName,
                             "test.cluster.ports=" + portA + "," + portB,
                             "test.query-handler.enabled=" + NODE_B.equals(nodeName),
+                            "test.rename-handler.enabled=" + NODE_B.equals(nodeName),
                             "axon.multitenancy.enabled=false",
                             "spring.main.banner-mode=off",
                             "logging.level.root=WARN")
@@ -215,6 +223,33 @@ class SpringCloudMessageDistributionIT {
 
             // then — node A has no local handler, so the distributed query bus must use node B's advertisement
             assertThat(Set.copyOf(handledBy)).containsExactly(NODE_B);
+        }
+
+        @Test
+        void emitsSubscriptionUpdatesFromAnEventHandlerContext() {
+            // given
+            QueryBus queryBus = nodeA.getBean(QueryBus.class);
+            MessageStream<QueryResponseMessage> responses = queryBus.subscriptionQuery(
+                    new GenericQueryMessage(new MessageType(FindCourse.class), new FindCourse("course-1")),
+                    null,
+                    16
+            );
+            Awaitility.await().atMost(Duration.ofSeconds(20)).until(responses::hasNextAvailable);
+            assertThat(responses.next().orElseThrow().message().payloadAs(String.class)).isEqualTo(NODE_B);
+
+            // when
+            CommandGateway gateway = nodeA.getBean(CommandGateway.class);
+            assertThat(gateway.sendAndWait(new RenameCourse("course-1", "Axon 5 renamed"), String.class))
+                    .isEqualTo(NODE_B);
+
+            // then — the event handler must resolve the same distributed query bus that owns the subscription
+            FindCourseHandler handler = nodeB.getBean(FindCourseHandler.class);
+            Awaitility.await()
+                      .atMost(Duration.ofSeconds(20))
+                      .until(handler::emittedUpdate);
+            Awaitility.await().atMost(Duration.ofSeconds(20)).until(responses::hasNextAvailable);
+            assertThat(responses.next().orElseThrow().message().payloadAs(String.class))
+                    .isEqualTo(NODE_B + "-renamed");
         }
     }
 

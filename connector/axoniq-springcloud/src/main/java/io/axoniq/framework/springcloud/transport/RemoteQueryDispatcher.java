@@ -46,4 +46,53 @@ public interface RemoteQueryDispatcher {
      * @return the stream of responses the given {@code member} answers with
      */
     MessageStream<QueryResponseMessage> dispatch(Member member, QueryMessage query);
+
+    /**
+     * Opens the stream of updates the given {@code query} produces on the given {@code member}.
+     * <p>
+     * A streaming query like any other, except that it does not end of its own accord: the member keeps it open,
+     * emitting an update whenever the state the query reads changes, until it is released or the member reports a
+     * failure. Closing the stream releases the subscription.
+     * <p>
+     * Carries updates alone. The initial result of a subscription query is a query like any other, asked for with
+     * {@link #dispatch(Member, QueryMessage)} once this member's update stream is open, so that an update emitted
+     * while that result is being produced still has somewhere to arrive. {@code onOpen} is what says when that is:
+     * it runs once the member has registered the subscription, and so before any update it emits.
+     *
+     * @param member           the member to open the update stream on
+     * @param query            the query to subscribe with
+     * @param updateBufferSize how many updates to hold for this subscriber before failing the subscription
+     * @param listener         told when the member has registered the subscription, and when it reports the
+     *                         subscription over
+     * @return the updates the given {@code member} emits for the given {@code query}
+     */
+    MessageStream<QueryResponseMessage> openSubscriptionQueryUpdateStream(Member member,
+                                                                          QueryMessage query,
+                                                                          int updateBufferSize,
+                                                                          SubscriptionListener listener);
+
+    /**
+     * What a member reports about a subscription besides the updates themselves.
+     * <p>
+     * Both are things the stream of updates cannot say for itself. It carries updates, and it ends; neither tells the
+     * subscriber that the member has registered the subscription, nor whether the end means the subscription is over
+     * or merely that this member stopped answering.
+     */
+    interface SubscriptionListener {
+
+        /**
+         * The member has registered the subscription, and so will not miss an update from here on.
+         * <p>
+         * Not called at all when the stream fails before reaching that point, which the stream itself reports.
+         */
+        void opened();
+
+        /**
+         * The member reported the subscription over: there will never be another update to it.
+         * <p>
+         * Distinct from the stream ending, which a member leaving the cluster also does. That ends this member's part
+         * in the subscription; this ends the subscription.
+         */
+        void completed();
+    }
 }

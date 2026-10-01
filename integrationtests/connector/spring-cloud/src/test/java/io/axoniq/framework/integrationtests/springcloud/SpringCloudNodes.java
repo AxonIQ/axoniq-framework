@@ -21,7 +21,13 @@ package io.axoniq.framework.integrationtests.springcloud;
 
 import org.axonframework.messaging.commandhandling.annotation.Command;
 import org.axonframework.messaging.commandhandling.annotation.CommandHandler;
+import org.axonframework.messaging.eventhandling.annotation.EventHandler;
+import org.axonframework.messaging.eventhandling.gateway.EventAppender;
+import org.axonframework.messaging.eventhandling.processing.streaming.token.store.TokenStore;
+import org.axonframework.messaging.eventhandling.processing.streaming.token.store.inmemory.InMemoryTokenStore;
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.queryhandling.annotation.QueryHandler;
+import org.axonframework.messaging.queryhandling.QueryUpdateEmitter;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -65,6 +71,27 @@ final class SpringCloudNodes {
      */
     @Command(routingKey = "courseId")
     record CreateCourse(String courseId, String name) {
+
+    }
+
+    /**
+     * A command that appends an event handled by the query projection.
+     *
+     * @param courseId the course to rename
+     * @param name     the new course name
+     */
+    @Command(routingKey = "courseId")
+    record RenameCourse(String courseId, String name) {
+
+    }
+
+    /**
+     * The event that causes an active course subscription to emit an update.
+     *
+     * @param courseId the renamed course
+     * @param name     the new course name
+     */
+    record CourseRenamed(String courseId, String name) {
 
     }
 
@@ -118,6 +145,16 @@ final class SpringCloudNodes {
             ));
         }
 
+        /**
+         * Supplies the event processor with process-local token storage for this in-JVM integration test.
+         *
+         * @return an in-memory token store
+         */
+        @Bean
+        TokenStore tokenStore() {
+            return new InMemoryTokenStore();
+        }
+
     }
 
     /**
@@ -149,6 +186,7 @@ final class SpringCloudNodes {
     static class FindCourseHandler {
 
         private final String nodeName;
+        private volatile boolean emittedUpdate;
 
         FindCourseHandler(@Value("${test.node.name}") String nodeName) {
             this.nodeName = nodeName;
@@ -156,6 +194,40 @@ final class SpringCloudNodes {
 
         @QueryHandler
         String handle(FindCourse query) {
+            return nodeName;
+        }
+
+        @EventHandler
+        void handle(CourseRenamed event, ProcessingContext context) {
+            emittedUpdate = true;
+            QueryUpdateEmitter.forContext(context).emit(
+                    FindCourse.class,
+                    query -> query.courseId().equals(event.courseId()),
+                    () -> nodeName + "-renamed"
+            );
+        }
+
+        boolean emittedUpdate() {
+            return emittedUpdate;
+        }
+    }
+
+    /**
+     * Appends {@link CourseRenamed}; the conditional handler makes the command and event stay on node B in the test.
+     */
+    @Component
+    @ConditionalOnProperty(name = "test.rename-handler.enabled", havingValue = "true")
+    static class RenameCourseHandler {
+
+        private final String nodeName;
+
+        RenameCourseHandler(@Value("${test.node.name}") String nodeName) {
+            this.nodeName = nodeName;
+        }
+
+        @CommandHandler
+        String handle(RenameCourse command, EventAppender appender) {
+            appender.append(new CourseRenamed(command.courseId(), command.name()));
             return nodeName;
         }
     }

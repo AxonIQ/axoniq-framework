@@ -19,19 +19,25 @@
 
 package io.axoniq.framework.springcloud.transport;
 
-import io.axoniq.framework.messaging.queryhandling.distributed.QueryBusConnector.Handler;
 import io.axoniq.framework.messaging.queryhandling.distributed.QueryBusConnector;
+import io.axoniq.framework.messaging.queryhandling.distributed.QueryBusConnector.Handler;
+import org.axonframework.common.FutureUtils;
+import org.axonframework.common.Registration;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.conversion.MessageConverter;
 import org.axonframework.messaging.queryhandling.NoHandlerForQueryException;
 import org.axonframework.messaging.queryhandling.QueryMessage;
 import org.axonframework.messaging.queryhandling.QueryResponseMessage;
+import org.axonframework.messaging.queryhandling.SubscriptionQueryUpdateMessage;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 
@@ -59,6 +65,10 @@ public class IncomingQueryInvoker {
     private final Supplier<String> memberName;
     private final @Nullable MessageConverter converter;
     private final AtomicReference<@Nullable Handler> handler = new AtomicReference<>();
+
+    // The subscriptions this member is currently answering, so that they can be ended when it stops. Keyed by the
+    // identifier of the request that opened each, which is what a reply is addressed by.
+    private final Map<String, OpenSubscription> openSubscriptions = new ConcurrentHashMap<>();
 
     /**
      * Constructs an {@code IncomingQueryInvoker} reporting failures as originating from the member the given
@@ -138,6 +148,168 @@ public class IncomingQueryInvoker {
         }
 
         new ResponseWriter(request.identifier(), responses, sink).start();
+    }
+
+    /**
+     * Handles the given subscription {@code request}, received from another member, writing every update the query
+     * produces on this member to the given {@code sink}.
+     * <p>
+     * Carries updates alone. The initial result of a subscription query is a query like any other, and the
+     * subscribing member asks for it separately once every member has registered its subscription -- which is what
+     * keeps an update emitted while that result is being produced from being missed.
+     * <p>
+     * Every member advertising the query's name receives one of these, because an update is emitted on whichever
+     * member's state changed and only reaches subscriptions that member holds a registration for.
+     * <p>
+     * The registration is cancelled when the sink reports it can no longer be written to, so a subscriber that goes
+     * away does not leave this member emitting into nothing.
+     *
+     * @param request the subscription query received from another member
+     * @param sink    receives the updates, and the outcome that ends them
+     */
+    public void handleSubscription(SubscriptionQueryRequest request, QueryResponseSink sink) {
+        Objects.requireNonNull(request, "The request must not be null.");
+        Objects.requireNonNull(sink, "The sink must not be null.");
+
+        Handler boundHandler = handler.get();
+        if (boundHandler == null) {
+            logger.info("Received subscription query [{}] before a handler was registered on this member. Reporting "
+                                + "it as unhandled so the subscribing member can retry.", request.type());
+            sink.error(QueryConverter.convertErrorResult(
+                    new NoHandlerForQueryException(
+                            "This member has not registered a query handler yet, as it is still starting up."
+                    ),
+                    request.identifier(), memberName.get(), converter
+            ));
+            return;
+        }
+
+        QueryMessage query;
+        try {
+            query = QueryConverter.convertSubscriptionRequest(request, converter);
+        } catch (Exception e) {
+            logger.warn("Could not read incoming subscription query [{}] of type [{}].",
+                        request.identifier(), request.type(), e);
+            sink.error(QueryConverter.convertErrorResult(
+                    new UnreadableQueryException(
+                            "Could not read incoming subscription query of type [" + request.type() + "].", e
+                    ),
+                    request.identifier(), memberName.get(), converter
+            ));
+            return;
+        }
+
+        // Registered before the initial result is read, so that an update emitted while it is being read is not lost
+        // in the window between the two.
+        Registration registration;
+        try {
+            registration = boundHandler.registerUpdateHandler(query, new SinkUpdateCallback(request.identifier(),
+                                                                                            sink));
+        } catch (Exception e) {
+            logger.warn("Could not register the update handler for subscription query [{}].", query.type(), e);
+            sink.error(QueryConverter.convertErrorResult(e, request.identifier(), memberName.get(), converter));
+            return;
+        }
+        String requestIdentifier = request.identifier();
+        openSubscriptions.put(requestIdentifier, new OpenSubscription(sink, registration));
+        sink.onUnavailable(() -> {
+            openSubscriptions.remove(requestIdentifier);
+            registration.cancel();
+        });
+    }
+
+    /**
+     * Ends every subscription this member is still answering, telling each subscriber to establish it again.
+     * <p>
+     * Called when this member stops. Leaving the streams open instead would strand every subscriber on a member that
+     * is going away: no further update is coming, yet nothing says so, so the subscription looks alive until the
+     * connection itself fails. Failing them is also what releases the response streams the web container would
+     * otherwise wait on while shutting down.
+     * <p>
+     * Reported as a failure rather than a completion on purpose. A completed subscription reads as "there is nothing
+     * more to send", which would let a subscriber conclude it has the whole story; a failed one tells it to subscribe
+     * again, which is what gets it a complete stream from a member that is still there.
+     */
+    public void endOpenSubscriptions() {
+        openSubscriptions.keySet().forEach(this::endSubscription);
+    }
+
+    private void endSubscription(String requestIdentifier) {
+        OpenSubscription subscription = openSubscriptions.remove(requestIdentifier);
+        if (subscription == null) {
+            // The subscriber released it in the meantime, which ends it just as well.
+            return;
+        }
+        subscription.registration().cancel();
+        try {
+            subscription.sink().error(QueryConverter.convertErrorResult(
+                    new QueryDispatchException(
+                            "The member answering this subscription query is shutting down. Establish the "
+                                    + "subscription query again to continue receiving updates."
+                    ),
+                    requestIdentifier, memberName.get(), converter
+            ));
+        } catch (Exception e) {
+            // The subscriber is already gone, which is the outcome this was aiming for anyway.
+            logger.debug("Could not report this member stopping to subscription query [{}].", requestIdentifier, e);
+        }
+    }
+
+    /**
+     * A subscription this member is answering, and the registration feeding it.
+     *
+     * @param sink         the stream carrying updates to the subscribing member
+     * @param registration the update handler registration producing them
+     */
+    private record OpenSubscription(QueryResponseSink sink, Registration registration) {
+
+    }
+
+    /**
+     * Writes the updates a subscription query produces to the sink carrying them to the subscribing member.
+     */
+    private final class SinkUpdateCallback implements QueryBusConnector.UpdateCallback {
+
+        private final String requestIdentifier;
+        private final QueryResponseSink sink;
+
+        private SinkUpdateCallback(String requestIdentifier, QueryResponseSink sink) {
+            this.requestIdentifier = requestIdentifier;
+            this.sink = sink;
+        }
+
+        @Override
+        public CompletableFuture<Void> sendUpdate(SubscriptionQueryUpdateMessage update) {
+            try {
+                sink.update(QueryConverter.convertResponseMessage(update, requestIdentifier));
+            } catch (Exception e) {
+                // The subscriber is gone. Reporting it back is pointless, and the sink has already told the
+                // registration to cancel.
+                logger.debug("Could not write an update to subscription query [{}].", requestIdentifier, e);
+                return CompletableFuture.failedFuture(e);
+            }
+            return FutureUtils.emptyCompletedFuture();
+        }
+
+        @Override
+        public CompletableFuture<Void> complete() {
+            try {
+                sink.subscriptionComplete(requestIdentifier);
+            } catch (Exception e) {
+                logger.debug("Could not complete subscription query [{}].", requestIdentifier, e);
+            }
+            return FutureUtils.emptyCompletedFuture();
+        }
+
+        @Override
+        public CompletableFuture<Void> completeExceptionally(Throwable cause) {
+            try {
+                sink.error(QueryConverter.convertErrorResult(cause, requestIdentifier, memberName.get(), converter));
+            } catch (Exception e) {
+                logger.debug("Could not report the failure of subscription query [{}].", requestIdentifier, e);
+            }
+            return FutureUtils.emptyCompletedFuture();
+        }
     }
 
     /**

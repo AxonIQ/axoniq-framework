@@ -23,6 +23,7 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.json.JsonMapper;
 import io.axoniq.framework.springcloud.routing.Member;
+import io.axoniq.framework.springcloud.transport.RemoteQueryDispatcher.SubscriptionListener;
 import org.axonframework.common.ExceptionUtils;
 import org.axonframework.conversion.jackson.JacksonConverter;
 import org.axonframework.messaging.core.GenericMessage;
@@ -60,6 +61,8 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BooleanSupplier;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
@@ -113,12 +116,17 @@ class HttpRemoteQueryDispatcherTest {
     }
 
     private HttpRemoteQueryDispatcher dispatcher(int bufferSize, Duration responseTimeout) {
+        return dispatcher(bufferSize, responseTimeout, Duration.ofMinutes(5));
+    }
+
+    private HttpRemoteQueryDispatcher dispatcher(int bufferSize, Duration responseTimeout, Duration inactivityTimeout) {
         return new HttpRemoteQueryDispatcher(RestClient.builder().requestFactory(requestFactory).build(),
                                              ENDPOINT,
                                              executor,
                                              converter,
                                              bufferSize,
                                              responseTimeout,
+                                             inactivityTimeout,
                                              scheduler);
     }
 
@@ -245,6 +253,228 @@ class HttpRemoteQueryDispatcherTest {
             awaitUntil(() -> !requestFactory.requests().isEmpty());
             assertThat(requestFactory.requests().getFirst().getURI())
                     .hasToString("http://node-b:8080" + ENDPOINT);
+        }
+    }
+
+    @Nested
+    class Subscribing {
+
+        private static final SubscriptionListener NO_OP = listening(new AtomicBoolean(), new AtomicBoolean());
+
+        /**
+         * A listener recording what a member reported about the subscription.
+         */
+        private static SubscriptionListener listening(AtomicBoolean opened, AtomicBoolean completed) {
+            return new SubscriptionListener() {
+                @Override
+                public void opened() {
+                    opened.set(true);
+                }
+
+                @Override
+                public void completed() {
+                    completed.set(true);
+                }
+            };
+        }
+
+        private String updateEvent(String identifier) throws IOException {
+            QueryDispatchResponse update = new QueryDispatchResponse(identifier,
+                                                                     "query-1",
+                                                                     RESPONSE_TYPE.toString(),
+                                                                     PAYLOAD,
+                                                                     Map.of());
+            return "event: " + QueryConverter.UPDATE_EVENT + "\ndata: "
+                    + objectMapper.writeValueAsString(update) + "\n\n";
+        }
+
+        @Test
+        void opensTheSubscriptionOnTheMembersSubscriptionEndpoint() {
+            // when
+            dispatcher(1024).openSubscriptionQueryUpdateStream(MEMBER, query(), 16, NO_OP);
+
+            // then
+            awaitUntil(() -> !requestFactory.requests().isEmpty());
+            assertThat(requestFactory.requests().getFirst().getURI())
+                    .hasToString("http://node-b:8080" + ENDPOINT + SpringCloudQueryController.SUBSCRIPTION_PATH);
+        }
+
+        @Test
+        void reportsTheSubscriptionOpenOnlyOnceTheMemberHasAnswered() {
+            // given
+            AtomicBoolean opened = new AtomicBoolean();
+            requestFactory.holdingResponses();
+
+            // when the member has not answered yet
+            dispatcher(1024).openSubscriptionQueryUpdateStream(MEMBER,
+                                                               query(),
+                                                               16,
+                                                               listening(opened, new AtomicBoolean()));
+
+            // then the initial result must not be asked for, as this member could still miss an update
+            awaitUntil(() -> !requestFactory.requests().isEmpty());
+            assertThat(opened).isFalse();
+
+            // when the member answers, which it does only after registering the subscription
+            requestFactory.releaseResponses();
+
+            // then
+            awaitUntil(opened::get);
+            assertThat(opened).isTrue();
+        }
+
+        @Test
+        void leavesTheSubscriptionUnopenedWhenTheMemberCannotBeReached() {
+            // given
+            AtomicBoolean opened = new AtomicBoolean();
+            requestFactory.respondingWithStatus(HttpStatus.SERVICE_UNAVAILABLE);
+
+            // when
+            MessageStream<QueryResponseMessage> updates = dispatcher(1024)
+                    .openSubscriptionQueryUpdateStream(MEMBER, query(), 16, listening(opened, new AtomicBoolean()));
+
+            // then the failure is on the stream, and nothing is told the subscription is in place
+            awaitUntil(() -> {
+                drainInto(updates, new ArrayList<>());
+                return updates.error().isPresent();
+            });
+            assertThat(opened).isFalse();
+        }
+
+        @Test
+        void carriesNoFailureWhileTheMemberIsSimplyQuiet() {
+            // when — the member answers, without emitting anything yet
+            MessageStream<QueryResponseMessage> updates =
+                    dispatcher(1024).openSubscriptionQueryUpdateStream(MEMBER, query(), 16, NO_OP);
+
+            // then a subscription with nothing to say is behaving correctly, not failing
+            assertThat(updates.error()).isEmpty();
+            assertThat(updates.isCompleted()).isFalse();
+        }
+
+        @Test
+        void readsTheUpdatesTheMemberEmits() throws IOException {
+            // given
+            MessageStream<QueryResponseMessage> updates =
+                    dispatcher(1024).openSubscriptionQueryUpdateStream(MEMBER, query(), 16, NO_OP);
+
+            // when
+            body.write(updateEvent("update-1"));
+            body.write(updateEvent("update-2"));
+
+            // then
+            List<QueryResponseMessage> received = new ArrayList<>();
+            awaitUntil(() -> {
+                drainInto(updates, received);
+                return received.size() == 2;
+            });
+            assertThat(received).extracting(QueryResponseMessage::identifier)
+                                .containsExactly("update-1", "update-2");
+        }
+
+        @Test
+        void reportsTheSubscriptionOverWhenTheMemberSaysSo() throws IOException {
+            // given
+            AtomicBoolean completed = new AtomicBoolean();
+            MessageStream<QueryResponseMessage> updates = dispatcher(1024)
+                    .openSubscriptionQueryUpdateStream(MEMBER, query(), 16,
+                                                       listening(new AtomicBoolean(), completed));
+
+            // when
+            body.write("event: " + QueryConverter.COMPLETE_EVENT + "\ndata: query-1\n\n");
+            body.end();
+
+            // then the subscription is over, which is more than this member having stopped answering
+            awaitUntil(() -> {
+                drainInto(updates, new ArrayList<>());
+                return updates.isCompleted();
+            });
+            assertThat(completed).isTrue();
+            assertThat(updates.error()).isEmpty();
+        }
+
+        @Test
+        void saysNothingAboutTheSubscriptionWhenTheMemberJustStopsAnswering() throws IOException {
+            // given
+            AtomicBoolean completed = new AtomicBoolean();
+            MessageStream<QueryResponseMessage> updates = dispatcher(1024)
+                    .openSubscriptionQueryUpdateStream(MEMBER, query(), 16,
+                                                       listening(new AtomicBoolean(), completed));
+
+            // when the member closes the stream without reporting the subscription over, as one shutting down does
+            body.end();
+
+            // then this member's part is over, and nothing claims the subscription itself is
+            awaitUntil(() -> {
+                drainInto(updates, new ArrayList<>());
+                return updates.isCompleted();
+            });
+            assertThat(completed).isFalse();
+        }
+
+        @Test
+        void endsTheSubscriptionWithTheFailureTheMemberReports() throws IOException {
+            // given
+            MessageStream<QueryResponseMessage> updates =
+                    dispatcher(1024).openSubscriptionQueryUpdateStream(MEMBER, query(), 16, NO_OP);
+
+            // when
+            body.write(errorEvent(QueryErrorCode.QUERY_EXECUTION_ERROR));
+            body.end();
+
+            // then
+            awaitUntil(() -> {
+                drainInto(updates, new ArrayList<>());
+                return updates.error().isPresent();
+            });
+            assertThat(updates.error().orElseThrow()).hasMessageContaining("The course store is unavailable.");
+        }
+
+        @Test
+        void stopsReadingTheMemberWhenTheSubscriptionIsReleased() {
+            // given
+            MessageStream<QueryResponseMessage> updates =
+                    dispatcher(1024).openSubscriptionQueryUpdateStream(MEMBER, query(), 16, NO_OP);
+
+            // when
+            updates.close();
+
+            // then the member is not left emitting into a subscription nobody holds
+            awaitUntil(body::closed);
+            assertThat(body.closed()).isTrue();
+        }
+
+        @Test
+        void givesUpOnAMemberThatSaysNothingAtAll() {
+            // given a subscription whose member stops sending even a keep-alive
+            MessageStream<QueryResponseMessage> updates =
+                    dispatcher(1024, Duration.ofMinutes(5), Duration.ofMillis(100))
+                            .openSubscriptionQueryUpdateStream(MEMBER, query(), 16, NO_OP);
+
+            // then silence is how a member that disappeared without the socket reporting it looks
+            awaitUntil(() -> {
+                drainInto(updates, new ArrayList<>());
+                return updates.error().isPresent();
+            });
+            assertThat(updates.error().orElseThrow()).hasMessageContaining("sent nothing");
+        }
+
+        @Test
+        void failsWhenTheMemberHasNoEndpoint() {
+            // given a member with nothing to reach it at, which only this application's own ever is
+            Member unreachable = new Member("UNIVERSITY[local]", null, true);
+
+            // when / then
+            MessageStream<QueryResponseMessage> updates =
+                    dispatcher(1024).openSubscriptionQueryUpdateStream(unreachable, query(), 16, NO_OP);
+            assertThat(updates.error()).containsInstanceOf(QueryDispatchException.class);
+        }
+
+        @Test
+        void rejectsANonPositiveUpdateBufferSize() {
+            assertThatThrownBy(() -> dispatcher(1024).openSubscriptionQueryUpdateStream(MEMBER, query(), 0, NO_OP))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("update buffer size");
         }
     }
 
@@ -648,6 +878,7 @@ class HttpRemoteQueryDispatcherTest {
 
         private IOException failure;
         private HttpStatusCode status = HttpStatus.OK;
+        private volatile CountDownLatch responseGate;
 
         private StubRequestFactory(SseBody body) {
             this.body = body;
@@ -661,6 +892,20 @@ class HttpRemoteQueryDispatcherTest {
             this.status = status;
         }
 
+        /**
+         * Withholds every response until {@link #releaseResponses()}, as a member that has not answered yet does.
+         */
+        private void holdingResponses() {
+            this.responseGate = new CountDownLatch(1);
+        }
+
+        private void releaseResponses() {
+            CountDownLatch gate = responseGate;
+            if (gate != null) {
+                gate.countDown();
+            }
+        }
+
         private List<MockClientHttpRequest> requests() {
             return List.copyOf(requests);
         }
@@ -672,6 +917,15 @@ class HttpRemoteQueryDispatcherTest {
                 protected ClientHttpResponse executeInternal() throws IOException {
                     if (failure != null) {
                         throw failure;
+                    }
+                    CountDownLatch gate = responseGate;
+                    if (gate != null) {
+                        try {
+                            gate.await();
+                        } catch (InterruptedException e) {
+                            Thread.currentThread().interrupt();
+                            throw new IOException("Interrupted while withholding the response.", e);
+                        }
                     }
                     return new StubResponse(status, body);
                 }

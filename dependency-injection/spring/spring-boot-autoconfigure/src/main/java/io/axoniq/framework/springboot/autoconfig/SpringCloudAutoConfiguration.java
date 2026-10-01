@@ -35,6 +35,7 @@ import io.axoniq.framework.springcloud.transport.RemoteCommandDispatcher;
 import io.axoniq.framework.springcloud.transport.RemoteQueryDispatcher;
 import io.axoniq.framework.springcloud.transport.SpringCloudCommandController;
 import io.axoniq.framework.springcloud.transport.SpringCloudQueryController;
+import io.axoniq.framework.springcloud.transport.SpringCloudQueryControllerConfiguration;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.axonframework.messaging.core.conversion.MessageConverter;
@@ -117,9 +118,16 @@ public class SpringCloudAutoConfiguration {
     private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(2);
 
     /**
-     * The name of the {@link ScheduledExecutorService} bean the deadline of each dispatched query runs on.
+     * The name of the {@link ScheduledExecutorService} bean deciding when the deadline of a dispatched query has
+     * passed, when a subscription has been silent for too long, and when a subscription being answered is due a
+     * keep-alive.
      */
-    public static final String DEADLINE_SCHEDULER_BEAN = "axoniqSpringCloudDeadlineScheduler";
+    public static final String QUERY_SCHEDULER_BEAN = "axoniqSpringCloudQueryScheduler";
+
+    /**
+     * The name of the {@link Executor} bean the keep-alive writes of subscriptions being answered run on.
+     */
+    public static final String KEEP_ALIVE_EXECUTOR_BEAN = "axoniqSpringCloudKeepAliveExecutor";
 
     /**
      * Bean creation method for a {@link ConfigurationEnhancer} that disables the
@@ -369,19 +377,24 @@ public class SpringCloudAutoConfiguration {
         }
 
         /**
-         * Bean creation method for the {@link ScheduledExecutorService} the deadline of each dispatched query runs
-         * on.
+         * Bean creation method for the {@link ScheduledExecutorService} deciding when a query's deadline has passed,
+         * when a subscription has been silent for too long, and when a subscription being answered is due a
+         * keep-alive.
          * <p>
          * A cancelled deadline is removed from its queue rather than left to elapse, so a query answered promptly
          * does not keep its responses reachable until the deadline would have fired.
+         * <p>
+         * A single thread carries all of it, which it can because nothing scheduled here blocks: the work is
+         * deciding that something is due, and the one due thing that blocks -- writing a keep-alive to a subscriber
+         * -- is handed to {@link #axoniqSpringCloudKeepAliveExecutor()} instead.
          *
-         * @return the scheduler query deadlines run on
+         * @return the scheduler query timing runs on
          */
-        @Bean(destroyMethod = "shutdownNow", name = DEADLINE_SCHEDULER_BEAN)
-        @ConditionalOnMissingBean(name = DEADLINE_SCHEDULER_BEAN)
-        public ScheduledExecutorService axoniqSpringCloudDeadlineScheduler() {
+        @Bean(destroyMethod = "shutdownNow", name = QUERY_SCHEDULER_BEAN)
+        @ConditionalOnMissingBean(name = QUERY_SCHEDULER_BEAN)
+        public ScheduledExecutorService axoniqSpringCloudQueryScheduler() {
             ScheduledThreadPoolExecutor scheduler = new ScheduledThreadPoolExecutor(1, task -> {
-                Thread thread = new Thread(task, "axoniq-springcloud-deadline");
+                Thread thread = new Thread(task, "axoniq-springcloud-query-scheduler");
                 thread.setDaemon(true);
                 return thread;
             });
@@ -475,7 +488,7 @@ public class SpringCloudAutoConfiguration {
         public RemoteQueryDispatcher axoniqSpringCloudRemoteQueryDispatcher(
                 @Qualifier(REST_CLIENT_BEAN) RestClient restClient,
                 @Qualifier(DISPATCH_EXECUTOR_BEAN) Executor executor,
-                @Qualifier(DEADLINE_SCHEDULER_BEAN) ScheduledExecutorService scheduler,
+                @Qualifier(QUERY_SCHEDULER_BEAN) ScheduledExecutorService scheduler,
                 MessageConverter converter,
                 SpringCloudProperties properties
         ) {
@@ -485,14 +498,17 @@ public class SpringCloudAutoConfiguration {
                                                  converter,
                                                  properties.getQueryBufferSize(),
                                                  properties.getQueryResponseTimeout(),
+                                                 properties.getSubscriptionInactivityTimeout(),
                                                  scheduler);
         }
 
         /**
          * Bean creation method for the controller answering queries from other members.
          *
-         * @param invoker    the invoker answering queries sent by other members
-         * @param properties the connector's properties
+         * @param invoker           the invoker answering queries sent by other members
+         * @param scheduler         the scheduler deciding when each open subscription is due a keep-alive
+         * @param keepAliveExecutor the executor those keep-alives are written on
+         * @param properties        the connector's properties
          * @return the controller answering queries from other members
          */
         @Bean
@@ -500,9 +516,40 @@ public class SpringCloudAutoConfiguration {
         @ConditionalOnWebApplication(type = Type.SERVLET)
         public SpringCloudQueryController axoniqSpringCloudQueryController(
                 IncomingQueryInvoker invoker,
+                @Qualifier(QUERY_SCHEDULER_BEAN) ScheduledExecutorService scheduler,
+                @Qualifier(KEEP_ALIVE_EXECUTOR_BEAN) Executor keepAliveExecutor,
                 SpringCloudProperties properties
         ) {
-            return new SpringCloudQueryController(invoker, properties.getQueryTimeout());
+            return new SpringCloudQueryController(
+                    invoker,
+                    scheduler,
+                    keepAliveExecutor,
+                    SpringCloudQueryControllerConfiguration.DEFAULT
+                            .queryTimeout(properties.getQueryTimeout())
+                            .keepAliveInterval(properties.getSubscriptionKeepAliveInterval())
+            );
+        }
+
+        /**
+         * Bean creation method for the {@link Executor} the keep-alive of each subscription being answered is written
+         * on.
+         * <p>
+         * Separate from the scheduler that decides when a keep-alive is due, because writing one is a blocking write
+         * to a single subscriber and deciding it is due is not. A subscriber that has stopped reading without closing
+         * blocks its write until the connection gives way; were that the scheduler's thread, it would hold up every
+         * other subscription's keep-alive and every dispatched query's deadline with it.
+         * <p>
+         * A virtual-thread-per-task executor, for the same reason the dispatch executor is one: the work is a
+         * blocking write and nothing else, and sizing a platform thread pool for it would cap the subscriptions this
+         * member can answer at the pool's own size.
+         *
+         * @return the executor subscription keep-alives are written on
+         */
+        @Bean(destroyMethod = "shutdownNow", name = KEEP_ALIVE_EXECUTOR_BEAN)
+        @ConditionalOnMissingBean(name = KEEP_ALIVE_EXECUTOR_BEAN)
+        @ConditionalOnWebApplication(type = Type.SERVLET)
+        public ExecutorService axoniqSpringCloudKeepAliveExecutor() {
+            return Executors.newVirtualThreadPerTaskExecutor();
         }
 
         /**

@@ -40,11 +40,13 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -75,13 +77,26 @@ class SseQueryResponseSinkFramingTest {
 
     private IncomingQueryInvoker invoker;
     private MockMvc mockMvc;
+    private ScheduledExecutorService scheduler;
+    private ExecutorService keepAliveExecutor;
 
     @BeforeEach
     void setUp() {
+        scheduler = Executors.newSingleThreadScheduledExecutor();
+        keepAliveExecutor = Executors.newVirtualThreadPerTaskExecutor();
         invoker = new IncomingQueryInvoker(() -> "node-b", null);
         mockMvc = MockMvcBuilders
-                .standaloneSetup(new SpringCloudQueryController(invoker, Duration.ofSeconds(30)))
+                .standaloneSetup(new SpringCloudQueryController(invoker,
+                                                                scheduler,
+                                                                keepAliveExecutor,
+                                                                SpringCloudQueryControllerConfiguration.DEFAULT))
                 .build();
+    }
+
+    @AfterEach
+    void tearDown() {
+        scheduler.shutdownNow();
+        keepAliveExecutor.shutdownNow();
     }
 
     private static QueryDispatchRequest request() {

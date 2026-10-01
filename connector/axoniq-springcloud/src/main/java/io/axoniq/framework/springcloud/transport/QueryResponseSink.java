@@ -23,7 +23,9 @@ package io.axoniq.framework.springcloud.transport;
  * Where a member writes the responses to a query it is answering for another member.
  * <p>
  * This is what keeps answering a query testable without a web stack: the endpoint adapts a response stream to this,
- * and everything deciding what to write works against it rather than against the stream itself.
+ * and everything deciding what to write works against it rather than against the stream itself. Keeping an idle
+ * stream open is not among those decisions -- whether that takes writing anything at all, and what, is the
+ * transport's own business, so it lives on the implementation rather than here.
  * <p>
  * A sink is written to until it is terminated, which either {@link #error(QueryDispatchFailure)} or {@link #complete()}
  * does. Nothing is written after that.
@@ -52,6 +54,27 @@ public interface QueryResponseSink {
      * @param response the response to write
      */
     void response(QueryDispatchResponse response);
+
+    /**
+     * Writes one update to the subscription query being answered.
+     * <p>
+     * Distinct from {@link #response(QueryDispatchResponse)} because the subscriber acts on the two differently: a
+     * response belongs to the initial result, an update is a change after it.
+     *
+     * @param update the update to write
+     */
+    void update(QueryDispatchResponse update);
+
+    /**
+     * Reports that the subscription query being answered is over: there will never be another update to it.
+     * <p>
+     * Distinct from the stream ending, which is also what a member leaving the cluster does. That says this member
+     * has stopped answering; this says the subscription itself has run its course, and the subscriber stops waiting
+     * on every other member too.
+     *
+     * @param requestIdentifier the identifier of the subscription query that is over
+     */
+    void subscriptionComplete(String requestIdentifier);
 
     /**
      * Ends the response stream, reporting that the query failed.
