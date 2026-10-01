@@ -94,8 +94,6 @@ class WorkflowConfigurerModuleComponentIsolationTest {
         MutableWorkflowHistoryRepository localHistoryRepository = new InMemoryWorkflowHistoryRepository();
 
         var localWithHistoryModule = WorkflowModule.configure("local-with-history-module", TestContext.class)
-                                                   .configurationRegistry(cfg -> localRegistryWithHistory)
-                                                   .executionRepository(cfg -> localRepositoryWithHistory)
                                                    .withHistory(cfg -> localHistoryRepository)
                                                    .contextFactory(c -> TestContext::new)
                                                    .definition(d -> d.declarative(c -> (ctx) -> {
@@ -103,15 +101,15 @@ class WorkflowConfigurerModuleComponentIsolationTest {
                                                                      .workflowName("wf-local-history")
                                                                      .on(c -> EventConditions.fromQualifiedName(new QualifiedName(
                                                                              "start")))
-                                                                     .notCustomized());
+                                                                     .notCustomized())
+                                                   .configurationRegistry(cfg -> localRegistryWithHistory)
+                                                   .executionRepository(cfg -> localRepositoryWithHistory);
 
         // 3. Local module without history, also with explicit component overrides
         WorkflowConfigurationRegistry<?> localRegistryWithoutHistory = new SimpleWorkflowConfigurationRegistry();
         WorkflowExecutionRepository localRepositoryWithoutHistory = new InMemoryWorkflowExecutionRepository();
 
         var localWithoutHistoryModule = WorkflowModule.configure("local-without-history-module", TestContext.class)
-                                                      .configurationRegistry(cfg -> localRegistryWithoutHistory)
-                                                      .executionRepository(cfg -> localRepositoryWithoutHistory)
                                                       .withoutHistory()
                                                       .contextFactory(c -> TestContext::new)
                                                       .definition(d -> d.declarative(c -> (ctx) -> {
@@ -119,7 +117,9 @@ class WorkflowConfigurerModuleComponentIsolationTest {
                                                                         .workflowName("wf-local-no-history")
                                                                         .on(c -> EventConditions.fromQualifiedName(new QualifiedName(
                                                                                 "start")))
-                                                                        .notCustomized());
+                                                                        .notCustomized())
+                                                      .configurationRegistry(cfg -> localRegistryWithoutHistory)
+                                                      .executionRepository(cfg -> localRepositoryWithoutHistory);
 
         configurer.componentRegistry(cr -> cr
                 .registerModule(globalModule)

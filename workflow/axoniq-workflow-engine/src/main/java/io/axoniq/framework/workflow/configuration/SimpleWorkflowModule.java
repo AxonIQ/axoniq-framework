@@ -81,8 +81,7 @@ import static java.util.Objects.requireNonNull;
 class SimpleWorkflowModule<C extends WorkflowContext>
         extends BaseModule<SimpleWorkflowModule<C>>
         implements WorkflowModule<C>,
-        WorkflowModule.WorkflowConfigurationRegistryPhase<C>,
-        WorkflowModule.WorkflowExecutionRepositoryPhase<C>,
+        WorkflowModule.OptionalPhase<C>,
         WorkflowModule.WorkflowEngineEventProcessorPhase<C>,
         WorkflowModule.HistoryPhase<C>,
         WorkflowModule.WorkflowContextFactoryPhase<C>,
@@ -132,27 +131,11 @@ class SimpleWorkflowModule<C extends WorkflowContext>
     }
 
     @Override
-    public WorkflowConfigurationRegistryPhase<C> processorConfiguration(
+    public HistoryPhase<C> processorConfiguration(
             Function<PooledStreamingEventProcessorConfiguration, PooledStreamingEventProcessorConfiguration> processorConfiguration
     ) {
         this.engineConfigCustomizer =
                 requireNonNull(processorConfiguration, "Processor configuration function must not be null.");
-        return this;
-    }
-
-    @Override
-    public WorkflowExecutionRepositoryPhase<C> configurationRegistry(
-            ComponentBuilder<WorkflowConfigurationRegistry<?>> configurationRegistry
-    ) {
-        this.configurationRegistry =
-                requireNonNull(configurationRegistry, "Workflow configuration registry must not be null.");
-        return this;
-    }
-
-    @Override
-    public HistoryPhase<C> executionRepository(ComponentBuilder<WorkflowExecutionRepository> executionRepository) {
-        this.executionRepository =
-                requireNonNull(executionRepository, "Workflow execution repository must not be null");
         return this;
     }
 
@@ -214,8 +197,24 @@ class SimpleWorkflowModule<C extends WorkflowContext>
     }
 
     @Override
-    public WorkflowModule<C> definition(Function<DetectionPhase<C>, FinalizedPhase<C>> definition) {
+    public OptionalPhase<C> definition(Function<DetectionPhase<C>, FinalizedPhase<C>> definition) {
         definition.apply(this);
+        return this;
+    }
+
+    @Override
+    public OptionalPhase<C> configurationRegistry(
+            ComponentBuilder<WorkflowConfigurationRegistry<?>> configurationRegistry
+    ) {
+        this.configurationRegistry =
+                requireNonNull(configurationRegistry, "Workflow configuration registry must not be null.");
+        return this;
+    }
+
+    @Override
+    public OptionalPhase<C> executionRepository(ComponentBuilder<WorkflowExecutionRepository> executionRepository) {
+        this.executionRepository =
+                requireNonNull(executionRepository, "Workflow execution repository must not be null");
         return this;
     }
 

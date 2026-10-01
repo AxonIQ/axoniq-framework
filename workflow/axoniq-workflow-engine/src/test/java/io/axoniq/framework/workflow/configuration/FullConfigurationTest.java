@@ -77,8 +77,6 @@ class FullConfigurationTest {
         WorkflowExecutionRepository customRepository = new InMemoryWorkflowExecutionRepository();
 
         var module = WorkflowModule.configure("custom-module", TestContext.class)
-                                   .configurationRegistry(cfg -> customRegistry)
-                                   .executionRepository(cfg -> customRepository)
                                    .withoutHistory()
                                    .contextFactory(c -> TestContext::new)
                                    .definition(d -> d
@@ -87,7 +85,9 @@ class FullConfigurationTest {
                                            .workflowName("wf-custom")
                                            .on(c -> EventConditions.fromQualifiedName(new QualifiedName("start")))
                                            .notCustomized()
-                                   );
+                                   )
+                                   .configurationRegistry(cfg -> customRegistry)
+                                   .executionRepository(cfg -> customRepository);
 
         configurer.componentRegistry(cr -> cr.registerModule(module));
         AxonConfiguration configuration = configurer.build();
