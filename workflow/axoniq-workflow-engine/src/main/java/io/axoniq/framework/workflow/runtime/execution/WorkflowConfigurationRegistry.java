@@ -48,7 +48,6 @@ import java.util.stream.Collectors;
  * @author Simon Zambrovski
  * @since 5.4.0
  */
-@Internal
 public interface WorkflowConfigurationRegistry<W extends WorkflowConfigurationRegistry<W>>
         extends DescribableComponent {
 
