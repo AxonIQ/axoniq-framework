@@ -35,7 +35,7 @@ Use `allMatch` to wait for every reservation to complete:
 [source,java]
 ----
 // Fan-in: wait for all reservations
-var guard = ctx.allMatch(WorkflowStepResult::isCompleted, reservations); // <1>
+var guard = ctx.allMatch(WorkflowStepResult::success, reservations); // <1>
 
 if (!guard.success()) {
     // Some reservations failed — cancel the rest and compensate
@@ -76,12 +76,13 @@ for (var approver : approvers) {
 var approvals = approvers.stream()
         .map(approver -> ctx.waitForEvent(
                 "approval-" + approver,                                    // <1>
-                EventConditions.fromQualifiedName(ctx.resolve(ApprovalDecisionEvent.class)),
+                ApprovalDecisionEvent.class,
+                associate(payloadProperty("approver"), equalsTo(approver)),
                 step -> step.timeout(Duration.ofDays(5))))
         .toArray(WorkflowStepResult[]::new);
 
 // Fan-in: wait for all approvals
-var result = ctx.allMatch(WorkflowStepResult::isCompleted, approvals);
+var result = ctx.allMatch(WorkflowStepResult::success, approvals);
 
 if (!result.success()) {
     ctx.fail(new RuntimeException("Not all approvals received within deadline"));
@@ -183,7 +184,8 @@ ctx.awaitExecute("requestApproval",
 
 // Wait for their response
 var decision = ctx.waitForEvent("awaitApproval",
-        EventConditions.fromQualifiedName(ctx.resolve(ApprovalDecisionEvent.class)),
+        ApprovalDecisionEvent.class,
+        associate(payloadProperty("requestId"), equalsTo(ctx.workflowId())),
         step -> step.timeout(Duration.ofDays(3)));
 
 if (decision.timeout()) {                                                // <1>
@@ -193,7 +195,8 @@ if (decision.timeout()) {                                                // <1>
             ApprovalService::escalate);
 
     decision = ctx.waitForEvent("awaitEscalatedApproval",
-            EventConditions.fromQualifiedName(ctx.resolve(ApprovalDecisionEvent.class)),
+            ApprovalDecisionEvent.class,
+            associate(payloadProperty("requestId"), equalsTo(ctx.workflowId())),
             step -> step.timeout(Duration.ofDays(1)));
 
     if (decision.timeout()) {
@@ -221,10 +224,10 @@ if (failureCount < 3) {                                                  // <1>
                 payload("to", email, "subject", subject).getValues(),
                 EmailService::send);
         ctx.setPayload("resetEmailFailures",
-                payload("emailFailures", 0));                             // <2>
+                Map.of("emailFailures", 0));                                 // <2>
     } catch (StepFailedException e) {
         ctx.setPayload("recordEmailFailure",
-                payload("emailFailures", failureCount + 1));              // <3>
+                Map.of("emailFailures", failureCount + 1));            // <3>
         logger.warn("Email failed ({}/3), will skip next time", failureCount + 1);
     }
 } else {
@@ -266,7 +269,7 @@ This is durable—if the application restarts during the sleep, the engine recal
 
 Workflows talk to each other through published events.
 A parent publishes an event with xref:publishing-events.adoc[`awaitPublish`]; a child workflow starts on it.
-The child publishes its completion event the same way; the parent matches it with `awaitEvent` on a shared correlation ID (for example, `orderId`).
+The child publishes its completion event the same way; the parent matches it with `waitForEvent` on a shared correlation ID (for example, `orderId`).
 
 Each `awaitPublish` appends exactly one event: the business event itself, recorded as the publisher's completed step.
 Other workflows, entities and projections receive the event you published.
@@ -292,17 +295,17 @@ include::example$workflows/commonpatterns/PaymentProcessWorkflow.java[tag=child,
 ----
 <.> The child starts when the `PaymentProcessStarted` event the parent published is processed.
 The `childWorkflowId` from the payload becomes this workflow's instance ID; it must differ from the parent's ID, because a start whose ID already exists is rejected.
-<.> The final `notifyParent` step publishes `PaymentProcessCompleted`, which wakes the parent's `awaitEvent`.
+<.> The final `notifyParent` step publishes `PaymentProcessCompleted`, which wakes the parent's `waitForEvent`.
 
 The event store shows the handoff:
 
 ++++
 <div class="et-player" data-autoplay>
   <div class="et-src" data-title="Parent — OrderFulfillmentWorkflow (123)">
-1 started AwaitPaymentProcessStarted {"startTime": "2026-03-26T10:00:01Z"}
+1 started AwaitPaymentProcessStarted {"startTime": "2026-03-26T10:00:01Z", "eventName": "io.myapp.payments.PaymentProcessCompleted", "associations": ["payload:orderId=123"], "timeoutTime": "2026-03-26T10:30:01Z"}
 2 completed PaymentProcessStarted {"childWorkflowId": "payment-123", "orderId": 123, "amount": 99.95}
 9 external PaymentProcessCompleted {"orderId": 123, "childWorkflowId": "payment-123"}
-10 completed AwaitPaymentProcessCompleted
+10 completed AwaitPaymentProcessCompleted {"orderId": 123, "childWorkflowId": "payment-123"}
 11 completed OrderFulfillmentWorkflow#ExecuteCompleted
   </div>
   <div class="et-src" data-title="Child — PaymentProcessWorkflow (payment-123)">
@@ -319,10 +322,17 @@ The event store shows the handoff:
 
 The parent registers its wait (`AwaitPaymentProcessStarted`) and then publishes: its `paymentProcessStarted` step is the `PaymentProcessStarted` event itself, one record in the parent's stream and the trigger of the child.
 The child runs its steps and its final `notifyParent` step is the `PaymentProcessCompleted` event.
-The engine routes that event to the parent, where it matches the `awaitEvent` on `payloadProperty("orderId")`.
+The engine routes that event to the parent, where it matches the `waitForEvent` on `payloadProperty("orderId")`.
 
 [NOTE]
 ====
 Several running workflows can wait for the same published event.
 One `awaitPublish` wakes every waiting instance whose association matches, and starts every workflow definition that lists the event as its start event.
+====
+
+[NOTE]
+====
+A child is an independent workflow.
+The engine does not link it to the parent.
+Cancelling, failing or timing out the parent does not stop the child.
 ====

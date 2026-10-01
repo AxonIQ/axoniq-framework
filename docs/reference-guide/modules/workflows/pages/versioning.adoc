@@ -56,8 +56,8 @@ differ by `version`, new starts route as follows:
 
 === Dispatching the body of an existing instance
 
-`SimpleWorkflowExecution.resolveVersionedDefinition` decides which workflow body to invoke on
-every `execute(...)` of an existing instance. The lookup runs in this order:
+`WorkflowConfigurationRegistry.resolveDefinitionForReplay` decides which workflow body to invoke on
+every run of an existing instance. The lookup runs in this order:
 
 1. **`exact-match-start-config`**: `state.workflowVersion()` equals the start-time
    configuration's `workflowVersion()`. The start-time definition is used directly.
@@ -78,7 +78,7 @@ For example, with `[v1.0.0, v2.0.0]` registered and an instance whose state is `
 jumps across the major boundary to `v2.0.0`. Symmetric for a v2 instance bumped to `"2.0.1"`: it
 stays on `v2.0.0`. With `[v0.0.2]` registered and state `"0.0.1"`, step 4 picks `v0.0.2`.
 
-When all four passes fail (no definition is registered for this workflow name at all), routing
+When no definition is registered for this workflow name at all (`no-match-fallback`), routing
 falls back to the start-time definition and logs at WARN. The drift safety net then pauses the
 workflow if step names diverge in incompatible ways.
 
@@ -129,7 +129,7 @@ For users wiring workflows manually rather than via the annotation scanner, the 
 [source,java]
 ----
 WorkflowModule.defaults("OrderWorkflow", SimpleWorkflowContext.class)
-              .workflowContextFactory(c -> new SimpleWorkflowContextFactory())
+              .contextFactory(c -> new SimpleWorkflowContextFactory())
               .definition(d -> d.declarative(c -> orderWorkflow::execute)
                                 .workflowName("OrderWorkflow")
                                 .on(EventConditions.fromType(OrderPlacedEvent.class))
@@ -172,17 +172,17 @@ public void execute(SimpleWorkflowContext ctx) {
     ctx.awaitExecute("reserveStock", Boolean.class, InventoryService::reserveStock);
 
     if (ctx.migrateVersion("payment-redesign", "0.0.2")) {
-        ctx.awaitExecute("processPayment", PaymentService::processV2);
+        ctx.awaitExecute("processPayment", Boolean.class, PaymentService::processV2);
     } else {
-        ctx.awaitExecute("chargePayment", PaymentService::chargeV1);
+        ctx.awaitExecute("chargePayment", Boolean.class, PaymentService::chargeV1);
     }
 }
 ----
 
 *Returns a boolean.* `true` iff the workflow has committed to (or is past) `newVersion` for this
-`changeId`; `false` if it stays on the legacy branch. Internally, `WorkflowState.effectiveVersionFor(changeId)`
-obtains this from the recorded migration step when one exists, otherwise from `state.workflowDefinitionId().version()`
-(driven by the started event's `MessageType.version()`).
+`changeId`; `false` if it stays on the legacy branch. Internally, `WorkflowState.versionFor(changeId)`
+returns the version recorded by the migration step when one exists, otherwise `state.workflowDefinitionId().version()`
+(driven by the started event's `MessageType.version()`). The call returns `true` when that version is greater than or equal to `newVersion`.
 
 *Versions are semver strings,* compared by `Version`. Downgrades
 (requested `<` current, no recorded step) raise `IllegalArgumentException`. Same-version requests
@@ -195,30 +195,30 @@ uncluttered: only workflows that actively migrated to a higher version carry mig
 
 *The wire-level event name derives from the `changeId`.* For the example above the marker event is
 named `Payment-redesign.Versioned` in the event store, with `MessageType.version() = "0.0.2"` on the
-envelope itself and metadata `{eventKind: VERSION_MARKER, versionChangeId: "payment-redesign",
-version: "0.0.2"}`. The `changeId` is the business-meaningful description of what changed; it
+envelope itself. It is a COMPLETED step event (`stepName` is the `changeId`) with the extra metadata
+`versionChangeId: "payment-redesign"` and `version: "0.0.2"`. The `changeId` is the business-meaningful description of what changed; it
 surfaces directly in the event log.
 
 [[downstream-steps-guard]]
 == The downstream-steps guard
 
-A naive `version()` implementation would break workflows: if a workflow has already executed steps
+A naive `migrateVersion` implementation would break workflows: if a workflow has already executed steps
 A, B, C under old code and a developer later inserts `ctx.migrateVersion("x", "0.0.2")` between A and B, the
 naive implementation would reach the version call with no marker in history and fork onto the v=2
 branch—even though B and C already ran.
 
-The actual implementation has a *correctness invariant*: `version()` returns the workflow's current version unchanged (and emits nothing)
+The actual implementation has a *correctness invariant*: `migrateVersion` returns `false` for the legacy branch (and emits nothing)
 if state contains any terminal step that the current invocation has not yet referenced. Those
 untouched-but-present steps prove old code already executed past this code point, so we must stay on
 the legacy branch.
 
 The mechanism: the workflow body runs from the top on every invocation (live or replay). The runtime
-tracks a per-invocation set of "step names the body has referenced so far." When `version()` runs,
+tracks a per-invocation set of "step names the body has referenced so far." When `migrateVersion` runs,
 it compares this set against `state.workflowStepNames()`—anything in state but not yet referenced
 is "downstream" of the current code position. Steps below this point in the new code that are
 already in history can only have come from old code that ran past this point.
 
-=== Worked example A—old workflow, version() inserted later
+=== Worked example A: old workflow, migrateVersion inserted later
 
 History: `A.started, A.completed, B.started, B.completed, C.started, C.completed, workflow.completed`.
 New code:
@@ -274,7 +274,7 @@ if (ctx.migrateVersion("x", "0.0.2")) {       // line 2—newly added
 | Workflow stayed on legacy branch ✓
 |===
 
-=== Worked example B—brand-new workflow, same code
+=== Worked example B: brand-new workflow, same code
 
 [cols="1,2,3,3,4"]
 |===
@@ -287,7 +287,7 @@ if (ctx.migrateVersion("x", "0.0.2")) {       // line 2—newly added
 | 4 | body returns | `{A, D}` | step names: `{A, D}`; versions map gains `x → "0.0.2"` | Workflow forked onto new branch ✓
 |===
 
-=== Worked example C—workflow stopped at the boundary
+=== Worked example C: workflow stopped at the boundary
 
 History: `A.started, A.completed` only (the workflow was awaiting B when the deployment happened).
 Same new code as A.
@@ -309,7 +309,7 @@ Workflows that haven't passed the version call yet adopt the new version on the 
 * Call `ctx.migrateVersion(changeId, newVersion)` *at most once per `changeId`* per workflow body. Multiple calls
 within one invocation could see different `referencedStepNames` snapshots and return inconsistent
 values.
-* Never call `version()` inside a loop or combinator branch—the call must be reached
+* Never call `migrateVersion` inside a loop or combinator branch: the call must be reached
 deterministically and exactly once per body invocation.
 * `changeId` strings are durable identifiers. Once shipped, they should not be renamed; the event
 log keys versions by `changeId`, so renaming detaches new code from existing markers.
@@ -437,6 +437,7 @@ Every event-emitting primitive:
 
 * `ctx.awaitExecute(...)` / `ctx.execute(...)`—before publishing `STARTED`
 * `ctx.awaitWaitFor(...)` / `ctx.waitFor(...)`—before publishing `STARTED`
+* `ctx.publish(...)` / `ctx.awaitPublish(...)`: before publishing the step's `COMPLETED` event
 * `ctx.awaitModifyPayload(...)` / `ctx.modifyPayload(...)`—before publishing `COMPLETED`
 * `ctx.fail(...)` / `ctx.cancel(...)` / `ctx.cancelStep(...)`—before publishing the terminal
   workflow / step events. **This is the case most easily missed**: a developer inserting an early
@@ -453,7 +454,7 @@ than throw. That's the entire purpose of the primitive.
 When the guard fires, it throws `WorkflowReplayDriftException`. The exception is caught by the
 workflow execution loop with a dedicated handler that:
 
-* Logs a warning with the workflow id, the primitive that drifted, and the orphan step names
+* Logs a warning with the workflow id, the step about to execute, and the orphan step names
 * *Does not* publish a `failedWorkflow` or `cancelledWorkflow` event
 * Leaves the workflow in its current (non-terminal) state
 
@@ -477,16 +478,15 @@ No state surgery, no manual event-store edits, no special workflow-administratio
 
 [source]
 ----
-WARN  Workflow order-abc-123 paused due to replay drift: Workflow order-abc-123 cannot run
-      execute("step1_1") because history contains terminal steps the current code does not
-      reference: [step2]. This means old code ran past this point with steps the new code skips.
-      Either revert the change or wrap the new code in ctx.migrateVersion("<changeId>", "x.y.z") so old
-      workflows stay on the legacy branch. Revert the code change or wrap it in ctx.migrateVersion()
-      and replay.
+WARN  Workflow order-abc-123 paused due to replay drift: Workflow order-abc-123 cannot proceed at
+      "step1_1" because history contains terminal steps the current code does not reference:
+      [step2]. This means old code ran past this point with steps the new code skips. Either revert
+      the change or wrap the new code in ctx.migrateVersion("<changeId>", N) so old workflows stay
+      on the legacy branch. Revert the code change or wrap it in ctx.migrateVersion() and replay.
 ----
 
 Telemetry-friendly accessors are available on the exception:
-`workflowId()`, `primitive()`, `aboutToExecute()`, `orphans()`.
+`workflowId()`, `aboutToExecute()`, `orphans()`.
 
 === Limitations
 

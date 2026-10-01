@@ -26,8 +26,8 @@ Both steps run concurrently. You can also mix `execute` with `waitForEvent`:
 
 [source,java]
 ----
-var approval = ctx.waitForEvent("awaitApproval",
-        EventConditions.fromQualifiedName(ctx.resolve(ManagerApproved.class)),
+var approval = ctx.waitForEvent("awaitApproval", ManagerApproved.class,
+        associate(payloadProperty("orderId"), equalsTo(ctx.workflowId())),
         step -> step.timeout(Duration.ofMinutes(30)));
 
 var backgroundCheck = ctx.execute("runBackgroundCheck", ctx.workflowPayload(),
@@ -52,12 +52,12 @@ Wait for the first of two possible outcomes—whichever event arrives first wins
 
 [source,java]
 ----
-var accepted = ctx.waitForEvent("paymentAccepted",
-        EventConditions.fromQualifiedName(ctx.resolve(CardPaymentAccepted.class)),
+var accepted = ctx.waitForEvent("paymentAccepted", CardPaymentAccepted.class,
+        associate(payloadProperty("orderId"), equalsTo(ctx.workflowId())),
         step -> step.timeout(Duration.ofMinutes(10)));
 
-var declined = ctx.waitForEvent("paymentDeclined",
-        EventConditions.fromQualifiedName(ctx.resolve(CardPaymentDeclined.class)),
+var declined = ctx.waitForEvent("paymentDeclined", CardPaymentDeclined.class,
+        associate(payloadProperty("orderId"), equalsTo(ctx.workflowId())),
         step -> step.timeout(Duration.ofMinutes(10)));
 
 var result = ctx.anyMatch(WorkflowStepResult::isCompleted,     // <1>
@@ -366,7 +366,7 @@ Both workflows receive the same `OrderPlaced` event payload, but they run indepe
 8 completed ShipOrderCompleted
 9 completed OrderFulfillmentWorkflow#ExecuteCompleted
   </div>
-  <div class="et-src" data-title="CustomerNotificationWorkflow (123)">
+  <div class="et-src" data-title="CustomerNotificationWorkflow (456)">
 1 started CustomerNotificationWorkflow#ExecuteStarted
 3 started SendConfirmationEmailStarted {"email": "joe@example.com", "orderId": 123}
 5 completed SendConfirmationEmailCompleted

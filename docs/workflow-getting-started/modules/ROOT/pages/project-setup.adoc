@@ -6,7 +6,7 @@ Before we can build our order fulfillment workflow, we need to set up the projec
 == Prerequisites
 
 * Java 21 or higher
-* Axon Framework 5.1.0
+* Axon Framework 5.4 or higher
 * Maven (Gradle works too, but this tutorial uses Maven)
 
 == Adding dependencies
@@ -17,18 +17,18 @@ To use the Axon Workflow Engine, add the following dependencies to your `pom.xml
 .pom.xml
 ----
 <dependencies>
-    <!-- Workflow Engine DSL (includes both Java and Kotlin DSL) -->
+    <!-- Workflow Engine Java DSL (brings in the engine transitively) -->
     <dependency>
-        <groupId>io.axoniq.framework.workflow</groupId>
-        <artifactId>axon-workflow-dsl</artifactId>
-        <version>${workflow.version}</version>
+        <groupId>io.axoniq.framework</groupId>
+        <artifactId>axoniq-workflow-dsl</artifactId>
+        <version>${axoniq-framework.version}</version>
     </dependency>
 
     <!-- Workflow Engine Test utilities -->
     <dependency>
-        <groupId>io.axoniq.framework.workflow</groupId>
-        <artifactId>axon-workflow-test</artifactId>
-        <version>${workflow.version}</version>
+        <groupId>io.axoniq.framework</groupId>
+        <artifactId>axoniq-workflow-test</artifactId>
+        <version>${axoniq-framework.version}</version>
         <scope>test</scope>
     </dependency>
 </dependencies>
@@ -36,10 +36,12 @@ To use the Axon Workflow Engine, add the following dependencies to your `pom.xml
 
 [NOTE]
 ====
-The `axon-workflow-dsl` module includes both Java DSL layers (`BaseWorkflowContext` and the convenience-focused
-`SimpleWorkflowContext`), which implement the author-facing `WorkflowContext` contract, plus the Kotlin DSL
-(`WorkflowKontext` with the author-facing `Kontext` wrapper).
-You don't need separate dependencies for Kotlin support.
+The `axoniq-workflow-dsl` module includes both Java DSL layers (`BaseWorkflowContext` and the convenience-focused
+`SimpleWorkflowContext`), which implement the author-facing `WorkflowContext` contract.
+The engine (`axoniq-workflow-engine`) is a transitive dependency.
+It does not depend on Kotlin.
+For the Kotlin DSL (`WorkflowKontext` with the author-facing `Kontext` wrapper), add `axoniq-workflow-dsl-kotlin`.
+For Spring Boot, use `axoniq-spring-boot-starter`, which includes workflow support.
 ====
 
 == Module overview
@@ -50,10 +52,10 @@ The Axon Workflow Engine consists of four modules:
 |===
 |Module |Purpose
 
-|`runtime` |Core engine: primitives, combinators, execution, configuration
-|`dsl` |DSL layers for Java (`BaseWorkflowContext` and `SimpleWorkflowContext`) and Kotlin (`WorkflowKontext` and `Kontext`)
-|`test` |Testing utilities: `AbstractWorkflowTestBase`, `DelayedPublisher`
-|`example` |Example workflows demonstrating all features
+|`axoniq-workflow-engine` |Core engine: primitives, combinators, execution, configuration, and the `WorkflowContext` API
+|`axoniq-workflow-dsl` |Java DSL layers (`BaseWorkflowContext` and `SimpleWorkflowContext`)
+|`axoniq-workflow-dsl-kotlin` |Kotlin DSL (`WorkflowKontext` and `Kontext`)
+|`axoniq-workflow-test` |Testing utilities: `AbstractWorkflowTestBase`, `DelayedPublisher`
 |===
 
 == Define your domain events

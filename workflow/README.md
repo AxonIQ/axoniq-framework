@@ -1,6 +1,6 @@
-# Axon Framework - Workflow Extension
+# Axoniq Framework - Workflow
 
-Repository for a Workflow (Flow) Engine built on Axon Framework 5.
+Modules of the Axoniq Workflow Engine, an event-sourced workflow engine built on Axon Framework 5.
 
 ## Why Workflows?
 
@@ -38,4 +38,4 @@ Axon Framework consists out of a number of different modules, each with differen
 Axon Framework GitHub organization, with group identifier org.axonframework, are Apache 2 licensed. Modules under the
 Axoniq GitHub organization, with group identifier io.axoniq, are licensed under Axoniq's proprietary license.
 
-Please refer to individual module's [LICENSE](LICENSE.txt) file for details.
+Please refer to the [LICENSE](../LICENSE.txt) file for details.

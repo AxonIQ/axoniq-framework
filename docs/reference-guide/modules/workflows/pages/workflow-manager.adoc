@@ -7,7 +7,8 @@ code, support tooling, or administration services. Use `WorkflowContext` inside 
 
 == Retrieve the manager instance
 
-The default workflow configuration registers `WorkflowManager` as a component:
+Each `WorkflowModule` registers its own `WorkflowManager`, named `WorkflowManager[<module name>]`.
+Retrieve it by that name:
 
 [source,java]
 ----
@@ -51,6 +52,14 @@ include::example$workflows/workflowmanager/WorkflowManagerExamples.java[tag=find
 in `WorkflowStateQuery` allow live and history repositories to execute the same search efficiently. A
 `WorkflowInstances` result includes matching live executions and historic workflow instances. When a workflow is
 available from both sources, the live execution represents that workflow in the result.
+
+[IMPORTANT]
+====
+`findMany` finds historic instances through an in-memory history of this node.
+That history is built from the events this node processes, so it is empty after a restart until new events arrive.
+It has no retention limit.
+A query that names a workflow ID also reads the durable state from the event store.
+====
 
 == Request cancellation
 

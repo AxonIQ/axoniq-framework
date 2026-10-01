@@ -48,9 +48,9 @@ awaitPublish("notifyApproved", OrderApproved(orderId, approvedBy))
 ++++
 <div class="et-player" data-autoplay>
   <div class="et-src" data-title="awaitPublish">
-1 started ApprovalStarted {"orderId": "order-1"}
+1 started ApprovalWorkflow#ExecuteStarted {"orderId": "order-1"}
 2 completed OrderApproved {"orderId": "order-1", "approvedBy": "alice"}
-3 completed ApprovalCompleted {}
+3 completed ApprovalWorkflow#ExecuteCompleted {}
   </div>
 </div>
 ++++

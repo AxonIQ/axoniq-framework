@@ -64,7 +64,7 @@ If no matching event arrives within 15 minutes:
 <div class="et-player" data-autoplay>
   <div class="et-src" data-title="awaitEvent — timeout">
 1 started AwaitPaymentStarted {"startTime": "2026-03-25T10:00:00Z", "eventName": "PaymentConfirmed", "associations": ["payload:orderId=123"], "timeoutTime": "2026-03-25T10:15:00Z"}
-2 timedout AwaitPaymentTimedOut {"timeout": "2026-03-25T10:15:00Z"}
+2 timedout AwaitPaymentTimedOut "2026-03-25T10:15:00Z"
   </div>
 </div>
 ++++
@@ -111,14 +111,13 @@ Examples:
 ----
 payload:paymentReference=123
 metadata:tenantId=acme
-message:timestamp>2026-01-01T12:00:00Z
 ----
 
 Rules:
 
-- `source` identifies where the left-hand value comes from. `payload` is the first required qualifier.
+- `source` identifies where the left-hand value comes from. Supported sources are `payload` and `metadata`.
 - `path` is source-specific lookup text, such as a payload property or metadata key. This maps to a value retriever.
-- `operator` is resolved through `ValueComparisonOperatorRegistry`.
+- `operator` is resolved through `ValueComparisonOperatorRegistry`. The built-in operator is `=`.
 - `value` is stored in serialized text form.
 
 [NOTE]
@@ -151,7 +150,7 @@ if(stepResult.success()){
 [NOTE]
 ====
 If you need to branch explicitly on timeout, cancellation, or success, prefer non-blocking `waitForEvent(...)` and inspect the returned `WorkflowStepResult`.
-The blocking helpers are best when your workflow only needs the successful event payload and treats other outcomes as exceptional.
+The blocking helpers are best when your workflow only needs the successful event payload. `awaitEvent` throws `StepTimedOutException` on timeout and `StepCancellationException` on cancellation.
 ====
 
 [TIP]
@@ -179,13 +178,13 @@ var approval = ctx.waitForEvent("awaitApproval",                     // <1>
                   equalsTo(ctx.workflowPayload().get("orderId"))),
         step -> step.timeout(Duration.ofMinutes(30)));
 
-ctx.allMatch(WorkflowStepResult::isCompleted, payment, approval)   // <2>
+ctx.allMatch(WorkflowStepResult::success, payment, approval)   // <2>
    .await();
 
 logger.info("Both payment and approval received — proceeding!");
 ----
 <.> `waitForEvent` returns a `WorkflowStepResult` immediately without blocking—both waits start concurrently.
-<.> `allMatch` blocks until both events have arrived. See xref:step-orchestration.adoc[] for more on combinators.
+<.> `allMatch` blocks until both waits have finished. With `success` as predicate, it ends early when one of them times out. See xref:step-orchestration.adoc[] for more on combinators.
 
 == Sleep—a simple delay
 
@@ -204,7 +203,7 @@ Under the hood, this is a `waitForEvent` with an event condition that never matc
 <div class="et-player" data-autoplay>
   <div class="et-src" data-title="sleep — 10-day delay">
 1 started CooldownPeriodStarted {"startTime": "2026-03-25T10:00:00Z", "eventName": "Void", "associations": [], "timeoutTime": "2026-04-04T10:00:00Z"}
-2 timedout CooldownPeriodTimedOut {"timeout": "2026-04-04T10:00:00Z"}
+2 timedout CooldownPeriodTimedOut "2026-04-04T10:00:00Z"
   </div>
 </div>
 ++++
@@ -262,7 +261,7 @@ public void execute(SimpleWorkflowContext ctx) {
             step -> step.timeout(Duration.ofSeconds(30)));
 
     // Wait for both to complete
-    ctx.allMatch(WorkflowStepResult::isCompleted,                   // <3>
+    ctx.allMatch(WorkflowStepResult::success,                       // <3>
                  paymentConfirmation, paymentInitiation).await();
 
     logger.info("Payment initiated and confirmed for order {}",
@@ -272,7 +271,7 @@ public void execute(SimpleWorkflowContext ctx) {
 
 <.> `waitForEvent` starts listening for `PaymentConfirmed` immediately and returns a `WorkflowStepResult` without blocking.
 <.> `execute` calls the payment service—this may trigger a third-party provider that eventually publishes a `PaymentConfirmed` event.
-<.> `allMatch` blocks until both the payment initiation completes and the confirmation event arrives.
+<.> `allMatch` blocks until both the payment initiation and the confirmation event have succeeded, or one of them ends without success.
 
 [TIP]
 ====
@@ -287,7 +286,7 @@ Here's the full event store for this workflow:
 1 external OrderPlaced {"orderId": 123, "customerId": 456, "email": "joe@example.com", "amount": 99.95}
 2 started OrderFulfillmentWorkflow#ExecuteStarted
 3 started ReserveStockStarted
-4 completed ReserveStockCompleted {"__reserveStock": true}
+4 completed ReserveStockCompleted {"reserved": true}
 5 started AwaitPaymentStarted {"startTime": "2026-03-25T10:00:05Z", "eventName": "PaymentConfirmed", "associations": ["payload:orderId=123"], "timeoutTime": "2026-03-25T10:15:05Z"}
 6 started InitiatePaymentStarted {"orderId": 123, "customerId": 456, "email": "joe@example.com", "amount": 99.95}
 7 completed InitiatePaymentCompleted

@@ -132,10 +132,10 @@ The `WorkflowStepResult` returned by `execute` and `waitForEvent` lets you inspe
 |Returns `true` if the step has already reached a terminal state.
 
 |`result()`
-|Returns `Optional<T>` with the result payload. Empty if the step hasn't finished yet.
+|Returns `Optional<Map<String, Object>>` with the result payload. Use `resultAs(Class)` for a typed result. Empty if the step hasn't finished yet.
 
 |`error()`
-|Returns `Optional<StepFailedException>`. Empty if the step hasn't finished or didn't fail.
+|Returns `Optional<StepFailedException>` describing the failure. Check `failure()` first.
 
 |`cancel()` / `cancel(reason)`
 |Cancels the step if still running. No-op if already in a terminal state. See <<cancelling-a-step>>.
@@ -152,7 +152,8 @@ var shipping = ctx.execute("shipOrder", ctx.workflowPayload(),
 
 // non-blocking wait for event
 var approval = ctx.waitForEvent("awaitApproval",
-        EventConditions.fromQualifiedName(ctx.resolve(ManagerApproved.class)),
+        ManagerApproved.class,
+        associate(payloadProperty("orderId"), equalsTo(ctx.workflowPayload().get("orderId"))),
         step -> step.timeout(Duration.ofMinutes(30)));
 
 // check and wait on either
@@ -182,7 +183,7 @@ Override per step:: Customize the step definition with `timeout(...)`.
 // Uses the default 5-second timeout
 ctx.awaitExecute("quickCheck",
         Map.of(),
-        (pc, input) -> Map.of("passed", QuickService::check()));
+        (pc, input) -> Map.of("passed", QuickService.check()));
 
 // Explicit 30-second timeout for an action
 ctx.awaitExecute("slowOperation", ctx.workflowPayload(),
@@ -228,7 +229,7 @@ Each step has two reducers:
 
 |`LocalOnlyPayloadReducer.INSTANCE` _(default for input)_
 |The action receives only the local payload you passed in. It doesn't see the global workflow state.
-|Only the local result is kept. The global payload is untouched.
+|The step's result replaces the global payload. Previous global values are dropped.
 
 |`GlobalOnlyPayloadReducer.INSTANCE` _(default for output)_
 |The action receives only the global workflow payload. The local payload is ignored.
@@ -288,7 +289,8 @@ You can cancel a running step in two ways:
 [source,java]
 ----
 var approval = ctx.waitForEvent("awaitApproval",
-        EventConditions.fromQualifiedName(ctx.resolve(ManagerApproved.class)),
+        ManagerApproved.class,
+        associate(payloadProperty("orderId"), equalsTo(ctx.workflowPayload().get("orderId"))),
         step -> step.timeout(Duration.ofMinutes(30)));
 
 // later — manager rejected, no longer need approval
@@ -341,13 +343,14 @@ This is different from `ctx.cancel()` or `ctx.fail()`, which terminate the entir
 
 [NOTE]
 ====
-Cancelling a step interrupts the running action by throwing a `StepCancellationException`.
-You can catch this in your action to perform cleanup before the step terminates.
+Cancelling a step completes the step with a `StepCancellationException` and records the CANCELLED event.
+The running action is not interrupted: it keeps running until it returns, and its late result is ignored.
+A blocking `awaitExecute` or `awaitEvent` in the workflow body throws the `StepCancellationException`.
 ====
 
 The event name follows the step's `EventNameCustomizer`.
 If the step was started with a custom namespace or base name, the CANCELLED event uses the same customization.
-See xref:#step-level-customizer[Step-level customizer] for how to control event naming, including the CANCELLED suffix.
+See <<_step_level_customizer,Step-level customizer>> for how to control event naming, including the CANCELLED suffix.
 
 [TIP]
 ====
@@ -360,12 +363,18 @@ For workflow-level termination (`ctx.fail()`, `ctx.cancel()`), terminal states, 
 [IMPORTANT]
 ====
 Steps execute with **at most once** semantics.
-A step's action runs **at most once** across the whole workflow lifetime, including across crashes and replays — it never runs twice.
+Each attempt of a step's action runs **at most once**, including across crashes and replays.
+An attempt is never re-run after a crash. Only a configured `RetryPolicy` starts a new attempt.
 
 The action runs *before* its COMPLETED event is persisted. If the application crashes in that window (action ran, COMPLETED not yet committed), the engine **does not** re-run the action on recovery: the durable STARTED record means an attempt was already opened and may have run, and re-running it would break the at-most-once guarantee.
 Because the outcome of the interrupted attempt is unknown, the engine resolves it through the **regular error flow** instead of re-executing it (see below).
 
 The trade-off of at-most-once is that an interrupted action may run **zero or one** times — it may not run at all. If a step's effect *must* eventually happen, make it **idempotent** and configure a `RetryPolicy` (a retry is a fresh attempt) and/or compensate when the step fails.
+
+Events can reach the workflow more than once, for example after a restart or a rebalance.
+A step that already reached a terminal status ignores a later matching event.
+For external side effects, use the workflow id and the step name as the idempotency key.
+Both are stable across restarts.
 ====
 
 [[crash-interrupted-steps]]
@@ -373,8 +382,8 @@ The trade-off of at-most-once is that an interrupted action may run **zero or on
 
 When a step's action is interrupted by a crash and not re-run, the engine resolves it exactly like any other failed attempt:
 
-* **No retry policy** → the step records a terminal **FAILED** status. The failure is surfaced to your workflow body as a `StepFailedException` whose cause is a `StepIndeterminateException` (the dedicated "in-flight at a crash, not re-run, outcome indeterminate" marker). `awaitExecute(...)` throws it; a non-blocking `execute(...)` handle reports it via `result.failure()` / `result.error()`.
-* **With a retry policy** → the interrupted attempt is treated as a failed attempt and the step goes to **RETRYING**; the engine schedules the next attempt per the policy (backoff included). This is identical to the normal retry-on-failure flow, so a step you *want* re-attempted after a crash should carry a `RetryPolicy` (and an idempotent action, since a retry runs the effect again). Each retry attempt records **RETRY_STARTED** before it runs, and runs only if the event store accepted that record. A node that lost the workflow instance during the backoff is rejected there and never runs the action.
+* **No retry policy**: the step records a terminal **FAILED** status. The failure is surfaced to your workflow body as a `StepIndeterminateException`, a subtype of `StepFailedException` (the dedicated "in-flight at a crash, not re-run, outcome indeterminate" marker). `awaitExecute(...)` throws it; a non-blocking `execute(...)` handle reports it via `result.failure()` / `result.error()`.
+* **With a retry policy**: the interrupted attempt is treated as a failed attempt and the step goes to **RETRYING**; the engine schedules the next attempt per the policy (backoff included). This is identical to the normal retry-on-failure flow, so a step you *want* re-attempted after a crash should carry a `RetryPolicy` (and an idempotent action, since a retry runs the effect again). Each retry attempt records **RETRY_STARTED** before it runs, and runs only if the event store accepted that record. A node that lost the workflow instance during the backoff is rejected there and never runs the action.
 
 [IMPORTANT]
 ====
@@ -385,7 +394,7 @@ A step reaching FAILED does not by itself terminate the workflow while the body 
 try {
     ctx.awaitExecute("chargePayment", payload, (pc, p) -> charge(p));
 } catch (StepFailedException e) {
-    // crash-interrupted (StepIndeterminateException cause) or a genuine failure: compensate, then fail the workflow
+    // crash-interrupted (StepIndeterminateException) or a genuine failure: compensate, then fail the workflow
     ctx.fail(e);
 }
 ----
@@ -400,37 +409,37 @@ The `RetryPolicy` API lets you configure retries per step—max attempts, backof
 
 [source,java]
 ----
-// Simple: retry up to 3 times (uses default timeout and event names)
+// Simple: retry up to 3 times (uses the default timeout and event names)
 ctx.awaitExecute("reserveInventory",
         payload("orderId", orderId).getValues(),
         InventoryService::reserve,
-        RetryPolicy.maxRetries(3));                                       // <1>
+        step -> step.retryPolicy(RetryPolicy.maxRetries(3)));             // <1>
 
 // With fixed backoff: wait 500ms between retries
 ctx.awaitExecute("chargePayment",
         payload("orderId", orderId, "amount", amount).getValues(),
         PaymentGateway::charge,
-        RetryPolicy.maxRetries(3)
-                .withBackoff(BackoffStrategy.fixed(Duration.ofMillis(500))));
+        step -> step.retryPolicy(RetryPolicy.maxRetries(3)
+                .withBackoff(BackoffStrategy.fixed(Duration.ofMillis(500)))));
 
 // With exponential backoff (base 200ms, capped at 5s)
 ctx.awaitExecute("notifyCarrier",
         payload("shipmentId", shipmentId).getValues(),
         CarrierService::notify,
-        RetryPolicy.maxRetries(5)
-                .withBackoff(BackoffStrategy.exponential(Duration.ofMillis(200), Duration.ofSeconds(5))));
+        step -> step.retryPolicy(RetryPolicy.maxRetries(5)
+                .withBackoff(BackoffStrategy.exponential(Duration.ofMillis(200), Duration.ofSeconds(5)))));
 
 // With retry handler and conditional stop
 ctx.awaitExecute("validateAddress",
         payload("address", address).getValues(),
         AddressService::validate,
-        RetryPolicy.maxRetries(5)
+        step -> step.retryPolicy(RetryPolicy.maxRetries(5)
                 .onRetry(retryCtx -> logger.warn("Retry {}/{} for {}: {}",       // <2>
                         retryCtx.attempt(), retryCtx.maxRetries(),
                         retryCtx.stepName(), retryCtx.error().getMessage()))
-                .retryWhile(retryCtx -> isTransient(retryCtx.error())));          // <3>
+                .retryWhile(retryCtx -> isTransient(retryCtx.error()))));         // <3>
 ----
-<.> If the step fails, the engine retries up to 3 times before marking it as FAILED. `maxRetries=3` means up to 4 total executions (1 initial + 3 retries).
+<.> If the step fails or times out, the engine retries up to 3 times before marking it as FAILED (or TIMED_OUT if the last attempt timed out). Each attempt gets its own full timeout. `maxRetries=3` means up to 4 total executions (1 initial + 3 retries).
 <.> `onRetry` is called before each retry—use it for logging, metrics, or alerts.
 <.> `retryWhile` continues retrying as long as the predicate returns true—here, only transient errors are retried (for example, a 404 is not retried).
 
@@ -522,7 +531,7 @@ return d -> d
                         namespace("io.myapp.orders")
                                 .stepCompleted("Done")
                                 .workflowBaseName("OrderFulfillment"))
-                .workflowIdProvider(fromPayloadAttribute(c, "orderId"))
+                .workflowIdProvider(new PayloadPropertyWorkflowIdProvider("orderId"))
         );
 ----
 
@@ -539,8 +548,8 @@ Override the customizer on a specific step when you need different naming:
 ctx.awaitExecute("initiatePayment",
                  payload("amount", amount).getValues(),
                  PaymentService::initiatePayment,
-                 Duration.ofSeconds(30),
-                 namespace("io.myapp.payments")); // <1>
+                 step -> step.timeout(Duration.ofSeconds(30))
+                             .eventNameCustomizer(namespace("io.myapp.payments"))); // <1>
 ----
 <.> This step's events use `io.myapp.payments` while all other steps still use the workflow-level namespace.
 
@@ -551,8 +560,8 @@ If a step uses a custom namespace, its cancellation event uses the same namespac
 ----
 ctx.execute("shipOrder", ctx.workflowPayload(),
         ShippingService::shipOrder,
-        Duration.ofMinutes(5),
-        namespace("io.shipping"));
+        step -> step.timeout(Duration.ofMinutes(5))
+                    .eventNameCustomizer(namespace("io.shipping")));
 
 // If cancelled, the event will be: io.shipping.ShipOrderCancelled
 ----
@@ -583,7 +592,7 @@ When a step also has its own customizer, the two are merged—**step-level wins*
 
 |`namespace`
 |The prefix for all event names (for example, `io.myapp.orders`)
-|`io.axoniq.framework.workflow`
+|`io.axoniq.framework.workflow` (for `@Workflow` classes without `workflowNamespace`: the package of the workflow class)
 |Yes—set it once, all steps use it
 
 |`capitalizeSimpleName`
@@ -592,8 +601,8 @@ When a step also has its own customizer, the two are merged—**step-level wins*
 |Yes
 
 |Step status suffixes
-|The suffix appended for each status (`stepStarted`, `stepCompleted`, `stepFailed`, `stepTimedOut`, `stepCancelled`)
-|`Started`, `Completed`, `Failed`, `TimedOut`, `Cancelled`
+|The suffix appended for each status (`stepStarted`, `stepCompleted`, `stepFailed`, `stepTimedOut`, `stepCancelled`, `stepRetrying`, `stepRetryStarted`)
+|`Started`, `Completed`, `Failed`, `TimedOut`, `Cancelled`, `Retrying`, `RetryStarted`
 |Yes
 
 |`baseName`
@@ -643,8 +652,8 @@ ctx.awaitExecute("reserveStock",
 ctx.awaitExecute("initiatePayment",
                  payload("amount", amount).getValues(),
                  PaymentService::initiatePayment,
-                 Duration.ofSeconds(30),
-                 namespace("io.payments"));
+                 step -> step.timeout(Duration.ofSeconds(30))
+                             .eventNameCustomizer(namespace("io.payments")));
 ----
 
 Resulting events:
@@ -727,7 +736,7 @@ payloadCustomization(pc -> {
 })
 ----
 
-This would produce `PriorityPaymentCompleted` or `NormalPaymentCompleted` depending on the payload.
+This would produce `highPaymentCompleted` or `normalPaymentCompleted` depending on the payload value of `priority`.
 
 [[kotlin-dsl-equivalents]]
 == Kotlin DSL equivalents

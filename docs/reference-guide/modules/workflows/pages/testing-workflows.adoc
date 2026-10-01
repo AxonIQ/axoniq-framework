@@ -39,7 +39,7 @@ Add the workflow test module to the test classpath:
 <dependency>
     <groupId>io.axoniq.framework</groupId>
     <artifactId>axoniq-workflow-test</artifactId>
-    <version>${axoniq-workflow.version}</version>
+    <version>${axoniq-framework.version}</version>
     <scope>test</scope>
 </dependency>
 ----
@@ -102,7 +102,7 @@ class UserSignupFixtureTest {
     void setUp() {
         WorkflowModule<SimpleWorkflowContext> module = WorkflowModule
                 .defaults("UserSignup", SimpleWorkflowContext.class)
-                .workflowContextFactory(c -> new SimpleWorkflowContextFactory())
+                .contextFactory(c -> new SimpleWorkflowContextFactory())
                 .definition(d -> d.autodetected(c -> new UserSignupWorkflow()));
 
         fixture = WorkflowTestFixture.of(module);
@@ -152,7 +152,7 @@ Use the `customize` overload when the workflow under test needs test-specific co
 ----
 WorkflowModule<SimpleWorkflowContext> module = WorkflowModule
         .defaults("UserSignup", SimpleWorkflowContext.class)
-        .workflowContextFactory(c -> new SimpleWorkflowContextFactory())
+        .contextFactory(c -> new SimpleWorkflowContextFactory())
         .definition(d -> d.autodetected(c -> new UserSignupWorkflow()));
 
 WorkflowTestFixture<GivenWhen.Phase, Then.Phase> fixture =
@@ -282,35 +282,10 @@ This is useful for `sleep`, `waitForEvent` timeouts, execute-step timeouts, and 
 
 === Testing retry backoff
 
-Retry backoff uses the same fixture-controlled scheduler. Supply a failing action for the first attempt, advance time
-past the configured backoff, then release the retry attempt with its successful result.
-
-The following example assumes that `reserveCredit` uses a retry policy with a one-second fixed backoff:
-
-[source,java]
-----
-fixture.given()
-       .publishEvent(new RegistrationReceivedEvent("2", "piggy@muppets.biz", "vip"))
-       .executionExists();
-
-fixture.when()
-       .execute("reserveCredit", (processingContext, inputPayload) -> {
-           throw new StepFailedException("temporary credit failure");
-       });
-
-fixture.then()
-       .step("reserveCredit", StepStatus.RETRYING);
-
-fixture.when()
-       .timePasses(Duration.ofSeconds(1))
-       .executeReturning("reserveCredit", Map.of("reservationId", "res-123"));
-
-fixture.then()
-       .step("reserveCredit", StepStatus.COMPLETED);
-----
-
-Use `execute(...)` for the failed retry attempt. `executeFailing(...)` is for steps expected to reach terminal `FAILED`
-state, whereas a retrying step first reaches `RETRYING`.
+Retry backoff uses the same fixture-controlled scheduler, so `timePasses(...)` advances the wait between attempts.
+The stepping fixture resolves the action of a step name once and reuses it for every retry attempt.
+`execute(...)`, `executeReturning(...)` and `executeFailing(...)` wait for a terminal status, so they cannot stop on `RETRYING`.
+Test the retry policy against `WorkflowTestDriver.live(...)` with a workflow action that fails once and then succeeds.
 
 == Assertions
 
@@ -463,7 +438,7 @@ Pass the custom phase instances to the custom fixture factory:
 WorkflowTestFixture<SignupGivenWhen, SignupThen> fixture =
         WorkflowTestFixture.of(
                 WorkflowModule.defaults("UserSignup", SimpleWorkflowContext.class)
-                              .workflowContextFactory(c -> new SimpleWorkflowContextFactory())
+                              .contextFactory(c -> new SimpleWorkflowContextFactory())
                               .definition(d -> d.autodetected(c -> new UserSignupWorkflow())),
                 UnaryOperator.identity(),
                 new SignupGivenWhen(),
@@ -535,6 +510,79 @@ void vip_registration_completes_after_magic_event() {
 }
 ----
 
+== More fixture examples
+
+=== A wait that times out
+
+This workflow waits 5 minutes for a confirmation and handles the timeout in a separate step:
+
+[source,java]
+----
+var confirmation = ctx.waitForEvent("waitForConfirmation", EventConditions.never(),
+        step -> step.timeout(Duration.ofMinutes(5)));
+confirmation.await();
+if (confirmation.timeout()) {
+    ctx.awaitExecute("handleTimeout", Map.of(), (pc, payload) -> Map.of("handledBy", "workflow"));
+}
+----
+
+Advance fixture time past the timeout, then release the handling step:
+
+[source,java]
+----
+fixture.when()
+       .publishEvent(new PaymentRequested("payment-1"))
+       .executionExists()
+       .timePasses(Duration.ofMinutes(5).plusSeconds(1));
+
+fixture.then()
+       .step("waitForConfirmation", StepStatus.TIMED_OUT)
+       .waitingIn("handleTimeout");
+
+fixture.when()
+       .executeReturning("handleTimeout", Map.of("handledBy", "test"));
+
+fixture.then()
+       .workflowFinished(WorkflowStatus.COMPLETED);
+----
+
+=== A failed step
+
+When the workflow body does not catch a step failure, the workflow ends `FAILED`:
+
+[source,java]
+----
+fixture.given()
+       .publishEvent(new RegistrationReceivedEvent("2", "piggy@muppets.biz", "vip"))
+       .execute("createUser");
+
+fixture.when()
+       .executeFailing("activateUser", new StepFailedException("activation service down"));
+
+fixture.then()
+       .workflowFinished(WorkflowStatus.FAILED)
+       .step("activateUser", StepStatus.FAILED)
+       .noStep("sendWelcomeEmail");
+----
+
+=== Several workflow instances
+
+Assertions apply to the selected execution or history.
+When several instances run, select one with a predicate or a workflow id:
+
+[source,java]
+----
+fixture.given()
+       .publishEvent(new RegistrationReceivedEvent("2", "piggy@muppets.biz", "vip"))
+       .publishEvent(new RegistrationReceivedEvent("3", "kermit@muppets.biz", "vip"));
+
+fixture.then()
+       .executionExists(execution -> "3".equals(execution.state().payload().get("id")))
+       .waitingIn("createUser");
+----
+
+After an instance finishes, select its history with `historyExists(workflowId)`.
+
 == Advanced testing
 
 Use the BDD fixture for normal workflow behavior tests.
@@ -569,7 +617,7 @@ In stepping mode, use the driver directly when you want fixture behavior without
 ----
 WorkflowModule<SimpleWorkflowContext> module = WorkflowModule
         .defaults("TestModule", SimpleWorkflowContext.class)
-        .workflowContextFactory(c -> new SimpleWorkflowContextFactory())
+        .contextFactory(c -> new SimpleWorkflowContextFactory())
         .definition(d -> d.autodetected(c -> new UserSignupWorkflow()));
 
 WorkflowTestDriver driver = WorkflowTestDriver.stepper(module, false, UnaryOperator.identity());
