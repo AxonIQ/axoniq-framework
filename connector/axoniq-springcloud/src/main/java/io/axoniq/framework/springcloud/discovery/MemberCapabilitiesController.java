@@ -32,7 +32,7 @@ import java.util.Objects;
 
 /**
  * Serves this application's own {@link io.axoniq.framework.springcloud.routing.MemberCapabilities capabilities} over
- * HTTP, so that other members of the cluster can learn which commands this one handles.
+ * HTTP, so that other members of the cluster can learn which commands and queries this one handles.
  * <p>
  * Every member of a cluster using {@link RestCapabilityDiscoveryMode} must expose this endpoint, since that is the
  * only way capabilities travel: they cannot be published through

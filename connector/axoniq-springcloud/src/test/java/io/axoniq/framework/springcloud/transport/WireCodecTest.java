@@ -39,12 +39,12 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class WireCodecTest {
 
     @Nested
-    class CarryingSerializedDetails {
+    class CarryingTheDetailsOfAFailure {
 
         @Test
         void carriesBytesAsTheyAre() {
-            // given
-            byte[] details = "{\"id\":\"course-1\"}".getBytes(StandardCharsets.UTF_8);
+            // given the serialized details a failure carries, which are bytes rather than text
+            byte[] details = "{\"remaining\":0}".getBytes(StandardCharsets.UTF_8);
 
             // when
             String encoded = WireCodec.encode(details);
@@ -55,7 +55,7 @@ class WireCodecTest {
 
         @Test
         void carriesNothingForAFailureWithoutDetails() {
-            // then absent details travel as an absent field rather than as an empty string
+            // when / then absent details travel as an absent field rather than as an empty string
             assertThat(WireCodec.encode(null)).isNull();
             assertThat(WireCodec.encode(new byte[0])).isNull();
             assertThat(WireCodec.decode(null)).isNull();

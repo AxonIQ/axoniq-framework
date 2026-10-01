@@ -34,8 +34,8 @@ import java.util.List;
 /**
  * The encoding members share when writing a failure to each other, whatever kind of message it answers.
  * <p>
- * Messages of different kinds travel over endpoints of their own, with shapes of their own, but a failure is
- * described the same way in all of them. Keeping that here means those shapes cannot drift apart into encodings that
+ * Commands and queries travel over different endpoints with different shapes, but a failure is described the same
+ * way in both. Keeping that here means the two directions cannot drift apart into encodings that
  * no longer read each other.
  *
  * @author Allard Buijze

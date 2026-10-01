@@ -57,8 +57,6 @@ class HttpRemoteCommandDispatcherTest {
 
     private static final MessageType COMMAND_TYPE = new MessageType("university.CreateCourse", "1.0.0");
     private static final String PAYLOAD = "{\"name\":\"Axon 5\"}";
-    /** The payload as it appears inside the JSON body carrying it. */
-    private static final String PAYLOAD_IN_JSON = PAYLOAD.replace("\"", "\\\"");
     private static final Member REMOTE_MEMBER =
             new Member("UNIVERSITY[http://node-b:8080]", URI.create("http://node-b:8080"), false);
 
@@ -77,9 +75,11 @@ class HttpRemoteCommandDispatcherTest {
                                                      null);
     }
 
-    /** A payload no converter is attached to, standing in for one a decorator should have converted. */
-    private record CreateCourse(String name) {
-
+    /**
+     * Quotes the given {@code text} as a JSON string, the way the answering member writes a payload into its reply.
+     */
+    private static String asJsonString(String text) {
+        return '"' + text.replace("\\", "\\\\").replace("\"", "\\\"") + '"';
     }
 
     private static CommandMessage command() {
@@ -119,7 +119,7 @@ class HttpRemoteCommandDispatcherTest {
             String body = requestFactory.lastRequest().getBodyAsString();
             assertThat(body).contains("\"identifier\":\"command-1\"")
                             .contains("\"type\":\"university.CreateCourse#1.0.0\"")
-                            .contains("\"payload\":\"" + PAYLOAD_IN_JSON + "\"")
+                            .contains("\"payload\":" + asJsonString(PAYLOAD))
                             .contains("\"routingKey\":\"course-1\"")
                             .contains("\"priority\":5");
         }
@@ -142,7 +142,7 @@ class HttpRemoteCommandDispatcherTest {
             // given
             requestFactory.respondingWith(
                     "{\"identifier\":\"reply-1\",\"requestIdentifier\":\"command-1\","
-                            + "\"type\":\"university.CourseId#1.0.0\",\"payload\":\"" + PAYLOAD_IN_JSON + "\"}",
+                            + "\"type\":\"university.CourseId#1.0.0\",\"payload\":" + asJsonString(PAYLOAD) + "}",
                     null);
 
             // when
@@ -289,9 +289,9 @@ class HttpRemoteCommandDispatcherTest {
         @Test
         void failsWhenThePayloadWasNeverConverted() {
             // given — a connector not wrapped in a PayloadConvertingCommandBusConnector would produce this
-            CommandMessage unconverted = new GenericCommandMessage(COMMAND_TYPE, new CreateCourse("Axon 5"));
+            CommandMessage unconverted = new GenericCommandMessage(COMMAND_TYPE, Map.of("name", "Axon 5"));
 
-            // when / then
+            // when / then the command is not sent at all, rather than sent in a form no member can read
             assertThatThrownBy(() -> testSubject.dispatch(REMOTE_MEMBER, unconverted).join())
                     .hasCauseInstanceOf(ConversionException.class);
             assertThat(requestFactory.requests()).isEmpty();

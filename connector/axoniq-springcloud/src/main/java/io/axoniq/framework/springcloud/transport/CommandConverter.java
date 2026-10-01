@@ -123,11 +123,12 @@ final class CommandConverter {
         if (resultMessage == null) {
             return emptyReply(requestIdentifier);
         }
-        return CommandDispatchReply.result(resultMessage.identifier(),
-                                           requestIdentifier,
-                                           resultMessage.type().toString(),
-                                           resultMessage.payloadAs(String.class),
-                                           resultMessage.metadata());
+        return new CommandDispatchReply(resultMessage.identifier(),
+                                        requestIdentifier,
+                                        resultMessage.type().toString(),
+                                        resultMessage.payloadAs(String.class),
+                                        resultMessage.metadata(),
+                                        null, null, List.of(), null, null, null);
     }
 
     /**

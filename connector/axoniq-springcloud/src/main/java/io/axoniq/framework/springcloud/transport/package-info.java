@@ -18,14 +18,21 @@
  */
 
 /**
- * The HTTP transport carrying commands between members of the cluster.
+ * The HTTP transport carrying commands and queries between members of the cluster.
  * <p>
- * {@link io.axoniq.framework.springcloud.transport.CommandDispatchRequest} and {@link
- * io.axoniq.framework.springcloud.transport.CommandDispatchReply} are the wire format. {@link
- * io.axoniq.framework.springcloud.transport.RemoteCommandDispatcher} sends a command to another member, {@link
- * io.axoniq.framework.springcloud.transport.SpringCloudCommandController} receives one, and {@link
+ * A command is one request answered by one reply: {@link
+ * io.axoniq.framework.springcloud.transport.CommandDispatchRequest} and {@link
+ * io.axoniq.framework.springcloud.transport.CommandDispatchReply} are its wire format, {@link
+ * io.axoniq.framework.springcloud.transport.RemoteCommandDispatcher} sends it, {@link
+ * io.axoniq.framework.springcloud.transport.SpringCloudCommandController} receives it, and {@link
  * io.axoniq.framework.springcloud.transport.IncomingCommandInvoker} turns a received request into an invocation of
- * the local command handler and its result back into a reply.
+ * the local handler and its result back into a reply.
+ * <p>
+ * A query may be answered any number of times, so it is one request answered by a stream of Server-Sent Events:
+ * {@link io.axoniq.framework.springcloud.transport.QueryDispatchRequest} carries it out, {@link
+ * io.axoniq.framework.springcloud.transport.QueryDispatchResponse} and {@link
+ * io.axoniq.framework.springcloud.transport.QueryDispatchFailure} carry the answer back, and {@link
+ * io.axoniq.framework.springcloud.transport.ServerSentEventReader} reads them without a reactive stack.
  */
 @NullMarked
 package io.axoniq.framework.springcloud.transport;

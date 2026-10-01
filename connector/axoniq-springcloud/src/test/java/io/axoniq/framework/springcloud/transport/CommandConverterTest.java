@@ -51,11 +51,6 @@ class CommandConverterTest {
     private static final MessageType RESULT_TYPE = new MessageType("university.CourseId", "1.0.0");
     private static final String PAYLOAD = "{\"name\":\"Axon 5\"}";
 
-    /** A payload no converter is attached to, standing in for one a decorator should have converted. */
-    private record CreateCourse(String name) {
-
-    }
-
     private static CommandMessage command() {
         return new GenericCommandMessage(
                 new GenericMessage("command-1", COMMAND_TYPE, PAYLOAD, Map.of("tenant", "acme")),
@@ -118,8 +113,9 @@ class CommandConverterTest {
 
         @Test
         void rejectsAPayloadThatWasNeverConverted() {
-            // given — a connector not wrapped in a PayloadConvertingCommandBusConnector would produce this
-            CommandMessage unconverted = new GenericCommandMessage(COMMAND_TYPE, new CreateCourse("Axon 5"));
+            // given — a connector not wrapped in a PayloadConvertingCommandBusConnector would produce this: a
+            // payload still in its domain form, with no converter to write it as text
+            CommandMessage unconverted = new GenericCommandMessage(COMMAND_TYPE, Map.of("name", "Axon 5"));
 
             // when / then
             assertThatThrownBy(() -> CommandConverter.convertCommandMessage(unconverted))

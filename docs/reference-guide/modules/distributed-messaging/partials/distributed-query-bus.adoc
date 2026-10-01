@@ -13,10 +13,6 @@ The `DistributedQueryBus` combined with the `AxonServerQueryBusConnector` provid
 * *Query prioritization*: Support for query priority to ensure critical queries are processed first
 * *Local handler shortcut*: Direct (point-to-point) queries for which a local handler is registered can be executed locally without going through the connector, avoiding network overhead. A `LocalQueryDispatchPredicate` decides, per query, whether to take this shortcut. Subscription queries are never shortcut
 
-[NOTE]
-====
-Other `QueryBusConnector` implementations will follow in the future. Through those, distributing query messages without Axon Server will become a possibility.
-====
 
 ==== Configuring the distributed query bus
 
@@ -143,3 +139,63 @@ By simply declaring dependency to `axon-spring-boot-starter`, Axon will automati
 ====
 If you exclude the `axon-server-connector` dependency you will fall back to the non-AxonServer query bus option, the `SimpleQueryBus` (see below).
 ====
+
+[.axoniq-feature]
+[[SpringCloudQueryBusConnector]]
+=== `SpringCloudQueryBusConnector`
+
+The `SpringCloudQueryBusConnector` distributes queries over HTTP between the nodes reported by a Spring Cloud `DiscoveryClient`, without an Axon Server in between.
+It is part of the same starter as the xref:distributed-command-bus.adoc#SpringCloudCommandBusConnector[`SpringCloudCommandBusConnector`], and shares its discovery, its capabilities endpoint, and its routing ring.
+
+Where a command carries a routing key that pins it to one node, a query asks nothing of where it is handled: any node advertising the query's name may answer it.
+Successive queries of a name therefore rotate over the nodes advertising it, spreading the load rather than sending every query of a name to the same node.
+The `preferLocalQueryHandler` setting still applies, and is handled by the `DistributedQueryBus` before a query reaches the connector at all.
+
+A query may be answered any number of times, so a node answers with a stream rather than a single reply.
+Responses travel back as https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events[Server-Sent Events], and appear on the dispatching node's `MessageStream` as the answering node produces them.
+
+==== Bounded buffering
+
+Responses are buffered per query while the application consumes them.
+A node answering faster than the dispatching application consumes fills that buffer, and the query then fails rather than growing the buffer until memory runs out:
+
+[source,properties]
+----
+# How many responses to a single query are held before an outpaced query fails.
+axon.springcloud.query-buffer-size=1024
+# How long a query's response stream may stay open before the container closes it.
+axon.springcloud.query-timeout=5m
+# How long the responses to a dispatched query are waited for before it is given up on.
+axon.springcloud.query-response-timeout=6m
+----
+
+Raise the buffer size where responses legitimately arrive in bursts, and the timeout where a query legitimately takes longer to answer than the default.
+
+`query-timeout` applies on the answering node and `query-response-timeout` on the dispatching one.
+Keep the latter above the former, so that a node which is merely slow ends the query itself.
+The dispatching deadline is a backstop for a node that stops answering without saying so, having been killed or partitioned away.
+Its socket reports nothing, so without a deadline the query would stay unanswered indefinitely.
+
+A query whose stream is closed releases the handler's response stream on the answering node, whether the timeout elapsed or the node that asked stopped reading.
+A handler is not left producing responses that nothing receives.
+
+==== Shutting down
+
+A node leaving the cluster stops advertising the queries it handled before it stops answering them, so the other nodes route elsewhere rather than discovering it left by timing out.
+Queries already dispatched are waited for: shutdown completes once their responses have arrived, and queries dispatched after shutdown began are rejected.
+
+==== Subscription queries
+
+This connector does not carry subscription queries.
+A subscription query dispatched through it fails with a message saying so, rather than degrading into a query that is answered once and never updates.
+Applications needing subscription queries across nodes distribute them through Axon Server.
+
+[NOTE]
+.A servlet web application is required
+====
+The endpoints nodes reach each other on are Spring Model-View-Controller (MVC) endpoints, and a query's responses are streamed with an `SseEmitter`, which a reactive stack does not serve.
+An application that enables the connector without a servlet web stack, whether it has no web stack at all, or is built on WebFlux, is rejected at start-up rather than joining the cluster advertising messages it cannot answer.
+Add `spring-boot-starter-web`, or set `axon.springcloud.enabled=false` to handle messages locally instead.
+====
+
+Query throughput is claimed against your Axoniq licence, on the same terms as command throughput.

@@ -105,6 +105,12 @@
             <optional>true</optional>
         </dependency>
         <dependency>
+            <!-- The query wire records use Jackson annotations to remain readable by members on earlier versions. -->
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-annotations</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
             <groupId>org.axonframework</groupId>
             <artifactId>axon-messaging</artifactId>
             <type>test-jar</type>

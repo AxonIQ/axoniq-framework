@@ -21,8 +21,12 @@ package io.axoniq.framework.springcloud;
 
 import io.axoniq.framework.messaging.commandhandling.distributed.CommandBusConnector;
 import io.axoniq.framework.messaging.commandhandling.distributed.PayloadConvertingCommandBusConnector;
+import io.axoniq.framework.messaging.queryhandling.distributed.PayloadConvertingQueryBusConnector;
+import io.axoniq.framework.messaging.queryhandling.distributed.QueryBusConnector;
 import io.axoniq.framework.springcloud.transport.IncomingCommandInvoker;
+import io.axoniq.framework.springcloud.transport.IncomingQueryInvoker;
 import io.axoniq.framework.springcloud.transport.RemoteCommandDispatcher;
+import io.axoniq.framework.springcloud.transport.RemoteQueryDispatcher;
 import org.axonframework.common.configuration.ApplicationConfigurer;
 import org.axonframework.common.configuration.ComponentDecorator;
 import org.axonframework.common.configuration.ComponentDefinition;
@@ -37,22 +41,25 @@ import org.slf4j.LoggerFactory;
 
 /**
  * A {@link ConfigurationEnhancer}, auto-loadable by the {@link ApplicationConfigurer}, registering the
- * {@link SpringCloudCommandBusConnector} as the {@link CommandBusConnector} to distribute commands with.
+ * {@link SpringCloudCommandBusConnector} as the {@link CommandBusConnector} to distribute commands with, and the
+ * {@link SpringCloudQueryBusConnector} as the {@link QueryBusConnector} to distribute queries with.
  * <p>
- * Registering a {@code CommandBusConnector} is all that is needed to distribute commands: the framework's own
- * {@code DistributedCommandBusConfigurationEnhancer} decorates whatever {@code CommandBus} is configured into a
- * {@code DistributedCommandBus} as soon as a connector is present. No bus needs to be constructed here.
+ * Registering a connector is all that is needed to distribute messages: the framework's own
+ * {@code DistributedCommandBusConfigurationEnhancer} and {@code DistributedQueryBusConfigurationEnhancer} decorate
+ * whatever {@code CommandBus} and {@code QueryBus} are configured into their distributed counterparts as soon as a
+ * connector is present. No bus needs to be constructed here.
  * <p>
  * This enhancer does nothing unless a {@link SpringCloudMemberRegistry} is present, which the Spring Boot
- * autoconfiguration provides once a Spring Cloud {@code DiscoveryClient} and {@code Registration} are on hand.
+ * autoconfiguration provides once a Spring Cloud {@code DiscoveryClient} and {@code Registration} are on hand. The two
+ * connectors are registered independently, so a configuration already carrying one of them still gains the other.
  * <p>
- * Distributing commands through Spring Cloud and through Axon Server are alternatives, not layers: an application uses
+ * Distributing messages through Spring Cloud and through Axon Server are alternatives, not layers: an application uses
  * one or the other. This enhancer does not attempt to diagnose an application that configures both, because it cannot
  * tell the two cases apart — enhancers are invoked again for every nested registry, at which point the connector this
  * one registered is itself visible in the enclosing scope. It therefore adds a connector only when none is configured
  * yet, and its {@link #ENHANCER_ORDER order} places it after the enhancers that register the other connectors, so that
  * an explicitly configured connector wins. Choosing between them is a matter of configuration:
- * {@code axon.axonserver.enabled=false} distributes commands through Spring Cloud, and
+ * {@code axon.axonserver.enabled=false} distributes messages through Spring Cloud, and
  * {@code axon.springcloud.enabled=false} distributes them through Axon Server.
  *
  * @author Allard Buijze
@@ -74,7 +81,10 @@ public class SpringCloudConfigurationEnhancer implements ConfigurationEnhancer {
         if (!registry.hasComponent(SpringCloudMemberRegistry.class, SearchScope.ALL)) {
             return;
         }
+        // Commands and queries are registered independently: a configuration may already carry a connector for one
+        // and not the other, and the one it lacks is still worth adding.
         registerCommandConnector(registry);
+        registerQueryConnector(registry);
     }
 
     private static void registerCommandConnector(ComponentRegistry registry) {
@@ -90,6 +100,47 @@ public class SpringCloudConfigurationEnhancer implements ConfigurationEnhancer {
         }
         registry.registerComponent(commandBusConnectorDefinition())
                 .registerDecorator(CommandBusConnector.class, 0, payloadConvertingCommandDecorator());
+    }
+
+    private static void registerQueryConnector(ComponentRegistry registry) {
+        if (registry.hasComponent(QueryBusConnector.class, SearchScope.ALL)) {
+            // Deferred for the same reason a command connector is; see registerCommandConnector.
+            logger.debug("A QueryBusConnector is already configured in this or an enclosing scope; "
+                                 + "the Spring Cloud connector is not registered again.");
+            return;
+        }
+        registry.registerComponent(queryBusConnectorDefinition())
+                .registerDecorator(QueryBusConnector.class, 0, payloadConvertingQueryDecorator());
+    }
+
+    private static ComponentDefinition<QueryBusConnector> queryBusConnectorDefinition() {
+        return ComponentDefinition.ofType(QueryBusConnector.class)
+                                  .withBuilder(config -> new SpringCloudQueryBusConnector(
+                                          config.getComponent(SpringCloudMemberRegistry.class),
+                                          config.getComponent(IncomingQueryInvoker.class),
+                                          config.getComponent(RemoteQueryDispatcher.class),
+                                          config.getComponent(MessageConverter.class)
+                                  ))
+                                  .onStart(Phase.INBOUND_QUERY_CONNECTOR,
+                                           connector -> ((SpringCloudQueryBusConnector) connector).start())
+                                  .onShutdown(Phase.INBOUND_QUERY_CONNECTOR,
+                                              (ComponentLifecycleHandler<QueryBusConnector>) (config, connector) ->
+                                                      ((SpringCloudQueryBusConnector) connector).disconnect())
+                                  .onShutdown(Phase.OUTBOUND_QUERY_CONNECTORS,
+                                              (ComponentLifecycleHandler<QueryBusConnector>) (config, connector) ->
+                                                      ((SpringCloudQueryBusConnector) connector)
+                                                              .shutdownDispatching());
+    }
+
+    private static ComponentDecorator<QueryBusConnector, PayloadConvertingQueryBusConnector>
+    payloadConvertingQueryDecorator() {
+        return (config, name, delegate) -> new PayloadConvertingQueryBusConnector(
+                delegate,
+                config.getComponent(MessageConverter.class),
+                // Text, not bytes: a query's responses travel as the data of Server-Sent Events, which is text, and
+                // the request and reply bodies are read and written as text as well.
+                String.class
+        );
     }
 
     private static ComponentDefinition<CommandBusConnector> commandBusConnectorDefinition() {
@@ -116,6 +167,7 @@ public class SpringCloudConfigurationEnhancer implements ConfigurationEnhancer {
         return (config, name, delegate) -> new PayloadConvertingCommandBusConnector(
                 delegate,
                 config.getComponent(MessageConverter.class),
+                // Text, not bytes, matching how the query side travels; see the query decorator.
                 String.class
         );
     }
