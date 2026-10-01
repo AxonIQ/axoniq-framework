@@ -10,6 +10,13 @@ Workflows are in *Preview*. APIs and behavior may change without notice, and it 
 
 This reference covers every primitive, configuration option, and pattern available in the Axon Workflow Engine.
 
+== Status and compatibility
+
+* Java 21.
+* Axon Framework 5.4.x.
+* Kotlin DSL: `axoniq-workflow-dsl-kotlin`.
+* Spring Boot: included in `axoniq-spring-boot-starter`.
+
 == Workflow API boundaries
 
 `WorkflowContext` is the author-facing contract supplied to a workflow body. The built-in
@@ -37,6 +44,7 @@ New to the engine? Start with the xref:axon-workflow-getting-started::index.adoc
 
 * *xref:workflow-lifecycle.adoc[Workflow Lifecycle]*: States, fail vs cancel, lifecycle listeners
 * *xref:error-handling.adoc[Error Handling]*: Step failure types, what is stored about an error, when a workflow fails and when it pauses and resumes
+* *xref:workflow-manager.adoc[Managing Workflow Instances]*: Find workflow instances and request cancellation from outside a workflow (`WorkflowManager`)
 
 == Orchestration
 
@@ -49,7 +57,7 @@ New to the engine? Start with the xref:axon-workflow-getting-started::index.adoc
 == Data & configuration
 
 * *xref:payload-and-state.adoc[Payload & State]*: Reading, setting, and managing durable workflow state
-* *xref:configuration.adoc[Configuration]*: Declarative setup, workflow modules, metadata propagation, custom contexts
+* *xref:configuration.adoc[Configuration]*: Declarative setup, workflow modules, metadata propagation, custom contexts, multi-node operation (xref:configuration.adoc#running-on-several-nodes[Running on several nodes])
 
 == Testing
 

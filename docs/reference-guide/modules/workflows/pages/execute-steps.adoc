@@ -150,10 +150,22 @@ See xref:step-orchestration.adoc[] for combining multiple `execute` and `waitFor
 
 [IMPORTANT]
 ====
-If your workflow body returns while an async step started with `execute(...)` is still running, the engine cancels that step and writes its `CANCELLED` event before the workflow transitions to `COMPLETED`.
+If your workflow body returns while an async step started with `execute(...)` is still running, the engine interrupts that step and completes the workflow.
+The step gets no terminal event of its own; only the workflow-level event is written.
 If you need the workflow to wait for the step's real result, call `.await()` on the returned `WorkflowStepResult` (or use `awaitExecute` / `allMatch` / `anyMatch`).
 See xref:workflow-lifecycle.adoc#complete-with-running-steps[Normal completion with running steps].
 ====
+
+[[blocking-boundary]]
+== Blocking and asynchronous work
+
+An execute action is a plain synchronous function.
+It runs on the workflow executor, which uses one virtual thread per task, so a blocking call such as JDBC or HTTP blocks only that workflow instance.
+The action has a timeout (5 seconds by default, set it with `step.timeout(...)`).
+The engine does not force-interrupt the action when the timeout expires, and a late result is discarded.
+
+For work that finishes elsewhere, use two steps: an `execute` step that starts the work with a correlation id, then a `waitForEvent` step associated with that id.
+See xref:waiting-for-events.adoc[].
 
 == Kotlin DSL
 

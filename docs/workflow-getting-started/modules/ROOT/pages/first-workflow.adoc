@@ -3,7 +3,7 @@
 
 A workflow definition is just imperative Java code.
 You write the business logic; the engine records every step as a durable event.
-If the application crashes, the engine replays those events and resumes exactly where it left off.
+If the application crashes, the engine replays those events and resumes after the last completed step.
 
 == Defining a workflow
 
@@ -96,7 +96,7 @@ Each unique `orderId` gets its own workflow instance.
 ====
 You can also use `startOnConditions` to filter which events trigger the workflow.
 Use the canonical qualified form.
-For example, `startOnConditions = {"payload:amount>100"}` would only process high-value orders.
+For example, `startOnConditions = {"payload:status=vip"}` would only start the workflow for events whose `status` payload property equals `vip`.
 ====
 
 == What happens under the hood
@@ -104,7 +104,9 @@ For example, `startOnConditions = {"payload:amount>100"}` would only process hig
 Each `awaitExecute` call produces two durable events: a STARTED event when the step begins, and a COMPLETED (or FAILED, TIMED_OUT) event when it finishes.
 
 The engine records everything.
-On crash recovery, it replays those events and resumes execution from where it left off—no manual state management needed.
+On crash recovery, it replays those events and resumes after the last completed step.
+A step that was running during the crash is not executed twice: it fails with a `StepIndeterminateException`, or is retried if the step has a retry policy.
+No manual state management is needed.
 
 [NOTE]
 ====
@@ -219,7 +221,7 @@ Here's the full event store:
 4 completed ReserveStockCompleted {"reserved": true}
 5 started InitiatingPaymentForCustomerStarted {"customerId": 456, "amount": 99.95}
 6 completed InitiatingPaymentForCustomerCompleted
-7 started AwaitPaymentStarted {"startTime": "2026-03-25T10:00:05Z"}
+7 started AwaitPaymentStarted {"startTime": "2026-03-25T10:00:05Z", "eventName": "PaymentConfirmed", "associations": ["payload:orderId=123"], "timeoutTime": "2026-03-25T10:15:05Z"}
 8 external PaymentConfirmed {"orderId": 123, "transactionId": "txn-456"}
 9 completed AwaitPaymentCompleted {"orderId": 123, "transactionId": "txn-456"}
 10 completed OrderFulfillmentWorkflow#ExecuteCompleted
@@ -227,7 +229,7 @@ Here's the full event store:
 </div>
 ++++
 
-The `AwaitPaymentStarted` event records when the wait began.
+The `AwaitPaymentStarted` event records when the wait began, which event it waits for, the associations and the timeout deadline.
 When the external `PaymentConfirmed` event arrives, it unblocks the workflow and the matched payload is recorded in `AwaitPaymentCompleted`.
 
 [NOTE]
@@ -239,10 +241,15 @@ They can be published from anywhere—a command handler, an `EventGateway`, a RE
 == Kotlin DSL
 
 If you prefer Kotlin, `WorkflowKontext` is the workflow context instance and `Kontext` is the author-facing DSL wrapper.
-`Kontext` offers the same kind of concise defaults as the Java DSL:
+`Kontext` offers the same kind of concise defaults as the Java DSL.
+The Kotlin DSL needs the `axoniq-workflow-dsl-kotlin` dependency.
+
+++++
+<!-- vale AxonIQ.Names = NO -->
+++++
 
 [source,kotlin]
-.src/main/kt/io/axoniq/example/order/OrderFulfillmentWorkflow.kt
+.src/main/kotlin/io/axoniq/example/order/OrderFulfillmentWorkflow.kt
 ----
 class OrderFulfillmentWorkflow {
 
@@ -258,6 +265,10 @@ class OrderFulfillmentWorkflow {
     }
 }
 ----
+
+++++
+<!-- vale AxonIQ.Names = YES -->
+++++
 
 Under the hood, `Kontext` builds the same DSL `ExecuteStepDefinition` and `WaitForStepDefinition` objects exposed by
 `WorkflowContext` through `WorkflowKontext`.
