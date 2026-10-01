@@ -485,7 +485,7 @@ public class WorkflowEngine implements
                                                                    // durable state and is restored by a later claim.
                                                                    .exceptionally(failure -> {
                                                                        if (isUnrecognizedDefinition(failure)) {
-                                                                           logger.debug(
+                                                                           logger.trace(
                                                                                    "Skipping workflow '{}' of "
                                                                                            + "segment {}: its "
                                                                                            + "definition belongs to "
