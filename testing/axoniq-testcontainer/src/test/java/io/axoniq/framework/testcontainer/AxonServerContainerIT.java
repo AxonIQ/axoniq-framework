@@ -35,14 +35,17 @@ import static org.assertj.core.api.Assertions.assertThat;
 @Tag("flaky")
 class AxonServerContainerIT {
 
+    // All overloads funnel into the same DockerImageName constructor, so only image-name resolution differs here;
+    // actually starting a container is covered by the tests below.
     @Test
-    void constructionThroughStringImageNameStartsAsExpected() {
-        String testName = "axoniq/axonserver";
+    void constructionOverloadsResolveToEquivalentConfiguration() {
         try (
-                AxonServerContainer testSubject = new AxonServerContainer(testName)
+                AxonServerContainer viaString = new AxonServerContainer("axoniq/axonserver");
+                AxonServerContainer viaDockerImageName = new AxonServerContainer(DockerImageName.parse("axoniq/axonserver"));
+                AxonServerContainer viaDefaultConstructor = new AxonServerContainer()
         ) {
-            testSubject.start();
-            assertThat(testSubject.isRunning()).isTrue();
+            assertThat(viaString.getDockerImageName()).isEqualTo(viaDockerImageName.getDockerImageName());
+            assertThat(viaDefaultConstructor.getDockerImageName()).isEqualTo("docker.axoniq.io/axoniq/axonserver:latest");
         }
     }
 
@@ -96,14 +99,6 @@ class AxonServerContainerIT {
             assertThat(testSubject.getEnvMap().get("AXONIQ_AXONSERVER_HOSTNAME")).isEqualTo(testHostName);
             assertThat(testSubject.getEnvMap().get("AXONIQ_AXONSERVER_DEVMODE_ENABLED")).isEqualTo(Boolean.toString(
                     testDevMode));
-        }
-    }
-
-    @Test
-    void constructionThroughDefaultConstructorStartsAsExpected() {
-        try (AxonServerContainer testSubject = new AxonServerContainer()) {
-            testSubject.start();
-            assertThat(testSubject.isRunning()).isTrue();
         }
     }
 

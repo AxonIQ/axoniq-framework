@@ -141,8 +141,7 @@ class MultiTenantQueryHandlingIT {
 
     @AfterAll
     void tearDownClass() {
-        // Guarded: if setUpClass() failed after creating the tenant contexts but before application was assigned,
-        // application.shutdown() would NPE and skip cleanup below, orphaning the contexts on the shared container.
+        // Guarded: an NPE here if setUpClass() failed early would skip cleanup below and orphan the contexts.
         if (application != null) {
             application.shutdown();
         }

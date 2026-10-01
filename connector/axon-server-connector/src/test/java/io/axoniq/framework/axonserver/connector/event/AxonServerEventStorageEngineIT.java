@@ -23,6 +23,7 @@ import io.axoniq.axonserver.connector.AxonServerConnection;
 import io.axoniq.axonserver.connector.AxonServerConnectionFactory;
 import io.axoniq.axonserver.connector.impl.ServerAddress;
 import io.axoniq.framework.testcontainer.AxonServerContainer;
+import io.axoniq.framework.testcontainer.SharedAxonServerContainer;
 import org.axonframework.common.infra.MockComponentDescriptor;
 import org.axonframework.conversion.ChainingContentTypeConverter;
 import org.axonframework.eventsourcing.eventstore.AppendCondition;
@@ -43,8 +44,6 @@ import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 import org.axonframework.messaging.eventstreaming.EventCriteria;
 import org.axonframework.messaging.eventstreaming.Tag;
 import org.junit.jupiter.api.*;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 import reactor.test.StepVerifier;
 
 import java.time.Instant;
@@ -60,35 +59,21 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * @author Steven van Beelen
  */
-@Testcontainers
 class AxonServerEventStorageEngineIT extends StorageEngineTestSuite<AxonServerEventStorageEngine> {
 
     private static final String CONTEXT = "default";
-
-    /*
-     * Pinned to 2026.1.0 (not the shared canonical container) because this suite exercises the
-     * AxonServerEventStorageEngine's SnapshotStore support, which requires a newer server than the
-     * docker.axoniq.io/axoniq/axonserver:latest tag currently provides.
-     */
-    @SuppressWarnings("resource")
-    @Container
-    private static final AxonServerContainer container =
-            new AxonServerContainer("docker.axoniq.io/axoniq/axonserver:2026.1.0")
-                    .withDevMode(true)
-                    .withDcbContext(true)
-                    .withReuse(true);
+    private static final AxonServerContainer container = SharedAxonServerContainer.INSTANCE;
 
     private static AxonServerConnection connection;
 
     @AfterAll
     static void afterAll() {
         connection.disconnect();
-        container.stop();
     }
 
     @Override
     protected AxonServerEventStorageEngine createStorageEngine() {
-        container.start();
+        SharedAxonServerContainer.ensureStarted();
         ServerAddress address = new ServerAddress(container.getHost(), container.getGrpcPort());
         connection = AxonServerConnectionFactory.forClient("AxonServerEventStorageEngineTest")
                                                 .routingServers(address)

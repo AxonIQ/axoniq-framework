@@ -45,18 +45,12 @@ import static io.axoniq.framework.axonserver.connector.api.AxonServerConfigurati
  * {@link TestInfrastructure} implementation that wires tests against a real Axon Server instance managed by
  * Testcontainers.
  * <p>
- * The underlying {@link AxonServerContainer} is a {@code static final} field of its own -- not
- * {@link io.axoniq.framework.testcontainer.SharedAxonServerContainer}, since the modules depending on this class
- * churn through many tenant contexts, and sharing that churn with suites that need a different hash-identical
- * configuration (or just sharing the same container across unrelated test suites in general) isn't desirable here.
- * It is reused across JVMs (and thus across consumer modules -- multitenancy/core, multitenancy/data-protection,
- * conformance) the same way {@link io.axoniq.framework.testcontainer.SharedAxonServerContainer} is: see
- * {@link #start()} for the cross-process locking that makes concurrent Surefire/Failsafe forks collapse onto one
- * container instead of racing to create their own. It is still shared across all instances of this class and all
- * leaf test classes within one module's JVM via the static field, regardless, so it only needs to start once per
- * module. {@link AxonServerContainer#start()} is idempotent -- Testcontainers makes it a no-op when the container
- * is already running -- so calling {@link #start()} from every {@code @BeforeEach} is safe and cheap after the
- * first test.
+ * The underlying {@link AxonServerContainer} is a {@code static final} field of its own, not
+ * {@link io.axoniq.framework.testcontainer.SharedAxonServerContainer}, since consumers of this class churn through
+ * many tenant contexts and need a container not shared with unrelated suites. It is still reused across JVMs via
+ * Testcontainers' reuse hash (see {@link #start()} for the cross-process locking that makes that safe), and shared
+ * within one module's JVM via the static field. {@link AxonServerContainer#start()} is idempotent, so calling
+ * {@link #start()} from every {@code @BeforeEach} is safe and cheap after the first test.
  *
  * @since 5.1.0
  */
@@ -69,18 +63,14 @@ public final class AxonServerTestInfrastructure implements TestInfrastructure {
             new AxonServerContainer("docker.axoniq.io/axoniq/axonserver:latest")
                     .withAxonServerHostname("localhost")
                     .withDevMode(true)
-                    // See SharedAxonServerContainer for why this is necessary: AxonServerContainer's constructor
-                    // bakes the Surefire/Failsafe fork number into TESTCONTAINERS_FORK_NUMBER, which would
-                    // otherwise vary the reuse hash per fork/module. Override to a constant so every consumer
-                    // module's JVM computes the identical hash and collapses onto the same container.
+                    // Fixed fork number (see SharedAxonServerContainer) so every module's JVM computes the same hash.
                     .withEnv("TESTCONTAINERS_FORK_NUMBER", "test-infrastructure")
                     .withReuse(true)
                     .withDcbContext(true)
                     .withLicense(licenseExists() ? AXON_SERVER_TEST_LICENSE : null);
 
     /**
-     * Path of the cross-process lock file guarding {@link #start()}. A fixed name is enough: there is only ever
-     * one {@link #CONTAINER} to guard.
+     * Cross-process lock file guarding {@link #start()}.
      */
     private static final Path START_LOCK_FILE =
             Paths.get(System.getProperty("java.io.tmpdir"), "axon-server-test-infrastructure-start.lock");
@@ -119,16 +109,9 @@ public final class AxonServerTestInfrastructure implements TestInfrastructure {
     /**
      * Starts {@link #CONTAINER} if it isn't already running.
      * <p>
-     * {@code synchronized} alone only guards within one JVM, not across forked processes, and Testcontainers' own
-     * {@code findContainerForReuse()} has no locking of its own (confirmed via its source: a {@code // TODO
-     * locking} comment) -- two Surefire/Failsafe forks that both decide {@link #CONTAINER} isn't running yet can
-     * both create their own container instead of one attaching to the other's, even though both compute the
-     * identical reuse hash. See {@link io.axoniq.framework.testcontainer.SharedAxonServerContainer#ensureStarted()}
-     * for the same fix applied there. A {@link FileLock} serializes the whole check-and-start sequence across
-     * processes, so the second caller sees the first one's container already running (and matching on hash) by the
-     * time it gets to check. Kept {@code synchronized} too: a second {@link FileLock} acquisition attempt from
-     * another thread in the same JVM throws {@link java.nio.channels.OverlappingFileLockException} rather than
-     * waiting, so cross-thread safety within this JVM still needs the intrinsic lock.
+     * The {@link FileLock} serializes this across processes, since Testcontainers' reuse lookup isn't itself
+     * process-safe. {@code synchronized} covers the same within one JVM, since a second {@link FileLock} attempt
+     * from another thread here throws rather than waiting.
      */
     @Override
     public synchronized void start() {
