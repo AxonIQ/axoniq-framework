@@ -87,8 +87,12 @@ jobs:
           # Also captures org.testcontainers.copied_files.hash: Testcontainers computes this from the content AND
           # unix file mode of every file copied into the container (e.g. the Axon Server test license), and folds
           # it into the overall reuse hash via a label set before the hash is computed. A prior run confirmed the
-          # env map is byte-identical across "shared" pool containers yet the overall hash still differs -- this
-          # narrows down whether the copied-files hash specifically is the varying component.
+          # env map AND copied_files hash can both be identical between two "shared" pool containers that still get
+          # different overall org.testcontainers.hash values -- so something else in the create-container command
+          # (which is what the hash is actually computed over) varies. Dump each new container's full inspect JSON
+          # once, so the raw config (full label set, hostname, extra hosts, etc) can be diffed directly across
+          # containers that share identical env/copied-files but still land in different hash groups.
+          mkdir -p container-inspect
           (
             while true; do
               echo "=== $(date -u +%Y-%m-%dT%H:%M:%S.%3NZ) ==="
@@ -96,6 +100,9 @@ jobs:
                 docker inspect --format \
                   '{{.Id}} status={{.State.Status}} hash={{index .Config.Labels "org.testcontainers.hash"}} copiedFilesHash={{index .Config.Labels "org.testcontainers.copied_files.hash"}} pool={{index .Config.Labels "io.axoniq.container-pool"}}' \
                   "$id" 2>/dev/null
+                if [ ! -f "container-inspect/$id.json" ]; then
+                  docker inspect "$id" > "container-inspect/$id.json" 2>/dev/null
+                fi
               done
               sleep 3
             done
@@ -121,6 +128,15 @@ jobs:
         with:
           name: container-lifecycle-jdk${{ matrix.java-version }}
           path: container-lifecycle.log
+          retention-days: 3
+          if-no-files-found: ignore
+
+      - name: Upload container inspect dumps
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: container-inspect-jdk${{ matrix.java-version }}
+          path: container-inspect/*.json
           retention-days: 3
           if-no-files-found: ignore
 
