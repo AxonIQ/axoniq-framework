@@ -114,7 +114,7 @@ class WorkflowConfigurerWakeCheckpointTest {
             await().atMost(5, TimeUnit.SECONDS).until(storageEngine::completedAppendStalled);
 
             // then
-            await().during(Duration.ofMillis(500)).atMost(2, TimeUnit.SECONDS)
+            await().during(Duration.ofMillis(1000)).atMost(2, TimeUnit.SECONDS)
                    .until(() -> !covers(storedToken(tokenStore), paidPosition));
 
             // when
