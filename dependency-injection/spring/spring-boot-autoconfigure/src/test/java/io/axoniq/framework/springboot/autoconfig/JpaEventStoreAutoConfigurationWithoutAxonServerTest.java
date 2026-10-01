@@ -51,6 +51,7 @@ class JpaEventStoreAutoConfigurationWithoutAxonServerTest {
                 .withPropertyValues(
                         "axon.axonserver.enabled=false",
                         "axon.postgresql.enabled=false",
+                        "axon.workflow.enabled=false",
                         "axon.eventstorage.jpa.polling-interval=0"
                 )
                 .withUserConfiguration(EmptyTestContext.class)
@@ -66,7 +67,11 @@ class JpaEventStoreAutoConfigurationWithoutAxonServerTest {
         new ApplicationContextRunner()
                 // Multi-tenancy is default-on with Axon Server; disable it so this test isolates
                 // the Axon-Server-over-JPA storage engine precedence rather than the tenant-routing wrapper.
-                .withPropertyValues("axon.axonserver.enabled=true", "axon.multitenancy.enabled=false")
+                .withPropertyValues(
+                    "axon.axonserver.enabled=true",
+                    "axon.multitenancy.enabled=false",
+                    "axon.workflow.enabled=false"
+                )
                 .withUserConfiguration(EmptyTestContext.class)
                 .run(context -> {
                     assertThat(context).hasSingleBean(EventStore.class);
@@ -80,7 +85,11 @@ class JpaEventStoreAutoConfigurationWithoutAxonServerTest {
     @Test
     void notConstructIfEventStoreDefinitionPresent() {
         new ApplicationContextRunner()
-                .withPropertyValues("axon.axonserver.enabled=false", "axon.postgresql.enabled=false")
+                .withPropertyValues(
+                    "axon.axonserver.enabled=false",
+                    "axon.postgresql.enabled=false",
+                    "axon.workflow.enabled=false"
+                )
                 .withUserConfiguration(ContextWithStore.class, EmptyTestContext.class)
                 .run(context -> {
                     assertThat(context)
@@ -93,7 +102,11 @@ class JpaEventStoreAutoConfigurationWithoutAxonServerTest {
     @Test
     void notConstructIfEventStorageEngineDefinitionPresent() {
         new ApplicationContextRunner()
-                .withPropertyValues("axon.axonserver.enabled=false", "axon.postgresql.enabled=false")
+                .withPropertyValues(
+                    "axon.axonserver.enabled=false",
+                    "axon.postgresql.enabled=false",
+                    "axon.workflow.enabled=false"
+                )
                 .withUserConfiguration(ContextWithEngine.class, EmptyTestContext.class)
                 .run(context -> {
                     assertThat(context)

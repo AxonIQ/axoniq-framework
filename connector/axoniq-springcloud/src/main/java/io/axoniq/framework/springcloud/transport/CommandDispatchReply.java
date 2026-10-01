@@ -47,9 +47,8 @@ import java.util.Objects;
  * @param identifier        the identifier of this reply message
  * @param requestIdentifier the {@link CommandDispatchRequest#identifier() identifier} of the command this replies to
  * @param type              the {@link MessageType#toString() string form} of the result's
- *                          {@link CommandResultMessage#type() type}, or {@code null} when there is no result
- * @param payload           the payload of the result as text, or {@code null} when there is
- *                          none
+ *                          {@link CommandResultMessage#type() type}, or {@code null} when there is no result.
+ * @param payload           the result's payload as its converter wrote it, or {@code null} when there is none.
  * @param metadata          the {@link CommandResultMessage#metadata() metadata} of the result
  * @param errorCode         the kind of failure that occurred, or {@code null} when handling succeeded
  * @param errorMessage      a description of the failure, or {@code null} when handling succeeded
@@ -109,8 +108,7 @@ public record CommandDispatchReply(
      * @param requestIdentifier the identifier of the command this is a reply to
      * @param type              the {@link MessageType#toString() string form} of the result's type, or {@code null}
      *                          when the handler produced no result
-     * @param payload           the payload of the result as text, or {@code null} when there is
-     *                          none
+     * @param payload           the payload of the result as text, or {@code null} when there is none
      * @param metadata          the metadata of the result
      * @return a reply carrying the successful outcome of a command
      */

@@ -25,14 +25,13 @@ import java.net.URI;
 import java.util.Objects;
 
 /**
- * A single node in the cluster of applications sharing a distributed {@code CommandBus} through Spring Cloud
- * Discovery.
+ * A single node in the cluster of applications distributing messages through Spring Cloud Discovery.
  * <p>
- * A {@code Member} is derived from a {@code ServiceInstance} reported by the discovery client, and is what the
- * {@link ConsistentHash} ring resolves a routing key to. The {@link #local() local} flag decides how a command
- * addressed to this member is delivered: a local member is handled through the registered handler of this
- * application's own {@code CommandBusConnector}, while a remote member is reached over HTTP at its
- * {@link #endpoint() endpoint}.
+ * A {@code Member} is derived from a {@code ServiceInstance} reported by the discovery client. It is what the
+ * {@link ConsistentHash} ring resolves a command's routing key to, and what a query name resolves to when the members
+ * advertising it are rotated over. The {@link #local() local} flag decides how a message addressed to this member is
+ * delivered: a local member is handled through the registered handler of this application's own connector, while a
+ * remote member is reached over HTTP at its {@link #endpoint() endpoint}.
  * <p>
  * The {@code endpoint} of a local member may be {@code null}. Several Spring Cloud Discovery implementations do not
  * expose a URI until the application has completed its registration, and throw when one is requested before that

@@ -46,7 +46,11 @@ class JdbcDeadLetterQueueAutoConfigurationTest {
     void setUp() {
         testContext = new ApplicationContextRunner()
                 .withUserConfiguration(TestContext.class)
-                .withPropertyValues("axon.axonserver.enabled=false", "axon.postgresql.enabled=false");
+                .withPropertyValues(
+                    "axon.axonserver.enabled=false",
+                    "axon.postgresql.enabled=false",
+                    "axon.workflow.enabled=false"
+                );
     }
 
     @Test

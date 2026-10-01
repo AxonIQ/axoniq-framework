@@ -42,6 +42,7 @@ import java.net.URI;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -50,17 +51,25 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.Callable;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 /**
- * Maintains the {@link ConsistentHash} ring this application routes commands with, from the {@code ServiceInstance}s
- * reported by Spring Cloud Discovery.
+ * Maintains the {@link ConsistentHash} ring this application routes commands with, and the members it routes queries
+ * to, from the {@code ServiceInstance}s reported by Spring Cloud Discovery.
+ * <p>
+ * Commands and queries are routed differently, which is why both live here. A command is hashed onto the ring by its
+ * routing key, so that commands for one entity keep landing on one member. A query carries no routing key, so it goes
+ * to whichever member advertises its name, rotating over them to spread the load.
  * <p>
  * The ring is rebuilt from scratch on every {@link HeartbeatEvent}, which is what makes the discovery implementation's
  * heartbeat interval the speed at which cluster topology changes propagate. Rebuilding rather than patching means a
@@ -70,8 +79,9 @@ import java.util.stream.Collectors;
  * and Spring only publishes events to beans it manages. It is registered by the Spring Boot autoconfiguration.
  * <p>
  * In Axon Framework 4 this work sat in a {@code CommandRouter} alongside the connector. That split is gone — a
- * connector now owns routing as well as transport — so this registry is the connector's own collaborator rather than
- * a component of the bus.
+ * connector now owns routing as well as transport — so this registry is the connectors' own collaborator rather than
+ * a component of a bus. Both the command and the query connector share one, so that each publishes what it handles
+ * without erasing what the other published.
  *
  * @author Allard Buijze
  * @since 5.4.0
@@ -102,8 +112,16 @@ public class SpringCloudMemberRegistry implements DescribableComponent {
     // the whole record from either would erase what the other had published.
     private volatile int localLoadFactor = 0;
     private volatile Set<QualifiedName> localCommands = Set.of();
-    // Published into by the query connector, and left empty by a member distributing commands only.
     private volatile Set<QualifiedName> localQueries = Set.of();
+
+    private final AtomicInteger queryRotation = new AtomicInteger();
+    // Notified after every ring replacement. A subscription query has to know when a member that advertises its name
+    // appears, because it cannot have received the updates that member emitted before it was subscribed to.
+    private final List<Consumer<ConsistentHash>> membershipListeners = new CopyOnWriteArrayList<>();
+    // Resolving a query's candidates means filtering and sorting every member, which is too much to repeat on every
+    // dispatch. Replaced wholesale whenever the ring changes, rather than keyed on the ring: hashing a ring means
+    // walking every member and every position it claims, which would cost more per dispatch than it saves.
+    private volatile Map<QualifiedName, List<Member>> queryCandidates = new ConcurrentHashMap<>();
 
     /**
      * Constructs a {@code SpringCloudMemberRegistry} discovering members through the given {@code discoveryClient}.
@@ -167,6 +185,99 @@ public class SpringCloudMemberRegistry implements DescribableComponent {
     }
 
     /**
+     * Resolves the member a query of the given {@code queryName} should be handled by.
+     * <p>
+     * Unlike a command, a query carries no routing key and asks nothing of where it is handled, so any member
+     * advertising the name will do. Successive queries of the same name therefore rotate over the members
+     * advertising it, spreading the load rather than sending every query of a name to the same member. Members are
+     * rotated over in name order, so that the rotation is over a stable sequence even as the ring changes.
+     * <p>
+     * This member is one of the candidates like any other. Preferring the local handler is a policy of the
+     * {@code DistributedQueryBus}, which applies it before the query reaches a connector at all.
+     *
+     * @param queryName the {@link QualifiedName} of the query to resolve a member for
+     * @return the member that should handle the query, or {@link Optional#empty()} when no known member handles
+     * queries of the given {@code queryName}
+     */
+    public Optional<Member> findQueryDestination(QualifiedName queryName) {
+        Objects.requireNonNull(queryName, "The queryName must not be null.");
+        // Read once: a ring change replaces the whole map, and resolving against the map that was current when this
+        // query started is correct, because that is the ring that was current when it started.
+        Map<QualifiedName, List<Member>> candidatesByName = queryCandidates;
+        ConsistentHash currentRing = ring;
+        List<Member> candidates =
+                candidatesByName.computeIfAbsent(queryName, name -> candidatesFor(currentRing, name));
+        if (candidates.isEmpty()) {
+            return Optional.empty();
+        }
+        int index = Math.floorMod(queryRotation.getAndIncrement(), candidates.size());
+        return Optional.of(candidates.get(index));
+    }
+
+    /**
+     * Returns every member advertising the given {@code queryName}, in a stable order.
+     * <p>
+     * Where {@link #findQueryDestination(QualifiedName)} picks one member to answer a query, a subscription query
+     * needs them all: an update is emitted on whichever member's state changed, and a member only matches a
+     * subscription it holds a registration for. A subscriber that reached only one member would miss every update
+     * emitted on the others.
+     *
+     * @param queryName the {@link QualifiedName} of the query to resolve members for
+     * @return every member advertising the given {@code queryName}, empty when none does
+     */
+    public List<Member> findAllQueryDestinations(QualifiedName queryName) {
+        Objects.requireNonNull(queryName, "The queryName must not be null.");
+        Map<QualifiedName, List<Member>> candidatesByName = queryCandidates;
+        ConsistentHash currentRing = ring;
+        return candidatesByName.computeIfAbsent(queryName, name -> candidatesFor(currentRing, name));
+    }
+
+    /**
+     * Registers a {@code listener} to be notified after every change to the ring, with the ring that replaced the
+     * previous one.
+     * <p>
+     * Notified outside the lock the ring is replaced under, so a listener may read the registry freely. It runs on
+     * whichever thread made the change, which for a discovery round is the thread delivering the heartbeat.
+     *
+     * @param listener notified with the new ring after every membership change
+     * @return a registration cancelling the notification
+     */
+    // Fully qualified because Spring Cloud's own Registration, which this class takes as its local registration, has
+    // the same simple name.
+    public org.axonframework.common.Registration onMembershipChanged(Consumer<ConsistentHash> listener) {
+        Objects.requireNonNull(listener, "The listener must not be null.");
+        membershipListeners.add(listener);
+        return () -> membershipListeners.remove(listener);
+    }
+
+    /**
+     * Notifies the membership listeners of the given {@code current} ring.
+     * <p>
+     * A listener that throws must not stop the others from being told, nor break the discovery round that led here.
+     *
+     * @param current the ring that replaced the previous one
+     */
+    private void notifyMembershipChanged(ConsistentHash current) {
+        for (Consumer<ConsistentHash> listener : membershipListeners) {
+            try {
+                listener.accept(current);
+            } catch (Exception e) {
+                logger.warn("A membership listener failed. The ring is unaffected.", e);
+            }
+        }
+    }
+
+    private static List<Member> candidatesFor(ConsistentHash ring, QualifiedName queryName) {
+        return ring.members()
+                   .stream()
+                   .filter(member -> ring.capabilitiesOf(member)
+                                         .filter(c -> c.handlesQuery(queryName))
+                                         .isPresent())
+                   .sorted(Comparator.comparing(Member::name))
+                   .toList();
+    }
+
+    /**
      * Publishes the given {@code commands} as the commands this application handles, asking for the given
      * {@code loadFactor} worth of the command load.
      *
@@ -184,6 +295,17 @@ public class SpringCloudMemberRegistry implements DescribableComponent {
     }
 
     /**
+     * Publishes the given {@code queries} as the queries this application handles.
+     *
+     * @param queries the names of the queries this application handles
+     */
+    public void publishLocalQueries(Set<QualifiedName> queries) {
+        Objects.requireNonNull(queries, "The queries must not be null.");
+        this.localQueries = Set.copyOf(queries);
+        republishLocalCapabilities();
+    }
+
+    /**
      * Makes this application's capabilities visible to other members on their next discovery round, and reflects them
      * in this application's own ring right away.
      * <p>
@@ -196,10 +318,13 @@ public class SpringCloudMemberRegistry implements DescribableComponent {
         discoveryMode.updateLocalCapabilities(localRegistration, capabilities);
         // Updating the local member immediately, rather than waiting for the next heartbeat, means a message
         // dispatched right after its handler subscribed can already be routed to this member.
+        ConsistentHash updated;
         synchronized (this) {
-            ring = ring.with(localMember(), currentLocalCapabilities());
+            updated = ring = ring.with(localMember(), currentLocalCapabilities());
+            queryCandidates = new ConcurrentHashMap<>();
         }
         logger.debug("Published local capabilities [{}]; ring is now [{}]", capabilities, ring);
+        notifyMembershipChanged(updated);
     }
 
     /**
@@ -232,7 +357,8 @@ public class SpringCloudMemberRegistry implements DescribableComponent {
                 logger.info("Removing member [{}] from the ring, as it could not be reached. It returns on the next "
                                     + "discovery round if it answers again.", member);
                 ring = updated;
-                }
+                queryCandidates = new ConcurrentHashMap<>();
+            }
         }
     }
 
@@ -280,16 +406,19 @@ public class SpringCloudMemberRegistry implements DescribableComponent {
         discoveryMode.retainOnly(instances.stream()
                                           .map(ServiceInstanceKey::of)
                                           .collect(Collectors.toUnmodifiableSet()));
+        ConsistentHash updated;
         synchronized (this) {
             // Re-applying this member's own capabilities, rather than trusting the rebuild to carry them: the rebuild
             // read them before taking the lock, so a handler that subscribed in between would be lost until the next
             // heartbeat. Only refreshed where the rebuild already placed this member, so that a member discovery left
             // out stays out.
             Member local = localMember();
-            ring = rebuilt.capabilitiesOf(local).isPresent()
+            updated = ring = rebuilt.capabilitiesOf(local).isPresent()
                     ? rebuilt.with(local, currentLocalCapabilities())
                     : rebuilt;
+            queryCandidates = new ConcurrentHashMap<>();
         }
+        notifyMembershipChanged(updated);
         logger.debug("Rebuilt the ring from [{}] discovered instances: [{}]", instances.size(), rebuilt);
     }
 

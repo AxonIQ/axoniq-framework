@@ -31,6 +31,7 @@ import org.springframework.cloud.client.discovery.event.HeartbeatEvent;
 import org.springframework.cloud.client.discovery.event.InstanceRegisteredEvent;
 
 import java.net.URI;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
@@ -181,6 +182,72 @@ class SpringCloudMemberRegistryTest {
     }
 
     @Nested
+    class RoutingQueries {
+
+        @Test
+        void findsNoDestinationWhenNoMemberHandlesTheQuery() {
+            // given a cluster whose members handle commands only
+            testSubject.updateMemberships();
+
+            // when / then
+            assertThat(testSubject.findQueryDestination(FIND_COURSE)).isEmpty();
+        }
+
+        @Test
+        void routesToTheOnlyMemberHandlingTheQuery() {
+            // given
+            testSubject.publishLocalQueries(Set.of(FIND_COURSE));
+
+            // when
+            Optional<Member> destination = testSubject.findQueryDestination(FIND_COURSE);
+
+            // then
+            assertThat(destination).isPresent();
+            assertThat(destination.get().local()).isTrue();
+        }
+
+        @Test
+        void rotatesOverEveryMemberHandlingTheQuery() {
+            // given two members both handling the query
+            MemberCapabilities handlesFind = new MemberCapabilities(100, Set.of(), Set.of(FIND_COURSE));
+            discoveryMode.answering(localInstance, handlesFind).answering(remoteInstance, handlesFind);
+            testSubject.updateMemberships();
+
+            // when the same query name is routed as many times as there are members
+            List<String> destinations = List.of(testSubject.findQueryDestination(FIND_COURSE).orElseThrow().name(),
+                                                testSubject.findQueryDestination(FIND_COURSE).orElseThrow().name());
+
+            // then the load is spread rather than always landing on the same member
+            assertThat(destinations).doesNotHaveDuplicates().hasSize(2);
+        }
+
+        @Test
+        void skipsMembersThatDoNotHandleTheQuery() {
+            // given only the remote member handling the query
+            discoveryMode.answering(remoteInstance, new MemberCapabilities(100, Set.of(), Set.of(FIND_COURSE)));
+            testSubject.updateMemberships();
+
+            // when routed repeatedly, so that a rotation would reach a non-handling member if it included one
+            List<Optional<Member>> destinations = List.of(testSubject.findQueryDestination(FIND_COURSE),
+                                                          testSubject.findQueryDestination(FIND_COURSE),
+                                                          testSubject.findQueryDestination(FIND_COURSE));
+
+            // then every query went to the one member advertising the name
+            assertThat(destinations).allSatisfy(destination -> {
+                assertThat(destination).isPresent();
+                assertThat(destination.get().local()).isFalse();
+            });
+        }
+
+        @Test
+        void rejectsANullQueryName() {
+            // when / then
+            assertThatThrownBy(() -> testSubject.findQueryDestination(null))
+                    .isInstanceOf(NullPointerException.class);
+        }
+    }
+
+    @Nested
     class LocalCapabilities {
 
         @Test
@@ -229,6 +296,39 @@ class SpringCloudMemberRegistryTest {
             assertThatThrownBy(() -> testSubject.publishLocalCommands(-1, Set.of(CREATE_COURSE)))
                     .isInstanceOf(IllegalArgumentException.class)
                     .hasMessageContaining("load factor");
+        }
+
+        @Test
+        void keepsPublishedQueriesWhenCommandsArePublished() {
+            // given a member handling both, as an application with a query handler and a command handler has
+            testSubject.publishLocalQueries(Set.of(FIND_COURSE));
+
+            // when
+            testSubject.publishLocalCommands(100, Set.of(CREATE_COURSE));
+
+            // then neither publication erased the other
+            assertThat(discoveryMode.localCapabilities().commands()).containsExactly(CREATE_COURSE);
+            assertThat(discoveryMode.localCapabilities().queries()).containsExactly(FIND_COURSE);
+        }
+
+        @Test
+        void keepsPublishedCommandsWhenQueriesArePublished() {
+            // given
+            testSubject.publishLocalCommands(100, Set.of(CREATE_COURSE));
+
+            // when
+            testSubject.publishLocalQueries(Set.of(FIND_COURSE));
+
+            // then
+            assertThat(discoveryMode.localCapabilities().commands()).containsExactly(CREATE_COURSE);
+            assertThat(discoveryMode.localCapabilities().queries()).containsExactly(FIND_COURSE);
+        }
+
+        @Test
+        void rejectsNullQueries() {
+            // when / then
+            assertThatThrownBy(() -> testSubject.publishLocalQueries(null))
+                    .isInstanceOf(NullPointerException.class);
         }
     }
 

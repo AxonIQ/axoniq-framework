@@ -23,11 +23,17 @@ import io.axoniq.framework.messaging.commandhandling.distributed.CommandBusConne
 import io.axoniq.framework.springboot.SpringCloudProperties;
 import io.axoniq.framework.springcloud.SpringCloudMemberRegistry;
 import io.axoniq.framework.springcloud.discovery.CapabilityDiscoveryMode;
-import io.axoniq.framework.springcloud.discovery.MemberCapabilitiesController;
 import io.axoniq.framework.springcloud.discovery.RestCapabilityDiscoveryMode;
+import io.axoniq.framework.springcloud.discovery.MemberCapabilitiesController;
 import io.axoniq.framework.springcloud.transport.IncomingCommandInvoker;
+import io.axoniq.framework.springcloud.transport.IncomingQueryInvoker;
 import io.axoniq.framework.springcloud.transport.RemoteCommandDispatcher;
+import io.axoniq.framework.springcloud.transport.RemoteQueryDispatcher;
 import io.axoniq.framework.springcloud.transport.SpringCloudCommandController;
+import io.axoniq.framework.springcloud.transport.SpringCloudQueryController;
+import org.axonframework.conversion.jackson.JacksonConverter;
+import org.axonframework.messaging.core.conversion.DelegatingMessageConverter;
+import org.axonframework.messaging.core.conversion.MessageConverter;
 import org.junit.jupiter.api.*;
 
 import java.time.Duration;
@@ -65,6 +71,9 @@ class SpringCloudAutoConfigurationTest {
         contextRunner = new WebApplicationContextRunner()
                 .withConfiguration(AutoConfigurations.of(SpringCloudAutoConfiguration.class))
                 .withUserConfiguration(DiscoveryConfiguration.class)
+                // The converter the application converts its messages with, which the framework's own
+                // autoconfiguration contributes and this connector writes the wire format with.
+                .withBean(MessageConverter.class, () -> new DelegatingMessageConverter(new JacksonConverter()))
                 .withPropertyValues("axon.springcloud.enabled=true");
     }
 
@@ -75,18 +84,27 @@ class SpringCloudAutoConfigurationTest {
         void bindsEveryPropertyTheConnectorExposes() {
             // given every property set away from its default
             contextRunner.withPropertyValues("axon.springcloud.command-endpoint=/custom/command",
+                                             "axon.springcloud.query-endpoint=/custom/query",
                                              "axon.springcloud.capabilities-endpoint=/custom/capabilities",
                                              "axon.springcloud.command-reply-timeout=11s",
+                                             "axon.springcloud.query-timeout=12m",
+                                             "axon.springcloud.query-response-timeout=13m",
+                                             "axon.springcloud.query-buffer-size=7",
+                                             "axon.springcloud.capabilities-timeout=3s",
                                              "axon.springcloud.ignore-period=14s",
                                              "axon.springcloud.context-root-metadata-property-name=root")
                          // when / then each one reaches the properties the components are built from
                          .run(context -> {
                              SpringCloudProperties properties = context.getBean(SpringCloudProperties.class);
                              assertThat(properties.getCommandEndpoint()).isEqualTo("/custom/command");
+                             assertThat(properties.getQueryEndpoint()).isEqualTo("/custom/query");
                              assertThat(properties.getCapabilitiesEndpoint()).isEqualTo("/custom/capabilities");
                              assertThat(properties.getCommandReplyTimeout()).isEqualTo(Duration.ofSeconds(11));
-                             assertThat(properties.getIgnorePeriod())
-                                     .isEqualTo(Duration.ofSeconds(14));
+                             assertThat(properties.getQueryTimeout()).isEqualTo(Duration.ofMinutes(12));
+                             assertThat(properties.getQueryResponseTimeout()).isEqualTo(Duration.ofMinutes(13));
+                             assertThat(properties.getQueryBufferSize()).isEqualTo(7);
+                             assertThat(properties.getCapabilitiesTimeout()).isEqualTo(Duration.ofSeconds(3));
+                             assertThat(properties.getIgnorePeriod()).isEqualTo(Duration.ofSeconds(14));
                              assertThat(properties.getContextRootMetadataPropertyName()).isEqualTo("root");
                          });
         }
@@ -101,6 +119,8 @@ class SpringCloudAutoConfigurationTest {
                 // other depends on the two agreeing
                 assertThat(properties.getCommandEndpoint())
                         .isEqualTo(SpringCloudCommandController.DEFAULT_COMMAND_ENDPOINT);
+                assertThat(properties.getQueryEndpoint())
+                        .isEqualTo(SpringCloudQueryController.DEFAULT_QUERY_ENDPOINT);
                 assertThat(properties.getCapabilitiesEndpoint())
                         .isEqualTo(RestCapabilityDiscoveryMode.DEFAULT_CAPABILITIES_ENDPOINT);
             });
@@ -127,11 +147,33 @@ class SpringCloudAutoConfigurationTest {
         }
 
         @Test
-        void contributesBothEndpoints() {
-            // The endpoints are how members reach each other, so neither is optional.
+        void contributesEveryEndpoint() {
+            // The endpoints are how members reach each other, so none of them is optional.
             contextRunner.run(context -> assertThat(context)
                     .hasSingleBean(SpringCloudCommandController.class)
+                    .hasSingleBean(SpringCloudQueryController.class)
                     .hasSingleBean(MemberCapabilitiesController.class));
+        }
+
+        @Test
+        void contributesTheQueryCollaborators() {
+            contextRunner.run(context -> assertThat(context)
+                    .hasSingleBean(IncomingQueryInvoker.class)
+                    .hasSingleBean(RemoteQueryDispatcher.class));
+        }
+
+        @Test
+        void saysWhatIsMissingWhenNothingCanConvertTheWireFormat() {
+            // The connector writes what members send each other with the application's MessageConverter, so it
+            // cannot be built without one rather than starting and failing every query.
+            new WebApplicationContextRunner()
+                    .withConfiguration(AutoConfigurations.of(SpringCloudAutoConfiguration.class))
+                    .withUserConfiguration(DiscoveryConfiguration.class)
+                    .withPropertyValues("axon.springcloud.enabled=true")
+                    .run(context -> assertThat(context)
+                            .hasFailed()
+                            .getFailure()
+                            .hasMessageContaining(MessageConverter.class.getSimpleName()));
         }
 
         @Test
@@ -200,6 +242,7 @@ class SpringCloudAutoConfigurationTest {
             // commands that are silently never distributed.
             new WebApplicationContextRunner()
                     .withConfiguration(AutoConfigurations.of(SpringCloudAutoConfiguration.class))
+                    .withBean(MessageConverter.class, () -> new DelegatingMessageConverter(new JacksonConverter()))
                     .withPropertyValues("axon.springcloud.enabled=true")
                     .run(context -> assertThat(context)
                             .hasFailed()
@@ -233,6 +276,7 @@ class SpringCloudAutoConfigurationTest {
             new ApplicationContextRunner()
                     .withConfiguration(AutoConfigurations.of(SpringCloudAutoConfiguration.class))
                     .withUserConfiguration(DiscoveryConfiguration.class)
+                    .withBean(MessageConverter.class, () -> new DelegatingMessageConverter(new JacksonConverter()))
                     .withPropertyValues("axon.springcloud.enabled=true")
                     .run(context -> assertThat(context)
                             .hasFailed()
@@ -257,23 +301,23 @@ class SpringCloudAutoConfigurationTest {
     }
 
     @Nested
-    class WithAReactiveWebApplication {
+    class OnAReactiveWebApplication {
 
         @Test
-        void refusesToStartRatherThanJoiningTheClusterUnreachable() {
-            // A reactive context is a web application, so the non-web condition does not catch it, yet the connector
-            // receives commands through Spring MVC controllers that WebFlux never maps. Left unchecked, this member
-            // registers with discovery, publishes its capabilities, and answers nothing.
+        void refusesToStartRatherThanAdvertisingWhatItCannotAnswer() {
+            // given / when — the endpoints members reach each other on are Spring MVC endpoints, which a reactive
+            // stack does not map, so such a member would advertise what it handles while answering nothing
             new ReactiveWebApplicationContextRunner()
                     .withConfiguration(AutoConfigurations.of(SpringCloudAutoConfiguration.class))
                     .withUserConfiguration(DiscoveryConfiguration.class)
+                    .withBean(MessageConverter.class, () -> new DelegatingMessageConverter(new JacksonConverter()))
                     .withPropertyValues("axon.springcloud.enabled=true")
                     .run(context -> assertThat(context)
                             .hasFailed()
                             .getFailure()
                             .rootCause()
                             .isInstanceOf(IllegalStateException.class)
-                            .hasMessageContaining("reactive web application")
+                            .hasMessageContaining("WebFlux")
                             .hasMessageContaining("axon.springcloud.enabled=false"));
         }
 
@@ -283,10 +327,7 @@ class SpringCloudAutoConfigurationTest {
                     .withConfiguration(AutoConfigurations.of(SpringCloudAutoConfiguration.class))
                     .withUserConfiguration(DiscoveryConfiguration.class)
                     .withPropertyValues("axon.springcloud.enabled=false")
-                    .run(context -> assertThat(context)
-                            .hasNotFailed()
-                            .doesNotHaveBean(SpringCloudCommandController.class)
-                            .doesNotHaveBean(MemberCapabilitiesController.class));
+                    .run(context -> assertThat(context).hasNotFailed());
         }
     }
 

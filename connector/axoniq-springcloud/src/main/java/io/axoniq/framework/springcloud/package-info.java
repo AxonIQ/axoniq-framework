@@ -18,16 +18,17 @@
  */
 
 /**
- * A {@code CommandBusConnector} distributing commands across nodes discovered through Spring Cloud Discovery, without
- * an Axon Server.
+ * Connectors distributing commands and queries across nodes discovered through Spring Cloud Discovery, without an
+ * Axon Server.
  * <p>
- * {@link io.axoniq.framework.springcloud.SpringCloudCommandBusConnector} is the connector itself, routing each command
- * with the consistent-hash ring that {@link io.axoniq.framework.springcloud.SpringCloudMemberRegistry} maintains from
- * the discovered service instances. {@link io.axoniq.framework.springcloud.SpringCloudConfigurationEnhancer} wires it
- * in.
+ * {@link io.axoniq.framework.springcloud.SpringCloudCommandBusConnector} routes each command with the consistent-hash
+ * ring that {@link io.axoniq.framework.springcloud.SpringCloudMemberRegistry} maintains from the discovered service
+ * instances, while {@link io.axoniq.framework.springcloud.SpringCloudQueryBusConnector} rotates each query over the
+ * members advertising its name. Both share that one registry, so each publishes what it handles without erasing what
+ * the other published. {@link io.axoniq.framework.springcloud.SpringCloudConfigurationEnhancer} wires them in.
  * <p>
  * The pieces live in sub-packages by concern: {@code routing} holds the ring and its members, {@code discovery} learns
- * what each member handles, and {@code transport} carries commands between them over HTTP.
+ * what each member handles, and {@code transport} carries messages between them over HTTP.
  */
 @NullMarked
 package io.axoniq.framework.springcloud;

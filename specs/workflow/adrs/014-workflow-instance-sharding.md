@@ -59,7 +59,7 @@ event arrives
 ### Segment count and claims
 
 The segment count is decided by the event processing configuration, so it defaults to the pooled streaming
-processor's own default. Setting the enhancer constructor argument or the `axoniq.workflow.initial-segment-count`
+processor's own default. Setting the enhancer constructor argument or the `axon.workflow.initial-segment-count`
 property forwards a value into that configuration; leaving both unset keeps whatever it already holds. Every other
 processor setting is left to the standard event processing configuration too. The processor claims its segments in the
 unnamed `TokenStore` component registered by the application; without one it falls back to an in-memory store and logs

@@ -28,3 +28,4 @@ io.axoniq.framework.springboot.autoconfig.MultiTenancyPersistentStreamAutoConfig
 io.axoniq.framework.springboot.autoconfig.PostgresqlAutoConfiguration
 io.axoniq.framework.springboot.autoconfig.PersistentStreamAutoConfiguration
 io.axoniq.framework.springboot.autoconfig.SpringCloudAutoConfiguration
+io.axoniq.framework.springboot.autoconfig.WorkflowAutoConfiguration
