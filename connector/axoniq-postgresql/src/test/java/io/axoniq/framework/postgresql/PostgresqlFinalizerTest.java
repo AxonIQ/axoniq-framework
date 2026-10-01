@@ -57,7 +57,7 @@ class PostgresqlFinalizerTest {
     @BeforeAll
     @SuppressWarnings("resource")
     static void startContainer() {
-        postgresContainer = new PostgreSQLContainer("postgres:16.2")
+        postgresContainer = new PostgreSQLContainer("postgres:16.2-alpine")
                 .withDatabaseName("testdb")
                 .withUsername("test")
                 .withPassword("test");

@@ -87,7 +87,7 @@ class JdbcSagaStoreConcurrentUnitOfWorkIT {
     private static final Duration TIMEOUT = Duration.ofSeconds(10);
 
     @Container
-    private static final PostgreSQLContainer POSTGRESQL = new PostgreSQLContainer("postgres:16-alpine");
+    private static final PostgreSQLContainer POSTGRESQL = new PostgreSQLContainer("postgres:16.2-alpine");
 
     private static final AssociationValue ORDER_COMMITTED = new AssociationValue("orderId", "committed");
     private static final AssociationValue ORDER_ROLLED_BACK = new AssociationValue("orderId", "rolled-back");
