@@ -245,7 +245,7 @@ If you prefer Kotlin, `WorkflowKontext` is the workflow context instance and `Ko
 The Kotlin DSL needs the `axoniq-workflow-dsl-kotlin` dependency.
 
 [source,kotlin]
-.src/main/kotlin/io/axoniq/example/order/OrderFulfillmentWorkflow.kt
+.`src/main/kotlin/io/axoniq/example/order/OrderFulfillmentWorkflow.kt`
 ----
 class OrderFulfillmentWorkflow {
 

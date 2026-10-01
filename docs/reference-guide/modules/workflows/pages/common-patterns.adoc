@@ -302,7 +302,7 @@ The event store shows the handoff:
 ++++
 <div class="et-player" data-autoplay>
   <div class="et-src" data-title="Parent — OrderFulfillmentWorkflow (123)">
-1 started AwaitPaymentProcessStarted {"startTime": "2026-03-26T10:00:01Z", "eventName": "io.myapp.payments.PaymentProcessCompleted", "associations": ["payload:orderId=123"], "timeoutTime": "2026-03-26T10:30:01Z"}
+1 started AwaitPaymentProcessStarted {"startTime": "2026-03-26T10:00:01Z", "associations": ["payload:orderId=123"], "timeoutTime": "2026-03-26T10:30:01Z"}
 2 completed PaymentProcessStarted {"childWorkflowId": "payment-123", "orderId": 123, "amount": 99.95}
 9 external PaymentProcessCompleted {"orderId": 123, "childWorkflowId": "payment-123"}
 10 completed AwaitPaymentProcessCompleted {"orderId": 123, "childWorkflowId": "payment-123"}
