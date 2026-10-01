@@ -45,6 +45,7 @@ class JpaDeadLetterQueueAutoConfigurationTest {
                 .withPropertyValues(
                         "axon.axonserver.enabled=false",
                         "axon.postgresql.enabled=false",
+                        "axon.workflow.enabled=false",
                         "axon.eventstorage.jpa.polling-interval=0"
                 );
     }

@@ -38,6 +38,23 @@
         <maven-enforcer.allow-spring-dependencies>true</maven-enforcer.allow-spring-dependencies>
     </properties>
 
+    <!-- Spring Boot's BOM (imported by the parent axoniq-framework-spring pom) manages
+         jackson-annotations below the version this project's tools.jackson:jackson-databind
+         needs (JsonApplyView, added in 2.22). Pin it back to the version managed by this
+         project's own jackson-bom (jackson2.version, ${jackson2.version}). Since Jackson 2.20,
+         jackson-annotations no longer takes a patch version, so this isn't simply
+         jackson2.version; keep it aligned with the jackson.version.annotations property of
+         the matching jackson-bom release instead. -->
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>com.fasterxml.jackson.core</groupId>
+                <artifactId>jackson-annotations</artifactId>
+                <version>2.22</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
     <dependencies>
         <!-- Axon -->
         <dependency>
@@ -99,6 +116,12 @@
         <dependency>
             <groupId>io.axoniq.framework</groupId>
             <artifactId>axoniq-springcloud</artifactId>
+            <version>${project.version}</version>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>io.axoniq.framework</groupId>
+            <artifactId>axoniq-workflow-engine</artifactId>
             <version>${project.version}</version>
             <optional>true</optional>
         </dependency>
@@ -234,6 +257,12 @@
         <dependency>
             <groupId>org.testcontainers</groupId>
             <artifactId>testcontainers-junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.axoniq.framework</groupId>
+            <artifactId>axoniq-workflow-test</artifactId>
+            <version>${project.version}</version>
             <scope>test</scope>
         </dependency>
     </dependencies>

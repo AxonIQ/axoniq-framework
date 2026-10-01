@@ -65,7 +65,11 @@ class AxonServerAutoConfigurationTest {
                 .withUserConfiguration(TestContext.class)
                 // Tracing off: these tests assert the concrete AxonServer component types (e.g. the
                 // PayloadConvertingCommandBusConnector), which the tracing decorators would otherwise wrap.
-                .withPropertyValues("axon.axonserver.enabled=true", "axon.tracing.enabled=false");
+                .withPropertyValues(
+                        "axon.axonserver.enabled=true",
+                        "axon.tracing.enabled=false",
+                        "axon.workflow.enabled=false"
+                );
     }
 
     @BeforeAll
