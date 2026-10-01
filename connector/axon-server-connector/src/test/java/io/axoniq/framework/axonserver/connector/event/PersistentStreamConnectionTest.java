@@ -784,6 +784,79 @@ class PersistentStreamConnectionTest {
                 .containsExactly(0L, PersistentStreamSegment.PENDING_WORK_DONE_MARKER);
     }
 
+    @Test
+    void closeDeliversAlreadyBufferedEventsBeforeRetiringTheConsumer() {
+        // given — the first event blocks the consumer on a gate, so by the time close() runs, a second
+        //         event is already sitting, undrained, in the segment's local buffer
+        AtomicBoolean firstEventConsumerStarted = new AtomicBoolean(false);
+        CompletableFuture<Void> firstEventGate = new CompletableFuture<>();
+        List<EventMessage> received = Collections.synchronizedList(new LinkedList<>());
+        testSubject.open((events, ctx) -> {
+            long position = TrackingToken.fromContext(ctx).orElseThrow().position().orElseThrow();
+            if (position == 0L) {
+                firstEventConsumerStarted.set(true);
+                return firstEventGate.thenRun(() -> received.addAll(events));
+            }
+            received.addAll(events);
+            return CompletableFuture.completedFuture(null);
+        });
+        MockPersistentStream mockPersistentStream = mockPersistentStreams.get(STREAM_ID);
+
+        mockPersistentStream.publish(0, eventWithToken(0, "agg-1", 0, "TestAggregate"));
+        await().atMost(Duration.ofSeconds(2)).until(firstEventConsumerStarted::get);
+        MockPersistentStreamSegment segment = mockPersistentStream.segments.get(0);
+        mockPersistentStream.publish(0, eventWithToken(1, "agg-1", 1, "TestAggregate"));
+
+        // when — the connection closes while the second event is still undrained; only then is the
+        //         first event allowed to complete
+        testSubject.close();
+        firstEventGate.complete(null);
+
+        // then — both events reach the real consumer; the still-buffered second event is not skipped
+        //        just because close() has already been called
+        await().atMost(Duration.ofSeconds(2)).until(() -> received.size() == 2);
+        // and — the second event's token, and the pending-work-done marker, are only acknowledged after
+        //       the consumer actually handled it
+        await().atMost(Duration.ofSeconds(2))
+               .until(() -> segment.acknowledgedTokens.contains(PersistentStreamSegment.PENDING_WORK_DONE_MARKER));
+        assertThat(segment.acknowledgedTokens)
+                .containsExactly(0L, 1L, PersistentStreamSegment.PENDING_WORK_DONE_MARKER);
+
+        mockPersistentStream.closeSegment(0);
+    }
+
+    @Test
+    void reopenBeforeOldSegmentFinishesDrainingDoesNotRetireTheNewConsumer() {
+        // given — the first stream's segment is mid-batch (consumer gated), so close()'s deferred
+        //         retirement of the old consumer has not yet completed when open() is called again
+        AtomicBoolean firstEventConsumerStarted = new AtomicBoolean(false);
+        CompletableFuture<Void> firstEventGate = new CompletableFuture<>();
+        testSubject.open((events, ctx) -> {
+            firstEventConsumerStarted.set(true);
+            return firstEventGate;
+        });
+        MockPersistentStream firstStream = mockPersistentStreams.get(STREAM_ID);
+        firstStream.publish(0, eventWithToken(0, "agg-1", 0, "TestAggregate"));
+        await().atMost(Duration.ofSeconds(2)).until(firstEventConsumerStarted::get);
+
+        // when — close while the batch is still in flight, then reopen immediately with a new consumer,
+        //        and only then let the old segment's batch complete, triggering the deferred retirement
+        testSubject.close();
+        List<EventMessage> receivedByNewConsumer = Collections.synchronizedList(new LinkedList<>());
+        testSubject.open((events, ctx) -> {
+            receivedByNewConsumer.addAll(events);
+            return CompletableFuture.completedFuture(null);
+        });
+        firstEventGate.complete(null);
+
+        // then — the new consumer survives: a freshly published event on the new stream still reaches it
+        MockPersistentStream secondStream = mockPersistentStreams.get(STREAM_ID);
+        secondStream.publish(0, eventWithToken(0, "agg-2", 0, "TestAggregate"));
+        await().atMost(Duration.ofSeconds(2)).until(() -> receivedByNewConsumer.size() == 1);
+
+        secondStream.closeSegment(0);
+    }
+
     @Nested
     class EventTypeResolution {
 
@@ -1179,7 +1252,10 @@ class PersistentStreamConnectionTest {
 
         @Override
         public void close() {
-            callbacks.onClosed();
+            // mirrors the real connector: closing the stream cascades into closing every still-open segment,
+            // appending a terminal marker behind any events already buffered locally for that segment
+            segments.values().forEach(MockPersistentStreamSegment::close);
+            callbacks.onClosed().accept(null);
         }
 
         private void publish(int segmentNumber, EventWithToken eventWithToken) {
@@ -1323,7 +1399,9 @@ class PersistentStreamConnectionTest {
     private static class MockPersistentStreamSegment implements PersistentStreamSegment {
 
         private final ConcurrentLinkedDeque<PersistentStreamEvent> entries = new ConcurrentLinkedDeque<>();
-        private final AtomicBoolean closed = new AtomicBoolean();
+        // true once close() is requested — mirrors the real connector appending a terminal marker to the
+        // tail of the buffer: isClosed() only reports true once entries already queued ahead of it are drained
+        private final AtomicBoolean closeRequested = new AtomicBoolean();
         private final int segment;
         private Runnable onAvailable = () -> {
         };
@@ -1364,7 +1442,7 @@ class PersistentStreamConnectionTest {
             }
             PersistentStreamEvent event = entries.isEmpty() ? null : entries.removeFirst();
             if (event != null && closeAfterNextRead.compareAndSet(true, false)) {
-                closed.set(true);
+                closeRequested.set(true);
             }
             return event;
         }
@@ -1376,7 +1454,7 @@ class PersistentStreamConnectionTest {
             }
             long endTime = System.currentTimeMillis() + unit.toMillis(timeout);
             PersistentStreamEvent event = nextIfAvailable();
-            while (event == null && System.currentTimeMillis() < endTime && !closed.get()) {
+            while (event == null && System.currentTimeMillis() < endTime && !isClosed()) {
                 Thread.sleep(1);
                 event = nextIfAvailable();
             }
@@ -1386,7 +1464,7 @@ class PersistentStreamConnectionTest {
         @Override
         public PersistentStreamEvent next() throws InterruptedException {
             PersistentStreamEvent event = nextIfAvailable();
-            while (event == null && !closed.get()) {
+            while (event == null && !isClosed()) {
                 Thread.sleep(1);
                 event = nextIfAvailable();
             }
@@ -1400,12 +1478,12 @@ class PersistentStreamConnectionTest {
 
         @Override
         public void close() {
-            closed.set(true);
+            closeRequested.set(true);
         }
 
         @Override
         public boolean isClosed() {
-            return closed.get();
+            return closeRequested.get() && entries.isEmpty();
         }
 
         @Override

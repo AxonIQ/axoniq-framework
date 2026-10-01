@@ -97,6 +97,7 @@ public class PersistentStreamConnection {
 
     private final AtomicReference<@Nullable PersistentStream> persistentStreamHolder = new AtomicReference<>();
     private final AtomicBoolean closing = new AtomicBoolean(false);
+    private final AtomicBoolean opened = new AtomicBoolean(false);
 
     private final AtomicReference<BiFunction<List<? extends EventMessage>, ProcessingContext, CompletableFuture<?>>>
             consumer = new AtomicReference<>(NO_OP_CONSUMER);
@@ -211,11 +212,11 @@ public class PersistentStreamConnection {
      * @throws IllegalStateException if the stream was already opened
      */
     public void open(BiFunction<List<? extends EventMessage>, ProcessingContext, CompletableFuture<?>> consumer) {
-        closing.set(false);
-        if (!this.consumer.compareAndSet(NO_OP_CONSUMER, consumer)) {
-            throw new IllegalStateException(
-                    String.format("%s: Persistent Stream has already been opened.", streamId));
+        if (!opened.compareAndSet(false, true)) {
+            throw new IllegalStateException(String.format("%s: Persistent Stream has already been opened.", streamId));
         }
+        closing.set(false);
+        this.consumer.set(consumer);
         start();
     }
 
@@ -271,14 +272,37 @@ public class PersistentStreamConnection {
 
     /**
      * Closes the persistent stream connection to Axon Server.
+     * <p>
+     * Events already buffered locally for a segment at the moment this method is called are still delivered
+     * to the consumer supplied to {@link #open(BiFunction)}. The consumer is only retired, in favor of a
+     * no-op, once every currently open segment has confirmed its local buffer is fully drained. Otherwise,
+     * those buffered events would be acknowledged to Axon Server without ever reaching a real consumer.
      */
     public void close() {
         closing.set(true);
-        this.consumer.set(NO_OP_CONSUMER);
+        opened.set(false);
+        BiFunction<List<? extends EventMessage>, ProcessingContext, CompletableFuture<?>> consumerToRetire =
+                consumer.get();
+        List<SegmentConnection> activeSegments = List.copyOf(segments.values());
+        if (activeSegments.isEmpty()) {
+            consumer.compareAndSet(consumerToRetire, NO_OP_CONSUMER);
+        } else {
+            AtomicInteger pendingDrains = new AtomicInteger(activeSegments.size());
+            activeSegments.forEach(segmentConnection -> segmentConnection.drained().thenRun(() -> {
+                if (pendingDrains.decrementAndGet() == 0) {
+                    // a CAS, not a plain set: if open() has since installed a new consumer, this retirement
+                    // of the old one must not clobber it
+                    consumer.compareAndSet(consumerToRetire, NO_OP_CONSUMER);
+                }
+            }));
+        }
         PersistentStream persistentStream = persistentStreamHolder.getAndSet(null);
         if (persistentStream != null) {
             persistentStream.close();
         }
+        // re-evaluates every segment's closed state in case it was already idle, with nothing left to drain,
+        // before persistentStream.close() appended its terminal marker
+        activeSegments.forEach(SegmentConnection::readMessagesFromSegment);
     }
 
     private interface SegmentState {
@@ -290,11 +314,22 @@ public class PersistentStreamConnection {
 
         private final AtomicBoolean processGate = new AtomicBoolean();
         private final AtomicBoolean doneConfirmed = new AtomicBoolean();
+        private final CompletableFuture<Void> drained = new CompletableFuture<>();
         private final PersistentStreamSegment persistentStreamSegment;
         private final AtomicReference<SegmentState> currentState = new AtomicReference<>(new ProcessingState());
 
         public SegmentConnection(PersistentStreamSegment persistentStreamSegment) {
             this.persistentStreamSegment = persistentStreamSegment;
+        }
+
+        /**
+         * A future completing once this segment's local buffer has been fully drained of events it already
+         * held at the moment {@link PersistentStreamConnection#close()} was called.
+         *
+         * @return a future completing once this segment is fully drained
+         */
+        CompletableFuture<Void> drained() {
+            return drained;
         }
 
         private class RetryState implements SegmentState {
@@ -409,6 +444,7 @@ public class PersistentStreamConnection {
             private void acknowledgeDoneWhenClosed(PersistentStreamSegment persistentStreamSegment) {
                 if (persistentStreamSegment.isClosed() && doneConfirmed.compareAndSet(false, true)) {
                     persistentStreamSegment.acknowledge(PENDING_WORK_DONE_MARKER);
+                    drained.complete(null);
                 }
             }
         }
