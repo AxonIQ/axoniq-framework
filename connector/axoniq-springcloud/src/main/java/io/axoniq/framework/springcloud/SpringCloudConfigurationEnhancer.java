@@ -23,10 +23,13 @@ import io.axoniq.framework.messaging.commandhandling.distributed.CommandBusConne
 import io.axoniq.framework.messaging.commandhandling.distributed.PayloadConvertingCommandBusConnector;
 import io.axoniq.framework.messaging.queryhandling.distributed.PayloadConvertingQueryBusConnector;
 import io.axoniq.framework.messaging.queryhandling.distributed.QueryBusConnector;
-import io.axoniq.framework.springcloud.transport.IncomingCommandInvoker;
-import io.axoniq.framework.springcloud.transport.IncomingQueryInvoker;
-import io.axoniq.framework.springcloud.transport.RemoteCommandDispatcher;
-import io.axoniq.framework.springcloud.transport.RemoteQueryDispatcher;
+import io.axoniq.framework.springcloud.command.IncomingCommandInvoker;
+import io.axoniq.framework.springcloud.command.RemoteCommandDispatcher;
+import io.axoniq.framework.springcloud.command.SpringCloudCommandBusConnector;
+import io.axoniq.framework.springcloud.query.IncomingQueryInvoker;
+import io.axoniq.framework.springcloud.query.RemoteQueryDispatcher;
+import io.axoniq.framework.springcloud.query.SpringCloudQueryBusConnector;
+import io.axoniq.framework.springcloud.shared.SpringCloudMemberRegistry;
 import org.axonframework.common.configuration.ApplicationConfigurer;
 import org.axonframework.common.configuration.ComponentDecorator;
 import org.axonframework.common.configuration.ComponentDefinition;

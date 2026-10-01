@@ -19,13 +19,13 @@
 
 package io.axoniq.framework.springboot;
 
+import io.axoniq.framework.springcloud.command.HttpRemoteCommandDispatcher;
+import io.axoniq.framework.springcloud.command.SpringCloudCommandController;
 import io.axoniq.framework.springcloud.discovery.IgnoreListingDiscoveryMode;
 import io.axoniq.framework.springcloud.discovery.RestCapabilityDiscoveryMode;
-import io.axoniq.framework.springcloud.transport.HttpRemoteCommandDispatcher;
-import io.axoniq.framework.springcloud.transport.HttpRemoteQueryDispatcher;
-import io.axoniq.framework.springcloud.transport.SpringCloudCommandController;
-import io.axoniq.framework.springcloud.transport.SpringCloudQueryController;
-import io.axoniq.framework.springcloud.transport.SpringCloudQueryControllerConfiguration;
+import io.axoniq.framework.springcloud.query.HttpRemoteQueryDispatcher;
+import io.axoniq.framework.springcloud.query.SpringCloudQueryController;
+import io.axoniq.framework.springcloud.query.SpringCloudQueryControllerConfiguration;
 import org.jspecify.annotations.Nullable;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 

@@ -17,4 +17,4 @@
 #  https://www.axoniq.io/pricing
 #
 
-io.axoniq.framework.springcloud.SpringCloudAxoniqAddon
+io.axoniq.framework.springcloud.shared.SpringCloudAxoniqAddon
