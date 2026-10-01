@@ -87,9 +87,6 @@ public class WorkflowModuleConfigurer implements ConfigurationEnhancer, Applicat
             return;
         }
         var afterHistory = WorkflowModule.configure(moduleName, workflowContextType)
-                                         .processorConfiguration(processorConfiguration -> applyProperties(
-                                                 workflowProperties, processorConfiguration
-                                         ))
                                          .historyProcessorConfiguration(processorConfiguration -> applyHistoryProperties(
                                                  workflowProperties, processorConfiguration
                                          ));
@@ -97,6 +94,7 @@ public class WorkflowModuleConfigurer implements ConfigurationEnhancer, Applicat
         ComponentBuilder<Object> firstBuilder = c -> applicationContext.getBean(firstBean);
         WorkflowModule.OptionalPhase<C> module =
                 afterHistory.definition(d -> d.autodetected(firstBuilder))
+                            .processorConfiguration(psepConfig -> applyProperties(workflowProperties, psepConfig))
                             .contextFactory(configuration -> (WorkflowContextFactory<C>) configuration
                                     .getOptionalComponent(WorkflowContextFactory.class, workflowContextType.getName())
                                     .orElseThrow(() -> new BadWorkflowConfigurationException(String.format(

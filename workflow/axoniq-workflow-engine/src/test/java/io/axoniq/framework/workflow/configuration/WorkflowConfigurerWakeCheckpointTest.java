@@ -177,13 +177,13 @@ class WorkflowConfigurerWakeCheckpointTest {
     private AxonConfiguration start(TokenStore tokenStore,
                                     Consumer<TestContext> body) {
         var module = WorkflowModule.configure(MODULE, TestContext.class)
-                                   .processorConfiguration(pc -> pc.initialSegmentCount(1))
                                    .definition(d -> d
                                            .declarative(c -> body::accept)
                                            .workflowName(MODULE)
                                            .on(c -> EventConditions.fromQualifiedName(new QualifiedName("start")))
                                            .notCustomized()
                                    )
+                                   .processorConfiguration(pc -> pc.initialSegmentCount(1))
                                    .contextFactory(c -> TestContext::new);
         var configurer = WorkflowConfigurer.create();
         configurer.componentRegistry(cr -> cr

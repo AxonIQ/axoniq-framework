@@ -52,12 +52,10 @@ import java.util.function.Function;
  *
  * <h2>Custom configuration</h2>
  * For advanced scenarios, {@link #configure(String, Class)} exposes the full configuration pipeline, allowing users to
- * customize the event processor and history tracking before defining the workflow language.
+ * customize history tracking before defining the workflow language.
  * <p>
- * There are several phases of the building process for a custom-configured workflow module:
+ * There is one phase of the building process for a custom-configured workflow module:
  * <ul>
- *     <li>{@link WorkflowEngineEventProcessorPhase} - customize the {@link PooledStreamingEventProcessorConfiguration}
- *         backing this module's event processor.</li>
  *     <li>{@link HistoryPhase} - enable or disable workflow history tracking.</li>
  * </ul>
  *
@@ -70,7 +68,8 @@ import java.util.function.Function;
  * </ul>
  *
  * <h2>Terminal configuration</h2>
- * Once the workflow definitions are in place, {@link OptionalPhase} allows a custom {@link WorkflowContextFactory},
+ * Once the workflow definitions are in place, {@link OptionalPhase} allows the {@link PooledStreamingEventProcessorConfiguration}
+ * backing the module's event processor to be customized, and a custom {@link WorkflowContextFactory},
  * {@link WorkflowConfigurationRegistry}, and/or {@link WorkflowExecutionRepository} to be supplied. Reaching this
  * phase already yields a fully-formed {@link WorkflowModule}: every method here is optional, each falling back to a
  * working default when left uncalled - for {@link OptionalPhase#contextFactory(ComponentBuilder)}, that default is
@@ -116,12 +115,12 @@ public interface WorkflowModule<C extends WorkflowContext> extends Module {
     /**
      * Creates a new workflow module with a fully customizable configuration pipeline.
      * <p>
-     * The returned builder starts at the {@link WorkflowEngineEventProcessorPhase}, allowing users to customize the
-     * event processor and history tracking before defining the workflow language. The
-     * {@link WorkflowConfigurationRegistry}, {@link WorkflowExecutionRepository}, and {@link WorkflowContextFactory}
-     * are configured afterward, through the terminal {@link OptionalPhase}.
+     * The returned builder starts at the {@link HistoryPhase}, allowing users to customize history tracking before
+     * defining the workflow language. The {@link PooledStreamingEventProcessorConfiguration} backing the module's
+     * event processor, the {@link WorkflowConfigurationRegistry}, the {@link WorkflowExecutionRepository}, and the
+     * {@link WorkflowContextFactory} are all configured afterward, through the terminal {@link OptionalPhase}.
      * <p>
-     * Use this entry point when you need to supply custom implementations for the event processor or history tracking.
+     * Use this entry point when you need to supply a custom implementation for history tracking.
      * <p>
      * Note that if the given {@code contextType} is <b>not</b> one originating from this project, that a custom
      * {@link OptionalPhase#contextFactory(ComponentBuilder) context factory} should be configured at all times.
@@ -129,9 +128,9 @@ public interface WorkflowModule<C extends WorkflowContext> extends Module {
      * @param name        name of the workflow module
      * @param contextType the {@link WorkflowContext} type used by the workflows in this module
      * @param <C>         the type of {@link WorkflowContext} used by the workflows in this module
-     * @return the {@link WorkflowEngineEventProcessorPhase} phase of this builder, for a fluent API
+     * @return the {@link HistoryPhase} phase of this builder, for a fluent API
      */
-    static <C extends WorkflowContext> WorkflowEngineEventProcessorPhase<C> configure(
+    static <C extends WorkflowContext> HistoryPhase<C> configure(
             String name,
             Class<C> contextType
     ) {
@@ -139,42 +138,12 @@ public interface WorkflowModule<C extends WorkflowContext> extends Module {
     }
 
     /**
-     * Phase of the module's building process in which the {@link PooledStreamingEventProcessorConfiguration} backing
-     * this module's event processor can be customized.
-     * <p>
-     * Standard processor settings - segment count, batch size, error handling, worker executor, and so on - live on
-     * {@link PooledStreamingEventProcessorConfiguration} itself. This phase is the hook through which those settings
-     * are reached: the given {@link Function} is applied on top of the module's own internal customization (event
-     * criteria, segment routing), so it composes with rather than replaces that wiring.
-     * <p>
-     * The engine component name and the event processor's own name are not configurable - the module derives both from
-     * its own name, so several {@link WorkflowModule}s in one application never collide.
-     * <p>
-     * This and every phase below it are optional - each extends the next phase (and ultimately
-     * {@link WorkflowDefinitionPhase}), so any phase can be skipped to accept its default.
-     *
-     * @param <C> the type of {@link WorkflowContext} used by the workflows in this module
-     */
-    interface WorkflowEngineEventProcessorPhase<C extends WorkflowContext> extends HistoryPhase<C> {
-
-        /**
-         * Applies the given {@code processorConfiguration} function to the
-         * {@link PooledStreamingEventProcessorConfiguration} backing this module's event processor.
-         *
-         * @param processorConfiguration a function customizing the {@link PooledStreamingEventProcessorConfiguration}
-         *                               of this module's event processor
-         * @return the {@link HistoryPhase} phase of this builder, for a fluent API
-         */
-        HistoryPhase<C> processorConfiguration(
-                Function<PooledStreamingEventProcessorConfiguration, PooledStreamingEventProcessorConfiguration> processorConfiguration
-        );
-    }
-
-    /**
      * Phase of the module's building process in which workflow history tracking can be enabled or disabled.
      * <p>
      * When enabled, a {@link WorkflowHistoryProjector} collects historic information about workflow executions into the
      * configured {@link MutableWorkflowHistoryRepository}. When disabled, no history is tracked.
+     * <p>
+     * This phase is optional - it extends {@link WorkflowDefinitionPhase}, so it can be skipped to accept its default.
      *
      * @param <C> the type of {@link WorkflowContext} used by the workflows in this module
      */
@@ -210,8 +179,8 @@ public interface WorkflowModule<C extends WorkflowContext> extends Module {
          * processor.
          * <p>
          * The history projector runs in a separate event processor from the workflow engine's own - see
-         * {@link WorkflowEngineEventProcessorPhase} for the engine's processor - so an application can give it a
-         * different (e.g. durable) token store and tune its segment count, batch size, and claim behavior
+         * {@link OptionalPhase#processorConfiguration(Function)} for the engine's processor - so an application can
+         * give it a different (e.g. durable) token store and tune its segment count, batch size, and claim behavior
          * independently. Meaningful only when history tracking ends up enabled; harmless to call regardless of whether
          * {@link #withHistory(ComponentBuilder)} or {@link #withoutHistory()} is (or isn't) also called, since it does
          * not itself decide whether history is enabled.
@@ -364,7 +333,8 @@ public interface WorkflowModule<C extends WorkflowContext> extends Module {
 
     /**
      * Terminal phase of the module's building process, in which more {@link #definition(Function) workflow definitions}
-     * can be added, and a custom {@link WorkflowContextFactory}, {@link WorkflowConfigurationRegistry}, and/or
+     * can be added, the {@link PooledStreamingEventProcessorConfiguration} backing the module's event processor can be
+     * customized, and a custom {@link WorkflowContextFactory}, {@link WorkflowConfigurationRegistry}, and/or
      * {@link WorkflowExecutionRepository} can optionally be provided.
      * <p>
      * Reaching this phase already yields a fully-formed {@link WorkflowModule}: every method here is purely optional
@@ -391,6 +361,26 @@ public interface WorkflowModule<C extends WorkflowContext> extends Module {
          */
         OptionalPhase<C> definition(
                 Function<WorkflowDefinitionPhase.DetectionPhase<C>, WorkflowDefinitionPhase.FinalizedPhase<C>> definition
+        );
+
+        /**
+         * Applies the given {@code processorConfiguration} function to the
+         * {@link PooledStreamingEventProcessorConfiguration} backing this module's event processor.
+         * <p>
+         * Standard processor settings - segment count, batch size, error handling, worker executor, and so on - live on
+         * {@link PooledStreamingEventProcessorConfiguration} itself. This method is the hook through which those
+         * settings are reached: the given {@link Function} is applied on top of the module's own internal customization
+         * (event criteria, segment routing), so it composes with rather than replaces that wiring.
+         * <p>
+         * The engine component name and the event processor's own name are not configurable - the module derives both
+         * from its own name, so several {@link WorkflowModule}s in one application never collide.
+         *
+         * @param processorConfiguration a function customizing the {@link PooledStreamingEventProcessorConfiguration}
+         *                               of this module's event processor
+         * @return this phase, for further optional configuration
+         */
+        OptionalPhase<C> processorConfiguration(
+                Function<PooledStreamingEventProcessorConfiguration, PooledStreamingEventProcessorConfiguration> processorConfiguration
         );
 
         /**
