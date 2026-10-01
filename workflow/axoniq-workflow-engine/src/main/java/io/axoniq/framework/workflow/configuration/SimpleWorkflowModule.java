@@ -38,6 +38,7 @@ import io.axoniq.framework.workflow.runtime.execution.WorkflowEngineCheckpointin
 import io.axoniq.framework.workflow.runtime.execution.WorkflowExecutionRepository;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowStore;
 import org.axonframework.common.AxonConfigurationException;
+import org.axonframework.common.TypeReference;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.configuration.BaseModule;
 import org.axonframework.common.configuration.ComponentBuilder;
@@ -81,7 +82,6 @@ import static java.util.Objects.requireNonNull;
 class SimpleWorkflowModule<C extends WorkflowContext>
         extends BaseModule<SimpleWorkflowModule<C>>
         implements WorkflowModule<C>,
-        WorkflowModule.WorkflowConfigurationRegistryPhase<C>,
         WorkflowModule.WorkflowEngineEventProcessorPhase<C>,
         WorkflowModule.HistoryPhase<C>,
         WorkflowModule.WorkflowContextFactoryPhase<C>,
@@ -106,8 +106,6 @@ class SimpleWorkflowModule<C extends WorkflowContext>
 
     private Function<PooledStreamingEventProcessorConfiguration, PooledStreamingEventProcessorConfiguration> engineConfigCustomizer =
             psepConfig -> psepConfig;
-    private ComponentBuilder<WorkflowConfigurationRegistry<?>> configurationRegistry =
-            config -> new SimpleWorkflowConfigurationRegistry();
     private boolean useHistory = true;
     private ComponentBuilder<WorkflowHistoryProjector> historyProjector =
             config -> new WorkflowHistoryProjector(config.getComponent(MutableWorkflowHistoryRepository.class));
@@ -129,20 +127,11 @@ class SimpleWorkflowModule<C extends WorkflowContext>
     }
 
     @Override
-    public WorkflowConfigurationRegistryPhase<C> processorConfiguration(
+    public HistoryPhase<C> processorConfiguration(
             Function<PooledStreamingEventProcessorConfiguration, PooledStreamingEventProcessorConfiguration> processorConfiguration
     ) {
         this.engineConfigCustomizer =
                 requireNonNull(processorConfiguration, "Processor configuration function must not be null.");
-        return this;
-    }
-
-    @Override
-    public HistoryPhase<C> configurationRegistry(
-            ComponentBuilder<WorkflowConfigurationRegistry<?>> configurationRegistry
-    ) {
-        this.configurationRegistry =
-                requireNonNull(configurationRegistry, "Workflow configuration registry must not be null.");
         return this;
     }
 
@@ -249,9 +238,11 @@ class SimpleWorkflowModule<C extends WorkflowContext>
         return "WorkflowExecutionRepository[" + name + "]";
     }
 
-    private ComponentDefinition<WorkflowConfigurationRegistry> workflowConfigurationRegistry() {
-        return ComponentDefinition.ofTypeAndName(WorkflowConfigurationRegistry.class, configurationRegistryName())
-                                  .withBuilder(configurationRegistry);
+    private ComponentDefinition<WorkflowConfigurationRegistry<?>> workflowConfigurationRegistry() {
+        TypeReference<WorkflowConfigurationRegistry<?>> configRegistryType = new TypeReference<>() {
+        };
+        return ComponentDefinition.ofTypeAndName(configRegistryType, configurationRegistryName())
+                                  .withBuilder(config -> new SimpleWorkflowConfigurationRegistry());
     }
 
     private String configurationRegistryName() {

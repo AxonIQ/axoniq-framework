@@ -70,13 +70,10 @@ class FullConfigurationTest {
     }
 
     @Test
-    void testConfigurationWithCustomComponents() {
+    void configurationWithConfigureEntryPointAndWithoutHistory() {
         WorkflowConfigurer configurer = WorkflowConfigurer.create();
 
-        WorkflowConfigurationRegistry<?> customRegistry = new SimpleWorkflowConfigurationRegistry();
-
         var module = WorkflowModule.configure("custom-module", TestContext.class)
-                                   .configurationRegistry(cfg -> customRegistry)
                                    .withoutHistory()
                                    .contextFactory(c -> TestContext::new)
                                    .definition(d -> d
@@ -90,11 +87,11 @@ class FullConfigurationTest {
         configurer.componentRegistry(cr -> cr.registerModule(module));
         AxonConfiguration configuration = configurer.build();
 
-        // The module registers the exact custom registry instance it was given, named after itself.
+        // The configuration registry and execution repository are not user-configurable, so the module still
+        // registers its own defaults, even via the full configure() pipeline.
         assertThat(configuration.getComponents(WorkflowConfigurationRegistry.class)
                                 .get("WorkflowConfigurationRegistry[custom-module]"))
-                .isSameAs(customRegistry);
-        // The execution repository is not user-configurable, so the module still registers its own default.
+                .isInstanceOf(SimpleWorkflowConfigurationRegistry.class);
         assertThat(configuration.getComponents(WorkflowExecutionRepository.class)
                                 .get("WorkflowExecutionRepository[custom-module]"))
                 .isInstanceOf(InMemoryWorkflowExecutionRepository.class);

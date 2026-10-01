@@ -54,8 +54,6 @@ import java.util.function.Function;
  * <ul>
  *     <li>{@link WorkflowEngineEventProcessorPhase} - customize the {@link PooledStreamingEventProcessorConfiguration}
  *         backing this module's event processor.</li>
- *     <li>{@link WorkflowConfigurationRegistryPhase} - provide a custom {@link WorkflowConfigurationRegistry} for
- *         storing workflow configurations with their start conditions.</li>
  *     <li>{@link HistoryPhase} - enable or disable workflow history tracking.</li>
  * </ul>
  *
@@ -112,8 +110,8 @@ public interface WorkflowModule<C extends WorkflowContext> extends Module {
      * The returned builder starts at the {@link WorkflowEngineEventProcessorPhase}, allowing users to provide custom
      * implementations for infrastructure components before defining the workflow language.
      * <p>
-     * Use this entry point when you need to supply custom implementations for any of the infrastructure components,
-     * such as the {@link WorkflowConfigurationRegistry} or history tracking.
+     * Use this entry point when you need to customize the module's event processor configuration or history
+     * tracking.
      *
      * @param name        name of the workflow module
      * @param contextType the {@link WorkflowContext} type used by the workflows in this module
@@ -145,7 +143,7 @@ public interface WorkflowModule<C extends WorkflowContext> extends Module {
      * @param <C> the type of {@link WorkflowContext} used by the workflows in this module
      */
     interface WorkflowEngineEventProcessorPhase<C extends WorkflowContext>
-            extends WorkflowConfigurationRegistryPhase<C> {
+            extends HistoryPhase<C> {
 
         /**
          * Applies the given {@code processorConfiguration} function to the
@@ -153,36 +151,10 @@ public interface WorkflowModule<C extends WorkflowContext> extends Module {
          *
          * @param processorConfiguration a function customizing the {@link PooledStreamingEventProcessorConfiguration}
          *                               of this module's event processor
-         * @return the {@link WorkflowConfigurationRegistryPhase} phase of this builder, for a fluent API
-         */
-        WorkflowConfigurationRegistryPhase<C> processorConfiguration(
-                Function<PooledStreamingEventProcessorConfiguration, PooledStreamingEventProcessorConfiguration> processorConfiguration
-        );
-    }
-
-    /**
-     * Phase of the module's building process in which a custom {@link WorkflowConfigurationRegistry} can be provided.
-     * <p>
-     * The registry stores workflow configurations together with their corresponding
-     * {@link EventCondition start conditions}, and is used by the
-     * {@link io.axoniq.framework.workflow.runtime.execution.WorkflowEngine WorkflowEngine} to look up which workflow to
-     * start for a given event.
-     *
-     * @param <C> the type of {@link WorkflowContext} used by the workflows in this module
-     */
-    interface WorkflowConfigurationRegistryPhase<C extends WorkflowContext>
-            extends WorkflowExecutionRepositoryPhase<C> {
-
-        /**
-         * Registers the given {@link ComponentBuilder} of a {@link WorkflowConfigurationRegistry} as the registry for
-         * the workflow module being built.
-         *
-         * @param workflowConfigurationRegistry a {@link ComponentBuilder} constructing the
-         *                                      {@link WorkflowConfigurationRegistry}
          * @return the {@link HistoryPhase} phase of this builder, for a fluent API
          */
-        HistoryPhase<C> configurationRegistry(
-                ComponentBuilder<WorkflowConfigurationRegistry<?>> workflowConfigurationRegistry
+        HistoryPhase<C> processorConfiguration(
+                Function<PooledStreamingEventProcessorConfiguration, PooledStreamingEventProcessorConfiguration> processorConfiguration
         );
     }
 

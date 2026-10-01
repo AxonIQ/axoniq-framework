@@ -30,7 +30,6 @@ import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowDefini
 import io.axoniq.framework.workflow.runtime.api.manager.WorkflowManager;
 import io.axoniq.framework.workflow.runtime.execution.AbstractWorkflowContext;
 import io.axoniq.framework.workflow.runtime.execution.EventSourcedWorkflowState;
-import io.axoniq.framework.workflow.runtime.execution.SimpleWorkflowConfigurationRegistry;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowConfigurationRegistry;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowEngine;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowExecutionRepository;
@@ -88,12 +87,10 @@ class WorkflowConfigurerModuleComponentIsolationTest {
                                                                    "start")))
                                                            .notCustomized());
 
-        // 2. Local module with history and an explicit registry override
-        WorkflowConfigurationRegistry<?> localRegistryWithHistory = new SimpleWorkflowConfigurationRegistry();
+        // 2. Local module with history
         MutableWorkflowHistoryRepository localHistoryRepository = new InMemoryWorkflowHistoryRepository();
 
         var localWithHistoryModule = WorkflowModule.configure("local-with-history-module", TestContext.class)
-                                                   .configurationRegistry(cfg -> localRegistryWithHistory)
                                                    .withHistory(cfg -> new WorkflowHistoryProjector(
                                                            localHistoryRepository
                                                    ))
@@ -105,11 +102,8 @@ class WorkflowConfigurerModuleComponentIsolationTest {
                                                                              "start")))
                                                                      .notCustomized());
 
-        // 3. Local module without history, also with an explicit registry override
-        WorkflowConfigurationRegistry<?> localRegistryWithoutHistory = new SimpleWorkflowConfigurationRegistry();
-
+        // 3. Local module without history
         var localWithoutHistoryModule = WorkflowModule.configure("local-without-history-module", TestContext.class)
-                                                      .configurationRegistry(cfg -> localRegistryWithoutHistory)
                                                       .withoutHistory()
                                                       .contextFactory(c -> TestContext::new)
                                                       .definition(d -> d.declarative(c -> (ctx) -> {
@@ -140,9 +134,8 @@ class WorkflowConfigurerModuleComponentIsolationTest {
         var withoutHistoryRepository = repositories.get("WorkflowExecutionRepository[local-without-history-module]");
 
         assertThat(globalRegistry).isNotNull();
-        assertThat(withHistoryRegistry).isSameAs(localRegistryWithHistory);
-        assertThat(withoutHistoryRegistry).isSameAs(localRegistryWithoutHistory);
-        // The execution repository is not user-configurable, so every module registers its own default.
+        assertThat(withHistoryRegistry).isNotNull();
+        assertThat(withoutHistoryRegistry).isNotNull();
         assertThat(globalRepository).isNotNull();
         assertThat(withHistoryRepository).isNotNull();
         assertThat(withoutHistoryRepository).isNotNull();
