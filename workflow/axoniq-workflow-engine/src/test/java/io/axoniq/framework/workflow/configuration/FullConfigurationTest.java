@@ -77,7 +77,6 @@ class FullConfigurationTest {
         WorkflowExecutionRepository customRepository = new InMemoryWorkflowExecutionRepository();
 
         var module = WorkflowModule.configure("custom-module", TestContext.class)
-                                   .withoutHistory()
                                    .definition(d -> d
                                            .declarative(c -> (ctx) -> {
                                            })
@@ -85,6 +84,7 @@ class FullConfigurationTest {
                                            .on(c -> EventConditions.fromQualifiedName(new QualifiedName("start")))
                                            .notCustomized()
                                    )
+                                   .withoutHistory()
                                    .contextFactory(c -> TestContext::new)
                                    .configurationRegistry(cfg -> customRegistry)
                                    .executionRepository(cfg -> customRepository);

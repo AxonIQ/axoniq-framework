@@ -344,8 +344,8 @@ class WorkflowReplayPreparedStateTest {
                               .registerComponent(TokenStore.class, cfg -> processingTokenStore)
                               .registerModule(
                                       WorkflowModule.configure(MODULE_NAME, SimpleWorkflowContext.class)
-                                                    .withHistory(cfg -> historyRepository)
                                                     .definition(d -> d.autodetected(c -> workflow))
+                                                    .withHistory(cfg -> historyRepository)
                               ));
 
             return new WorkflowTestApp(configurer.start());

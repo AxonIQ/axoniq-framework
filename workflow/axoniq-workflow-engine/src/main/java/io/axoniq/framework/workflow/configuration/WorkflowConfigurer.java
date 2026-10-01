@@ -68,11 +68,8 @@ import static java.util.Objects.requireNonNull;
  * {@link io.axoniq.framework.workflow.runtime.execution.WorkflowCancellationService},
  * {@link io.axoniq.framework.workflow.history.inmemory.MutableWorkflowHistoryRepository}, and
  * {@link io.axoniq.framework.workflow.runtime.api.manager.WorkflowManager} is, by contrast, <em>not</em> among these
- * app-wide defaults: each {@link WorkflowModule} registers its own instance of these, named after itself, so several
- * {@code WorkflowModule}s in one application never share - or collide over - any of them. The default
- * {@code MutableWorkflowHistoryRepository} is an
- * {@link io.axoniq.framework.workflow.history.inmemory.InMemoryWorkflowHistoryRepository}; replace it per module
- * through {@link WorkflowModule.HistoryPhase#withHistory(org.axonframework.common.configuration.ComponentBuilder)}.
+ * app-wide defaults. Each {@link WorkflowModule} registers its own instance of these, named after itself, so several
+ * {@code WorkflowModules} in one application never share any of them.
  * <p>
  * To replace or decorate any of the remaining app-wide defaults above, use their respective type as the identifier.
  *

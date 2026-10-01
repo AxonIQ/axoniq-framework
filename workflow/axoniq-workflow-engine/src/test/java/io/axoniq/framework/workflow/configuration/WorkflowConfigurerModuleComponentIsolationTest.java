@@ -94,13 +94,13 @@ class WorkflowConfigurerModuleComponentIsolationTest {
         MutableWorkflowHistoryRepository localHistoryRepository = new InMemoryWorkflowHistoryRepository();
 
         var localWithHistoryModule = WorkflowModule.configure("local-with-history-module", TestContext.class)
-                                                   .withHistory(cfg -> localHistoryRepository)
                                                    .definition(d -> d.declarative(c -> (ctx) -> {
                                                                      })
                                                                      .workflowName("wf-local-history")
                                                                      .on(c -> EventConditions.fromQualifiedName(new QualifiedName(
                                                                              "start")))
                                                                      .notCustomized())
+                                                   .withHistory(cfg -> localHistoryRepository)
                                                    .contextFactory(c -> TestContext::new)
                                                    .configurationRegistry(cfg -> localRegistryWithHistory)
                                                    .executionRepository(cfg -> localRepositoryWithHistory);
@@ -110,13 +110,13 @@ class WorkflowConfigurerModuleComponentIsolationTest {
         WorkflowExecutionRepository localRepositoryWithoutHistory = new InMemoryWorkflowExecutionRepository();
 
         var localWithoutHistoryModule = WorkflowModule.configure("local-without-history-module", TestContext.class)
-                                                      .withoutHistory()
                                                       .definition(d -> d.declarative(c -> (ctx) -> {
                                                                         })
                                                                         .workflowName("wf-local-no-history")
                                                                         .on(c -> EventConditions.fromQualifiedName(new QualifiedName(
                                                                                 "start")))
                                                                         .notCustomized())
+                                                      .withoutHistory()
                                                       .contextFactory(c -> TestContext::new)
                                                       .configurationRegistry(cfg -> localRegistryWithoutHistory)
                                                       .executionRepository(cfg -> localRepositoryWithoutHistory);

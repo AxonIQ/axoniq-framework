@@ -82,7 +82,6 @@ class SimpleWorkflowModule<C extends WorkflowContext>
         extends BaseModule<SimpleWorkflowModule<C>>
         implements WorkflowModule<C>,
         WorkflowModule.OptionalPhase<C>,
-        WorkflowModule.HistoryPhase<C>,
         WorkflowModule.WorkflowDefinitionPhase<C>,
         WorkflowModule.WorkflowDefinitionPhase.DetectionPhase<C>,
         WorkflowModule.WorkflowDefinitionPhase.FinalizedPhase<C> {
@@ -126,31 +125,6 @@ class SimpleWorkflowModule<C extends WorkflowContext>
     SimpleWorkflowModule(String name, Class<C> workflowContextType) {
         super(name);
         this.contextType = requireNonNull(workflowContextType, "Workflow context type must not be null");
-    }
-
-    @Override
-    public WorkflowDefinitionPhase<C> withHistory(
-            ComponentBuilder<MutableWorkflowHistoryRepository> historyRepository
-    ) {
-        this.historyRepository = requireNonNull(historyRepository, "Workflow history repository must not be null");
-        this.useHistory = true;
-        return this;
-    }
-
-    @Override
-    public WorkflowDefinitionPhase<C> withoutHistory() {
-        this.useHistory = false;
-        return this;
-    }
-
-    @Override
-    public HistoryPhase<C> historyProcessorConfiguration(
-            Function<PooledStreamingEventProcessorConfiguration, PooledStreamingEventProcessorConfiguration> historyProcessorConfiguration
-    ) {
-        this.historyConfigCustomizer = requireNonNull(
-                historyProcessorConfiguration, "History processor configuration function must not be null"
-        );
-        return this;
     }
 
     @Override
@@ -209,6 +183,31 @@ class SimpleWorkflowModule<C extends WorkflowContext>
     ) {
         this.engineConfigCustomizer =
                 requireNonNull(processorConfiguration, "Processor configuration function must not be null.");
+        return this;
+    }
+
+    @Override
+    public OptionalPhase<C> withHistory(
+            ComponentBuilder<MutableWorkflowHistoryRepository> historyRepository
+    ) {
+        this.historyRepository = requireNonNull(historyRepository, "Workflow history repository must not be null");
+        this.useHistory = true;
+        return this;
+    }
+
+    @Override
+    public OptionalPhase<C> withoutHistory() {
+        this.useHistory = false;
+        return this;
+    }
+
+    @Override
+    public OptionalPhase<C> historyProcessorConfiguration(
+            Function<PooledStreamingEventProcessorConfiguration, PooledStreamingEventProcessorConfiguration> historyProcessorConfiguration
+    ) {
+        this.historyConfigCustomizer = requireNonNull(
+                historyProcessorConfiguration, "History processor configuration function must not be null"
+        );
         return this;
     }
 
