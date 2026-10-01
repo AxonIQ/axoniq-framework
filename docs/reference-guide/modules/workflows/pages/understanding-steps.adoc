@@ -350,7 +350,7 @@ A blocking `awaitExecute` or `awaitEvent` in the workflow body throws the `StepC
 
 The event name follows the step's `EventNameCustomizer`.
 If the step was started with a custom namespace or base name, the CANCELLED event uses the same customization.
-See <<_step_level_customizer,Step-level customizer>> for how to control event naming, including the CANCELLED suffix.
+See <<step-level-customizer,Step-level customizer>> for how to control event naming, including the CANCELLED suffix.
 
 [TIP]
 ====
@@ -539,6 +539,7 @@ With this configuration, all steps produce events like `io.myapp.orders.ReserveS
 
 For the full declarative configuration API—workflow modules, start conditions, ID providers, and more—see xref:configuration.adoc[Configuration].
 
+[[step-level-customizer]]
 === Step-level customizer
 
 Override the customizer on a specific step when you need different naming:

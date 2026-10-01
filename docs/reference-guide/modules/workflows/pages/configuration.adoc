@@ -235,13 +235,15 @@ The history projector runs on a second processor named `WorkflowHistoryProjector
 Each workflow instance belongs to one segment of the engine processor, chosen by the hash of its workflow id.
 Subscribing processors, including Axon Server persistent streams, cannot back workflows.
 
-**Token store.**
+=== Token store
+
 The processor claims its segments in the unnamed `TokenStore` component of your application.
 Register a durable store, for example `JpaTokenStore`, as an unnamed component.
 Without one, the engine falls back to an in-memory token store and logs a warning.
 Claims then stay inside the process, so run a single node only.
 
-**Processor settings.**
+=== Processor settings
+
 `WorkflowModule.configure(...)` accepts `processorConfiguration(...)` for the engine processor and `historyProcessorConfiguration(...)` for the history processor.
 Both take a function that receives and returns a `PooledStreamingEventProcessorConfiguration`.
 Only the initial segment count is applied to a new token store. To change it later, split or merge the stored tokens.
@@ -255,7 +257,8 @@ WorkflowModule
     .definition(d -> d /* ... */);
 ----
 
-**Failover.**
+=== Failover
+
 When a node stops, another node claims its segments and resumes the unfinished workflow instances.
 Every event an instance appends carries an append condition on its workflow id.
 A node that lost its claim without noticing has its append rejected, logs a warning, and stops that instance.

@@ -244,8 +244,12 @@ If you prefer Kotlin, `WorkflowKontext` is the workflow context instance and `Ko
 `Kontext` offers the same kind of concise defaults as the Java DSL.
 The Kotlin DSL needs the `axoniq-workflow-dsl-kotlin` dependency.
 
+++++
+<!-- vale AxonIQ.Names = NO -->
+++++
+
 [source,kotlin]
-.`src/main/kotlin/io/axoniq/example/order/OrderFulfillmentWorkflow.kt`
+.src/main/kotlin/io/axoniq/example/order/OrderFulfillmentWorkflow.kt
 ----
 class OrderFulfillmentWorkflow {
 
@@ -261,6 +265,10 @@ class OrderFulfillmentWorkflow {
     }
 }
 ----
+
+++++
+<!-- vale AxonIQ.Names = YES -->
+++++
 
 Under the hood, `Kontext` builds the same DSL `ExecuteStepDefinition` and `WaitForStepDefinition` objects exposed by
 `WorkflowContext` through `WorkflowKontext`.
