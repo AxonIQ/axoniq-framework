@@ -21,6 +21,7 @@ package io.axoniq.framework.springcloud.transport;
 
 import io.axoniq.framework.springcloud.util.RecordingQueryHandler;
 import org.axonframework.messaging.core.MessageType;
+import org.awaitility.Awaitility;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.*;
 
@@ -28,12 +29,10 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -69,11 +68,12 @@ class SpringCloudQueryControllerTest {
     }
 
     private SpringCloudQueryController controller(Duration keepAliveInterval, Executor keepAliveExecutor) {
-        return new SpringCloudQueryController(invoker,
-                                              Duration.ofSeconds(30),
-                                              keepAliveInterval,
-                                              scheduler,
-                                              keepAliveExecutor);
+        return new SpringCloudQueryController(
+                invoker,
+                scheduler,
+                keepAliveExecutor,
+                SpringCloudQueryControllerConfiguration.DEFAULT.keepAliveInterval(keepAliveInterval)
+        );
     }
 
     private static SubscriptionQueryRequest request() {
@@ -93,35 +93,28 @@ class SpringCloudQueryControllerTest {
 
         private final List<Runnable> handed = new CopyOnWriteArrayList<>();
         private final @Nullable ExecutorService delegate;
-        private final CountDownLatch handoffs;
 
-        private RecordingExecutor(@Nullable ExecutorService delegate, int expectedHandoffs) {
+        private RecordingExecutor(@Nullable ExecutorService delegate) {
             this.delegate = delegate;
-            this.handoffs = new CountDownLatch(expectedHandoffs);
         }
 
-        private static RecordingExecutor running(int expectedHandoffs) {
-            return new RecordingExecutor(Executors.newVirtualThreadPerTaskExecutor(), expectedHandoffs);
+        private static RecordingExecutor running() {
+            return new RecordingExecutor(Executors.newVirtualThreadPerTaskExecutor());
         }
 
         /**
          * Records what it is handed and never runs it, leaving every keep-alive perpetually mid-write.
          */
         private static RecordingExecutor holding() {
-            return new RecordingExecutor(null, 1);
+            return new RecordingExecutor(null);
         }
 
         @Override
         public void execute(Runnable command) {
             handed.add(command);
-            handoffs.countDown();
             if (delegate != null) {
                 delegate.execute(command);
             }
-        }
-
-        private boolean awaitHandoffs(Duration timeout) throws InterruptedException {
-            return handoffs.await(timeout.toMillis(), TimeUnit.MILLISECONDS);
         }
 
         private int handedOff() {
@@ -153,51 +146,60 @@ class SpringCloudQueryControllerTest {
         }
 
         @Test
-        void handsTheBeatsThatFollowToTheExecutor() throws InterruptedException {
+        void handsTheBeatsThatFollowToTheExecutor() {
             // given
             invoker.bind(new RecordingQueryHandler());
-            RecordingExecutor executor = RecordingExecutor.running(2);
+            RecordingExecutor executor = RecordingExecutor.running();
             try {
                 // when
                 controller(BEAT_OFTEN, executor).receiveSubscriptionQuery(request());
 
                 // then the scheduler only ever decides a beat is due. Writing one blocks on a subscriber that has
                 // stopped reading, and the scheduler carries every other subscription and query deadline besides
-                assertThat(executor.awaitHandoffs(Duration.ofSeconds(5))).isTrue();
+                Awaitility.await()
+                          .atMost(Duration.ofSeconds(5))
+                          .until(() -> executor.handedOff() >= 2);
             } finally {
                 executor.shutdown();
             }
         }
 
         @Test
-        void skipsABeatWhileThePreviousOneIsStillBeingWritten() throws InterruptedException {
+        void skipsABeatWhileThePreviousOneIsStillBeingWritten() {
             // given an executor that never finishes a keep-alive, as a subscriber that stopped reading leaves one
             invoker.bind(new RecordingQueryHandler());
             RecordingExecutor executor = RecordingExecutor.holding();
 
-            // when several intervals pass
+            // when
             controller(BEAT_OFTEN, executor).receiveSubscriptionQuery(request());
-            assertThat(executor.awaitHandoffs(Duration.ofSeconds(5))).isTrue();
-            Thread.sleep(300);
 
-            // then a stalled subscriber collects one thread rather than one per interval, which is what handing the
-            // write elsewhere gives up of the scheduler's own guarantee that a run never overlaps its predecessor
-            assertThat(executor.handedOff()).isEqualTo(1);
+            // then a stalled subscriber collects one thread rather than one per interval, however many intervals
+            // pass, which is what handing the write elsewhere gives up of the scheduler's own guarantee that a run
+            // never overlaps its predecessor
+            Awaitility.await()
+                      .atMost(Duration.ofSeconds(5))
+                      .until(() -> executor.handedOff() == 1);
+            Awaitility.await()
+                      .during(Duration.ofMillis(300))
+                      .atMost(Duration.ofSeconds(1))
+                      .until(() -> executor.handedOff() == 1);
         }
 
         @Test
-        void stopsBeatingWhenTheFirstKeepAliveCannotBeWritten() throws InterruptedException {
+        void stopsBeatingWhenTheFirstKeepAliveCannotBeWritten() {
             // given no handler bound, so the invoker reports the subscription unhandled and ends the stream before
             // the first keep-alive is attempted
-            RecordingExecutor executor = RecordingExecutor.running(1);
+            RecordingExecutor executor = RecordingExecutor.running();
             try {
                 // when
                 controller(BEAT_OFTEN, executor).receiveSubscriptionQuery(request());
 
                 // then a beat that fails on its very first write has to have something to cancel, or it goes on
                 // writing to a stream nobody reads for as long as the application lives
-                assertThat(executor.awaitHandoffs(Duration.ofMillis(500))).isFalse();
-                assertThat(executor.handedOff()).isZero();
+                Awaitility.await()
+                          .during(Duration.ofMillis(500))
+                          .atMost(Duration.ofSeconds(1))
+                          .until(() -> executor.handedOff() == 0);
             } finally {
                 executor.shutdown();
             }
@@ -215,10 +217,13 @@ class SpringCloudQueryControllerTest {
         }
 
         @Test
-        void rejectsAKeepAliveIntervalThatWouldNeverBeat() {
-            assertThatThrownBy(() -> controller(Duration.ZERO, RecordingExecutor.holding()))
-                    .isInstanceOf(IllegalArgumentException.class)
-                    .hasMessageContaining("must be positive");
+        void rejectsAMissingConfiguration() {
+            assertThatThrownBy(() -> new SpringCloudQueryController(invoker,
+                                                                    scheduler,
+                                                                    RecordingExecutor.holding(),
+                                                                    null))
+                    .isInstanceOf(NullPointerException.class)
+                    .hasMessageContaining("configuration");
         }
     }
 }

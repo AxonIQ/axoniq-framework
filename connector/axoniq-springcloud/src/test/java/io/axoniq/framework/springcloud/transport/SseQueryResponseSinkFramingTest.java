@@ -40,7 +40,6 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -88,10 +87,9 @@ class SseQueryResponseSinkFramingTest {
         invoker = new IncomingQueryInvoker(() -> "node-b", null);
         mockMvc = MockMvcBuilders
                 .standaloneSetup(new SpringCloudQueryController(invoker,
-                                                                Duration.ofSeconds(30),
-                                                                Duration.ofSeconds(20),
                                                                 scheduler,
-                                                                keepAliveExecutor))
+                                                                keepAliveExecutor,
+                                                                SpringCloudQueryControllerConfiguration.DEFAULT))
                 .build();
     }
 

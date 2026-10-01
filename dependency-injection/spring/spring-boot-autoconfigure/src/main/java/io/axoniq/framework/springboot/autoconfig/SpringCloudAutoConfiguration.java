@@ -35,6 +35,7 @@ import io.axoniq.framework.springcloud.transport.RemoteCommandDispatcher;
 import io.axoniq.framework.springcloud.transport.RemoteQueryDispatcher;
 import io.axoniq.framework.springcloud.transport.SpringCloudCommandController;
 import io.axoniq.framework.springcloud.transport.SpringCloudQueryController;
+import io.axoniq.framework.springcloud.transport.SpringCloudQueryControllerConfiguration;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.axonframework.messaging.core.conversion.MessageConverter;
@@ -519,11 +520,14 @@ public class SpringCloudAutoConfiguration {
                 @Qualifier(KEEP_ALIVE_EXECUTOR_BEAN) Executor keepAliveExecutor,
                 SpringCloudProperties properties
         ) {
-            return new SpringCloudQueryController(invoker,
-                                                  properties.getQueryTimeout(),
-                                                  properties.getSubscriptionKeepAliveInterval(),
-                                                  scheduler,
-                                                  keepAliveExecutor);
+            return new SpringCloudQueryController(
+                    invoker,
+                    scheduler,
+                    keepAliveExecutor,
+                    SpringCloudQueryControllerConfiguration.DEFAULT
+                            .queryTimeout(properties.getQueryTimeout())
+                            .keepAliveInterval(properties.getSubscriptionKeepAliveInterval())
+            );
         }
 
         /**

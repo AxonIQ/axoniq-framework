@@ -25,6 +25,7 @@ import io.axoniq.framework.springcloud.transport.HttpRemoteCommandDispatcher;
 import io.axoniq.framework.springcloud.transport.HttpRemoteQueryDispatcher;
 import io.axoniq.framework.springcloud.transport.SpringCloudCommandController;
 import io.axoniq.framework.springcloud.transport.SpringCloudQueryController;
+import io.axoniq.framework.springcloud.transport.SpringCloudQueryControllerConfiguration;
 import org.jspecify.annotations.Nullable;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
@@ -91,9 +92,10 @@ public class SpringCloudProperties {
      * How long a query's response stream may stay open before the container closes it.
      * <p>
      * A query still being answered when this elapses is reported to the member that asked as a failed stream, so this
-     * should exceed the time the slowest query legitimately takes to answer. Defaults to five minutes.
+     * should exceed the time the slowest query legitimately takes to answer. Defaults to
+     * {@link SpringCloudQueryControllerConfiguration#DEFAULT_QUERY_TIMEOUT}.
      */
-    private Duration queryTimeout = Duration.ofMinutes(5);
+    private Duration queryTimeout = SpringCloudQueryControllerConfiguration.DEFAULT_QUERY_TIMEOUT;
 
     /**
      * How long this application waits for the responses to a query it dispatched, before giving up on it.
@@ -121,9 +123,10 @@ public class SpringCloudProperties {
      * A subscription may go a long time without an update, and an idle connection is what a load balancer, proxy or
      * NAT table reclaims. Keeping it comfortably below the idle timeout of whatever sits between members -- sixty
      * seconds, commonly -- is what stops a healthy subscription being cut. Defaults to
-     * {@link SpringCloudQueryController#DEFAULT_KEEP_ALIVE_INTERVAL}.
+     * {@link SpringCloudQueryControllerConfiguration#DEFAULT_KEEP_ALIVE_INTERVAL}.
      */
-    private Duration subscriptionKeepAliveInterval = SpringCloudQueryController.DEFAULT_KEEP_ALIVE_INTERVAL;
+    private Duration subscriptionKeepAliveInterval =
+            SpringCloudQueryControllerConfiguration.DEFAULT_KEEP_ALIVE_INTERVAL;
 
     /**
      * How long a subscription this application opened may hear nothing at all before it is given up on.

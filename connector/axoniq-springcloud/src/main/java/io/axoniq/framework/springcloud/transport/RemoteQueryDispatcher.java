@@ -77,9 +77,6 @@ public interface RemoteQueryDispatcher {
      * Both are things the stream of updates cannot say for itself. It carries updates, and it ends; neither tells the
      * subscriber that the member has registered the subscription, nor whether the end means the subscription is over
      * or merely that this member stopped answering.
-     *
-     * @author Allard Buijze
-     * @since 5.4.0
      */
     interface SubscriptionListener {
 

@@ -29,7 +29,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
-import java.time.Duration;
 import java.util.Objects;
 import java.util.concurrent.Executor;
 import java.util.concurrent.RejectedExecutionException;
@@ -68,14 +67,6 @@ public class SpringCloudQueryController {
     public static final String SUBSCRIPTION_PATH = "/subscription";
 
     /**
-     * How often an idle subscription is written to when no other interval is configured.
-     * <p>
-     * Comfortably inside the sixty seconds a load balancer, proxy or NAT table commonly gives an idle connection, so
-     * that several keep-alives pass before any of them would reclaim it.
-     */
-    public static final Duration DEFAULT_KEEP_ALIVE_INTERVAL = Duration.ofSeconds(20);
-
-    /**
      * The emitter timeout given to a subscription: none. A subscription ends when the subscriber releases it or this
      * member fails it, not when a clock says so.
      */
@@ -84,63 +75,33 @@ public class SpringCloudQueryController {
     private static final Logger logger = LoggerFactory.getLogger(SpringCloudQueryController.class);
 
     private final IncomingQueryInvoker invoker;
-    private final Duration timeout;
-    private final Duration keepAliveInterval;
+    private final SpringCloudQueryControllerConfiguration configuration;
     private final ScheduledExecutorService scheduler;
     private final Executor keepAliveExecutor;
 
     /**
-     * Constructs a {@code SpringCloudQueryController} writing to an idle subscription every
-     * {@link #DEFAULT_KEEP_ALIVE_INTERVAL}.
+     * Constructs a {@code SpringCloudQueryController} handing received queries to the given {@code invoker}.
+     * <p>
+     * The {@code scheduler} only ever decides when an open subscription is due a keep-alive, and never performs the
+     * write, so that a subscriber which has stopped reading cannot block whatever else the scheduler carries. The
+     * writes run on the {@code keepAliveExecutor} instead. Each is a blocking write to one subscriber, so an executor
+     * that can hold as many blocked threads as there are open subscriptions suits it, a virtual-thread-per-task
+     * executor for instance.
      *
      * @param invoker           the component invoking this application's local query handler
-     * @param timeout           how long a response stream may stay open before the container closes it. Does not
-     *                          apply to a subscription query, which lasts as long as the subscriber wants it to.
      * @param scheduler         decides when each open subscription is due a keep-alive
      * @param keepAliveExecutor performs the keep-alive writes
+     * @param configuration     the {@link SpringCloudQueryControllerConfiguration} holding how long a response stream
+     *                          may stay open and how often an idle subscription is written to
      */
     public SpringCloudQueryController(IncomingQueryInvoker invoker,
-                                      Duration timeout,
                                       ScheduledExecutorService scheduler,
-                                      Executor keepAliveExecutor) {
-        this(invoker, timeout, DEFAULT_KEEP_ALIVE_INTERVAL, scheduler, keepAliveExecutor);
-    }
-
-    /**
-     * Constructs a {@code SpringCloudQueryController} handing received queries to the given {@code invoker}.
-     *
-     * @param invoker           the component invoking this application's local query handler
-     * @param timeout           how long a response stream may stay open before the container closes it. A query still
-     *                          being answered when it elapses is reported to the member that asked as a failed
-     *                          stream. Does not apply to a subscription query, which lasts as long as the subscriber
-     *                          wants it to.
-     * @param keepAliveInterval how often an idle subscription is written to, so that neither the subscribing member
-     *                          nor the intermediaries between the two mistake a quiet subscription for a dead one.
-     *                          Must be comfortably below the window subscribing members give a subscription to say
-     *                          something.
-     * @param scheduler         decides when each open subscription is due a keep-alive. Only ever schedules the
-     *                          write, never performs it, so that a subscriber which has stopped reading cannot block
-     *                          whatever else the scheduler carries.
-     * @param keepAliveExecutor performs the keep-alive writes. Each is a blocking write to one subscriber, so an
-     *                          executor that can hold as many blocked threads as there are open subscriptions suits
-     *                          it -- a virtual-thread-per-task executor, for instance.
-     */
-    public SpringCloudQueryController(IncomingQueryInvoker invoker,
-                                      Duration timeout,
-                                      Duration keepAliveInterval,
-                                      ScheduledExecutorService scheduler,
-                                      Executor keepAliveExecutor) {
+                                      Executor keepAliveExecutor,
+                                      SpringCloudQueryControllerConfiguration configuration) {
         this.invoker = Objects.requireNonNull(invoker, "The invoker must not be null.");
-        this.timeout = Objects.requireNonNull(timeout, "The timeout must not be null.");
-        Objects.requireNonNull(keepAliveInterval, "The keepAliveInterval must not be null.");
-        if (keepAliveInterval.isNegative() || keepAliveInterval.isZero()) {
-            throw new IllegalArgumentException(
-                    "The keep-alive interval must be positive, but was [" + keepAliveInterval + "]."
-            );
-        }
-        this.keepAliveInterval = keepAliveInterval;
         this.scheduler = Objects.requireNonNull(scheduler, "The scheduler must not be null.");
         this.keepAliveExecutor = Objects.requireNonNull(keepAliveExecutor, "The keepAliveExecutor must not be null.");
+        this.configuration = Objects.requireNonNull(configuration, "The configuration must not be null.");
     }
 
     /**
@@ -151,7 +112,7 @@ public class SpringCloudQueryController {
      */
     @PostMapping(produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter receiveQuery(@RequestBody QueryDispatchRequest request) {
-        SseEmitter emitter = new SseEmitter(timeout.toMillis());
+        SseEmitter emitter = new SseEmitter(configuration.queryTimeout().toMillis());
         invoker.handle(request, new SseQueryResponseSink(emitter));
         return emitter;
     }
@@ -197,7 +158,7 @@ public class SpringCloudQueryController {
             // Scheduled and registered before the first beat, so that a beat failing straight away has something to
             // cancel. A subscriber already gone by the time it is written to would otherwise leave the beat running
             // against a stream nobody reads until its next turn came round.
-            long intervalMillis = keepAliveInterval.toMillis();
+            long intervalMillis = configuration.keepAliveInterval().toMillis();
             beat = scheduler.scheduleWithFixedDelay(this::submit,
                                                     intervalMillis,
                                                     intervalMillis,
