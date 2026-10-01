@@ -59,6 +59,7 @@ import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -75,8 +76,10 @@ import java.util.concurrent.atomic.AtomicInteger;
  * A subscription query reaches every member advertising its name, not just the one a plain query would route to: an
  * update is emitted on whichever member's state changed, and only reaches subscriptions that member holds a
  * registration for. One of them answers the initial result as well, so a subscriber gets one initial result and the
- * updates of the whole cluster. A member that starts advertising the query while a subscription is active fails that
- * subscription rather than joining it late; see {@link SubscriptionQueryMembersChangedException}.
+ * updates of the whole cluster. The initial result is asked for only once every one of those members has registered
+ * the subscription, so that an update emitted in the meantime reaches the subscriber rather than nobody. A member that
+ * starts advertising the query while a subscription is active fails that subscription rather than joining it late;
+ * see {@link SubscriptionQueryMembersChangedException}.
  *
  * @author Allard Buijze
  * @since 5.4.0
@@ -202,16 +205,16 @@ public class SpringCloudQueryBusConnector implements QueryBusConnector {
         private final QueueMessageStream<QueryResponseMessage> merged;
         private final List<Source> sources = new CopyOnWriteArrayList<>();
         private final AtomicInteger openSources;
-        // Failed alongside the merged updates, so that a subscription whose answering member could not be reached
-        // does not leave the initial result waiting on a stream that will never open.
-        private final CompletableFuture<Void> answeringMemberOpen;
+        // Failed alongside the merged updates, so that a subscription one of whose members could not be reached
+        // does not leave the initial result waiting on an opening that will never come.
+        private final CompletableFuture<Void> everyMemberOpen;
 
         private SubscriptionUpdates(QueryMessage query,
                                     int updateBufferSize,
                                     int memberCount,
-                                    CompletableFuture<Void> answeringMemberOpen) {
+                                    CompletableFuture<Void> everyMemberOpen) {
             this.query = query;
-            this.answeringMemberOpen = answeringMemberOpen;
+            this.everyMemberOpen = everyMemberOpen;
             this.merged = new QueueMessageStream<>(new ArrayBlockingQueue<>(updateBufferSize));
             // Counted up front rather than as members are added: members are subscribed to concurrently, and one
             // completing before the next is added would otherwise look like the last of them.
@@ -302,7 +305,7 @@ public class SpringCloudQueryBusConnector implements QueryBusConnector {
          */
         private void fail(Throwable cause) {
             merged.sealExceptionally(cause);
-            answeringMemberOpen.completeExceptionally(cause);
+            everyMemberOpen.completeExceptionally(cause);
         }
 
         /**
@@ -469,8 +472,8 @@ public class SpringCloudQueryBusConnector implements QueryBusConnector {
             ));
         }
         // Resolved against the members already snapshotted, rather than taken as whatever the registry answers now.
-        // A ring change between the two reads would otherwise name a member no update stream is opened on, leaving
-        // the initial result waiting on an opening that never comes.
+        // A ring change between the two reads would otherwise name a member no update stream is opened on, asking it
+        // for an initial result while the updates it emits reach nobody.
         Member answering = registry.findQueryDestination(queryName)
                                    .filter(members::contains)
                                    .orElseGet(members::getFirst);
@@ -493,21 +496,24 @@ public class SpringCloudQueryBusConnector implements QueryBusConnector {
                                                                  List<Member> members,
                                                                  Member answering,
                                                                  int updateBufferSize) {
-        // Two activities, in this order. Opening the update streams comes first, and the initial result waits for
-        // the answering member's to be open, so that an update emitted while that result is being produced still has
-        // somewhere to arrive. Only the answering member is waited for: no other member is asked for a result, so
-        // there is nothing its updates could arrive ahead of.
-        CompletableFuture<Void> answeringMemberOpen = new CompletableFuture<>();
+        // Two activities, in this order. Every member's update stream is opened first, and the initial result waits
+        // until all of them are. Not only the answering member's: the initial result reflects state every member
+        // advertising the query changes, as when the segments of one event processor are spread over the members and
+        // all write the read model it reads. An update a member emits before it registered the subscription reaches
+        // nobody, so asking any sooner lets one fall between the initial result and the updates. The streams are
+        // opened concurrently, so this waits for the slowest member rather than for all of them in turn.
+        CompletableFuture<Void> everyMemberOpen = new CompletableFuture<>();
+        AtomicInteger unopened = new AtomicInteger(members.size());
         SubscriptionUpdates updates =
-                new SubscriptionUpdates(query, updateBufferSize, members.size(), answeringMemberOpen);
+                new SubscriptionUpdates(query, updateBufferSize, members.size(), everyMemberOpen);
         for (Member member : members) {
-            // Only the answering member's opening is waited on; every member's completion ends the subscription.
-            boolean answersInitialResult = member.equals(answering);
+            AtomicBoolean opened = new AtomicBoolean();
             SubscriptionListener listener = new SubscriptionListener() {
                 @Override
                 public void opened() {
-                    if (answersInitialResult) {
-                        answeringMemberOpen.complete(null);
+                    // Counted once per member, so that one member reporting twice cannot stand in for another.
+                    if (opened.compareAndSet(false, true) && unopened.decrementAndGet() == 0) {
+                        everyMemberOpen.complete(null);
                     }
                 }
 
@@ -519,7 +525,7 @@ public class SpringCloudQueryBusConnector implements QueryBusConnector {
             updates.add(member, updateStreamOn(member, query, updateBufferSize, listener));
         }
         MessageStream<QueryResponseMessage> initialResult = DelayedMessageStream.create(
-                answeringMemberOpen.thenApply(open -> initialResultFrom(answering, query))
+                everyMemberOpen.thenApply(open -> initialResultFrom(answering, query))
         );
 
         Registration watch = watchMembership(query, queryName, members, updates);

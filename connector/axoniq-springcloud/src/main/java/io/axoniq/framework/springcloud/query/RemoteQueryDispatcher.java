@@ -55,9 +55,10 @@ public interface RemoteQueryDispatcher {
      * failure. Closing the stream releases the subscription.
      * <p>
      * Carries updates alone. The initial result of a subscription query is a query like any other, asked for with
-     * {@link #dispatch(Member, QueryMessage)} once this member's update stream is open, so that an update emitted
-     * while that result is being produced still has somewhere to arrive. {@code onOpen} is what says when that is:
-     * it runs once the member has registered the subscription, and so before any update it emits.
+     * {@link #dispatch(Member, QueryMessage)} once the update stream of every member advertising the query is open,
+     * so that an update emitted while that result is being produced still has somewhere to arrive.
+     * {@link SubscriptionListener#opened()} is what says when that is for the given {@code member}: it runs once the
+     * member has registered the subscription, and so before any update it emits.
      *
      * @param member           the member to open the update stream on
      * @param query            the query to subscribe with
