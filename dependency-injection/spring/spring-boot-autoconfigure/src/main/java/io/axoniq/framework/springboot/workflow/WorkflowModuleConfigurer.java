@@ -86,24 +86,24 @@ public class WorkflowModuleConfigurer implements ConfigurationEnhancer, Applicat
         if (workflowBeanNames.isEmpty()) {
             return;
         }
-        var withFactory = WorkflowModule.configure(moduleName, workflowContextType)
-                                        .processorConfiguration(processorConfiguration -> applyProperties(
-                                                workflowProperties, processorConfiguration
-                                        ))
-                                        .historyProcessorConfiguration(processorConfiguration -> applyHistoryProperties(
-                                                workflowProperties, processorConfiguration
-                                        ))
-                                        .contextFactory(configuration -> (WorkflowContextFactory<C>) configuration
-                                                .getOptionalComponent(WorkflowContextFactory.class,
-                                                                      workflowContextType.getName())
-                                                .orElseThrow(() -> new BadWorkflowConfigurationException(String.format(
-                                                        "Detected workflow definition in '%s' without a WorkflowContextFactory for the workflow type %s.",
-                                                        String.join(",", workflowBeanNames),
-                                                        workflowContextType.getSimpleName()
-                                                ))));
+        var afterHistory = WorkflowModule.configure(moduleName, workflowContextType)
+                                         .processorConfiguration(processorConfiguration -> applyProperties(
+                                                 workflowProperties, processorConfiguration
+                                         ))
+                                         .historyProcessorConfiguration(processorConfiguration -> applyHistoryProperties(
+                                                 workflowProperties, processorConfiguration
+                                         ));
         var firstBean = workflowBeanNames.getFirst();
         ComponentBuilder<Object> firstBuilder = c -> applicationContext.getBean(firstBean);
-        WorkflowModule.OptionalPhase<C> module = withFactory.definition(d -> d.autodetected(firstBuilder));
+        WorkflowModule.OptionalPhase<C> module =
+                afterHistory.definition(d -> d.autodetected(firstBuilder))
+                            .contextFactory(configuration -> (WorkflowContextFactory<C>) configuration
+                                    .getOptionalComponent(WorkflowContextFactory.class, workflowContextType.getName())
+                                    .orElseThrow(() -> new BadWorkflowConfigurationException(String.format(
+                                            "Detected workflow definition in '%s' without a WorkflowContextFactory for the workflow type %s.",
+                                            String.join(",", workflowBeanNames),
+                                            workflowContextType.getSimpleName()
+                                    ))));
         for (var beanName : workflowBeanNames.subList(1, workflowBeanNames.size())) {
             ComponentBuilder<Object> builder = c -> applicationContext.getBean(beanName);
             module = module.definition(d -> d.autodetected(builder));

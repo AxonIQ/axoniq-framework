@@ -56,14 +56,14 @@ abstract class AbstractEventSourcedEntityRepositoryTestBase {
 
     protected AxonConfiguration configuration(String moduleName) {
         var module = WorkflowModule.defaults(moduleName, TestContext.class)
-                                   .contextFactory(c -> TestContext::new)
                                    .definition(d -> d
                                            .declarative(c -> ctx -> {
                                            })
                                            .workflowName(moduleName)
                                            .on(c -> EventConditions.fromQualifiedName(new QualifiedName("start")))
                                            .notCustomized()
-                                   );
+                                   )
+                                   .contextFactory(c -> TestContext::new);
 
         var configurer = WorkflowConfigurer.create();
         configurer.componentRegistry(cr -> cr.registerModule(module));

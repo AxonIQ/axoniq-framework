@@ -185,14 +185,14 @@ class ClaimRestoreSelfFenceTest extends AbstractEventSourcedEntityRepositoryTest
 
     private AxonConfiguration configurationWith(PreviousOwnerWritingStorageEngine storageEngine) {
         var module = WorkflowModule.defaults(MODULE, TestContext.class)
-                                   .contextFactory(c -> TestContext::new)
                                    .definition(d -> d
                                            .declarative(c -> ctx -> {
                                            })
                                            .workflowName(MODULE)
                                            .on(c -> EventConditions.fromQualifiedName(new QualifiedName("start")))
                                            .notCustomized()
-                                   );
+                                   )
+                                   .contextFactory(c -> TestContext::new);
         var configurer = WorkflowConfigurer.create();
         configurer.componentRegistry(cr -> cr
                 .registerComponent(EventStorageEngine.class, cfg -> storageEngine)

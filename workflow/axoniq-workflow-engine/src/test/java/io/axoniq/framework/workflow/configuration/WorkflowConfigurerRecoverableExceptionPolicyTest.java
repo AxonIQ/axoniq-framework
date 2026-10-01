@@ -58,7 +58,6 @@ class WorkflowConfigurerRecoverableExceptionPolicyTest {
 
     private static WorkflowModule declarativeModule(boolean customizePolicy) {
         return WorkflowModule.defaults("declarative-module", TestContext.class)
-                             .contextFactory(c -> TestContext::new)
                              .definition(d -> d
                                      .declarative(c -> ctx -> {
                                      })
@@ -67,13 +66,14 @@ class WorkflowConfigurerRecoverableExceptionPolicyTest {
                                      .customized((c, w) -> customizePolicy
                                              ? w.recoverableExceptionPolicy(WORKFLOW_POLICY)
                                              : w)
-                             );
+                             )
+                             .contextFactory(c -> TestContext::new);
     }
 
     private static WorkflowModule annotatedModule() {
         return WorkflowModule.defaults("annotated-module", TestContext.class)
-                             .contextFactory(c -> TestContext::new)
-                             .definition(d -> d.autodetected(c -> new AnnotatedTestWorkflow()));
+                             .definition(d -> d.autodetected(c -> new AnnotatedTestWorkflow()))
+                             .contextFactory(c -> TestContext::new);
     }
 
     public static class AnnotatedTestWorkflow {

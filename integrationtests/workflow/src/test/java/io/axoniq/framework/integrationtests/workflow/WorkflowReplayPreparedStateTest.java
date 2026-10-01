@@ -345,7 +345,6 @@ class WorkflowReplayPreparedStateTest {
                               .registerModule(
                                       WorkflowModule.configure(MODULE_NAME, SimpleWorkflowContext.class)
                                                     .withHistory(cfg -> historyRepository)
-                                                    .contextFactory(c -> new SimpleWorkflowContextFactory())
                                                     .definition(d -> d.autodetected(c -> workflow))
                               ));
 

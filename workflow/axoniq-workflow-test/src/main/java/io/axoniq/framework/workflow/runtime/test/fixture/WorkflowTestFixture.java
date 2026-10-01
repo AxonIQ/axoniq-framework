@@ -72,8 +72,8 @@ public interface WorkflowTestFixture<ACTION extends GivenWhen<ACTION, ASSERT>, A
             ComponentBuilder<Object> workflowInstanceBuilder
     ) {
         return WorkflowModule.defaults(WorkflowTestServices.DEFAULT_MODULE_NAME, contextType)
-                             .contextFactory(workflowContextFactoryBuilder)
-                             .definition(d -> d.autodetected(workflowInstanceBuilder));
+                             .definition(d -> d.autodetected(workflowInstanceBuilder))
+                             .contextFactory(workflowContextFactoryBuilder);
     }
 
     /**

@@ -84,7 +84,6 @@ class SimpleWorkflowModule<C extends WorkflowContext>
         WorkflowModule.OptionalPhase<C>,
         WorkflowModule.WorkflowEngineEventProcessorPhase<C>,
         WorkflowModule.HistoryPhase<C>,
-        WorkflowModule.WorkflowContextFactoryPhase<C>,
         WorkflowModule.WorkflowDefinitionPhase<C>,
         WorkflowModule.WorkflowDefinitionPhase.DetectionPhase<C>,
         WorkflowModule.WorkflowDefinitionPhase.FinalizedPhase<C> {
@@ -106,15 +105,15 @@ class SimpleWorkflowModule<C extends WorkflowContext>
 
     private Function<PooledStreamingEventProcessorConfiguration, PooledStreamingEventProcessorConfiguration> engineConfigCustomizer =
             psepConfig -> psepConfig;
-    private ComponentBuilder<WorkflowExecutionRepository> executionRepository =
-            config -> new InMemoryWorkflowExecutionRepository();
-    private ComponentBuilder<WorkflowConfigurationRegistry<?>> configurationRegistry =
-            config -> new SimpleWorkflowConfigurationRegistry();
     private boolean useHistory = true;
     private ComponentBuilder<MutableWorkflowHistoryRepository> historyRepository =
             config -> new InMemoryWorkflowHistoryRepository();
     private Function<PooledStreamingEventProcessorConfiguration, PooledStreamingEventProcessorConfiguration> historyConfigCustomizer =
             psepConfig -> psepConfig;
+    private ComponentBuilder<WorkflowExecutionRepository> executionRepository =
+            config -> new InMemoryWorkflowExecutionRepository();
+    private ComponentBuilder<WorkflowConfigurationRegistry<?>> configurationRegistry =
+            config -> new SimpleWorkflowConfigurationRegistry();
     @Nullable
     private ComponentBuilder<WorkflowContextFactory<C>> contextFactory;
 
@@ -140,7 +139,7 @@ class SimpleWorkflowModule<C extends WorkflowContext>
     }
 
     @Override
-    public WorkflowContextFactoryPhase<C> withHistory(
+    public WorkflowDefinitionPhase<C> withHistory(
             ComponentBuilder<MutableWorkflowHistoryRepository> historyRepository
     ) {
         this.historyRepository = requireNonNull(historyRepository, "Workflow history repository must not be null");
@@ -149,7 +148,7 @@ class SimpleWorkflowModule<C extends WorkflowContext>
     }
 
     @Override
-    public WorkflowContextFactoryPhase<C> withoutHistory() {
+    public WorkflowDefinitionPhase<C> withoutHistory() {
         this.useHistory = false;
         return this;
     }
@@ -165,19 +164,31 @@ class SimpleWorkflowModule<C extends WorkflowContext>
     }
 
     @Override
-    public WorkflowDefinitionPhase<C> contextFactory(ComponentBuilder<WorkflowContextFactory<C>> contextFactory) {
-        this.contextFactory = requireNonNull(contextFactory, "Workflow context factory must no be null");
-        return this;
-    }
-
-    @Override
     public NamingPhase<C> declarative(ComponentBuilder<WorkflowDefinition<C>> componentBuilder) {
-        return new DeclarativeWorkflowBuilder<>(this.contextType, this.contextFactory, this, componentBuilder);
+        return new DeclarativeWorkflowBuilder<>(this.contextType, this::resolveContextFactory, this, componentBuilder);
     }
 
     @Override
     public FinalizedPhase<C> autodetected(ComponentBuilder<Object> componentBuilder) {
-        return new AutoDetectingWorkflowBuilder<>(this.contextType, this.contextFactory, this, componentBuilder);
+        return new AutoDetectingWorkflowBuilder<>(
+                this.contextType, this::resolveContextFactory, this, componentBuilder
+        );
+    }
+
+    @SuppressWarnings("unchecked")
+    private WorkflowContextFactory<C> resolveContextFactory(Configuration configuration) {
+        return contextFactory != null
+                ? contextFactory.build(configuration)
+                : (WorkflowContextFactory<C>) configuration.getOptionalComponent(
+                                                                   WorkflowContextFactory.class,
+                                                                   contextType.getName()
+                                                           )
+                                                           .orElseThrow(() -> new AxonConfigurationException(
+                                                                   "The workflow module [" + name
+                                                                           + "] requires a WorkflowContextFactory. Provide one through "
+                                                                           + "WorkflowModule.OptionalPhase#contextFactory(ComponentBuilder), or use a workflow "
+                                                                           + "context type a DSL module registers one for automatically."
+                                                           ));
     }
 
     /**
@@ -215,6 +226,12 @@ class SimpleWorkflowModule<C extends WorkflowContext>
     public OptionalPhase<C> executionRepository(ComponentBuilder<WorkflowExecutionRepository> executionRepository) {
         this.executionRepository =
                 requireNonNull(executionRepository, "Workflow execution repository must not be null");
+        return this;
+    }
+
+    @Override
+    public OptionalPhase<C> contextFactory(ComponentBuilder<WorkflowContextFactory<C>> contextFactory) {
+        this.contextFactory = requireNonNull(contextFactory, "Workflow context factory must not be null");
         return this;
     }
 
@@ -305,7 +322,9 @@ class SimpleWorkflowModule<C extends WorkflowContext>
     private ComponentDefinition<WorkflowManager> workflowManager() {
         return ComponentDefinition.ofTypeAndName(WorkflowManager.class, managerName())
                                   .withBuilder(c -> new SimpleWorkflowManager(
-                                          c.getComponent(MutableWorkflowHistoryRepository.class, historyRepositoryName()),
+                                          c.getComponent(
+                                                  MutableWorkflowHistoryRepository.class, historyRepositoryName()
+                                          ),
                                           c.getComponent(WorkflowExecutionRepository.class, executionRepositoryName()),
                                           c.getComponent(WorkflowCancellationService.class, cancellationServiceName()),
                                           c.getComponent(WorkflowStore.class),

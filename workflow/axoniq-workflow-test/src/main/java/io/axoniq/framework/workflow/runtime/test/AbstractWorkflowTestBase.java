@@ -69,8 +69,8 @@ public abstract class AbstractWorkflowTestBase<T extends WorkflowContext> {
     public AbstractWorkflowTestBase(Class<T> dslType,
                                     ComponentBuilder<WorkflowContextFactory<T>> contextFactoryBuilder) {
         var module = WorkflowModule.defaults(getClass().getSimpleName(), dslType)
-                                   .contextFactory(contextFactoryBuilder)
-                                   .definition(getDeclaredDefinition());
+                                   .definition(getDeclaredDefinition())
+                                   .contextFactory(contextFactoryBuilder);
         for (var extra : getAdditionalDefinitions()) {
             module = module.definition(extra);
         }

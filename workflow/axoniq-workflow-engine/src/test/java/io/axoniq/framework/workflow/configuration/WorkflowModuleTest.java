@@ -121,9 +121,9 @@ class WorkflowModuleTest {
         WorkflowDefinition<TestWorkflowContext> definition = mock(WorkflowDefinition.class);
 
         var myModule = WorkflowModule.defaults(UUID.randomUUID().toString(), TestWorkflowContext.class)
-                                     .contextFactory(c -> contextFactory)
                                      .definition(d -> d.declarative(c -> definition).workflowName("name")
-                                                       .on(c -> startCondition).notCustomized());
+                                                       .on(c -> startCondition).notCustomized())
+                                     .contextFactory(c -> contextFactory);
         assertThat(myModule).isNotNull();
         assertThat(myModule).isInstanceOf(SimpleWorkflowModule.class);
         assertThat(myModule.contextType()).isEqualTo(TestWorkflowContext.class);

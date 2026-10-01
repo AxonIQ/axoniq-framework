@@ -178,13 +178,13 @@ class WorkflowConfigurerWakeCheckpointTest {
                                     Consumer<TestContext> body) {
         var module = WorkflowModule.configure(MODULE, TestContext.class)
                                    .processorConfiguration(pc -> pc.initialSegmentCount(1))
-                                   .contextFactory(c -> TestContext::new)
                                    .definition(d -> d
                                            .declarative(c -> body::accept)
                                            .workflowName(MODULE)
                                            .on(c -> EventConditions.fromQualifiedName(new QualifiedName("start")))
                                            .notCustomized()
-                                   );
+                                   )
+                                   .contextFactory(c -> TestContext::new);
         var configurer = WorkflowConfigurer.create();
         configurer.componentRegistry(cr -> cr
                 .registerComponent(EventStorageEngine.class, cfg -> storageEngine)

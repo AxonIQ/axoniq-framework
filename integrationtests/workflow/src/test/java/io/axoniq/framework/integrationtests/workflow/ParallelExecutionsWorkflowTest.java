@@ -62,8 +62,8 @@ class ParallelExecutionsWorkflowTest extends AbstractWorkflowIntegrationTestBase
         return c -> super.configure().apply(c).componentRegistry(
                 r -> r.registerModule(
                         WorkflowModule.defaults("another", BaseWorkflowContext.class)
-                                      .contextFactory(conf -> new BaseWorkflowContextFactory())
                                       .definition(d -> d.autodetected(c0 -> new CustomerNotificationWorkflow()))
+                                      .contextFactory(conf -> new BaseWorkflowContextFactory())
                 )
         );
     }

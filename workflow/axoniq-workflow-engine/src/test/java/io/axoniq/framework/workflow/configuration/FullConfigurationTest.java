@@ -48,14 +48,14 @@ class FullConfigurationTest {
         WorkflowConfigurer configurer = WorkflowConfigurer.create();
 
         var module = WorkflowModule.defaults("defaults-module", TestContext.class)
-                                   .contextFactory(c -> TestContext::new)
                                    .definition(d -> d
                                            .declarative(c -> (ctx) -> {
                                            })
                                            .workflowName("wf-defaults")
                                            .on(c -> EventConditions.fromQualifiedName(new QualifiedName("start")))
                                            .notCustomized()
-                                   );
+                                   )
+                                   .contextFactory(c -> TestContext::new);
 
         configurer.componentRegistry(cr -> cr.registerModule(module));
         AxonConfiguration configuration = configurer.build();
@@ -78,7 +78,6 @@ class FullConfigurationTest {
 
         var module = WorkflowModule.configure("custom-module", TestContext.class)
                                    .withoutHistory()
-                                   .contextFactory(c -> TestContext::new)
                                    .definition(d -> d
                                            .declarative(c -> (ctx) -> {
                                            })
@@ -86,6 +85,7 @@ class FullConfigurationTest {
                                            .on(c -> EventConditions.fromQualifiedName(new QualifiedName("start")))
                                            .notCustomized()
                                    )
+                                   .contextFactory(c -> TestContext::new)
                                    .configurationRegistry(cfg -> customRegistry)
                                    .executionRepository(cfg -> customRepository);
 
