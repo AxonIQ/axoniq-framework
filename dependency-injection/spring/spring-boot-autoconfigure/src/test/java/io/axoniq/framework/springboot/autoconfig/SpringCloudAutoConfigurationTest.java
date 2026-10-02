@@ -21,22 +21,20 @@ package io.axoniq.framework.springboot.autoconfig;
 
 import io.axoniq.framework.messaging.commandhandling.distributed.CommandBusConnector;
 import io.axoniq.framework.springboot.SpringCloudProperties;
-import io.axoniq.framework.springcloud.SpringCloudMemberRegistry;
+import io.axoniq.framework.springcloud.command.IncomingCommandInvoker;
+import io.axoniq.framework.springcloud.command.RemoteCommandDispatcher;
+import io.axoniq.framework.springcloud.command.SpringCloudCommandController;
 import io.axoniq.framework.springcloud.discovery.CapabilityDiscoveryMode;
-import io.axoniq.framework.springcloud.discovery.RestCapabilityDiscoveryMode;
 import io.axoniq.framework.springcloud.discovery.MemberCapabilitiesController;
-import io.axoniq.framework.springcloud.transport.IncomingCommandInvoker;
-import io.axoniq.framework.springcloud.transport.IncomingQueryInvoker;
-import io.axoniq.framework.springcloud.transport.RemoteCommandDispatcher;
-import io.axoniq.framework.springcloud.transport.RemoteQueryDispatcher;
-import io.axoniq.framework.springcloud.transport.SpringCloudCommandController;
-import io.axoniq.framework.springcloud.transport.SpringCloudQueryController;
+import io.axoniq.framework.springcloud.discovery.RestCapabilityDiscoveryMode;
+import io.axoniq.framework.springcloud.query.IncomingQueryInvoker;
+import io.axoniq.framework.springcloud.query.RemoteQueryDispatcher;
+import io.axoniq.framework.springcloud.query.SpringCloudQueryController;
+import io.axoniq.framework.springcloud.shared.SpringCloudMemberRegistry;
 import org.axonframework.conversion.jackson.JacksonConverter;
 import org.axonframework.messaging.core.conversion.DelegatingMessageConverter;
 import org.axonframework.messaging.core.conversion.MessageConverter;
 import org.junit.jupiter.api.*;
-
-import java.time.Duration;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.boot.test.context.runner.ReactiveWebApplicationContextRunner;
@@ -50,6 +48,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.web.client.RestClient;
 
 import java.net.URI;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 

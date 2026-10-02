@@ -23,10 +23,10 @@ import io.axoniq.framework.integrationtests.springcloud.SpringCloudNodes.CreateC
 import io.axoniq.framework.integrationtests.springcloud.SpringCloudNodes.RenameCourse;
 import io.axoniq.framework.integrationtests.springcloud.SpringCloudNodes.FindCourseHandler;
 import io.axoniq.framework.integrationtests.springcloud.SpringCloudNodes.FindCourse;
-import io.axoniq.framework.springcloud.SpringCloudMemberRegistry;
 import io.axoniq.framework.springcloud.discovery.MemberCapabilitiesPayload;
 import io.axoniq.framework.springcloud.discovery.RestCapabilityDiscoveryMode;
 import io.axoniq.framework.springcloud.routing.Member;
+import io.axoniq.framework.springcloud.shared.SpringCloudMemberRegistry;
 import org.axonframework.messaging.commandhandling.gateway.CommandGateway;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
