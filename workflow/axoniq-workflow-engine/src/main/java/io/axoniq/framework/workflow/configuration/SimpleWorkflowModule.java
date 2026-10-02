@@ -471,6 +471,11 @@ class SimpleWorkflowModule<C extends WorkflowContext>
      * Mirrors {@code PooledStreamingEventProcessorsConfigurer}'s own default customization: fills in the ambient,
      * unnamed {@link StreamableEventSource} and {@link TokenStore} the application registered.
      * <p>
+     * Deliberately sets the {@link UnitOfWorkFactory} from the configuration, as the default on the
+     * {@code PooledStreamingEventProcessorConfiguration} does not have access to the overarching {@code Configuration}.
+     * Due to that, the default wouldn't allow the {@link WorkflowEngine} to access configuration components from the
+     * {@link org.axonframework.messaging.core.unitofwork.ProcessingContext} created by said factory.
+     * <p>
      * Runs before the caller's own {@code processorConfiguration}/{@code historyProcessorConfiguration} customization,
      * so a caller can still override either.
      */
@@ -480,6 +485,7 @@ class SimpleWorkflowModule<C extends WorkflowContext>
     ) {
         config.getOptionalComponent(StreamableEventSource.class).ifPresent(psepConfig::eventSource);
         config.getOptionalComponent(TokenStore.class).ifPresent(psepConfig::tokenStore);
+        config.getOptionalComponent(UnitOfWorkFactory.class).ifPresent(psepConfig::unitOfWorkFactory);
         return psepConfig;
     }
 
