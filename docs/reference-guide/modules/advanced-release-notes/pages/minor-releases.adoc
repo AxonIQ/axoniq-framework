@@ -10,7 +10,7 @@ Any patch release made for an Axon project is tailored towards resolving bugs. T
 
 ==== Enhancements
 
-- Manage the protobuf-java version explicitly in the axoniq-framework-bom (link:https://github.com/AxonIQ/axoniq-framework/issues/524[#524], link:https://github.com/AxonIQ/axoniq-framework/pull/561[PR #561], by @hatzlj)
+- Manage the protobuf-java version explicitly in the Axoniq Framework BOM (link:https://github.com/AxonIQ/axoniq-framework/issues/524[#524], link:https://github.com/AxonIQ/axoniq-framework/pull/561[PR #561], by @hatzlj)
 - Always run flatten-maven-plugin, even on a build cache hit (link:https://github.com/AxonIQ/axoniq-framework/pull/507[PR #507], by @CodeDrivenMitch)
 
 ==== Bug fixes
