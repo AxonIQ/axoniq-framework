@@ -18,8 +18,7 @@
   ~  https://www.axoniq.io/pricing
   -->
 
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>io.axoniq.framework</groupId>
@@ -34,7 +33,7 @@
     </description>
 
     <properties>
-        <revision>5.4.0-SNAPSHOT</revision>
+        <revision>5.4.0-RC1</revision>
 
         <!-- Global Axoniq version properties -->
         <axon-framework.version>5.4.0-RC1</axon-framework.version>
@@ -119,10 +118,10 @@
     </organization>
 
     <!-- Dependencies are managed in axoniq-framework-parent -->
-    <dependencyManagement/>
+    <dependencyManagement />
 
     <!-- Dependencies are managed in axoniq-framework-parent -->
-    <dependencies/>
+    <dependencies />
 
     <build>
         <defaultGoal>clean package</defaultGoal>
@@ -655,7 +654,7 @@
         <connection>scm:git:git://github.com/AxonIQ/AxoniqFramework.git</connection>
         <developerConnection>scm:git:git@github.com:AxonIQ/AxoniqFramework.git</developerConnection>
         <url>https://github.com/AxonIQ/AxoniqFramework</url>
-        <tag>HEAD</tag>
+        <tag>axoniq-5.4.0-RC1</tag>
     </scm>
 
     <developers>
