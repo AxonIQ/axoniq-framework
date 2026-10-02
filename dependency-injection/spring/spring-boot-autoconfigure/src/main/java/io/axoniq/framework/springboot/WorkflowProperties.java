@@ -60,7 +60,7 @@ public class WorkflowProperties {
     private int batchSize = 1;
 
     /**
-     * The maximum number of segments this node's workflow event processor claims and works concurrently.
+     * The number of threads the workflow event processor uses to process events concurrently.
      * <p>
      * Defaults to {@code 4}, matching {@code EventProcessorProperties.ProcessorSettings}.
      */
@@ -129,19 +129,18 @@ public class WorkflowProperties {
     }
 
     /**
-     * Returns the maximum number of segments this node's workflow event processor claims and works concurrently.
+     * Returns the number of threads the workflow event processor uses to process events concurrently.
      *
-     * @return the maximum number of segments this node's workflow event processor claims and works concurrently
+     * @return the number of threads the workflow event processor uses to process events concurrently
      */
     public int getThreadCount() {
         return threadCount;
     }
 
     /**
-     * Sets the maximum number of segments this node's workflow event processor claims and works concurrently.
+     * Sets the number of threads the workflow event processor uses to process events concurrently.
      *
-     * @param threadCount the maximum number of segments this node's workflow event processor claims and works
-     *                    concurrently
+     * @param threadCount the number of threads the workflow event processor uses to process events concurrently
      */
     public void setThreadCount(int threadCount) {
         this.threadCount = threadCount;
@@ -269,19 +268,18 @@ public class WorkflowProperties {
         }
 
         /**
-         * Returns the maximum number of segments this node's history processor claims and works concurrently.
+         * Returns the number of threads the history processor uses to process events concurrently.
          *
-         * @return the maximum number of segments this node's history processor claims and works concurrently
+         * @return the number of threads the history processor uses to process events concurrently
          */
         public int getThreadCount() {
             return threadCount;
         }
 
         /**
-         * Sets the maximum number of segments this node's history processor claims and works concurrently.
+         * Sets the number of threads the history processor uses to process events concurrently.
          *
-         * @param threadCount the maximum number of segments this node's history processor claims and works
-         *                    concurrently
+         * @param threadCount the number of threads the history processor uses to process events concurrently
          */
         public void setThreadCount(int threadCount) {
             this.threadCount = threadCount;

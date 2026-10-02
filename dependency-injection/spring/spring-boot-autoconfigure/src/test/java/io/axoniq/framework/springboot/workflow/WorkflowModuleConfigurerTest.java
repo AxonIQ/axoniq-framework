@@ -23,6 +23,8 @@ import org.axonframework.messaging.eventhandling.configuration.EventProcessorCon
 import org.axonframework.messaging.eventhandling.processing.streaming.pooled.PooledStreamingEventProcessorConfiguration;
 import org.junit.jupiter.api.*;
 
+import java.util.concurrent.ScheduledThreadPoolExecutor;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -50,7 +52,7 @@ class WorkflowModuleConfigurerTest {
             // then
             assertThat(result.initialSegmentCount()).isEqualTo(16);
             assertThat(result.batchSize()).isEqualTo(1);
-            assertThat(result.maxSegmentProvider().getMaxSegments("Workflow")).isEqualTo(4);
+            assertThat(((ScheduledThreadPoolExecutor) result.workerExecutor()).getCorePoolSize()).isEqualTo(4);
             assertThat(result.tokenClaimInterval()).isEqualTo(5000L);
             assertThat(result.claimExtensionThreshold()).isEqualTo(5000L);
             assertThat(result.coordinatorExtendsClaims()).isFalse();
@@ -81,13 +83,13 @@ class WorkflowModuleConfigurerTest {
         }
 
         @Test
-        void appliesTheThreadCountAsTheMaxClaimedSegments() {
+        void appliesTheThreadCountAsTheWorkerExecutorPoolSize() {
             var properties = new WorkflowProperties();
             properties.setThreadCount(2);
 
             var result = WorkflowModuleConfigurer.applyProperties(properties, processorConfiguration());
 
-            assertThat(result.maxSegmentProvider().getMaxSegments("Workflow")).isEqualTo(2);
+            assertThat(((ScheduledThreadPoolExecutor) result.workerExecutor()).getCorePoolSize()).isEqualTo(2);
         }
 
         @Test
