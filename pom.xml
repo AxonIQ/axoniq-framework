@@ -18,7 +18,8 @@
   ~  https://www.axoniq.io/pricing
   -->
 
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>io.axoniq.framework</groupId>
@@ -118,10 +119,10 @@
     </organization>
 
     <!-- Dependencies are managed in axoniq-framework-parent -->
-    <dependencyManagement />
+    <dependencyManagement/>
 
     <!-- Dependencies are managed in axoniq-framework-parent -->
-    <dependencies />
+    <dependencies/>
 
     <build>
         <defaultGoal>clean package</defaultGoal>
@@ -242,6 +243,18 @@
                     <publishingServerId>central</publishingServerId>
                     <excludeArtifacts>
                         <excludeArtifact>axoniq-integrationtests</excludeArtifact>
+                        <excludeArtifact>axoniq-integrationtests-support</excludeArtifact>
+                        <excludeArtifact>axoniq-integrationtests-connector</excludeArtifact>
+                        <excludeArtifact>axoniq-integrationtests-connector-axon-server</excludeArtifact>
+                        <excludeArtifact>axoniq-integrationtests-connector-spring-cloud</excludeArtifact>
+                        <excludeArtifact>axoniq-integrationtests-conformance</excludeArtifact>
+                        <excludeArtifact>axoniq-integrationtests-tracing</excludeArtifact>
+                        <excludeArtifact>axoniq-integrationtests-dead-letter</excludeArtifact>
+                        <excludeArtifact>axoniq-integrationtests-legacy</excludeArtifact>
+                        <excludeArtifact>axoniq-integrationtests-multitenancy</excludeArtifact>
+                        <excludeArtifact>axoniq-integrationtests-multitenancy-core</excludeArtifact>
+                        <excludeArtifact>axoniq-integrationtests-multitenancy-data-protection</excludeArtifact>
+                        <excludeArtifact>axoniq-integrationtests-workflow</excludeArtifact>
                         <excludeArtifact>axoniq-docs-samples</excludeArtifact>
                     </excludeArtifacts>
                 </configuration>
@@ -574,8 +587,10 @@
                                 <dependencySourceInclude>org.axonframework:*</dependencySourceInclude>
                                 <dependencySourceInclude>org.axonframework.extensions.spring:*</dependencySourceInclude>
                                 <dependencySourceInclude>org.axonframework.extensions.kotlin:*</dependencySourceInclude>
-                                <dependencySourceInclude>org.axonframework.extensions.metrics:*</dependencySourceInclude>
-                                <dependencySourceInclude>org.axonframework.extensions.reactor:*</dependencySourceInclude>
+                                <dependencySourceInclude>org.axonframework.extensions.metrics:*
+                                </dependencySourceInclude>
+                                <dependencySourceInclude>org.axonframework.extensions.reactor:*
+                                </dependencySourceInclude>
                             </dependencySourceIncludes>
                             <tags>
                                 <tag>
