@@ -179,7 +179,7 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
         WITH snap AS (
           SELECT NULL::int8 AS snapshot_position, (?::int8) - 1 AS sort_index,
                  NULL::varchar AS version, NULL::bytea AS payload, NULL::timestamptz AS timestamp, NULL::json AS metadata
-        )
+        ),
         """;
 
     /**
@@ -216,12 +216,13 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
                 ORDER BY position_value DESC
                 LIMIT 1
             ) sn ON true
-        )
+        ),
         """;
 
     /**
-     * Queries events in order starting from a given global index, limited by the given limit.
-     * Must be prefixed with either {@link #RESUME_AT_POSITION} or {@link #RESUME_AT_SNAPSHOT}.
+     * Queries events in order starting from a given global index, limited by the given limit, plus
+     * the table-wide high-water mark - all in a single round trip and single statement. Must be
+     * prefixed with either {@link #RESUME_AT_POSITION} or {@link #RESUME_AT_SNAPSHOT}.
      * <p>
      * Always returns a leading row sourced from {@code snap} - either genuine snapshot data,
      * or a row with no snapshot data if there is none - followed by up to {@code limit} events.
@@ -230,22 +231,32 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
      * <p>
      * The trailing {@code type_version} column is the event's {@code MessageType} version - not to
      * be confused with the {@code version} column, which is the leading snapshot row's own version.
+     * {@code last_seen} is the same, table-wide value on every row (PostgreSQL evaluates the
+     * uncorrelated subquery once); callers only need it when the page came up short of
+     * {@code limit}, meaning the end of the table was reached.
+     * <p>
+     * Folding the high-water mark into this same statement (rather than a trailing, separate one)
+     * means the page and the mark are read from one consistent snapshot even under plain
+     * {@code READ COMMITTED} - no particular isolation level is required of the connection running
+     * this query.
      *
      * <li>Parameter 1 {@code long}: maximum number of rows to query, excluding the leading {@code snap} row
      */
     private static final String EVENTS_READ_MULTIPLE =
         """
-        SELECT s.sort_index AS global_index, s.timestamp, NULL::varchar AS identifier, NULL::varchar AS type, s.payload, s.metadata, s.version, s.snapshot_position, NULL::varchar AS type_version
-          FROM snap s
-        UNION ALL
-        SELECT e.global_index, e.timestamp, e.identifier, e.type, e.payload, e.metadata, NULL AS version, NULL::int8 AS snapshot_position, e.type_version
-          FROM events e
-          WHERE e.global_index > (SELECT sort_index FROM snap)
-        ORDER BY global_index
-        LIMIT ?;
-
-        SELECT COALESCE(MAX(global_index), 0) AS last_seen
-          FROM events;
+        page AS (
+          SELECT s.sort_index AS global_index, s.timestamp, NULL::varchar AS identifier, NULL::varchar AS type, s.payload, s.metadata, s.version, s.snapshot_position, NULL::varchar AS type_version
+            FROM snap s
+          UNION ALL
+          SELECT e.global_index, e.timestamp, e.identifier, e.type, e.payload, e.metadata, NULL AS version, NULL::int8 AS snapshot_position, e.type_version
+            FROM events e
+            WHERE e.global_index > (SELECT sort_index FROM snap)
+          ORDER BY global_index
+          LIMIT ?
+        )
+        SELECT page.*, (SELECT COALESCE(MAX(global_index), 0) FROM events) AS last_seen
+          FROM page
+          ORDER BY global_index;
         """;
 
     /**
@@ -575,7 +586,7 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
         this.schemaInitialization = Objects.requireNonNull(schemaInitialization, "schemaInitialization");
         this.entitlementManager = Objects.requireNonNull(entitlementManager, "entitlementManager");
         this.transactionalExecutorProvider = new JdbcTransactionalExecutorProvider(dataSource);
-        this.snapshotStore = new PostgresqlSnapshotStore(dataSource, converter);
+        this.snapshotStore = new PostgresqlSnapshotStore(dataSource, converter, transactionalExecutorProvider);
 
         try {
             PostgresqlSchemaInitializer.initialize(dataSource, schemaInitialization);
@@ -740,8 +751,8 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
         Set<EventCriterion> criterions = condition.criteria().flatten();
 
         return DelayedMessageStream.create(
-            load(criterions, 50, condition.strategy())
-                .thenApply(initial -> buildStream(initial, criterions))
+            load(criterions, 50, condition.strategy(), context)
+                .thenApply(initial -> buildStream(initial, criterions, context))
         );
     }
 
@@ -754,16 +765,17 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
      *
      * @param initial the initial batch, cannot be {@code null}
      * @param criterions the tag criteria used to fetch further pages, cannot be {@code null}
+     * @param context the processing context to prefer reusing a connection from, if active, can be {@code null}
      * @return the resulting stream, never {@code null}
      */
-    private MessageStream<EventMessage> buildStream(Batch initial, Set<EventCriterion> criterions) {
+    private MessageStream<EventMessage> buildStream(Batch initial, Set<EventCriterion> criterions, @Nullable ProcessingContext context) {
         AtomicLong lastGlobalIndex = new AtomicLong(initial.highestGlobalIndex);
 
         MessageStream<EventMessage> tail = MessageStream.fromStream(
             initial.events.stream(),
             FinalizedEvent::event,
             PostgresqlEventStorageEngine::trackingTokenContext
-        ).concatWith(internalStream(criterions, initial.highestGlobalIndex + 1, lastGlobalIndex, List::isEmpty));
+        ).concatWith(internalStream(criterions, initial.highestGlobalIndex + 1, lastGlobalIndex, List::isEmpty, context));
 
         MessageStream<EventMessage> withSnapshot = initial.snapshot == null
             ? tail
@@ -812,7 +824,7 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
 
         Supplier<List<FinalizedEvent>> fetcher = () -> {
             long position = nextQueryIndex.get();
-            Batch batch = load(criterions, 50, new SourcingStrategy.Absolute(new GlobalIndexPosition(position))).join();
+            Batch batch = load(criterions, 50, new SourcingStrategy.Absolute(new GlobalIndexPosition(position)), null).join();
 
             /*
              * The above code joins on the future, but ContinuousMessageStream should probably
@@ -885,12 +897,13 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
         Set<EventCriterion> criterions,
         long start,
         AtomicLong lastGlobalIndex,
-        Predicate<List<? extends FinalizedEvent>> predicate
+        Predicate<List<? extends FinalizedEvent>> predicate,
+        @Nullable ProcessingContext context
     ) {
         StreamSpliterator<FinalizedEvent> entrySpliterator = new StreamSpliterator<>(
             last -> {
                 long position = last == null ? start : last.position + 1;
-                Batch batch = load(criterions, 50, new SourcingStrategy.Absolute(new GlobalIndexPosition(position))).join();
+                Batch batch = load(criterions, 50, new SourcingStrategy.Absolute(new GlobalIndexPosition(position)), context).join();
 
                 lastGlobalIndex.set(batch.highestGlobalIndex);
 
@@ -917,10 +930,11 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
      * @param limit the maximum number of events to return
      * @param sourcingStrategy the strategy determining the start position, or the snapshot to look
      *                         up, cannot be {@code null}
+     * @param context the processing context to prefer reusing a connection from, if active, can be {@code null}
      * @return a future with the batch, never {@code null}
      */
     // TODO #9 Prefetching via max parameter here should perhaps not be a concern of the engine
-    private CompletableFuture<Batch> load(Set<EventCriterion> criterions, int limit, SourcingStrategy sourcingStrategy) {
+    private CompletableFuture<Batch> load(Set<EventCriterion> criterions, int limit, SourcingStrategy sourcingStrategy, @Nullable ProcessingContext context) {
         if (LOGGER.isDebugEnabled()) {
             LOGGER.debug("load: loading from " + sourcingStrategy + " (limit " + limit + ") with condition " + criterions);
         }
@@ -944,19 +958,7 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
             case SourcingStrategy.Snapshot s -> GlobalIndexPosition.toIndex(s.maximumPosition() == null ? MAX_GLOBAL_INDEX_POSITION : s.maximumPosition());
         };
 
-        return connectionExecutor(null).apply(connection -> {
-
-            /*
-             * Repeatable read is used here because EVENTS_READ_MULTIPLE is two statements - the page
-             * read and a trailing MAX(global_index) watermark - and under READ COMMITTED each would
-             * take its own snapshot, letting a commit land in between and silently skip events. This
-             * only affects this dedicated, single-call, read-only connection - not
-             * CONSISTENCY_TAGS_LOCK's append-side connection, which relies on READ COMMITTED's
-             * per-statement refresh instead.
-             */
-
-            connection.setTransactionIsolation(Connection.TRANSACTION_REPEATABLE_READ);
-
+        return transactionalExecutorProvider.getTransactionalExecutorPreferringIndependent(context).apply(connection -> {
             try (PreparedStatement ps = connection.prepareStatement(query)) {
                 int parameterIndex = 1;
 
@@ -981,44 +983,22 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
 
                 ps.setLong(parameterIndex++, limit + 1L);  // LIMIT ?, +1 for the leading snap row
 
-                if (!ps.execute()) {
-                    throw new IllegalStateException("A ResultSet is expected");
-                }
-
-                Snapshot snapshot;
-                List<FinalizedEvent> list = new ArrayList<>();
-
-                try (ResultSet resultSet = ps.getResultSet()) {
+                try (ResultSet resultSet = ps.executeQuery()) {
                     resultSet.next();  // always present, holds no event data in the plain (non-snapshot) case
 
-                    snapshot = toSnapshot(resultSet);
+                    Snapshot snapshot = toSnapshot(resultSet);
+                    long lastSeen = resultSet.getLong(10);
+                    List<FinalizedEvent> list = new ArrayList<>();
 
                     while (resultSet.next()) {
                         list.add(toFinalizedEvent(resultSet));
                     }
-                }
 
-                if (list.size() == limit) {
+                    // if the limit was reached, more events remain beyond this page - resume from
+                    // the last one fetched, not the table-wide watermark
+                    long highestGlobalIndex = list.size() == limit ? list.getLast().position : lastSeen;
 
-                    /*
-                     * If limit was reached, the maximum global index query is not yet needed
-                     * as there will be more queries needed to finish the stream. Don't
-                     * bother fetching it and just return early:
-                     */
-
-                    return new Batch(snapshot, list, list.getLast().position);
-                }
-
-                if (!ps.getMoreResults()) {
-                    throw new IllegalStateException("A second ResultSet is expected");
-                }
-
-                try (ResultSet resultSet = ps.getResultSet()) {
-                    resultSet.next();
-
-                    long maxGlobalIndex = resultSet.getLong(1);
-
-                    return new Batch(snapshot, list, maxGlobalIndex);
+                    return new Batch(snapshot, list, highestGlobalIndex);
                 }
             }
         });

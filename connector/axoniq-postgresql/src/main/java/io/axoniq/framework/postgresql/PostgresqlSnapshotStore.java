@@ -28,6 +28,7 @@ import org.axonframework.eventsourcing.snapshot.api.Snapshot;
 import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.axonframework.messaging.core.unitofwork.transaction.TransactionalExecutorProvider;
 import org.jspecify.annotations.Nullable;
 
 import java.sql.Connection;
@@ -40,8 +41,6 @@ import java.time.Instant;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Executor;
-import java.util.concurrent.Executors;
 import javax.sql.DataSource;
 
 /**
@@ -63,8 +62,6 @@ import javax.sql.DataSource;
  */
 @Internal
 class PostgresqlSnapshotStore implements SnapshotStore {
-
-    private static final Executor EXECUTOR = Executors.newVirtualThreadPerTaskExecutor();
 
     /**
      * Deletes all snapshots for a given entity, regardless of version.
@@ -112,16 +109,20 @@ class PostgresqlSnapshotStore implements SnapshotStore {
 
     private final DataSource dataSource;
     private final Converter converter;
+    private final TransactionalExecutorProvider<Connection> transactionalExecutorProvider;
 
     /**
      * Constructs a new instance, creating the {@code snapshots} table if it does not yet exist.
      *
      * @param dataSource a data source to connect to PostgreSQL, cannot be {@code null}
      * @param converter  a converter for snapshot payload serialization, cannot be {@code null}
+     * @param transactionalExecutorProvider provides the connection executor to use, cannot be {@code null}
      */
-    PostgresqlSnapshotStore(DataSource dataSource, Converter converter) {
+    PostgresqlSnapshotStore(DataSource dataSource, Converter converter,
+                            TransactionalExecutorProvider<Connection> transactionalExecutorProvider) {
         this.dataSource = Objects.requireNonNull(dataSource, "dataSource");
         this.converter = Objects.requireNonNull(converter, "converter");
+        this.transactionalExecutorProvider = Objects.requireNonNull(transactionalExecutorProvider, "transactionalExecutorProvider");
 
         try (
             Connection connection = dataSource.getConnection();
@@ -163,9 +164,8 @@ class PostgresqlSnapshotStore implements SnapshotStore {
         byte[] payload = converter.convert(snapshot.payload(), byte[].class);
         String metadata = MetadataSerializer.toJson(snapshot.metadata());
 
-        return CompletableFuture.runAsync(() -> {
+        return transactionalExecutorProvider.getTransactionalExecutor(null).<Void>apply(connection -> {
             try (
-                Connection connection = dataSource.getConnection();
                 PreparedStatement del = connection.prepareStatement(SNAPSHOT_DELETE);
                 PreparedStatement ins = connection.prepareStatement(SNAPSHOT_INSERT)
             ) {
@@ -183,13 +183,13 @@ class PostgresqlSnapshotStore implements SnapshotStore {
                 ins.setString(8, metadata);
                 ins.executeUpdate();
 
-                connection.commit();
+                return null;
             }
             catch (SQLException e) {
                 throw new IllegalStateException(
                         "Failed to store snapshot for " + qualifiedName + " with identifier " + identifier, e);
             }
-        }, EXECUTOR);
+        });
     }
 
     @Override
@@ -198,11 +198,8 @@ class PostgresqlSnapshotStore implements SnapshotStore {
         Objects.requireNonNull(qualifiedName, "qualifiedName");
         Objects.requireNonNull(identifier, "identifier");
 
-        return CompletableFuture.supplyAsync(() -> {
-            try (
-                Connection connection = dataSource.getConnection();
-                PreparedStatement ps = connection.prepareStatement(SNAPSHOT_SELECT)
-            ) {
+        return transactionalExecutorProvider.getTransactionalExecutorPreferringIndependent(context).apply(connection -> {
+            try (PreparedStatement ps = connection.prepareStatement(SNAPSHOT_SELECT)) {
                 ps.setString(1, qualifiedName.fullName());
                 ps.setString(2, String.valueOf(identifier));
 
@@ -225,7 +222,7 @@ class PostgresqlSnapshotStore implements SnapshotStore {
                 throw new IllegalStateException(
                         "Failed to load snapshot for " + qualifiedName + " with identifier " + identifier, e);
             }
-        }, EXECUTOR);
+        });
     }
 
     private static String toPositionType(Position position) {

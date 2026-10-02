@@ -26,6 +26,7 @@ import org.axonframework.eventsourcing.eventstore.AggregateSequenceNumberPositio
 import org.axonframework.eventsourcing.eventstore.GlobalIndexPosition;
 import org.axonframework.eventsourcing.snapshot.api.Snapshot;
 import org.axonframework.messaging.core.QualifiedName;
+import org.axonframework.messaging.core.unitofwork.transaction.jdbc.JdbcTransactionalExecutorProvider;
 import org.junit.jupiter.api.*;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
@@ -71,7 +72,8 @@ class PostgresqlSnapshotStoreTest {
         config.setAutoCommit(false);
 
         dataSource = new HikariDataSource(config);
-        testSubject = new PostgresqlSnapshotStore(dataSource, new JacksonConverter());
+        testSubject = new PostgresqlSnapshotStore(dataSource, new JacksonConverter(),
+                                                   new JdbcTransactionalExecutorProvider(dataSource));
     }
 
     @AfterAll
