@@ -21,6 +21,11 @@ package io.axoniq.framework.testcontainer;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.nio.channels.FileChannel;
+import java.nio.channels.FileLock;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
 
 /**
  * Holds the single canonical {@link AxonServerContainer} configuration meant to be shared by every IT test suite in
@@ -78,15 +83,42 @@ public final class SharedAxonServerContainer {
                     .withLicense(licenseExists() ? LICENSE_RESOURCE : null);
 
     /**
+     * Path of the cross-process lock file guarding {@link #ensureStarted()}. A fixed name is enough: there is only
+     * ever one {@link #INSTANCE} to guard.
+     */
+    private static final Path START_LOCK_FILE =
+            Paths.get(System.getProperty("java.io.tmpdir"), "shared-axon-server-container-start.lock");
+
+    /**
      * Starts {@link #INSTANCE} if it isn't already running.
      * <p>
      * {@link AxonServerContainer#start()} is idempotent on its own -- Testcontainers makes it a no-op when the
      * container is already running in this JVM -- so this is a thin, explicitly-named entry point for callers rather
      * than a correctness requirement.
+     * <p>
+     * {@code synchronized} alone only guards within one JVM, not across forked processes, and Testcontainers'
+     * own {@code findContainerForReuse()} has no locking of its own (confirmed via its source: a {@code // TODO
+     * locking} comment). Two Surefire/Failsafe forks can therefore both decide {@code INSTANCE} isn't running yet
+     * and both end up creating their own container instead of one attaching to the other's -- confirmed directly:
+     * from a clean Docker state, two forks calling this method concurrently produced two separate containers on
+     * two different ports, even though both compute the identical reuse hash. A {@link FileLock} serializes the
+     * whole check-and-start sequence across processes, so the second caller sees the first one's container already
+     * running (and matching on hash) by the time it gets to check. Kept {@code synchronized} too: a second
+     * {@link FileLock} acquisition attempt from another thread in the same JVM throws
+     * {@link java.nio.channels.OverlappingFileLockException} rather than waiting, so cross-thread safety within
+     * this JVM still needs the intrinsic lock.
      */
     public static synchronized void ensureStarted() {
-        if (!INSTANCE.isRunning()) {
-            INSTANCE.start();
+        if (INSTANCE.isRunning()) {
+            return;
+        }
+        try (FileChannel channel = FileChannel.open(START_LOCK_FILE, StandardOpenOption.CREATE, StandardOpenOption.WRITE);
+             FileLock lock = channel.lock()) {
+            if (!INSTANCE.isRunning()) {
+                INSTANCE.start();
+            }
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
         }
     }
 
