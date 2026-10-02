@@ -295,6 +295,13 @@ public class SpringCloudAutoConfiguration {
          * <p>
          * Each open subscription holds one connection to every member advertising its query, and each plain query
          * one for as long as its responses are arriving.
+         * <p>
+         * Because the transport is this client's own, transport settings of the application's client do not reach
+         * it, such as an SSL bundle configured for it or a custom request factory on the builder. Settings the JVM
+         * applies to every connection still do. An application whose members trust each other through an SSL bundle,
+         * or authenticate each other with client certificates, defines a bean named {@link #QUERY_REST_CLIENT_BEAN}
+         * itself, keeping it free of a read timeout and of a bounded connection pool. The same holds for the client
+         * named {@link #CAPABILITIES_REST_CLIENT_BEAN}, which is built without the application's builder altogether.
          *
          * @param builderProvider provides the application's {@link RestClient.Builder}, if it has one
          * @return the client used to send queries and subscription queries to other members
