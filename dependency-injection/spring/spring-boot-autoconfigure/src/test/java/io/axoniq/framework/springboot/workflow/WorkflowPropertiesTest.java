@@ -45,7 +45,7 @@ class WorkflowPropertiesTest {
 
     @Test
     void batchSizeBindsFromTheApplicationProperties() {
-        contextRunner.withPropertyValues("axoniq.workflow.batch-size=50")
+        contextRunner.withPropertyValues("axon.workflow.batch-size=50")
                      .run(context -> assertThat(
                              context.getBean(WorkflowProperties.class).getBatchSize()
                      ).isEqualTo(50));
@@ -53,7 +53,7 @@ class WorkflowPropertiesTest {
 
     @Test
     void threadCountBindsFromTheApplicationProperties() {
-        contextRunner.withPropertyValues("axoniq.workflow.thread-count=4")
+        contextRunner.withPropertyValues("axon.workflow.thread-count=4")
                      .run(context -> assertThat(
                              context.getBean(WorkflowProperties.class).getThreadCount()
                      ).isEqualTo(4));
@@ -61,7 +61,7 @@ class WorkflowPropertiesTest {
 
     @Test
     void tokenClaimIntervalBindsFromTheApplicationProperties() {
-        contextRunner.withPropertyValues("axoniq.workflow.token-claim-interval=2500")
+        contextRunner.withPropertyValues("axon.workflow.token-claim-interval=2500")
                      .run(context -> assertThat(
                              context.getBean(WorkflowProperties.class).getTokenClaimInterval()
                      ).isEqualTo(2500L));
@@ -69,7 +69,7 @@ class WorkflowPropertiesTest {
 
     @Test
     void claimExtensionThresholdBindsFromTheApplicationProperties() {
-        contextRunner.withPropertyValues("axoniq.workflow.claim-extension-threshold=7500")
+        contextRunner.withPropertyValues("axon.workflow.claim-extension-threshold=7500")
                      .run(context -> assertThat(
                              context.getBean(WorkflowProperties.class).getClaimExtensionThreshold()
                      ).isEqualTo(7500L));
@@ -77,7 +77,7 @@ class WorkflowPropertiesTest {
 
     @Test
     void coordinatorClaimExtensionBindsFromTheApplicationProperties() {
-        contextRunner.withPropertyValues("axoniq.workflow.coordinator-claim-extension=true")
+        contextRunner.withPropertyValues("axon.workflow.coordinator-claim-extension=true")
                      .run(context -> assertThat(context.getBean(WorkflowProperties.class)
                                                        .getCoordinatorClaimExtension()).isTrue());
     }
