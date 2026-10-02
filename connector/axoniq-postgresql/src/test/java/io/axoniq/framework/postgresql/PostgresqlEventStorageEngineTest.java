@@ -24,8 +24,10 @@ import com.zaxxer.hikari.HikariDataSource;
 import io.axoniq.license.entitlement.EnforcingEntitlementManager;
 import io.axoniq.license.entitlement.EntitlementManager;
 import org.axonframework.common.jdbc.ConnectionExecutor;
+import org.axonframework.conversion.CachingSupplier;
 import org.axonframework.conversion.jackson.JacksonConverter;
 import org.axonframework.eventsourcing.eventstore.AppendCondition;
+import org.axonframework.eventsourcing.eventstore.EventStorageEngine.AppendTransaction;
 import org.axonframework.eventsourcing.eventstore.SourcingCondition;
 import org.axonframework.eventsourcing.eventstore.StorageEngineTestSuite;
 import org.axonframework.eventsourcing.eventstore.TaggedEventMessage;
@@ -48,6 +50,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import javax.sql.DataSource;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -219,5 +223,38 @@ class PostgresqlEventStorageEngineTest extends StorageEngineTestSuite<Postgresql
                 .cause()
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("__T");
+    }
+
+    @Test
+    void sourcingAfterAppendWithinTheSameProcessingContextReusesTheAmbientConnection() throws Exception {
+        // given - a context whose connection executor is memoized (like a real transaction manager would
+        // register it), tracking how many times a connection was actually handed out
+        AtomicInteger connectionsHandedOut = new AtomicInteger();
+        Connection connection = dataSource.getConnection();
+        connection.setAutoCommit(false);
+
+        StubProcessingContext pc = new StubProcessingContext();
+        pc.putResource(JdbcTransactionalExecutorProvider.SUPPLIER_KEY, CachingSupplier.of(() -> new ConnectionExecutor(() -> {
+            connectionsHandedOut.incrementAndGet();
+            return connection;
+        })));
+
+        try {
+            // when - append materializes the ambient connection, then source reads afterwards on the same context
+            AppendTransaction<?> tx = testSubject.appendEvents(
+                    AppendCondition.none(), pc, List.of(taggedEventMessage("event-0", TEST_CRITERIA_TAGS))
+            ).get(5, TimeUnit.SECONDS);
+            tx.commit().get(5, TimeUnit.SECONDS);
+            connection.commit();
+
+            MessageStream<EventMessage> stream = testSubject.source(SourcingCondition.conditionFor(TEST_CRITERIA), pc);
+            waitUntilHasNextAvailable(stream);
+
+            // then - the read reused the already-active connection rather than opening a second one
+            assertThat(connectionsHandedOut).hasValue(1);
+        }
+        finally {
+            connection.close();
+        }
     }
 }
