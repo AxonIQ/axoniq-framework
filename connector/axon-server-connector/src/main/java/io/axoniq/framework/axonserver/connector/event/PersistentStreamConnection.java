@@ -100,6 +100,8 @@ public class PersistentStreamConnection {
 
     private final AtomicReference<@Nullable PersistentStream> persistentStreamHolder = new AtomicReference<>();
     private final AtomicBoolean opened = new AtomicBoolean(false);
+    // tags every open() so a reconnect scheduled for an earlier one can be told apart from the current one
+    private final AtomicInteger openGeneration = new AtomicInteger();
 
     private final AtomicReference<BiFunction<List<? extends EventMessage>, ProcessingContext, CompletableFuture<?>>>
             consumer = new AtomicReference<>(NO_OP_CONSUMER);
@@ -216,6 +218,7 @@ public class PersistentStreamConnection {
         if (!opened.compareAndSet(false, true)) {
             throw new IllegalStateException(String.format("%s: Persistent Stream has already been opened.", streamId));
         }
+        openGeneration.incrementAndGet();
         this.consumer.set(consumer);
         start();
     }
@@ -243,7 +246,9 @@ public class PersistentStreamConnection {
     private void segmentOpened(PersistentStreamSegment persistentStreamSegment) {
         logger.info("Segment opened: {}", persistentStreamSegment);
         retrySeconds.set(MIN_RETRY_INTERVAL_SECONDS);
-        segments.put(persistentStreamSegment.segment(), new SegmentConnection(persistentStreamSegment));
+        segments.put(
+                persistentStreamSegment.segment(), new SegmentConnection(persistentStreamSegment, consumer.get())
+        );
     }
 
     private void segmentClosed(PersistentStreamSegment persistentStreamSegment) {
@@ -264,9 +269,19 @@ public class PersistentStreamConnection {
             // Only reschedule reconnection if the stream was NOT intentionally closed.
             // close() flips opened to false, preventing reconnection attempts.
             logger.info("{}: Rescheduling persistent stream", streamId, throwable);
-            scheduler.schedule(this::start,
+            int generation = openGeneration.get();
+            scheduler.schedule(() -> reconnect(generation),
                                retrySeconds.getAndUpdate(current -> Math.min(MAX_RETRY_INTERVAL_SECONDS, current * 2)),
                                TimeUnit.SECONDS);
+        }
+    }
+
+    private void reconnect(int generation) {
+        // a reconnect scheduled before close(), or before a close() and reopen, belongs to a stream that is
+        // already gone: starting it now would open a stream nobody reads from or closes, or a second one
+        // next to the one the reopen already started
+        if (opened.get() && openGeneration.get() == generation) {
+            start();
         }
     }
 
@@ -282,6 +297,7 @@ public class PersistentStreamConnection {
         BiFunction<List<? extends EventMessage>, ProcessingContext, CompletableFuture<?>> consumerToRetire =
                 consumer.get();
         List<SegmentConnection> activeSegments = List.copyOf(segments.values());
+        activeSegments.forEach(SegmentConnection::requestClose);
         CompletableFuture.allOf(activeSegments.stream().map(SegmentConnection::drained)
                                               .toArray(CompletableFuture[]::new))
                          .thenRun(() -> {
@@ -305,20 +321,31 @@ public class PersistentStreamConnection {
     private class SegmentConnection {
 
         private final AtomicBoolean processGate = new AtomicBoolean();
-        private final AtomicBoolean doneConfirmed = new AtomicBoolean();
         private final CompletableFuture<Void> drained = new CompletableFuture<>();
+        private final AtomicBoolean closeRequested = new AtomicBoolean();
         private final PersistentStreamSegment persistentStreamSegment;
+        private final BiFunction<List<? extends EventMessage>, ProcessingContext, CompletableFuture<?>> segmentConsumer;
         private final AtomicReference<SegmentState> currentState = new AtomicReference<>(new ProcessingState());
 
-        public SegmentConnection(PersistentStreamSegment persistentStreamSegment) {
+        public SegmentConnection(
+                PersistentStreamSegment persistentStreamSegment,
+                BiFunction<List<? extends EventMessage>, ProcessingContext, CompletableFuture<?>> segmentConsumer
+        ) {
             this.persistentStreamSegment = persistentStreamSegment;
+            this.segmentConsumer = segmentConsumer;
+        }
+
+        void requestClose() {
+            closeRequested.set(true);
         }
 
         /**
-         * A future completing once this segment's local buffer has been fully drained of events it already held at the
-         * moment {@link PersistentStreamConnection#close()} was called.
+         * A future completing once this segment has no work left: either its buffer was consumed up to the terminal
+         * marker and {@link PersistentStreamSegment#PENDING_WORK_DONE_MARKER} was acknowledged, or the batch it was
+         * retrying was abandoned because {@link PersistentStreamConnection#close()} was called. Completes for every
+         * segment close, whether requested through {@code close()} or initiated by Axon Server.
          *
-         * @return a future completing once this segment is fully drained
+         * @return a future completing once this segment has no work left
          */
         CompletableFuture<Void> drained() {
             return drained;
@@ -335,7 +362,7 @@ public class PersistentStreamConnection {
             }
 
             private void retry() {
-                if (!opened.get()) {
+                if (closeRequested.get()) {
                     // the acknowledgement can no longer reach Axon Server at this point anyway. The real connector's
                     // close() only waits briefly for a done marker before tearing down the outbound stream, so retrying
                     // further would just hold up this segment's drain for nothing
@@ -416,7 +443,7 @@ public class PersistentStreamConnection {
                             // while processGate was still true is otherwise never retried, since peek() is null
                             // once that marker is the only thing left to consume
                             if (persistentStreamSegment.peek() != null
-                                    || (persistentStreamSegment.isClosed() && !doneConfirmed.get())) {
+                                    || (persistentStreamSegment.isClosed() && !drained.isDone())) {
                                 scheduler.submit(SegmentConnection.this::readMessagesFromSegment);
                             }
                         });
@@ -450,10 +477,8 @@ public class PersistentStreamConnection {
                 // only this ProcessingState may confirm the drain — if a batch failed in the meantime,
                 // currentState has already moved to a RetryState, and that failed batch still needs to be
                 // retried through the real consumer before the segment is actually drained
-                if (persistentStreamSegment.isClosed() && currentState.get() == this
-                        && doneConfirmed.compareAndSet(false, true)) {
+                if (persistentStreamSegment.isClosed() && currentState.get() == this && drained.complete(null)) {
                     persistentStreamSegment.acknowledge(PENDING_WORK_DONE_MARKER);
-                    drained.complete(null);
                 }
             }
         }
@@ -488,7 +513,7 @@ public class PersistentStreamConnection {
                                          .withResource(TrackingToken.BATCH_END_RESOURCE_KEY, batchEndToken);
                 for (PersistentStreamEvent pse : batch) {
                     result = result.thenCompose(
-                            ignored -> consumer.get().apply(
+                            ignored -> segmentConsumer.apply(
                                     List.of(convertToMessage(pse)), enrichContextInformation(pse, batchContext)
                             )
                     );

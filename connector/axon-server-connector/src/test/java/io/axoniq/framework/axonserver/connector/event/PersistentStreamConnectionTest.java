@@ -288,20 +288,25 @@ class PersistentStreamConnectionTest {
         testSubject.close();
 
         // when reopen and deliver
-        testSubject.open((events, ctx) -> CompletableFuture.completedFuture(null));
+        List<EventMessage> eventMessagesAfterReopen = new LinkedList<>();
+        testSubject.open((events, ctx) -> {
+            eventMessagesAfterReopen.addAll(events);
+            return CompletableFuture.completedFuture(null);
+        });
+        MockPersistentStream reopenedStream = mockPersistentStreams.get(STREAM_ID);
 
-        mockPersistentStream.publish(0, eventWithToken(0, "AggregateId-1", 0, "TestAggregate"));
-        mockPersistentStream.publish(0, eventWithToken(1, "AggregateId-1", 1, "TestAggregate"));
+        reopenedStream.publish(0, eventWithToken(0, "AggregateId-1", 0, "TestAggregate"));
+        reopenedStream.publish(0, eventWithToken(1, "AggregateId-1", 1, "TestAggregate"));
 
         // then should deliver again
         await().atMost(Duration.ofSeconds(1))
                .pollDelay(Duration.ofMillis(100))
-               .until(() -> eventMessages.size() == 2);
+               .until(() -> eventMessagesAfterReopen.size() == 2);
         await().atMost(Duration.ofSeconds(1))
                .pollDelay(Duration.ofMillis(100))
-               .until(() -> mockPersistentStream.lastAcknowledged(0) == 1);
+               .until(() -> reopenedStream.lastAcknowledged(0) == 1);
 
-        mockPersistentStream.closeSegment(0);
+        reopenedStream.closeSegment(0);
     }
 
     @Test
@@ -729,6 +734,44 @@ class PersistentStreamConnectionTest {
     }
 
     @Test
+    void reconnectScheduledBeforeCloseDoesNotOpenANewStreamAfterClose() throws InterruptedException {
+        // given — the stream fails, so a reconnect is scheduled after the minimal 1s back-off
+        testSubject.open((events, ctx) -> CompletableFuture.completedFuture(null));
+        MockPersistentStream failedStream = mockPersistentStreams.get(STREAM_ID);
+        failedStream.closeWithError(new RuntimeException("connection lost"));
+
+        // when — the connection is closed while that reconnect is still pending
+        testSubject.close();
+
+        // then — the pending reconnect is dropped, rather than opening a stream nobody will ever read
+        //        from or close
+        Thread.sleep(Duration.ofMillis(1500)); // past the 1s reconnect back-off
+        assertThat(mockPersistentStreams.get(STREAM_ID))
+                .describedAs("no stream may be opened after close()")
+                .isSameAs(failedStream);
+    }
+
+    @Test
+    void reconnectScheduledBeforeReopenDoesNotOpenASecondStream() throws InterruptedException {
+        // given — the stream fails, so a reconnect is scheduled after the minimal 1s back-off
+        testSubject.open((events, ctx) -> CompletableFuture.completedFuture(null));
+        mockPersistentStreams.get(STREAM_ID).closeWithError(new RuntimeException("connection lost"));
+
+        // when — the connection is closed and reopened while that reconnect is still pending
+        testSubject.close();
+        testSubject.open((events, ctx) -> CompletableFuture.completedFuture(null));
+        MockPersistentStream reopenedStream = mockPersistentStreams.get(STREAM_ID);
+
+        // then — the stale reconnect is dropped, so the reopened stream remains the only one
+        Thread.sleep(Duration.ofMillis(1500)); // past the 1s reconnect back-off
+        assertThat(mockPersistentStreams.get(STREAM_ID))
+                .describedAs("a reconnect scheduled for the previous open() must not replace the reopened stream")
+                .isSameAs(reopenedStream);
+
+        reopenedStream.closeSegment(0);
+    }
+
+    @Test
     void pendingWorkDoneIsAcknowledgedWhenSegmentClosesAfterLastBatch() {
         // given — consumer processes events and closes the segment, simulating a server-initiated segment close
         List<EventMessage> received = new LinkedList<>();
@@ -901,6 +944,75 @@ class PersistentStreamConnectionTest {
         assertThat(mockPersistentStream.segments.get(0).acknowledgedTokens)
                 .describedAs("the never-processed batch must not be acknowledged")
                 .isEmpty();
+    }
+
+    @Test
+    void reopenWhileOldSegmentIsRetryingDoesNotRetryTheOldBatchThroughTheNewConsumer() throws InterruptedException {
+        // given — the consumer of the first open() always fails, so the only batch of the first stream
+        //         enters RetryState
+        AtomicInteger firstConsumerAttempts = new AtomicInteger();
+        testSubject.open((events, ctx) -> {
+            firstConsumerAttempts.incrementAndGet();
+            throw new IllegalStateException("always fails");
+        });
+        MockPersistentStream firstStream = mockPersistentStreams.get(STREAM_ID);
+        firstStream.publish(0, eventWithToken(0, "agg-1", 0, "TestAggregate"));
+        await().atMost(Duration.ofSeconds(2)).until(() -> firstConsumerAttempts.get() >= 1);
+        MockPersistentStreamSegment firstStreamSegment = firstStream.segments.get(0);
+
+        // when — close and reopen with a new consumer before the old segment's 1s retry fires
+        testSubject.close();
+        List<EventMessage> receivedByNewConsumer = Collections.synchronizedList(new LinkedList<>());
+        testSubject.open((events, ctx) -> {
+            receivedByNewConsumer.addAll(events);
+            return CompletableFuture.completedFuture(null);
+        });
+
+        // then — the old stream's batch is abandoned, not handed to the consumer of the next open()
+        Thread.sleep(Duration.ofMillis(1500)); // past the 1s retry delay of the old segment
+        assertThat(receivedByNewConsumer)
+                .describedAs("a batch of the closed stream must never reach the consumer of the next open()")
+                .isEmpty();
+        assertThat(firstStreamSegment.acknowledgedTokens)
+                .describedAs("the never-processed batch must not be acknowledged")
+                .isEmpty();
+
+        mockPersistentStreams.get(STREAM_ID).closeSegment(0);
+    }
+
+    @Test
+    void reopenWhileOldSegmentIsDrainingKeepsDeliveringTheOldBufferToTheOldConsumer() {
+        // given — the first event blocks the first consumer on a gate, while a second event is buffered
+        //         behind it
+        List<Long> receivedByFirstConsumer = Collections.synchronizedList(new LinkedList<>());
+        CompletableFuture<Void> firstEventGate = new CompletableFuture<>();
+        testSubject.open((events, ctx) -> {
+            long position = TrackingToken.fromContext(ctx).orElseThrow().position().orElseThrow();
+            receivedByFirstConsumer.add(position);
+            return position == 0L ? firstEventGate : CompletableFuture.completedFuture(null);
+        });
+        MockPersistentStream firstStream = mockPersistentStreams.get(STREAM_ID);
+        firstStream.publish(0, eventWithToken(0, "agg-1", 0, "TestAggregate"));
+        await().atMost(Duration.ofSeconds(2)).until(() -> receivedByFirstConsumer.contains(0L));
+        firstStream.publish(0, eventWithToken(1, "agg-1", 1, "TestAggregate"));
+
+        // when — close and reopen with a new consumer, and only then release the old segment's in-flight batch
+        testSubject.close();
+        List<EventMessage> receivedByNewConsumer = Collections.synchronizedList(new LinkedList<>());
+        testSubject.open((events, ctx) -> {
+            receivedByNewConsumer.addAll(events);
+            return CompletableFuture.completedFuture(null);
+        });
+        firstEventGate.complete(null);
+
+        // then — the still-buffered second event of the old stream drains into the consumer it was
+        //        buffered for
+        await().atMost(Duration.ofSeconds(2)).until(() -> receivedByFirstConsumer.contains(1L));
+        assertThat(receivedByNewConsumer)
+                .describedAs("the old stream's buffer must never drain into the consumer of the next open()")
+                .isEmpty();
+
+        mockPersistentStreams.get(STREAM_ID).closeSegment(0);
     }
 
     @Test
