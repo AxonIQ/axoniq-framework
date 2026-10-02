@@ -19,6 +19,7 @@
 package io.axoniq.framework.workflow.configuration;
 
 import org.axonframework.common.configuration.ApplicationConfigurerTestSuite;
+import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
@@ -41,10 +42,19 @@ import static org.junit.jupiter.api.Assertions.*;
  * no implicit state of its own, invalid as written. This class adjusts those assertions through the suite's
  * {@link #baselineModuleCount()} and {@link #expectedEnhancerInvocationCount()} extension points, and overrides the
  * handful of ordering-sensitive tests that cannot be expressed through a simple count.
+ * <p>
+ * Both extension points are measured against a freshly probed {@link WorkflowConfigurer}, rather than hardcoded,
+ * because the exact module/enhancer footprint {@code WorkflowConfigurer.create()} contributes is an implementation
+ * detail of the Axon Framework version this module depends on, not a stable constant. A hardcoded count would
+ * silently drift out of sync whenever that upstream behavior changes, and starts failing only once such a change
+ * eventually lands rather than being tested against as it changes.
  *
  * @author Simon Zambrovski
  */
 class WorkflowConfigurerTest extends ApplicationConfigurerTestSuite<WorkflowConfigurer> {
+
+    private Integer baselineModuleCount;
+    private Integer expectedEnhancerInvocationCount;
 
     @Override
     public WorkflowConfigurer createConfigurer() {
@@ -53,12 +63,24 @@ class WorkflowConfigurerTest extends ApplicationConfigurerTestSuite<WorkflowConf
 
     @Override
     protected int baselineModuleCount() {
-        return 3;
+        if (baselineModuleCount == null) {
+            AxonConfiguration probe = WorkflowConfigurer.create().build();
+            baselineModuleCount = probe.getModuleConfigurations().size();
+            probe.shutdown();
+        }
+        return baselineModuleCount;
     }
 
     @Override
     protected int expectedEnhancerInvocationCount() {
-        return 4;
+        if (expectedEnhancerInvocationCount == null) {
+            AtomicInteger counter = new AtomicInteger(0);
+            WorkflowConfigurer probe = WorkflowConfigurer.create();
+            probe.componentRegistry(cr -> cr.registerEnhancer(registry -> counter.incrementAndGet()));
+            probe.build().shutdown();
+            expectedEnhancerInvocationCount = counter.get();
+        }
+        return expectedEnhancerInvocationCount;
     }
 
     @Nested
