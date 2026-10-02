@@ -187,6 +187,34 @@
                             <fail>true</fail>
                         </configuration>
                     </execution>
+                    <execution>
+                        <!-- Modules that pull in Spring Boot's BOM (e.g. via spring-boot-testcontainers) can have
+                             it silently win dependency management over this project's own testcontainers-bom
+                             import, for a directly-declared org.testcontainers dependency with no explicit
+                             version. Maven gives no warning for this; it just resolves to the "wrong" version.
+                             That broke Testcontainers' container-reuse hash computation for months before being
+                             tracked down. Every org.testcontainers dependency in this reactor should pin an
+                             explicit ${testcontainers.version}; this rule is the safety net for the next one
+                             that forgets. -->
+                        <id>enforce-testcontainers-version</id>
+                        <goals>
+                            <goal>enforce</goal>
+                        </goals>
+                        <configuration>
+                            <rules>
+                                <bannedDependencies>
+                                    <searchTransitive>false</searchTransitive>
+                                    <excludes>
+                                        <exclude>org.testcontainers</exclude>
+                                    </excludes>
+                                    <includes>
+                                        <include>org.testcontainers:*:${testcontainers.version}</include>
+                                    </includes>
+                                </bannedDependencies>
+                            </rules>
+                            <fail>true</fail>
+                        </configuration>
+                    </execution>
                 </executions>
             </plugin>
             <!-- deploy -->

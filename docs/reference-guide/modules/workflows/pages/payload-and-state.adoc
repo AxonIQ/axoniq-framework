@@ -65,7 +65,8 @@ var email = payload(ctx.workflowPayload()).get("email"); // <1>
 ----
 
 <.> `payload(...)` wraps a `Map<String, Object>` and provides type-safe `get` methods.
-You can also use `payload(ctx, object)` to convert any object into a payload map.
+You can also build a payload from key/value pairs with `payload("key", value)`.
+To merge the fields of an object into the workflow payload, use `ctx.setPayload(stepName, object)`.
 
 == Payload reducers
 

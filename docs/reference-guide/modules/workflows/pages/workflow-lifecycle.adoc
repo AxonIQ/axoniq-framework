@@ -8,12 +8,13 @@ This section covers how workflows terminate—both intentionally and unexpectedl
 ====
 Each workflow instance runs on a **virtual thread**.
 Virtual threads are lightweight—a suspended workflow (for example, waiting for an event) consumes almost no memory or OS resources, so you can run thousands of concurrent workflow instances without issue.
+Memory use is proportional to the number of non-terminal instances on the node.
 In a future version, the engine will support offloading long-running suspended workflows to disk, freeing memory entirely until they are resumed.
 ====
 
 == Workflow states
 
-A workflow is always in one of these states:
+Once started, a workflow is always in one of these states:
 
 [cols="1,2"]
 |===
@@ -33,7 +34,7 @@ Any async steps still running are interrupted (see <<complete-with-running-steps
 |The workflow was cancelled via `ctx.cancel()`.
 
 |`TIMED_OUT`
-|The workflow exceeded its overall timeout.
+|A `TimeoutException` escaped the workflow body.
 |===
 
 `COMPLETED`, `FAILED`, `CANCELLED`, and `TIMED_OUT` are **terminal states**—the workflow will not be retried or resumed.
@@ -43,7 +44,7 @@ Any async steps still running are interrupted (see <<complete-with-running-steps
 The engine writes workflow lifecycle events with event-store tags as well:
 `workflowId=<id>` on engine-published workflow events and
 `workflowEvent=lifecycle` on workflow lifecycle events.
-`waitForEvent` step STARTED and terminal events additionally carry `workflowEvent=waitForStep`.
+`waitForEvent` step events with status STARTED, COMPLETED, CANCELLED or TIMED_OUT additionally carry `workflowEvent=waitForStep`.
 ====
 
 == The workflow context
@@ -378,8 +379,8 @@ parameters:
 [source,java]
 ----
 @WorkflowCompletedHandler
-public void onCompleted(WorkflowStatus status, SimpleWorkflowContext ctx, OrderFulfillmentWorkflow self) {
-    logger.info("Order {} fulfilled successfully! (workflow instance: {})", ctx.workflowPayload().get("orderId"), self);
+public void onCompleted(WorkflowStatus status, SimpleWorkflowContext ctx, WorkflowState state) {
+    logger.info("Order {} fulfilled successfully! (status: {})", ctx.workflowPayload().get("orderId"), state.workflowStatus());
 }
 ----
 
@@ -396,8 +397,8 @@ The following parameters are supported for workflow related handler methods:
 |The status that triggered the listener. Only available on lifecycle listener methods.
 Declaring it on the `@Workflow` method itself has no matching value, so that method won't be recognized as a handler.
 
-|The workflow instance's own type (or a supertype)
-|The workflow-annotated component instance itself, letting a listener call other methods or read fields on it.
+|`WorkflowState`
+|The state of the workflow instance, taken from the live execution or, when it is no longer live, from the stored history.
 
 |Any type with a public constructor accepting your `WorkflowContext` type
 |Your `WorkflowContext`, wrapped in that type. Useful for giving a lifecycle listener the same convenience type

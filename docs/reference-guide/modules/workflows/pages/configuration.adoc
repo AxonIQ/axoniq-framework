@@ -32,26 +32,22 @@ Here's a complete example showing how to set up the Axon configuration with a wo
 
 [source,java]
 ----
-var configurer = MessagingConfigurer.create();
+var configurer = WorkflowConfigurer.create();
 
-configurer.componentRegistry(r -> r.registerEnhancer(registry ->
-        registry.registerModule(
-                WorkflowModule
-                        .usingContext(SimpleWorkflowContext.class)
-                        .workflowContextFactory(c -> new SimpleWorkflowContextFactory())
-                        .workflowExecutionFactory(c ->
-                                new WorkflowContextAdoptingExecutionFactory<>(SimpleWorkflowContext.class))
-                        .definitions(d -> d
-                                .declarative(c -> new OrderFulfillmentWorkflow()::execute)
-                                .workflowName("OrderFulfillment")
-                                .on(EventConditions.fromType(OrderPlacedEvent.class))
-                                .customized((c, w) -> w
-                                        .eventNameCustomizer(namespace("io.myapp.orders"))
-                                        .workflowIdProvider(fromPayloadAttribute(c, "orderId"))
-                                )
+configurer.registerWorkflowModule(
+        WorkflowModule
+                .defaults("order-workflows", SimpleWorkflowContext.class)
+                .contextFactory(c -> new SimpleWorkflowContextFactory())
+                .definition(d -> d
+                        .declarative(c -> new OrderFulfillmentWorkflow()::execute)
+                        .workflowName("OrderFulfillment")
+                        .on(EventConditions.fromType(OrderPlacedEvent.class))
+                        .customized((c, w) -> w
+                                .eventNameCustomizer(namespace("io.myapp.orders"))
+                                .workflowIdProvider(new PayloadPropertyWorkflowIdProvider("orderId"))
                         )
-        )
-));
+                )
+);
 
 var configuration = configurer.start(); // <1>
 ----
@@ -64,59 +60,48 @@ The builder follows a step-by-step flow:
 [source]
 ----
 WorkflowModule
-    .usingContext(ContextType.class)           // 1. Which context type
-    .workflowContextFactory(...)               // 2. How to create context instances
-    .workflowExecutionFactory(...)             // 3. How to create executions
-    .definitions(d -> d                        // 4. Define one or more workflows
+    .defaults("module-name", ContextType.class) // 1. Module name and context type
+    .contextFactory(...)                    // 2. How to create context instances
+    .definition(d -> d                          // 3. Define a workflow
         .declarative(...) or .autodetected(...)
     );
 ----
 
-=== Step 1: Context type
+=== Step 1: Module name and context type
 
 [source,java]
 ----
-WorkflowModule.usingContext(SimpleWorkflowContext.class)
+WorkflowModule.defaults("order-workflows", SimpleWorkflowContext.class)
 ----
 
-Specifies the author-facing workflow context type. Use `SimpleWorkflowContext.class` for the built-in context, or your
+Specifies the module name and the author-facing workflow context type. Use `SimpleWorkflowContext.class` for the built-in context, or your
 own custom context class. Both implement `WorkflowContext`, the contract supplied to workflow bodies.
+The context type must extend `AbstractWorkflowContext`.
+`WorkflowModule.configure(name, contextType)` is the variant that also lets you supply a `WorkflowConfigurationRegistry`,
+a `WorkflowExecutionRepository`, history settings, and the configuration of the event processors, see <<running-on-several-nodes,Running on several nodes>>.
 
 === Step 2: Context factory
 
 [source,java]
 ----
-.workflowContextFactory(c -> new SimpleWorkflowContextFactory())
+.contextFactory(c -> new SimpleWorkflowContextFactory())
 ----
 
 Provides a factory that creates new context instances for each workflow execution.
 
-=== Step 3: Execution factory
-
-[source,java]
-----
-.workflowExecutionFactory(c -> new WorkflowContextAdoptingExecutionFactory<>(SimpleWorkflowContext.class))
-----
-
-`WorkflowContextAdoptingExecutionFactory` is the standard execution factory for author-facing workflow contexts
-(anything extending `AbstractWorkflowContext`). It bridges a `WorkflowContext` to the engine's internal
-`WorkflowExecutionOperations` runtime contract. Workflow definitions should depend on the author-facing context, not
-on the runtime contract.
-
-Import `WorkflowContextAdoptingExecutionFactory` and `AbstractWorkflowContext` from
-`io.axoniq.framework.workflow.runtime.execution`. The author-facing `WorkflowContext`, step definitions,
+Import `AbstractWorkflowContext` from `io.axoniq.framework.workflow.runtime.execution`. The author-facing `WorkflowContext`, step definitions,
 `EventCondition`, `EventConditions`, and workflow lifecycle exceptions reside in
 `io.axoniq.framework.workflow.dsl.api`; retry configuration resides in
 `io.axoniq.framework.workflow.dsl.api.retry`.
 
-=== Step 4: Workflow definitions
+=== Step 3: Workflow definitions
 
 You can define workflows in two ways:
 
 **Declarative**—full control:
 [source,java]
 ----
-.definitions(d -> d
+.definition(d -> d
         .declarative(c -> workflow::execute)
         .workflowName("OrderFulfillment")
         .on(EventConditions.fromType(OrderPlacedEvent.class))
@@ -127,26 +112,27 @@ You can define workflows in two ways:
 **Autodetected**—convention-based, reads `@Workflow` annotations:
 [source,java]
 ----
-.definitions(d -> d
-        .autodetected(c -> new OrderFulfillmentWorkflow(),
-                      SimpleWorkflowContext.class)
+.definition(d -> d
+        .autodetected(c -> new OrderFulfillmentWorkflow())
 )
 ----
 
-You can chain multiple definitions:
+You can add multiple definitions to the same module by calling `definition(...)` repeatedly:
 [source,java]
 ----
-.definitions(d -> d
-        .declarative(c -> workflowA::execute)
-        .workflowName("WorkflowA")
-        .on(EventConditions.fromType(EventA.class))
-        .notCustomized()
-
-        .declarative(c -> workflowB::execute)
-        .workflowName("WorkflowB")
-        .on(EventConditions.fromType(EventB.class))
-        .notCustomized()
-)
+WorkflowModule
+    .defaults("my-workflows", SimpleWorkflowContext.class)
+    .contextFactory(c -> new SimpleWorkflowContextFactory())
+    .definition(d -> d
+            .declarative(c -> workflowA::execute)
+            .workflowName("WorkflowA")
+            .on(EventConditions.fromType(EventA.class))
+            .notCustomized())
+    .definition(d -> d
+            .declarative(c -> workflowB::execute)
+            .workflowName("WorkflowB")
+            .on(EventConditions.fromType(EventB.class))
+            .notCustomized());
 ----
 
 == Start conditions
@@ -195,7 +181,7 @@ The workflow ID provider determines how each workflow instance gets its unique I
 .workflowIdProvider(fromPayloadAttribute(c, "orderId", id -> "order-" + id))
 
 // Extract directly without transformation
-.workflowIdProvider(fromPayloadAttribute(c, "orderId"))
+.workflowIdProvider(new PayloadPropertyWorkflowIdProvider("orderId"))
 ----
 
 == Customization options
@@ -208,7 +194,7 @@ The `.customized(...)` lambda receives the Axon `Configuration` and a `WorkflowC
         .eventNameCustomizer(namespace("io.myapp.orders")
                 .stepCompleted("Done")
                 .workflowBaseName("OrderFulfillment"))
-        .workflowIdProvider(fromPayloadAttribute(c, "orderId"))
+        .workflowIdProvider(new PayloadPropertyWorkflowIdProvider("orderId"))
         .registerWorkflowStatusChangeListener(WorkflowStatus.COMPLETED,
                 (status, context, processingContext) -> {
                     logger.info("Workflow {} completed", context.workflowId());
@@ -234,9 +220,92 @@ The `.customized(...)` lambda receives the Axon `Configuration` and a `WorkflowC
 
 |`recoverableExceptionPolicy(...)`
 |Decide which exceptions escaping the body pause the workflow instead of failing it. See xref:error-handling.adoc#recoverable-policy[Configuring the policy].
+
+|`workflowVersion(String)`
+|The version of this workflow definition. Defaults to the default version. See xref:versioning.adoc[Versioning].
 |===
 
 If you don't need any customizations, use `.notCustomized()`.
+
+[[running-on-several-nodes]]
+== Running on several nodes
+
+Each `WorkflowModule` runs its engine on its own pooled streaming event processor, named after the module.
+The history projector runs on a second processor named `WorkflowHistoryProjector[<module name>]`.
+Each workflow instance belongs to one segment of the engine processor, chosen by the hash of its workflow id.
+Subscribing processors, including Axon Server persistent streams, cannot back workflows.
+
+=== Token store
+
+The processor claims its segments in the unnamed `TokenStore` component of your application.
+Register a durable store, for example `JpaTokenStore`, as an unnamed component.
+Without one, the engine falls back to an in-memory token store and logs a warning.
+Claims then stay inside the process, so run a single node only.
+
+=== Processor settings
+
+`WorkflowModule.configure(...)` accepts `processorConfiguration(...)` for the engine processor and `historyProcessorConfiguration(...)` for the history processor.
+Both take a function that receives and returns a `PooledStreamingEventProcessorConfiguration`.
+Only the initial segment count is applied to a new token store. To change it later, split or merge the stored tokens.
+
+[source,java]
+----
+WorkflowModule
+    .configure("order-workflows", SimpleWorkflowContext.class)
+    .processorConfiguration(processor -> processor.initialSegmentCount(8))
+    .contextFactory(c -> new SimpleWorkflowContextFactory())
+    .definition(d -> d /* ... */);
+----
+
+=== Failover
+
+When a node stops, another node claims its segments and resumes the unfinished workflow instances.
+Every event an instance appends carries an append condition on its workflow id.
+A node that lost its claim without noticing has its append rejected, logs a warning, and stops that instance.
+
+[[spring-boot]]
+== Spring Boot
+
+Workflow support is part of the Axoniq Framework Spring Boot starter, `io.axoniq.framework:axoniq-spring-boot-starter`.
+It activates when the workflow engine is on the classpath, for example through `axoniq-workflow-dsl`.
+Set `axon.workflow.enabled=false` to turn it off.
+The auto-configuration registers every Spring bean that has `@Workflow` annotated methods.
+A `RecoverableWorkflowExceptionPolicy` bean sets the exception policy, as described in xref:error-handling.adoc#recoverable-policy[Configuring the policy].
+All `@Workflow` beans with the same context type share one `WorkflowModule`, named after the simple name of that context type.
+
+The engine processor is configured with `axon.workflow.*` properties.
+The history processor uses the same properties under `axon.workflow.history.*`.
+
+[cols="2,1,3"]
+|===
+|Property |Default |Description
+
+|`initial-segment-count`
+|`16`
+|Number of segments created on first start.
+
+|`batch-size`
+|`1`
+|Maximum number of events read from the event store per poll.
+
+|`thread-count`
+|`4`
+|Maximum number of segments claimed by one node.
+
+|`token-claim-interval`
+|`5000`
+|Milliseconds between attempts to claim segments.
+
+|`claim-extension-threshold`
+|`5000`
+|Milliseconds after which a claim is extended.
+
+|`coordinator-claim-extension`
+|`false`
+|Whether the coordinator extends claims.
+|===
+
+See <<running-on-several-nodes,Running on several nodes>> for the token store and failover.
 
 [[metadata-and-correlation-data]]
 == Metadata and correlation data
@@ -259,13 +328,22 @@ The engine attaches the following metadata to every workflow and step event:
 |The name of the step (step events only).
 
 |`stepType`
-|The step's lifecycle phase: `STARTED`, `COMPLETED`, `FAILED`, `TIMED_OUT`, or `CANCELLED` (step events only).
+|The step's lifecycle phase: `STARTED`, `RETRYING`, `RETRY_STARTED`, `COMPLETED`, `FAILED`, `TIMED_OUT`, or `CANCELLED` (step events only).
 
 |`stepPrimitive`
 |Internal step classification used by the engine: `WAIT_FOR_EVENT` on `waitForEvent` step events, `PUBLISH` on events published with `publish` / `awaitPublish`.
 
 |`workflowStatus`
 |The workflow status: `STARTED`, `COMPLETED`, `FAILED`, `TIMED_OUT`, or `CANCELLED` (workflow events only).
+
+|`workflowDefinitionName`
+|The qualified name of the workflow definition (workflow events).
+
+|`workflowDefinitionVersion`
+|The version of the workflow definition (workflow events).
+
+|`versionChangeId`, `version`
+|The recorded version change identifier and the workflow version, on version marker events.
 
 |`modifyPayload`
 |The payload reducer name, if one was configured on a completed step (for example, `COMBINE_GLOBAL_AND_LOCAL`).
@@ -305,10 +383,10 @@ NOTE: Axon Framework automatically registers a `MessageOriginProvider` by defaul
 
 [source,java]
 ----
-configurer.eventProcessing(ep -> ep
+configurer.eventSourcing(es -> es.messaging(m -> m
     .registerCorrelationDataProvider(config ->
         new MessageOriginProvider()) // <1>
-);
+));
 ----
 <.> `MessageOriginProvider` is a built-in provider that copies the `correlationId` and `causationId` from the incoming message metadata to all outgoing messages published within the same processing context.
 
@@ -316,7 +394,7 @@ You can also create a custom provider to propagate additional metadata fields:
 
 [source,java]
 ----
-configurer.eventProcessing(ep -> ep
+configurer.eventSourcing(es -> es.messaging(m -> m
     .registerCorrelationDataProvider(config ->
         message -> {
             var metadata = message.metadata();
@@ -329,7 +407,7 @@ configurer.eventProcessing(ep -> ep
             }
             return result;
         })
-);
+));
 ----
 
 With this configuration, if the triggering event (for example, `OrderPlaced`) carries `tenantId` and `userId` in its metadata, every step event (`ReserveStockStarted`, `ReserveStockCompleted`, etc.) will also carry those values—automatically, with no changes to your workflow code.
@@ -430,10 +508,9 @@ Wire it all together:
 [source,java]
 ----
 WorkflowModule
-    .usingContext(ApprovalWorkflowContext.class)
-    .workflowContextFactory(c -> new ApprovalWorkflowContextFactory())
-    .workflowExecutionFactory(c -> new WorkflowContextAdoptingExecutionFactory<>(ApprovalWorkflowContext.class))
-    .definitions(d -> d
+    .defaults("purchase-approval", ApprovalWorkflowContext.class)
+    .contextFactory(c -> new ApprovalWorkflowContextFactory())
+    .definition(d -> d
             .declarative(c -> new PurchaseApprovalWorkflow()::execute)
             .workflowName("PurchaseApproval")
             .on(EventConditions.fromType(PurchaseRequestSubmitted.class))

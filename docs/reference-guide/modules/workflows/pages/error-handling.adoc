@@ -19,7 +19,7 @@ The engine distinguishes 3 outcomes:
 
 |**Workflow terminal**
 |The workflow itself ended with `COMPLETED`, `FAILED`, `CANCELLED` or `TIMED_OUT`. A terminal event is stored. Nothing runs again.
-|`ctx.fail(...)`, `ctx.cancel(...)`, a workflow timeout, or an exception nobody caught, see <<terminal>>.
+|`ctx.fail(...)`, `ctx.cancel(...)`, a `TimeoutException` escaping the body, or an exception nobody caught, see <<terminal>>.
 
 |**Workflow stopped, not ended**
 |The body stopped without a terminal status. The stored status is still `STARTED`. Nothing is lost.
@@ -105,6 +105,14 @@ if (shipping.failure()) { // blocks until the step reaches a terminal status
 
 The saga pattern in xref:common-patterns.adoc[Common Patterns] shows compensation in reverse order.
 
+[[exhausted-retries]]
+=== After retries are exhausted
+
+When the retry policy is exhausted, the step records a durable `FAILED` event and throws a `StepFailedException`.
+Catch it in the body to compensate, as shown above. If the body does not catch it, the workflow ends `FAILED`.
+
+IMPORTANT: The engine cannot resume or retry a `FAILED` workflow. `WorkflowManager` can only request cancellation.
+
 [[durable-errors]]
 == What is stored about an error
 
@@ -152,20 +160,20 @@ interrupted, and the instance is removed from the engine.
 |`CANCELLED`
 |Explicit, graceful stop.
 
-|Workflow timeout
+|A `java.util.concurrent.TimeoutException` that escapes the body as the top-level exception
 |`TIMED_OUT`
-|Configured on the workflow.
+|Checked before the recoverable policy. A `TimeoutException` wrapped as the cause of another exception is classified by the policy, see <<recoverable>>.
 
 |A `StepFailedException` the body did not catch
 |`FAILED`
-|The step outcome is durable and business-visible, so the failure ends the workflow. The exception is stored as the cause.
+|The step outcome is durable and business-visible, so the failure ends the workflow. The exception is stored as the cause. Exception: `StepInterruptedException`, raised when the engine stops, ends the body without a terminal status, see <<stopped>>.
 
 |Any other exception the body did not catch and that is not recoverable
 |`FAILED`
 |A defect in the body, such as a `NullPointerException`, `ClassCastException` or `IllegalArgumentException`. See <<recoverable>>.
 |===
 
-Lifecycle listeners such as `@OnFailure` fire on each terminal status. See
+Lifecycle listeners such as `@WorkflowFailedHandler` fire on each terminal status. See
 xref:workflow-lifecycle.adoc[Workflow Lifecycle].
 
 [[stopped]]
@@ -207,8 +215,15 @@ on 2 occasions:
 The body runs again from its recorded state. Completed steps are not re-executed. A workflow stopped by a
 replay drift resumes as soon as fixed code is deployed and the node restarts.
 
-To find such workflows, query `WorkflowManager` for instances in `STARTED` whose last step event is older than
-you expect, and correlate with the log lines above.
+[[checkpoint-safety]]
+=== Recovery never skips unfinished work
+
+The processor stores its position as the recovery point. The engine does not move that position past an event
+until the workflow state caused by that event is durable. For example, the position does not pass an event that
+wakes an `awaitEvent` step before the step's `COMPLETED` event is stored.
+
+When a segment is released, the release fails instead of storing a position past work that is not durable yet.
+The next node to claim the segment starts from the older position, so at most some events are delivered again.
 
 [[recoverable]]
 === Recoverable versus unrecoverable exceptions
@@ -221,7 +236,7 @@ treats these as recoverable:
 * `InterruptedException` and `StepInterruptedException`, raised when the engine stops
 * `RejectedExecutionException`, raised when an executor is shutting down
 * `AxonTransientException`, the framework's marker for a condition worth retrying
-* `TimeoutException` and `IOException`, raised when infrastructure did not answer
+* `TimeoutException` (only when wrapped as a cause, a top-level one times out the workflow) and `IOException`, raised when infrastructure did not answer
 
 Everything else fails the workflow.
 
