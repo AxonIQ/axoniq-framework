@@ -67,13 +67,16 @@ import static io.axoniq.axonserver.connector.event.PersistentStreamSegment.PENDI
 /**
  * A connection instance receiving the events for a persistent stream to pass on in batches to an event consumer.
  * <p>
- * Opens a gRPC connection to Axon Server via {@link #open(BiFunction)} and invokes the supplied
- * {@link BiFunction} for each batch. The batch consumer returns a {@link CompletableFuture} that must complete before
- * the token for the last event in the batch is acknowledged to Axon Server. On consumer failure the batch is retried
- * with exponential back-off.
+ * Opens a gRPC connection to Axon Server via {@link #open(BiFunction)} and invokes the supplied {@link BiFunction} for
+ * each batch. The batch consumer returns a {@link CompletableFuture} that must complete before the token for the last
+ * event in the batch is acknowledged to Axon Server. On consumer failure the batch is retried with exponential
+ * back-off.
  * <p>
- * This is an internal helper for the {@link PersistentStreamEventSource} managing the gRPC based persistent stream
- * with Axon Server. This class is usually not used directly by users.
+ * {@link #close()} still delivers every event already buffered locally at the moment it is called to the consumer, and
+ * only retires that consumer, in favor of a no-op, once all of it has been delivered.
+ * <p>
+ * This is an internal helper for the {@link PersistentStreamEventSource} managing the gRPC based persistent stream with
+ * Axon Server. This class is usually not used directly by users.
  *
  * @author Marc Gathier
  * @author Jakob Hatzl
@@ -96,7 +99,6 @@ public class PersistentStreamConnection {
     private final PersistentStreamProperties persistentStreamProperties;
 
     private final AtomicReference<@Nullable PersistentStream> persistentStreamHolder = new AtomicReference<>();
-    private final AtomicBoolean closing = new AtomicBoolean(false);
     private final AtomicBoolean opened = new AtomicBoolean(false);
 
     private final AtomicReference<BiFunction<List<? extends EventMessage>, ProcessingContext, CompletableFuture<?>>>
@@ -149,8 +151,8 @@ public class PersistentStreamConnection {
     }
 
     /**
-     * Instantiates a {@code PersistentStreamConnection} placing additional resources on the
-     * {@link ProcessingContext} of every batch through the given {@code contextCustomizer}.
+     * Instantiates a {@code PersistentStreamConnection} placing additional resources on the {@link ProcessingContext}
+     * of every batch through the given {@code contextCustomizer}.
      *
      * @param streamId                   the unique identifier of the persistent stream
      * @param connectionManager          the Axon Server connection manager
@@ -198,24 +200,22 @@ public class PersistentStreamConnection {
     /**
      * Initiates the connection to Axon Server and starts delivering events to the given {@code consumer}.
      * <p>
-     * The stream can be opened with only a single consumer at a time. After a previous {@link #close()}, the stream
-     * may be reopened by calling this method again.
+     * The stream can be opened with only a single consumer at a time. After a previous {@link #close()}, the stream may
+     * be reopened by calling this method again.
      *
-     * @param consumer the consumer of batches of event messages; to allow providing tracking and replay information
-     *                 per event, it receives each event in a single callback {@link ProcessingContext} enriched with
-     *                 the current {@link TrackingToken} and, when available, aggregate identity information, and must
+     * @param consumer the consumer of batches of event messages; to allow providing tracking and replay information per
+     *                 event, it receives each event in a single callback {@link ProcessingContext} enriched with the
+     *                 current {@link TrackingToken} and, when available, aggregate identity information, and must
      *                 return a {@link CompletableFuture} that completes when the event has been processed; events are
-     *                 still processed in batches as configured through the {@code batchSize} constructor argument,
-     *                 the persistent stream connection takes care of creating and spanning a unit of work
-     *                 over all events belonging to a single batch
-     *
+     *                 still processed in batches as configured through the {@code batchSize} constructor argument, the
+     *                 persistent stream connection takes care of creating and spanning a unit of work over all events
+     *                 belonging to a single batch
      * @throws IllegalStateException if the stream was already opened
      */
     public void open(BiFunction<List<? extends EventMessage>, ProcessingContext, CompletableFuture<?>> consumer) {
         if (!opened.compareAndSet(false, true)) {
             throw new IllegalStateException(String.format("%s: Persistent Stream has already been opened.", streamId));
         }
-        closing.set(false);
         this.consumer.set(consumer);
         start();
     }
@@ -260,9 +260,9 @@ public class PersistentStreamConnection {
 
     private void streamClosed(@Nullable Throwable throwable) {
         persistentStreamHolder.set(null);
-        if (throwable != null && !closing.get()) {
+        if (throwable != null && opened.get()) {
             // Only reschedule reconnection if the stream was NOT intentionally closed.
-            // When close() is called, closing flag is set to true, preventing reconnection attempts.
+            // close() flips opened to false, preventing reconnection attempts.
             logger.info("{}: Rescheduling persistent stream", streamId, throwable);
             scheduler.schedule(this::start,
                                retrySeconds.getAndUpdate(current -> Math.min(MAX_RETRY_INTERVAL_SECONDS, current * 2)),
@@ -273,36 +273,28 @@ public class PersistentStreamConnection {
     /**
      * Closes the persistent stream connection to Axon Server.
      * <p>
-     * Events already buffered locally for a segment at the moment this method is called are still delivered
-     * to the consumer supplied to {@link #open(BiFunction)}. The consumer is only retired, in favor of a
-     * no-op, once every currently open segment has confirmed its local buffer is fully drained. Otherwise,
-     * those buffered events would be acknowledged to Axon Server without ever reaching a real consumer.
+     * Events already buffered locally for a segment at the moment this method is called are still delivered to the
+     * consumer supplied to {@link #open(BiFunction)}. The consumer is only retired, in favor of a no-op, once every
+     * currently open segment has confirmed its local buffer is fully drained. Otherwise, those buffered events would be
+     * acknowledged to Axon Server without ever reaching a real consumer.
      */
     public void close() {
-        closing.set(true);
-        opened.set(false);
         BiFunction<List<? extends EventMessage>, ProcessingContext, CompletableFuture<?>> consumerToRetire =
                 consumer.get();
         List<SegmentConnection> activeSegments = List.copyOf(segments.values());
-        if (activeSegments.isEmpty()) {
-            consumer.compareAndSet(consumerToRetire, NO_OP_CONSUMER);
-        } else {
-            AtomicInteger pendingDrains = new AtomicInteger(activeSegments.size());
-            activeSegments.forEach(segmentConnection -> segmentConnection.drained().thenRun(() -> {
-                if (pendingDrains.decrementAndGet() == 0) {
-                    // a CAS, not a plain set: if open() has since installed a new consumer, this retirement
-                    // of the old one must not clobber it
-                    consumer.compareAndSet(consumerToRetire, NO_OP_CONSUMER);
-                }
-            }));
-        }
+        CompletableFuture.allOf(activeSegments.stream().map(SegmentConnection::drained)
+                                              .toArray(CompletableFuture[]::new))
+                         .thenRun(() -> {
+                             // a CAS, not a plain set: if open() has since installed a new consumer, this
+                             // retirement of the old one must not clobber it
+                             consumer.compareAndSet(consumerToRetire, NO_OP_CONSUMER);
+                         });
         PersistentStream persistentStream = persistentStreamHolder.getAndSet(null);
+        // set last: a concurrent open() installing a new stream must not have it closed by this call
+        opened.set(false);
         if (persistentStream != null) {
             persistentStream.close();
         }
-        // re-evaluates every segment's closed state in case it was already idle, with nothing left to drain,
-        // before persistentStream.close() appended its terminal marker
-        activeSegments.forEach(SegmentConnection::readMessagesFromSegment);
     }
 
     private interface SegmentState {
@@ -323,8 +315,8 @@ public class PersistentStreamConnection {
         }
 
         /**
-         * A future completing once this segment's local buffer has been fully drained of events it already
-         * held at the moment {@link PersistentStreamConnection#close()} was called.
+         * A future completing once this segment's local buffer has been fully drained of events it already held at the
+         * moment {@link PersistentStreamConnection#close()} was called.
          *
          * @return a future completing once this segment is fully drained
          */
@@ -343,6 +335,13 @@ public class PersistentStreamConnection {
             }
 
             private void retry() {
+                if (!opened.get()) {
+                    // the acknowledgement can no longer reach Axon Server at this point anyway. The real connector's
+                    // close() only waits briefly for a done marker before tearing down the outbound stream, so retrying
+                    // further would just hold up this segment's drain for nothing
+                    drained.complete(null);
+                    return;
+                }
                 processBatch(batch)
                         .thenRun(() -> {
                             currentState.set(new ProcessingState());
@@ -380,11 +379,13 @@ public class PersistentStreamConnection {
                             if (ex == null) {
                                 return processBatch(batch)
                                         .exceptionally(fla -> {
-                                            logger.warn("{}: Exception while processing events for segment {}, retrying after {} second",
-                                                        streamId,
-                                                        persistentStreamSegment.segment(),
-                                                        MIN_RETRY_INTERVAL_SECONDS,
-                                                        fla);
+                                            logger.warn(
+                                                    "{}: Exception while processing events for segment {}, retrying after {} second",
+                                                    streamId,
+                                                    persistentStreamSegment.segment(),
+                                                    MIN_RETRY_INTERVAL_SECONDS,
+                                                    fla
+                                            );
                                             currentState.set(new RetryState(batch));
                                             return null;
                                         });
@@ -411,7 +412,11 @@ public class PersistentStreamConnection {
                                 acknowledgeDoneWhenClosed(persistentStreamSegment);
                             }
                             processGate.set(false);
-                            if (!persistentStreamSegment.isClosed() && persistentStreamSegment.peek() != null) {
+                            // covers a missed wakeup: a messageAvailable() call for the terminal marker arriving
+                            // while processGate was still true is otherwise never retried, since peek() is null
+                            // once that marker is the only thing left to consume
+                            if (persistentStreamSegment.peek() != null
+                                    || (persistentStreamSegment.isClosed() && !doneConfirmed.get())) {
                                 scheduler.submit(SegmentConnection.this::readMessagesFromSegment);
                             }
                         });
@@ -442,7 +447,11 @@ public class PersistentStreamConnection {
             }
 
             private void acknowledgeDoneWhenClosed(PersistentStreamSegment persistentStreamSegment) {
-                if (persistentStreamSegment.isClosed() && doneConfirmed.compareAndSet(false, true)) {
+                // only this ProcessingState may confirm the drain — if a batch failed in the meantime,
+                // currentState has already moved to a RetryState, and that failed batch still needs to be
+                // retried through the real consumer before the segment is actually drained
+                if (persistentStreamSegment.isClosed() && currentState.get() == this
+                        && doneConfirmed.compareAndSet(false, true)) {
                     persistentStreamSegment.acknowledge(PENDING_WORK_DONE_MARKER);
                     drained.complete(null);
                 }
@@ -495,7 +504,9 @@ public class PersistentStreamConnection {
         }
 
         public void messageAvailable() {
-            if (!processGate.get() && !closing.get()) {
+            // closing a segment appends its terminal marker, which also triggers this callback — don't drop
+            // that notification, or an idle segment's drain never gets scheduled and close() stalls on it
+            if (!processGate.get() && (opened.get() || persistentStreamSegment.isClosed())) {
                 scheduler.submit(this::readMessagesFromSegment);
             }
         }
