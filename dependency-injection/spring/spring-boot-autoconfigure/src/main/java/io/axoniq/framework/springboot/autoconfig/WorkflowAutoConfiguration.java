@@ -20,18 +20,14 @@ package io.axoniq.framework.springboot.autoconfig;
 
 import io.axoniq.framework.springboot.WorkflowProperties;
 import io.axoniq.framework.springboot.workflow.WorkflowDefinitionLookup;
-import io.axoniq.framework.workflow.configuration.WorkflowEventProcessingRegistrationEnhancer;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowEngine;
 import org.springframework.beans.factory.config.BeanDefinition;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Role;
-
-import static io.axoniq.framework.workflow.configuration.WorkflowEventProcessingRegistrationEnhancer.DEFAULT_MODULE_NAME;
 
 /**
  * Autoconfiguration for workflow infrastructure.
@@ -54,21 +50,5 @@ public class WorkflowAutoConfiguration {
     @Bean
     public static WorkflowDefinitionLookup workflowDefinitionLookup() {
         return new WorkflowDefinitionLookup();
-    }
-
-    /**
-     * Configures the event handling for the top-level workflow module.
-     *
-     * @param workflowProperties the workflow properties of this application.
-     * @return enhancer.
-     */
-    @Bean
-    @ConditionalOnMissingBean
-    public WorkflowEventProcessingRegistrationEnhancer workflowEventHandlersDefaults(
-            WorkflowProperties workflowProperties
-    ) {
-        return new WorkflowEventProcessingRegistrationEnhancer(
-                DEFAULT_MODULE_NAME, null, null, true, workflowProperties.getInitialSegmentCount()
-        );
     }
 }

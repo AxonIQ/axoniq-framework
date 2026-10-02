@@ -18,13 +18,14 @@
  */
 package io.axoniq.framework.springboot.workflow;
 
+import io.axoniq.framework.workflow.annotation.Workflow;
 import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContextFactory;
-import io.axoniq.framework.workflow.annotation.Workflow;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowDefinition;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowConfigurationRegistry;
 import io.axoniq.framework.workflow.runtime.util.DefaultTimeoutFutureResolver;
 import io.axoniq.framework.workflow.runtime.util.FutureResolver;
+import org.axonframework.common.configuration.Configuration;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
 import org.axonframework.eventsourcing.eventstore.inmemory.InMemoryEventStorageEngine;
 import org.axonframework.messaging.core.MessageType;
@@ -62,13 +63,16 @@ import static org.assertj.core.api.Assertions.assertThat;
 public class WorkflowAutodetectionIT {
 
     @Autowired
-    private WorkflowConfigurationRegistry<?> registry;
+    private Configuration configuration;
 
     @Autowired
     private TestWorkflow testWorkflow;
 
     @Test
-    void should_autodetect_workflow() {
+    void autodetectsWorkflow() {
+        WorkflowConfigurationRegistry<?> registry =
+                configuration.getComponents(WorkflowConfigurationRegistry.class)
+                             .get("WorkflowConfigurationRegistry[SimpleWorkflowContext]");
         var processingContext = StubProcessingContext.withComponents(
                 cr -> cr.registerComponent(FutureResolver.class, cfg -> new DefaultTimeoutFutureResolver())
         );

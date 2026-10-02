@@ -24,6 +24,7 @@ import io.axoniq.framework.workflow.runtime.api.execution.context.Version;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.infra.DescribableComponent;
+import org.axonframework.messaging.core.Context;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.VersionedType;
@@ -47,15 +48,26 @@ import java.util.stream.Collectors;
  * @author Simon Zambrovski
  * @since 5.4.0
  */
-@Internal
 public interface WorkflowConfigurationRegistry<W extends WorkflowConfigurationRegistry<W>>
         extends DescribableComponent {
 
     /**
+     * Resource key under which the owning {@link io.axoniq.framework.workflow.configuration.WorkflowModule}'s own
+     * registry is stashed on a workflow execution's {@link ProcessingContext}.
+     * <p>
+     * The registry is a per-module, named {@code Configuration} component (so several {@code WorkflowModule}s never
+     * share or collide over one), so it cannot be found through an unqualified {@code Configuration} lookup. The
+     * {@link io.axoniq.framework.workflow.runtime.execution.WorkflowEngine} that resolved it puts it here, once, at
+     * workflow-context creation time, so {@link #resolveOrFallback} can read it back without knowing that name.
+     */
+    Context.ResourceKey<WorkflowConfigurationRegistry<?>> RESOURCE_KEY =
+            Context.ResourceKey.withLabel("workflowConfigurationRegistry");
+
+    /**
      * Convenience helper that resolves the {@link WorkflowConfiguration} for an in-flight workflow's body against the
-     * registry available on the given {@link ProcessingContext}. When the registry is unavailable (e.g. tests that wire
-     * the execution directly without a registry component), logs a {@code [registry-missing]} routing line and falls
-     * back to {@code startConfig}.
+     * registry stashed on the given {@link ProcessingContext} (see {@link #RESOURCE_KEY}). When the registry is
+     * unavailable (e.g. tests that wire the execution directly without one), logs a {@code [registry-missing]} routing
+     * line and falls back to {@code startConfig}.
      */
     static WorkflowConfiguration<?> resolveOrFallback(
             ProcessingContext ctx,
@@ -64,7 +76,7 @@ public interface WorkflowConfigurationRegistry<W extends WorkflowConfigurationRe
             String stateVersion,
             WorkflowConfiguration<?> startConfig
     ) {
-        WorkflowConfigurationRegistry<?> registry = ctx.component(WorkflowConfigurationRegistry.class);
+        WorkflowConfigurationRegistry<?> registry = ctx.getResource(RESOURCE_KEY);
         if (registry == null) {
             RoutingLog.LOGGER.warn(
                     "Workflow {} ({}) routing: state='{}' definitions=<registry unavailable> -> target='{}' "

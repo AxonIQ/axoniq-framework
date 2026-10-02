@@ -18,10 +18,11 @@
  */
 package io.axoniq.framework.springboot.workflow;
 
-import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.framework.workflow.annotation.Workflow;
+import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowConfigurationRegistry;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowEngine;
+import org.axonframework.common.configuration.Configuration;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
 import org.axonframework.eventsourcing.eventstore.inmemory.InMemoryEventStorageEngine;
 import org.axonframework.messaging.core.QualifiedName;
@@ -39,12 +40,11 @@ import org.springframework.test.context.ContextConfiguration;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Verifies that multiple {@link Workflow @Workflow} beans of the same workflow-context type are
- * registered into a SINGLE module that shares one {@link WorkflowConfigurationRegistry} and
- * {@link WorkflowEngine}. This is the architectural prerequisite for cross-version routing: two
- * beans with the same {@code workflowName} but different {@code @Workflow(version=...)} need to be
- * visible to one another so the engine can pick the highest version on start and look up a sibling
- * definition on replay.
+ * Verifies that multiple {@link Workflow @Workflow} beans of the same workflow-context type are registered into a
+ * SINGLE module that shares one {@link WorkflowConfigurationRegistry} and {@link WorkflowEngine}. This is the
+ * architectural prerequisite for cross-version routing: two beans with the same {@code workflowName} but different
+ * {@code @Workflow(version=...)} need to be visible to one another so the engine can pick the highest version on start
+ * and look up a sibling definition on replay.
  *
  * @author Stefan Dragisic
  */
@@ -59,10 +59,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 public class WorkflowMultiVersionGroupingIT {
 
     @Autowired
-    private WorkflowConfigurationRegistry<?> registry;
+    private Configuration configuration;
 
     @Test
     void bothBeansShareOneRegistryWithDistinctVersions() {
+        WorkflowConfigurationRegistry<?> registry =
+                configuration.getComponents(WorkflowConfigurationRegistry.class)
+                             .get("WorkflowConfigurationRegistry[SimpleWorkflowContext]");
+
         var configurations = registry.getWorkflowsConfigurations(new QualifiedName("io.namespace.OrderPlaced"));
         assertThat(configurations)
                 .as("Both v1 and v2 @Workflow beans should land in the SAME registry under the same start-event qualified name")
@@ -115,6 +119,7 @@ public class WorkflowMultiVersionGroupingIT {
     }
 
     public static class OrderWorkflowV1 {
+
         @Workflow(
                 workflowName = "OrderWorkflow",
                 startOnEventName = "io.namespace.OrderPlaced",
@@ -126,6 +131,7 @@ public class WorkflowMultiVersionGroupingIT {
     }
 
     public static class OrderWorkflowV2 {
+
         @Workflow(
                 workflowName = "OrderWorkflow",
                 startOnEventName = "io.namespace.OrderPlaced",

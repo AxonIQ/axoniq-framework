@@ -1,3 +1,22 @@
+/*
+ * Copyright (c) 2010-2026. AxonIQ B.V.
+ *
+ * Licensed under the AXONIQ TERMS OF SERVICE,
+ * Version 29 April 2026 (the "License");
+ *
+ * The software is available for evaluation use without registration.
+ * Continued use beyond the evaluation period requires registration
+ * and a commercial license. See the License for the specific language
+ * governing permissions and limitations under the License.
+ * You may not use this file except in compliance with the License.
+ *
+ * You may obtain a copy of the License at:
+ *  https://www.axoniq.io/legal/terms-of-service
+ *
+ * For licensing information and to register, visit:
+ *  https://www.axoniq.io/pricing
+ */
+
 package io.axoniq.framework.integrationtests.workflow;
 
 import io.axoniq.framework.axonserver.connector.configuration.AxonServerConfigurationEnhancer;
@@ -5,15 +24,13 @@ import io.axoniq.framework.workflow.annotation.Workflow;
 import io.axoniq.framework.workflow.configuration.WorkflowConfigurer;
 import io.axoniq.framework.workflow.configuration.WorkflowModule;
 import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContext;
-import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContextFactory;
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.messaging.eventhandling.gateway.EventGateway;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.ReplayToken;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.store.TokenStore;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.store.inmemory.InMemoryTokenStore;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 
 import java.time.Duration;
 import java.util.List;
@@ -41,16 +58,17 @@ class WorkflowProcessorInitialPositionTest {
     }
 
     @Test
-    void startEventsPublishedBeforeTheFirstStartDoNotStartWorkflows() throws Exception {
+    void startEventsPublishedBeforeTheFirstStartDoNotStartWorkflows() {
         // given a workflow definition and a start event that is already in the store
         var started = ConcurrentHashMap.<String>newKeySet();
         var tokenStore = new InMemoryTokenStore();
         var configurer = WorkflowConfigurer.create();
         configurer.componentRegistry(r -> r.disableEnhancer(AxonServerConfigurationEnhancer.class)
                                            .registerComponent(TokenStore.class, c -> tokenStore));
-        configurer.registerWorkflowModule(WorkflowModule.defaults("Recording", SimpleWorkflowContext.class)
-                                                        .workflowContextFactory(c -> new SimpleWorkflowContextFactory())
-                                                        .definition(d -> d.autodetected(c -> new RecordingWorkflow(started))));
+        configurer.registerWorkflowModule(
+                WorkflowModule.defaults("Recording", SimpleWorkflowContext.class)
+                              .definition(d -> d.autodetected(c -> new RecordingWorkflow(started)))
+        );
         configuration = configurer.build();
         var events = configuration.getComponent(EventGateway.class);
         events.publish(null, List.of(new ThingRequested("before"))).orTimeout(5, TimeUnit.SECONDS).join();
@@ -69,7 +87,7 @@ class WorkflowProcessorInitialPositionTest {
 
     private static TrackingToken storedToken(InMemoryTokenStore tokenStore) {
         try {
-            return tokenStore.fetchToken("Workflow", 0, null).orTimeout(5, TimeUnit.SECONDS).join();
+            return tokenStore.fetchToken("Recording", 0, null).orTimeout(5, TimeUnit.SECONDS).join();
         } catch (Exception notInitializedYet) {
             return null;
         }

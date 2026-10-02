@@ -261,6 +261,7 @@ public class WorkflowEngine implements
             }
 
             var payload = requireNonNull(eventMessage.payloadAs(PAYLOAD_TYPE), "Error converting initial payload");
+            processingContext.putResource(WorkflowConfigurationRegistry.RESOURCE_KEY, workflowConfigurationRegistry);
             var workflowContext = workflowConfiguration.workflowContextFactory().createContext(
                     payload, workflowId, processingContext, workflowConfiguration
             );
@@ -411,6 +412,15 @@ public class WorkflowEngine implements
         return CompletableFuture.completedFuture(null);
     }
 
+    /**
+     * Returns whether the given restore {@code failure} is an {@link UnrecognizedWorkflowDefinitionException},
+     * possibly wrapped in a {@link java.util.concurrent.CompletionException} by the future chain it surfaced from.
+     */
+    private static boolean isUnrecognizedDefinition(Throwable failure) {
+        return failure instanceof UnrecognizedWorkflowDefinitionException
+                || failure.getCause() instanceof UnrecognizedWorkflowDefinitionException;
+    }
+
     private void logFailedRestore(Segment segment, @Nullable Throwable failure) {
         if (failure != null) {
             logger.error("Restoring the workflow executions of segment {} did not complete within {}; failing the "
@@ -474,14 +484,25 @@ public class WorkflowEngine implements
                                                                    // node looks healthy. The skipped instance keeps its
                                                                    // durable state and is restored by a later claim.
                                                                    .exceptionally(failure -> {
-                                                                       logger.error(
-                                                                               "Skipping workflow '{}' of segment {}: "
-                                                                                       + "it could not be restored. It "
-                                                                                       + "stays durable and is not "
-                                                                                       + "running on this node.",
-                                                                               workflowId,
-                                                                               segment.getSegmentId(),
-                                                                               failure);
+                                                                       if (isUnrecognizedDefinition(failure)) {
+                                                                           logger.trace(
+                                                                                   "Skipping workflow '{}' of "
+                                                                                           + "segment {}: its "
+                                                                                           + "definition belongs to "
+                                                                                           + "another WorkflowModule, "
+                                                                                           + "not this engine.",
+                                                                                   workflowId,
+                                                                                   segment.getSegmentId());
+                                                                       } else {
+                                                                           logger.error(
+                                                                                   "Skipping workflow '{}' of segment {}: "
+                                                                                           + "it could not be restored. It "
+                                                                                           + "stays durable and is not "
+                                                                                           + "running on this node.",
+                                                                                   workflowId,
+                                                                                   segment.getSegmentId(),
+                                                                                   failure);
+                                                                       }
                                                                        return null;
                                                                    }))
                                                            .toArray(CompletableFuture[]::new);
@@ -533,14 +554,17 @@ public class WorkflowEngine implements
         // cannot restore it.
         var workflowConfiguration = workflowConfigurationRegistry
                 .getWorkflowConfiguration(definitionId)
-                .or(() -> workflowConfigurationRegistry.findClosestRegisteredVersion(workflowName,
-                                                                                     definitionId.version()))
-                .or(() -> workflowConfigurationRegistry.findClosestHigherRegisteredVersion(workflowName,
-                                                                                           definitionId.version()))
-                .orElseThrow(() -> new IllegalStateException(
+                .or(() -> workflowConfigurationRegistry.findClosestRegisteredVersion(
+                        workflowName, definitionId.version()
+                ))
+                .or(() -> workflowConfigurationRegistry.findClosestHigherRegisteredVersion(
+                        workflowName, definitionId.version()
+                ))
+                .orElseThrow(() -> new UnrecognizedWorkflowDefinitionException(
                         "No workflow configuration found for workflow '%s' with definition %s."
                                 .formatted(workflowId, definitionId)
                 ));
+        executionContext.putResource(WorkflowConfigurationRegistry.RESOURCE_KEY, workflowConfigurationRegistry);
         var workflowContext = workflowConfiguration.workflowContextFactory().createContext(
                 state.payload(),
                 workflowId,

@@ -18,8 +18,8 @@
  */
 package io.axoniq.framework.workflow.configuration;
 
-import io.axoniq.framework.workflow.dsl.api.EventConditions;
 import io.axoniq.framework.workflow.annotation.Workflow;
+import io.axoniq.framework.workflow.dsl.api.EventConditions;
 import io.axoniq.framework.workflow.runtime.api.execution.context.RecoverableWorkflowExceptionPolicy;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.framework.workflow.runtime.execution.AbstractWorkflowContext;
@@ -44,9 +44,13 @@ class WorkflowConfigurerRecoverableExceptionPolicyTest {
     private static final RecoverableWorkflowExceptionPolicy COMPONENT_POLICY = e -> e instanceof IllegalStateException;
     private static final RecoverableWorkflowExceptionPolicy WORKFLOW_POLICY = e -> e instanceof ArithmeticException;
 
-    private static RecoverableWorkflowExceptionPolicy policyOf(WorkflowConfigurer configurer, String workflowName) {
+    private static RecoverableWorkflowExceptionPolicy policyOf(WorkflowConfigurer configurer,
+                                                               String moduleName,
+                                                               String workflowName) {
         WorkflowConfigurationRegistry<?> registry =
-                configurer.build().getComponent(WorkflowConfigurationRegistry.class);
+                configurer.build()
+                          .getComponents(WorkflowConfigurationRegistry.class)
+                          .get("WorkflowConfigurationRegistry[" + moduleName + "]");
         return registry.findByWorkflowNameAndVersion(workflowName, "0.0.1")
                        .orElseThrow()
                        .recoverableExceptionPolicy();
@@ -54,7 +58,6 @@ class WorkflowConfigurerRecoverableExceptionPolicyTest {
 
     private static WorkflowModule declarativeModule(boolean customizePolicy) {
         return WorkflowModule.defaults("declarative-module", TestContext.class)
-                             .workflowContextFactory(c -> TestContext::new)
                              .definition(d -> d
                                      .declarative(c -> ctx -> {
                                      })
@@ -63,13 +66,14 @@ class WorkflowConfigurerRecoverableExceptionPolicyTest {
                                      .customized((c, w) -> customizePolicy
                                              ? w.recoverableExceptionPolicy(WORKFLOW_POLICY)
                                              : w)
-                             );
+                             )
+                             .contextFactory(c -> TestContext::new);
     }
 
     private static WorkflowModule annotatedModule() {
         return WorkflowModule.defaults("annotated-module", TestContext.class)
-                             .workflowContextFactory(c -> TestContext::new)
-                             .definition(d -> d.autodetected(c -> new AnnotatedTestWorkflow()));
+                             .definition(d -> d.autodetected(c -> new AnnotatedTestWorkflow()))
+                             .contextFactory(c -> TestContext::new);
     }
 
     public static class AnnotatedTestWorkflow {
@@ -98,7 +102,7 @@ class WorkflowConfigurerRecoverableExceptionPolicyTest {
             configurer.componentRegistry(cr -> cr.registerModule(declarativeModule(false)));
 
             // when
-            var policy = policyOf(configurer, "wf-declarative");
+            var policy = policyOf(configurer, "declarative-module", "wf-declarative");
 
             // then
             assertThat(policy).isSameAs(RecoverableWorkflowExceptionPolicy.DEFAULT);
@@ -113,7 +117,7 @@ class WorkflowConfigurerRecoverableExceptionPolicyTest {
                                                  .registerModule(declarativeModule(false)));
 
             // when
-            var policy = policyOf(configurer, "wf-declarative");
+            var policy = policyOf(configurer, "declarative-module", "wf-declarative");
 
             // then
             assertThat(policy).isSameAs(COMPONENT_POLICY);
@@ -128,7 +132,7 @@ class WorkflowConfigurerRecoverableExceptionPolicyTest {
                                                  .registerModule(declarativeModule(true)));
 
             // when
-            var policy = policyOf(configurer, "wf-declarative");
+            var policy = policyOf(configurer, "declarative-module", "wf-declarative");
 
             // then
             assertThat(policy).isSameAs(WORKFLOW_POLICY);
@@ -145,7 +149,7 @@ class WorkflowConfigurerRecoverableExceptionPolicyTest {
             configurer.componentRegistry(cr -> cr.registerModule(annotatedModule()));
 
             // when
-            var policy = policyOf(configurer, "wf-annotated");
+            var policy = policyOf(configurer, "annotated-module", "wf-annotated");
 
             // then
             assertThat(policy).isSameAs(RecoverableWorkflowExceptionPolicy.DEFAULT);
@@ -160,7 +164,7 @@ class WorkflowConfigurerRecoverableExceptionPolicyTest {
                                                  .registerModule(annotatedModule()));
 
             // when
-            var policy = policyOf(configurer, "wf-annotated");
+            var policy = policyOf(configurer, "annotated-module", "wf-annotated");
 
             // then
             assertThat(policy).isSameAs(COMPONENT_POLICY);

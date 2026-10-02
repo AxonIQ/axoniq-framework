@@ -38,7 +38,6 @@ import java.util.function.Supplier;
  * @author Stefan Dragisic
  * @since 5.4.0
  */
-@Internal
 public interface WorkflowExecutionRepository extends DescribableComponent {
 
     /**

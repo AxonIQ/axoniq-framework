@@ -20,7 +20,6 @@ package io.axoniq.framework.integrationtests.workflow;
 
 import io.axoniq.framework.axonserver.connector.configuration.AxonServerConfigurationEnhancer;
 import io.axoniq.framework.workflow.configuration.WorkflowConfigurer;
-import io.axoniq.framework.workflow.configuration.WorkflowEventProcessingRegistrationEnhancer;
 import io.axoniq.framework.workflow.configuration.WorkflowModule;
 import io.axoniq.framework.workflow.dsl.api.StepStatus;
 import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
@@ -235,6 +234,8 @@ class WorkflowReplayPreparedStateTest {
 
     private static final class PreparedState {
 
+        private static final String MODULE_NAME = "replay-prepared-state";
+
         private final EventStorageEngine eventStorageEngine = new InMemoryEventStorageEngine();
         private final JacksonConverter eventConverter = new JacksonConverter();
         private final TokenStore processingTokenStore = new InMemoryTokenStore();
@@ -314,24 +315,14 @@ class WorkflowReplayPreparedStateTest {
         }
 
         private void seedProcessorToken(TrackingToken token) {
-            var segments = processingTokenStore.fetchSegments(
-                    WorkflowEventProcessingRegistrationEnhancer.DEFAULT_MODULE_NAME,
-                    null
-            ).join();
+            var segments = processingTokenStore.fetchSegments(MODULE_NAME, null)
+                                               .join();
             if (segments.isEmpty()) {
-                processingTokenStore.initializeTokenSegments(
-                        WorkflowEventProcessingRegistrationEnhancer.DEFAULT_MODULE_NAME,
-                        1,
-                        token,
-                        null
-                ).join();
+                processingTokenStore.initializeTokenSegments(MODULE_NAME, 1, token, null)
+                                    .join();
             } else {
-                processingTokenStore.storeToken(
-                        token,
-                        WorkflowEventProcessingRegistrationEnhancer.DEFAULT_MODULE_NAME,
-                        0,
-                        null
-                ).join();
+                processingTokenStore.storeToken(token, MODULE_NAME, 0, null)
+                                    .join();
             }
         }
 
@@ -350,14 +341,11 @@ class WorkflowReplayPreparedStateTest {
             configurer.componentRegistry(r -> r.disableEnhancer(AxonServerConfigurationEnhancer.class))
                       .componentRegistry(cr -> cr
                               .registerComponent(EventStorageEngine.class, cfg -> eventStorageEngine)
-                              .registerComponent(MutableWorkflowHistoryRepository.class, cfg -> historyRepository)
                               .registerComponent(TokenStore.class, cfg -> processingTokenStore)
                               .registerModule(
-                                      WorkflowModule.defaults("replay-prepared-state", SimpleWorkflowContext.class)
-                                                    .workflowContextFactory(c -> new SimpleWorkflowContextFactory())
-                                                    .definition(d -> d
-                                                            .autodetected(c -> workflow)
-                                                    )
+                                      WorkflowModule.configure(MODULE_NAME, SimpleWorkflowContext.class)
+                                                    .definition(d -> d.autodetected(c -> workflow))
+                                                    .withHistory(cfg -> historyRepository)
                               ));
 
             return new WorkflowTestApp(configurer.start());
@@ -374,7 +362,8 @@ class WorkflowReplayPreparedStateTest {
 
         private WorkflowTestApp(AxonConfiguration configuration) {
             this.configuration = configuration;
-            this.workflowEngine = configuration.getComponent(WorkflowEngine.class);
+            this.workflowEngine = configuration.getComponents(WorkflowEngine.class)
+                                               .get("WorkflowEngine[" + PreparedState.MODULE_NAME + "]");
             this.eventSink = configuration.getComponent(EventSink.class);
             this.messageTypeResolver = configuration.getComponent(MessageTypeResolver.class);
             this.eventConverter = configuration.getComponent(EventConverter.class);
@@ -393,7 +382,10 @@ class WorkflowReplayPreparedStateTest {
         }
 
         private Optional<io.axoniq.framework.workflow.history.api.WorkflowHistory> history(String workflowId) {
-            return configuration.getComponent(MutableWorkflowHistoryRepository.class).findById(workflowId).join();
+            return configuration.getComponents(MutableWorkflowHistoryRepository.class)
+                                .get("MutableWorkflowHistoryRepository[" + PreparedState.MODULE_NAME + "]")
+                                .findById(workflowId)
+                                .join();
         }
 
         @Override

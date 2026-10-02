@@ -105,7 +105,8 @@ public interface WorkflowTestDriver {
     static <C extends WorkflowContext> WorkflowTestDriver stepper(
             WorkflowModule<C> workflowModule,
             boolean throwFixtureException,
-            UnaryOperator<WorkflowConfigurer> customize) {
+            UnaryOperator<WorkflowConfigurer> customize
+    ) {
 
         var configurer = WorkflowConfigurer.create();
         configurer.componentRegistry(r -> new WorkflowTestSteppingModeEnhancer().enhance(r))
@@ -115,7 +116,7 @@ public interface WorkflowTestDriver {
         var configuration = Objects.requireNonNull(customize, "Customizer must not be null")
                                    .apply(configurer).start();
 
-        var workflowTestServices = WorkflowTestServices.from(configuration);
+        var workflowTestServices = WorkflowTestServices.from(configuration, workflowModule.name());
         var assertionFailureHandler = AssertionFailureHandler.handler(throwFixtureException);
         return new DefaultWorkflowTestDriver(workflowTestServices,
                                              new MutableWorkflowEngineTestingState(),
@@ -152,12 +153,13 @@ public interface WorkflowTestDriver {
     static <C extends WorkflowContext> WorkflowTestDriver live(
             WorkflowModule<C> workflowModule,
             boolean throwFixtureException,
-            UnaryOperator<WorkflowConfigurer> customize) {
+            UnaryOperator<WorkflowConfigurer> customize
+    ) {
         var configurer = WorkflowConfigurer.create();
         configurer.registerWorkflowModule(Objects.requireNonNull(workflowModule, "Workflow module must not be null"));
         var configuration = Objects.requireNonNull(customize, "Customizer must not be null").apply(configurer).start();
         var assertionFailureHandler = AssertionFailureHandler.handler(throwFixtureException);
-        var workflowTestServices = WorkflowTestServices.from(configuration);
+        var workflowTestServices = WorkflowTestServices.from(configuration, workflowModule.name());
         return new DefaultWorkflowTestDriver(workflowTestServices,
                                              new MutableWorkflowEngineTestingState(),
                                              assertionFailureHandler,

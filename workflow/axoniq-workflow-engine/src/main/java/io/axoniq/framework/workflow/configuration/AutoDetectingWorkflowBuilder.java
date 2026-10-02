@@ -83,7 +83,7 @@ class AutoDetectingWorkflowBuilder<C extends WorkflowContext>
      * for annotated workflow methods via {@link AutoDetectionUtils}.
      *
      * @param workflowContextType           the {@link WorkflowContext} type of the workflows being built
-     * @param workflowContextFactoryBuilder a {@link ComponentBuilder} constructing the {@link WorkflowContextFactory}
+     * @param workflowContextFactoryBuilder a {@link ComponentBuilder} resolving the {@link WorkflowContextFactory}
      * @param parent                        the parent {@link SimpleWorkflowModule} to register the results on
      * @param instanceBuilder               a {@link ComponentBuilder} constructing the annotated workflow component
      */

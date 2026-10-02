@@ -61,10 +61,10 @@ class DeclarativeWorkflowBuilder<C extends WorkflowContext> implements
     private ComponentBuilder<EventCondition> startConditionBuilder;
 
     /**
-     * Constructs a  for the given {@code parent} module.
+     * Constructs a {@code DeclarativeWorkflowBuilder} for the given {@code parent} module.
      *
      * @param workflowContextType           the {@link WorkflowContext} type of the workflow being built
-     * @param workflowContextFactoryBuilder a {@link ComponentBuilder} constructing the {@link WorkflowContextFactory}
+     * @param workflowContextFactoryBuilder a {@link ComponentBuilder} resolving the {@link WorkflowContextFactory}
      * @param parent                        the parent {@link SimpleWorkflowModule} to register the result on
      * @param definitionBuilder             a {@link ComponentBuilder} constructing the {@link WorkflowDefinition}
      */

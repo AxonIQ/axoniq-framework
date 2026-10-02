@@ -56,14 +56,24 @@ import java.util.function.UnaryOperator;
  */
 public interface WorkflowTestFixture<ACTION extends GivenWhen<ACTION, ASSERT>, ASSERT extends Then<ASSERT, ACTION>> {
 
+    /**
+     * Builds an autodetected {@link WorkflowModule} registered under {@link WorkflowTestServices#DEFAULT_MODULE_NAME},
+     * ready to be passed into {@link #of(WorkflowModule)} or {@link #of(WorkflowModule, UnaryOperator)}.
+     *
+     * @param contextType                   type of the workflow context
+     * @param workflowContextFactoryBuilder builder of the {@link WorkflowContextFactory} for the workflow context
+     * @param workflowInstanceBuilder       builder of the workflow instance to autodetect handlers on
+     * @param <T>                           type of the workflow context
+     * @return workflow module ready for use in a {@code WorkflowTestFixture}
+     */
     static <T extends WorkflowContext> WorkflowModule<T> workflowModule(
             Class<T> contextType,
             ComponentBuilder<WorkflowContextFactory<T>> workflowContextFactoryBuilder,
             ComponentBuilder<Object> workflowInstanceBuilder
     ) {
-        return WorkflowModule.defaults("Test Module", contextType)
-                             .workflowContextFactory(workflowContextFactoryBuilder)
-                             .definition(d -> d.autodetected(workflowInstanceBuilder));
+        return WorkflowModule.defaults(WorkflowTestServices.DEFAULT_MODULE_NAME, contextType)
+                             .definition(d -> d.autodetected(workflowInstanceBuilder))
+                             .contextFactory(workflowContextFactoryBuilder);
     }
 
     /**

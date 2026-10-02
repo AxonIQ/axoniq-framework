@@ -25,6 +25,7 @@ import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowEngine;
 import io.axoniq.framework.workflow.runtime.test.utils.PrettyPrintingRecordingEventStore;
 import org.axonframework.common.configuration.ComponentRegistry;
+import org.axonframework.common.configuration.Configuration;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.axonframework.common.infra.FilesystemStyleComponentDescriptor;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
@@ -33,7 +34,6 @@ import org.axonframework.eventsourcing.eventstore.InterceptingEventStore;
 import org.axonframework.eventsourcing.eventstore.inmemory.InMemoryEventStorageEngine;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
-import org.axonframework.messaging.eventhandling.EventSink;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.store.TokenStore;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.store.inmemory.InMemoryTokenStore;
@@ -86,18 +86,21 @@ class ShutdownDuringSleepIT {
     private ConfigurableApplicationContext applicationContext;
 
     @Autowired
-    private EventSink eventSink;
+    private EventStore eventStore;
 
     @Autowired
-    private WorkflowEngine workflowEngine;
+    private Configuration configuration;
 
     @Test
     void applicationContextCloseShouldNotHangWhenWorkflowIsSleeping() {
+        var workflowEngine = configuration.getComponents(WorkflowEngine.class)
+                                          .get("WorkflowEngine[SimpleWorkflowContext]");
+
         var trigger = new GenericEventMessage(
                 new MessageType(new QualifiedName("io.axoniq.issue125.StartSleep")),
                 Map.of("id", "user-1")
         );
-        eventSink.publish(null, trigger);
+        eventStore.publish(null, trigger).join();
 
         await().atMost(20, TimeUnit.SECONDS).untilAsserted(() -> {
             var executions = workflowEngine.workflowExecutions();

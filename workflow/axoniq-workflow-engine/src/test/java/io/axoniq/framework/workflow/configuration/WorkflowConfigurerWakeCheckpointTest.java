@@ -78,7 +78,7 @@ import static org.awaitility.Awaitility.await;
 class WorkflowConfigurerWakeCheckpointTest {
 
     private static final String MODULE = "wake-checkpoint";
-    private static final String PROCESSOR = WorkflowEventProcessingRegistrationEnhancer.DEFAULT_MODULE_NAME;
+    private static final String PROCESSOR = MODULE;
     private static final String WAIT_STEP = "awaitPaid";
     private static final WaitForStepDefinition AWAIT_PAID = new WaitForStepDefinition(
             new PrimitiveMetadata(WAIT_STEP, DefaultEventNameCustomizer.Builder.defaults()),
@@ -176,18 +176,16 @@ class WorkflowConfigurerWakeCheckpointTest {
 
     private AxonConfiguration start(TokenStore tokenStore,
                                     Consumer<TestContext> body) {
-        var module = WorkflowModule.defaults(MODULE, TestContext.class)
-                                   .workflowContextFactory(c -> TestContext::new)
+        var module = WorkflowModule.configure(MODULE, TestContext.class)
                                    .definition(d -> d
                                            .declarative(c -> body::accept)
                                            .workflowName(MODULE)
                                            .on(c -> EventConditions.fromQualifiedName(new QualifiedName("start")))
                                            .notCustomized()
-                                   );
+                                   )
+                                   .processorConfiguration(pc -> pc.initialSegmentCount(1))
+                                   .contextFactory(c -> TestContext::new);
         var configurer = WorkflowConfigurer.create();
-        configurer.eventSourcing(es -> es.messaging(m -> m.eventProcessing(
-                ep -> ep.pooledStreaming(ps -> ps.defaults(d -> d.initialSegmentCount(1)))
-        )));
         configurer.componentRegistry(cr -> cr
                 .registerComponent(EventStorageEngine.class, cfg -> storageEngine)
                 .registerComponent(TokenStore.class, cfg -> tokenStore)
@@ -203,7 +201,7 @@ class WorkflowConfigurerWakeCheckpointTest {
      */
     private String startWorkflow(AxonConfiguration configuration) {
         publish(configuration, "start");
-        var engine = configuration.getComponent(WorkflowEngine.class);
+        var engine = configuration.getComponents(WorkflowEngine.class).get("WorkflowEngine[" + MODULE + "]");
         await().atMost(5, TimeUnit.SECONDS).until(() -> engine.workflowExecutions().size() == 1);
         var workflowId = engine.workflowExecutions().iterator().next().workflowId();
         await().atMost(5, TimeUnit.SECONDS)

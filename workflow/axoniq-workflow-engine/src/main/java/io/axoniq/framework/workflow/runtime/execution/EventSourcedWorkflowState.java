@@ -291,8 +291,22 @@ public class EventSourcedWorkflowState implements WorkflowState {
             return this;
         }
         Object eventPayload = eventMessage.payloadAs(Object.class);
-        MetadataUtils.getWorkflowDefinitionId(metadata)
-                     .ifPresent(definitionId -> this.workflowDefinition = definitionId);
+        // Safety net. A definition id naming a different workflow (e.g. two WorkflowModules whose workflowIdProviders
+        // coincidentally derived the same workflowId for unrelated workflow definitions) must not silently take over
+        // this instance's identity; only the version is allowed to move (see applyVersionMigrationStep and the
+        // STARTED branch below), never the qualified name this instance was created under.
+        MetadataUtils.getWorkflowDefinitionId(metadata).ifPresent(definitionId -> {
+            if (definitionId.qualifiedName().equals(workflowDefinition.qualifiedName())) {
+                this.workflowDefinition = definitionId;
+            } else {
+                logger.warn(
+                        "Ignoring workflow definition '{}' for workflow '{}': it does not match the "
+                                + "already-established definition '{}'. This usually means two WorkflowModules "
+                                + "derived the same workflowId for different workflow definitions.",
+                        definitionId, workflowId, workflowDefinition
+                );
+            }
+        });
         // Migration events arrive as regular COMPLETED step events that additionally carry the
         // versionChangeId + version metadata keys. They flow through the step-registration switch like
         // any other step and ALSO update the version map as a side-effect.

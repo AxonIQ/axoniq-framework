@@ -1,3 +1,22 @@
+/*
+ * Copyright (c) 2010-2026. AxonIQ B.V.
+ *
+ * Licensed under the AXONIQ TERMS OF SERVICE,
+ * Version 29 April 2026 (the "License");
+ *
+ * The software is available for evaluation use without registration.
+ * Continued use beyond the evaluation period requires registration
+ * and a commercial license. See the License for the specific language
+ * governing permissions and limitations under the License.
+ * You may not use this file except in compliance with the License.
+ *
+ * You may obtain a copy of the License at:
+ *  https://www.axoniq.io/legal/terms-of-service
+ *
+ * For licensing information and to register, visit:
+ *  https://www.axoniq.io/pricing
+ */
+
 package io.axoniq.framework.workflow.runtime.test.fixture;
 
 import io.axoniq.framework.workflow.annotation.Workflow;
@@ -6,11 +25,8 @@ import io.axoniq.framework.workflow.dsl.api.EventConditions;
 import io.axoniq.framework.workflow.dsl.api.StepStatus;
 import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
 import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContext;
-import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContextFactory;
 import org.axonframework.messaging.eventhandling.annotation.Event;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 
 import java.time.Duration;
 import java.util.Map;
@@ -29,7 +45,6 @@ class WorkflowStepClockAfterTimePassesTest {
     @BeforeEach
     void setUp() {
         var module = WorkflowModule.defaults("ClockAfterTimePasses", SimpleWorkflowContext.class)
-                                   .workflowContextFactory(c -> new SimpleWorkflowContextFactory())
                                    .definition(d -> d.autodetected(c -> new ReminderWorkflow()));
         fixture = WorkflowTestFixture.of(module, UnaryOperator.identity());
     }

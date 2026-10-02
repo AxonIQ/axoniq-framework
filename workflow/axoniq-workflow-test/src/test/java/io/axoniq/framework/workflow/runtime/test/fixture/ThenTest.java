@@ -26,6 +26,7 @@ import io.axoniq.framework.workflow.dsl.api.WorkflowState;
 import io.axoniq.framework.workflow.dsl.api.WorkflowStep;
 import io.axoniq.framework.workflow.dsl.api.StepStatus;
 import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
+import io.axoniq.framework.workflow.runtime.execution.WorkflowCancellationService;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowConfigurationRegistry;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowEngine;
 import io.axoniq.framework.workflow.runtime.test.utils.DelayedPublisher;
@@ -45,6 +46,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 
+import static io.axoniq.framework.workflow.runtime.test.fixture.WorkflowTestServices.DEFAULT_MODULE_NAME;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.*;
@@ -249,19 +251,27 @@ class ThenTest {
         when(workflowEngine.workflowExecutions()).thenReturn(Set.of());
 
         var configuration = mock(AxonConfiguration.class);
-        when(configuration.getComponent(WorkflowEngine.class)).thenReturn(workflowEngine);
+        when(configuration.getComponents(WorkflowEngine.class))
+                .thenReturn(Map.of("WorkflowEngine[" + DEFAULT_MODULE_NAME + "]", workflowEngine));
         when(configuration.getComponent(DelayedPublisher.class)).thenReturn(mock(DelayedPublisher.class));
         when(configuration.getComponent(TestEventPublisher.class)).thenReturn(mock(TestEventPublisher.class));
-        when(configuration.getComponent(WorkflowConfigurationRegistry.class)).thenReturn(
-                mock(WorkflowConfigurationRegistry.class));
-        when(configuration.getComponent(MutableWorkflowHistoryRepository.class)).thenReturn(historyRepository);
+        when(configuration.getComponents(WorkflowConfigurationRegistry.class))
+                .thenReturn(Map.of(
+                        "WorkflowConfigurationRegistry[" + DEFAULT_MODULE_NAME + "]",
+                        mock(WorkflowConfigurationRegistry.class)
+                ));
+        when(configuration.getComponents(WorkflowCancellationService.class))
+                .thenReturn(Map.of(
+                        "WorkflowCancellationService[" + DEFAULT_MODULE_NAME + "]",
+                        mock(WorkflowCancellationService.class)
+                ));
+        when(configuration.getComponents(MutableWorkflowHistoryRepository.class))
+                .thenReturn(Map.of("MutableWorkflowHistoryRepository[" + DEFAULT_MODULE_NAME + "]", historyRepository));
         when(configuration.getOptionalComponent(TestClock.class)).thenReturn(Optional.empty());
         when(configuration.getOptionalComponent(ManualExecuteStepActionResolver.class)).thenReturn(Optional.empty());
         when(configuration.getOptionalComponent(ManualWorkflowScheduler.class)).thenReturn(Optional.empty());
 
-        var services = WorkflowTestServices.from(
-                configuration
-        );
+        var services = WorkflowTestServices.from(configuration);
 
         var testingState = new MutableWorkflowEngineTestingState();
         if (selectedState != null) {

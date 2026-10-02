@@ -18,13 +18,12 @@
  */
 package io.axoniq.framework.workflow.runtime.test.fixture;
 
-import io.axoniq.framework.workflow.configuration.WorkflowModule;
-import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContext;
-import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContextFactory;
 import io.axoniq.framework.workflow.annotation.Workflow;
+import io.axoniq.framework.workflow.configuration.WorkflowModule;
 import io.axoniq.framework.workflow.dsl.api.EventConditions;
 import io.axoniq.framework.workflow.dsl.api.StepStatus;
 import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
+import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContext;
 import org.axonframework.messaging.eventhandling.annotation.Event;
 import org.junit.jupiter.api.*;
 
@@ -47,7 +46,6 @@ class WorkflowStagedTimeoutFeatureTest {
     @BeforeEach
     void setUp() {
         var module = WorkflowModule.defaults("TimeoutHandling", SimpleWorkflowContext.class)
-                                   .workflowContextFactory(c -> new SimpleWorkflowContextFactory())
                                    .definition(d -> d.autodetected(c -> new TimeoutHandlingWorkflow()));
         fixture = WorkflowTestFixture.of(module, UnaryOperator.identity());
     }

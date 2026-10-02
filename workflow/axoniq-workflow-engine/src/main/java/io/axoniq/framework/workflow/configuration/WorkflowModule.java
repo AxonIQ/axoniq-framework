@@ -20,6 +20,7 @@ package io.axoniq.framework.workflow.configuration;
 
 import io.axoniq.framework.workflow.dsl.api.EventCondition;
 import io.axoniq.framework.workflow.dsl.api.WorkflowContext;
+import io.axoniq.framework.workflow.history.inmemory.MutableWorkflowHistoryRepository;
 import io.axoniq.framework.workflow.history.inmemory.WorkflowHistoryProjector;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContextFactory;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowDefinition;
@@ -28,6 +29,7 @@ import io.axoniq.framework.workflow.runtime.execution.WorkflowExecutionRepositor
 import org.axonframework.common.configuration.ComponentBuilder;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.common.configuration.Module;
+import org.axonframework.messaging.eventhandling.processing.streaming.pooled.PooledStreamingEventProcessorConfiguration;
 
 import java.util.function.BiFunction;
 import java.util.function.Function;
@@ -43,30 +45,33 @@ import java.util.function.Function;
  * <h2>Default configuration</h2>
  * Modules created through {@link #defaults(String, Class)} use sensible defaults for infrastructure components (such as
  * the {@link WorkflowConfigurationRegistry}, {@link WorkflowExecutionRepository}, and history). This is the recommended
- * entry point for most use cases.
+ * entry point for most use cases. A {@link WorkflowContextFactory} has no generic default of its own, but a DSL module
+ * (such as {@code axoniq-workflow-dsl} or its Kotlin counterpart) registers one automatically for its own
+ * {@link WorkflowContext} type, so a custom {@link #contextType()} is typically the only case still requiring an
+ * explicit {@link OptionalPhase#contextFactory(ComponentBuilder)}.
  *
  * <h2>Custom configuration</h2>
- * For advanced scenarios, {@link #configure(String, Class)} exposes the full configuration pipeline, allowing users to
- * supply custom implementations for infrastructure components before defining the workflow language.
- * <p>
- * There are several phases of the building process for a custom-configured workflow module:
- * <ul>
- *     <li>{@link ConfigurationPhase.WorkflowConfigurationRegistryPhase} - provide a custom
- *         {@link WorkflowConfigurationRegistry} for storing workflow configurations with their start conditions.</li>
- *     <li>{@link ConfigurationPhase.WorkflowExecutionRepositoryPhase} - provide a custom
- *         {@link WorkflowExecutionRepository} for persisting and retrieving workflow instances.</li>
- *     <li>{@link ConfigurationPhase.HistoryPhase} - enable or disable workflow history tracking.</li>
- * </ul>
+ * {@link #configure(String, Class)} is, for now, equivalent to {@link #defaults(String, Class)}: every infrastructure
+ * setting - the event processor, history tracking, the registry, and the repository - has moved into the terminal
+ * {@link OptionalPhase}, so there is no longer a distinct pre-definition configuration phase between the two entry
+ * points.
  *
  * <h2>Workflow language</h2>
- * After the (optional) configuration phase, the language phase defines the workflow context and definitions:
+ * The language phase defines one or more workflow definitions:
  * <ul>
- *     <li>{@link LanguagePhase.WorkflowContextFactoryPhase} - provide the {@link WorkflowContextFactory} used to
- *         create the {@link WorkflowContext} for each workflow execution.</li>
  *     <li>{@link WorkflowDefinitionPhase} - define one or more workflow definitions, either
  *         {@link WorkflowDefinitionPhase.DetectionPhase#declarative(ComponentBuilder) declaratively} or
  *         {@link WorkflowDefinitionPhase.DetectionPhase#autodetected(ComponentBuilder) autodetected}.</li>
  * </ul>
+ *
+ * <h2>Terminal configuration</h2>
+ * Once the workflow definitions are in place, {@link OptionalPhase} allows the {@link PooledStreamingEventProcessorConfiguration}
+ * backing the module's event processor to be customized, workflow history tracking to be enabled or disabled, and a
+ * custom {@link WorkflowContextFactory}, {@link WorkflowConfigurationRegistry}, and/or {@link WorkflowExecutionRepository}
+ * to be supplied. Reaching this phase already yields a fully-formed {@link WorkflowModule}: every method here is
+ * optional, each falling back to a working default when left uncalled - for
+ * {@link OptionalPhase#contextFactory(ComponentBuilder)}, that default is whatever a DSL module registered for
+ * {@link #contextType()}, which only a custom {@link WorkflowContext} type lacks.
  *
  * <h2>Autodetected workflows</h2>
  * Workflows can be built using {@link WorkflowDefinitionPhase.DetectionPhase#autodetected(ComponentBuilder)}, which
@@ -85,41 +90,19 @@ import java.util.function.Function;
 public interface WorkflowModule<C extends WorkflowContext> extends Module {
 
     /**
-     * Creates a new workflow module using default infrastructure settings.
+     * Creates a new workflow module using default infrastructure settings, the recommended entry point for most use
+     * cases.
      * <p>
-     * The returned builder starts at the {@link LanguagePhase.WorkflowContextFactoryPhase}, skipping the configuration
-     * phases since all infrastructure components (such as the {@link WorkflowConfigurationRegistry},
-     * {@link WorkflowExecutionRepository}, and history) are configured with sensible defaults.
-     * <p>
-     * This is the recommended entry point for most use cases.
+     * Note that the given {@code contextType} is expected to be one originating from this project. If a custom
+     * {@code contextType} is given, be sure to set the
+     * {@link OptionalPhase#contextFactory(ComponentBuilder) context factory} for it as well.
      *
      * @param name        name of the workflow module
      * @param contextType the {@link WorkflowContext} type used by the workflows in this module
      * @param <C>         the type of {@link WorkflowContext} used by the workflows in this module
-     * @return the {@link LanguagePhase.WorkflowContextFactoryPhase} phase of this builder, for a fluent API
+     * @return the {@link WorkflowDefinitionPhase} phase of this builder, for a fluent API
      */
-    static <C extends WorkflowContext> LanguagePhase.WorkflowContextFactoryPhase<C> defaults(
-            String name,
-            Class<C> contextType
-    ) {
-        return new SimpleWorkflowModule<>(name, contextType, true);
-    }
-
-    /**
-     * Creates a new workflow module with a fully customizable configuration pipeline.
-     * <p>
-     * The returned builder starts at the {@link ConfigurationPhase.WorkflowConfigurationRegistryPhase}, allowing users
-     * to provide custom implementations for infrastructure components before defining the workflow language.
-     * <p>
-     * Use this entry point when you need to supply custom implementations for any of the infrastructure components,
-     * such as the {@link WorkflowConfigurationRegistry}, {@link WorkflowExecutionRepository}, or history tracking.
-     *
-     * @param name        name of the workflow module
-     * @param contextType the {@link WorkflowContext} type used by the workflows in this module
-     * @param <C>         the type of {@link WorkflowContext} used by the workflows in this module
-     * @return the {@link ConfigurationPhase.WorkflowConfigurationRegistryPhase} phase of this builder, for a fluent API
-     */
-    static <C extends WorkflowContext> ConfigurationPhase.WorkflowConfigurationRegistryPhase<C> configure(
+    static <C extends WorkflowContext> WorkflowDefinitionPhase<C> defaults(
             String name,
             Class<C> contextType
     ) {
@@ -127,152 +110,27 @@ public interface WorkflowModule<C extends WorkflowContext> extends Module {
     }
 
     /**
-     * Adds an additional workflow definition to a module that has already had one or more definitions registered via
-     * the fluent {@link WorkflowDefinitionPhase#definition(Function)} entry point. Use this to register multiple
-     * workflow definitions of the same workflow context type into a SINGLE module so they share one
-     * {@link WorkflowConfigurationRegistry} and
-     * {@link io.axoniq.framework.workflow.runtime.execution.WorkflowEngine WorkflowEngine}.
+     * Creates a new workflow module, exposing the same {@link WorkflowDefinitionPhase} entry point as
+     * {@link #defaults(String, Class)}.
+     * <p>
+     * The {@link PooledStreamingEventProcessorConfiguration} backing the module's event processor, history tracking,
+     * the {@link WorkflowConfigurationRegistry}, the {@link WorkflowExecutionRepository}, and the
+     * {@link WorkflowContextFactory} are all configured after the workflow definitions, through the terminal
+     * {@link OptionalPhase}.
+     * <p>
+     * Note that if the given {@code contextType} is <b>not</b> one originating from this project, that a custom
+     * {@link OptionalPhase#contextFactory(ComponentBuilder) context factory} should be configured at all times.
      *
-     * @param definition function returning a {@link WorkflowDefinitionPhase.FinalizedPhase} for an additional
-     *                   workflow.
-     * @return this module, for chaining.
+     * @param name        name of the workflow module
+     * @param contextType the {@link WorkflowContext} type used by the workflows in this module
+     * @param <C>         the type of {@link WorkflowContext} used by the workflows in this module
+     * @return the {@link WorkflowDefinitionPhase} phase of this builder, for a fluent API
      */
-    WorkflowModule<C> definition(
-            Function<WorkflowDefinitionPhase.DetectionPhase<C>, WorkflowDefinitionPhase.FinalizedPhase<C>> definition
-    );
-
-    /**
-     * Returns the {@link WorkflowContext} type used by the workflows configured in this module.
-     *
-     * @return the {@link WorkflowContext} type of this module
-     */
-    Class<C> getWorkflowContextType();
-
-    /**
-     * Defines the infrastructure configuration phases of the workflow module's building process.
-     * <p>
-     * These phases allow users to supply custom implementations for the infrastructure components that back workflow
-     * execution.
-     * <p>
-     * All phases in this group are optional - each extends the next phase (and ultimately the
-     * {@link LanguagePhase.WorkflowContextFactoryPhase}), so any phase can be skipped to accept its default.
-     */
-    interface ConfigurationPhase {
-
-        /**
-         * Phase of the module's building process in which a custom {@link WorkflowConfigurationRegistry} can be
-         * provided.
-         * <p>
-         * The registry stores workflow configurations together with their corresponding
-         * {@link EventCondition start conditions}, and is used by the
-         * {@link io.axoniq.framework.workflow.runtime.execution.WorkflowEngine WorkflowEngine} to look up which
-         * workflow to start for a given event.
-         *
-         * @param <C> the type of {@link WorkflowContext} used by the workflows in this module
-         */
-        interface WorkflowConfigurationRegistryPhase<C extends WorkflowContext>
-                extends WorkflowExecutionRepositoryPhase<C> {
-
-            /**
-             * Registers the given {@link ComponentBuilder} of a {@link WorkflowConfigurationRegistry} as the registry
-             * for the workflow module being built.
-             *
-             * @param workflowConfigurationRegistry a {@link ComponentBuilder} constructing the
-             *                                      {@link WorkflowConfigurationRegistry}
-             * @return the {@link WorkflowExecutionRepositoryPhase} phase of this builder, for a fluent API
-             */
-            WorkflowExecutionRepositoryPhase<C> workflowConfigurationRegistry(
-                    ComponentBuilder<WorkflowConfigurationRegistry<?>> workflowConfigurationRegistry
-            );
-        }
-
-        /**
-         * Phase of the module's building process in which a custom {@link WorkflowExecutionRepository} can be
-         * provided.
-         * <p>
-         * The repository is responsible for persisting and retrieving workflow instances, where each instance is
-         * identified by a unique workflow identifier and bundles configuration, context, and execution state.
-         *
-         * @param <C> the type of {@link WorkflowContext} used by the workflows in this module
-         */
-        interface WorkflowExecutionRepositoryPhase<C extends WorkflowContext> extends HistoryPhase<C> {
-
-            /**
-             * Registers the given {@link ComponentBuilder} of a {@link WorkflowExecutionRepository} as the repository
-             * for the workflow module being built.
-             *
-             * @param workflowExecutionRepository a {@link ComponentBuilder} constructing the
-             *                                    {@link WorkflowExecutionRepository}
-             * @return the {@link HistoryPhase} phase of this builder, for a fluent API
-             */
-            HistoryPhase<C> workflowExecutionRepository(
-                    ComponentBuilder<WorkflowExecutionRepository> workflowExecutionRepository
-            );
-        }
-
-        /**
-         * Phase of the module's building process in which workflow history tracking can be enabled or disabled.
-         * <p>
-         * When enabled, a {@link WorkflowHistoryProjector} collects historic information about workflow executions.
-         * When disabled, no history is tracked.
-         *
-         * @param <C> the type of {@link WorkflowContext} used by the workflows in this module
-         */
-        interface HistoryPhase<C extends WorkflowContext> extends LanguagePhase.WorkflowContextFactoryPhase<C> {
-
-            /**
-             * Enables workflow history tracking with the given {@link WorkflowHistoryProjector}.
-             * <p>
-             * The projector will collect historic information about workflow executions.
-             *
-             * @param workflowHistoryProjector a {@link ComponentBuilder} constructing the
-             *                                 {@link WorkflowHistoryProjector}
-             * @return the {@link LanguagePhase.WorkflowContextFactoryPhase} phase of this builder, for a fluent API
-             */
-            LanguagePhase.WorkflowContextFactoryPhase<C> withHistory(
-                    ComponentBuilder<WorkflowHistoryProjector> workflowHistoryProjector
-            );
-
-            /**
-             * Disables workflow history tracking for this module.
-             * <p>
-             * No historic information about workflow executions will be collected.
-             *
-             * @return the {@link LanguagePhase.WorkflowContextFactoryPhase} phase of this builder, for a fluent API
-             */
-            LanguagePhase.WorkflowContextFactoryPhase<C> withoutHistory();
-        }
-    }
-
-    /**
-     * Defines the workflow language phases of the module's building process.
-     * <p>
-     * These phases are concerned with the workflow's runtime behavior: how the {@link WorkflowContext} is created and
-     * how workflow definitions are specified.
-     */
-    interface LanguagePhase {
-
-        /**
-         * Phase of the module's building process in which a {@link WorkflowContextFactory} should be provided.
-         * <p>
-         * The factory is responsible for creating the {@link WorkflowContext} that is passed to
-         * {@link WorkflowDefinition workflow definitions} during execution.
-         *
-         * @param <C> the type of {@link WorkflowContext} used by the workflows in this module
-         */
-        interface WorkflowContextFactoryPhase<C extends WorkflowContext> {
-
-            /**
-             * Registers the given {@link ComponentBuilder} of a {@link WorkflowContextFactory} as the context factory
-             * for the workflow module being built.
-             *
-             * @param workflowContextFactory a {@link ComponentBuilder} constructing the {@link WorkflowContextFactory}
-             * @return the {@link WorkflowDefinitionPhase} phase of this builder, for a fluent API
-             */
-            WorkflowDefinitionPhase<C> workflowContextFactory(
-                    ComponentBuilder<WorkflowContextFactory<C>> workflowContextFactory
-            );
-        }
+    static <C extends WorkflowContext> WorkflowDefinitionPhase<C> configure(
+            String name,
+            Class<C> contextType
+    ) {
+        return new SimpleWorkflowModule<>(name, contextType);
     }
 
     /**
@@ -298,9 +156,9 @@ public interface WorkflowModule<C extends WorkflowContext> extends Module {
          * users to chain one or more workflow definitions in a fluent manner.
          *
          * @param definition a function that defines one or more workflows via the {@link DetectionPhase}
-         * @return the completed {@link WorkflowModule}
+         * @return the {@link OptionalPhase} phase of this builder, for a fluent API
          */
-        WorkflowModule<C> definition(Function<DetectionPhase<C>, FinalizedPhase<C>> definition);
+        OptionalPhase<C> definition(Function<DetectionPhase<C>, FinalizedPhase<C>> definition);
 
         /**
          * Phase of the workflow definition process in which the detection strategy is chosen.
@@ -410,4 +268,157 @@ public interface WorkflowModule<C extends WorkflowContext> extends Module {
 
         }
     }
+
+    /**
+     * Terminal phase of the module's building process, in which a multitude of optional components can be set:
+     * <ul>
+     *     <li>{@link #definition(Function)} - add another workflow definition to this module.</li>
+     *     <li>{@link #processorConfiguration(Function)} - customize the
+     *         {@link PooledStreamingEventProcessorConfiguration} backing this module's event processor.</li>
+     *     <li>{@link #withHistory(ComponentBuilder)} / {@link #withoutHistory()} - enable or disable workflow history
+     *         tracking.</li>
+     *     <li>{@link #historyProcessorConfiguration(Function)} - customize the
+     *         {@link PooledStreamingEventProcessorConfiguration} backing the history projector's own event
+     *         processor.</li>
+     *     <li>{@link #contextFactory(ComponentBuilder)} - override the {@link WorkflowContextFactory} used to create
+     *         the {@link WorkflowContext} for each workflow execution.</li>
+     *     <li>{@link #configurationRegistry(ComponentBuilder)} - override the {@link WorkflowConfigurationRegistry}
+     *         storing workflow configurations and their start conditions.</li>
+     *     <li>{@link #executionRepository(ComponentBuilder)} - override the {@link WorkflowExecutionRepository}
+     *         persisting and retrieving workflow instances.</li>
+     * </ul>
+     * <p>
+     * Reaching this phase already yields a fully-formed {@link WorkflowModule}.
+     *
+     * @param <C> the type of {@link WorkflowContext} used by the workflows in this module
+     */
+    interface OptionalPhase<C extends WorkflowContext> extends WorkflowModule<C> {
+
+        /**
+         * Add another workflow definition to this module, which already received one or more via the fluent
+         * {@link WorkflowDefinitionPhase#definition(Function)} entry point.
+         * <p>
+         * Use this to register multiple workflow definitions of the same workflow context type into a SINGLE module so
+         * they share one {@link WorkflowConfigurationRegistry} and
+         * {@link io.axoniq.framework.workflow.runtime.execution.WorkflowEngine WorkflowEngine}.
+         *
+         * @param definition function returning a {@link WorkflowDefinitionPhase.FinalizedPhase} for an additional
+         *                   workflow
+         * @return this phase, for further optional configuration
+         */
+        OptionalPhase<C> definition(
+                Function<WorkflowDefinitionPhase.DetectionPhase<C>, WorkflowDefinitionPhase.FinalizedPhase<C>> definition
+        );
+
+        /**
+         * Applies the given {@code processorConfiguration} function to the
+         * {@link PooledStreamingEventProcessorConfiguration} backing this module's event processor.
+         * <p>
+         * Standard processor settings - segment count, batch size, error handling, worker executor, and so on - live on
+         * {@link PooledStreamingEventProcessorConfiguration} itself. This method is the hook through which those
+         * settings are reached: the given {@link Function} is applied on top of the module's own internal customization
+         * (event criteria, segment routing), so it composes with rather than replaces that wiring.
+         * <p>
+         * The engine component name and the event processor's own name are not configurable - the module derives both
+         * from its own name, so several {@link WorkflowModule}s in one application never collide.
+         *
+         * @param processorConfiguration a function customizing the {@link PooledStreamingEventProcessorConfiguration}
+         *                               of this module's event processor
+         * @return this phase, for further optional configuration
+         */
+        OptionalPhase<C> processorConfiguration(
+                Function<PooledStreamingEventProcessorConfiguration, PooledStreamingEventProcessorConfiguration> processorConfiguration
+        );
+
+        /**
+         * Enables workflow history tracking, storing collected history in the given
+         * {@link MutableWorkflowHistoryRepository}.
+         * <p>
+         * The module creates its own {@link WorkflowHistoryProjector}, injecting the repository constructed by the
+         * given {@code workflowHistoryRepository}.
+         *
+         * @param workflowHistoryRepository a {@link ComponentBuilder} constructing the
+         *                                  {@link MutableWorkflowHistoryRepository}
+         * @return this phase, for further optional configuration
+         */
+        OptionalPhase<C> withHistory(ComponentBuilder<MutableWorkflowHistoryRepository> workflowHistoryRepository);
+
+        /**
+         * Disables workflow history tracking for this module.
+         * <p>
+         * No historic information about workflow executions will be collected.
+         *
+         * @return this phase, for further optional configuration
+         */
+        OptionalPhase<C> withoutHistory();
+
+        /**
+         * Applies the given {@code historyProcessorConfiguration} function to the
+         * {@link PooledStreamingEventProcessorConfiguration} backing the history projector's own, dedicated event
+         * processor.
+         * <p>
+         * Note that setting these properties do not make sense if {@link #withoutHistory() history has been disabled}.
+         *
+         * @param historyProcessorConfiguration a function customizing the
+         *                                      {@link PooledStreamingEventProcessorConfiguration} of the history
+         *                                      projector's event processor
+         * @return this phase, for further optional configuration
+         */
+        OptionalPhase<C> historyProcessorConfiguration(
+                Function<PooledStreamingEventProcessorConfiguration, PooledStreamingEventProcessorConfiguration> historyProcessorConfiguration
+        );
+
+        /**
+         * Registers the given {@link ComponentBuilder} of a {@link WorkflowContextFactory} as the context factory for
+         * the workflow module being built, overriding any factory a DSL module registered for {@link #contextType()}.
+         * <p>
+         * The factory is responsible for creating the {@link WorkflowContext} that is passed to
+         * {@link WorkflowDefinition workflow definitions} during execution. Left uncalled, the module falls back to the
+         * {@link WorkflowContextFactory} a DSL's own {@code ConfigurationEnhancer} registered for
+         * {@link #contextType()} - for example {@code SimpleWorkflowContext} or the Kotlin DSL's context type both have
+         * one registered automatically. A custom {@link WorkflowContext} type has no such enhancer, so it still
+         * requires this method to be called, or building fails with a clear error.
+         *
+         * @param workflowContextFactory a {@link ComponentBuilder} constructing the {@link WorkflowContextFactory}
+         * @return this phase, for further optional configuration
+         */
+        OptionalPhase<C> contextFactory(ComponentBuilder<WorkflowContextFactory<C>> workflowContextFactory);
+
+        /**
+         * Registers the given {@link ComponentBuilder} of a {@link WorkflowConfigurationRegistry} as the registry for
+         * the workflow module being built.
+         * <p>
+         * The registry stores workflow configurations together with their corresponding
+         * {@link EventCondition start conditions}, and is used by the
+         * {@link io.axoniq.framework.workflow.runtime.execution.WorkflowEngine WorkflowEngine} to look up which
+         * workflow to start for a given event.
+         *
+         * @param workflowConfigurationRegistry a {@link ComponentBuilder} constructing the
+         *                                      {@link WorkflowConfigurationRegistry}
+         * @return this phase, for further optional configuration
+         */
+        OptionalPhase<C> configurationRegistry(
+                ComponentBuilder<WorkflowConfigurationRegistry<?>> workflowConfigurationRegistry
+        );
+
+        /**
+         * Registers the given {@link ComponentBuilder} of a {@link WorkflowExecutionRepository} as the repository for
+         * the workflow module being built.
+         * <p>
+         * The repository is responsible for persisting and retrieving workflow instances, where each instance is
+         * identified by a unique workflow identifier and bundles configuration, context, and execution state.
+         *
+         * @param workflowExecutionRepository a {@link ComponentBuilder} constructing the
+         *                                    {@link WorkflowExecutionRepository}
+         * @return this phase, for further optional configuration
+         */
+        OptionalPhase<C> executionRepository(ComponentBuilder<WorkflowExecutionRepository> workflowExecutionRepository);
+    }
+
+    /**
+     * Returns the {@link WorkflowContext} type used by the workflows configured in this module.
+     *
+     * @return the {@link WorkflowContext} type of this module
+     */
+    Class<C> contextType();
 }

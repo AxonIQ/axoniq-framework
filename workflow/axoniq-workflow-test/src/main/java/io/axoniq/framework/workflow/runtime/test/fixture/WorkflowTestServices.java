@@ -20,6 +20,7 @@ package io.axoniq.framework.workflow.runtime.test.fixture;
 
 import io.axoniq.framework.workflow.history.api.WorkflowHistoryRepository;
 import io.axoniq.framework.workflow.history.inmemory.MutableWorkflowHistoryRepository;
+import io.axoniq.framework.workflow.runtime.execution.WorkflowCancellationService;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowConfigurationRegistry;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowEngine;
 import io.axoniq.framework.workflow.runtime.test.utils.DelayedPublisher;
@@ -27,8 +28,9 @@ import io.axoniq.framework.workflow.runtime.test.utils.ManualExecuteStepActionRe
 import io.axoniq.framework.workflow.runtime.test.utils.ManualWorkflowScheduler;
 import io.axoniq.framework.workflow.runtime.test.utils.TestClock;
 import io.axoniq.framework.workflow.runtime.test.utils.TestEventPublisher;
-import org.jspecify.annotations.Nullable;
 import org.axonframework.common.configuration.AxonConfiguration;
+import org.axonframework.common.configuration.ComponentBuilder;
+import org.jspecify.annotations.Nullable;
 
 import java.util.Objects;
 import java.util.Optional;
@@ -47,12 +49,19 @@ import java.util.Optional;
  */
 public class WorkflowTestServices {
 
+    /**
+     * Name every {@link io.axoniq.framework.workflow.configuration.WorkflowModule} built through
+     * {@link WorkflowTestFixture#workflowModule(Class, ComponentBuilder, ComponentBuilder)} is registered under.
+     */
+    public static final String DEFAULT_MODULE_NAME = "test";
+
     private final AxonConfiguration configuration;
     private final WorkflowEngine workflowEngine;
     private final DelayedPublisher delayedPublisher;
     private final TestEventPublisher eventPublisher;
     private final WorkflowConfigurationRegistry<?> workflowRegistry;
-    private final WorkflowHistoryRepository workflowHistoryRepository;
+    private final WorkflowCancellationService workflowCancellationService;
+    private final MutableWorkflowHistoryRepository workflowHistoryRepository;
     @Nullable
     private final TestClock clock;
     @Nullable
@@ -61,22 +70,53 @@ public class WorkflowTestServices {
     private final ManualWorkflowScheduler timeoutScheduler;
 
     /**
-     * Constructs a new {@link WorkflowTestServices} from the given {@link AxonConfiguration}.
+     * Constructs a new {@code WorkflowTestServices} from the given {@link AxonConfiguration}.
      *
      * @param configuration configuration to use
      * @return initialized services
      */
     public static WorkflowTestServices from(AxonConfiguration configuration) {
-        return new WorkflowTestServices(Objects.requireNonNull(configuration, "Configuration must not be null"));
+        return from(configuration, DEFAULT_MODULE_NAME);
     }
 
-    private WorkflowTestServices(AxonConfiguration configuration) {
-        this.configuration = Objects.requireNonNull(configuration, "Configuration must not be null");
-        this.workflowEngine = configuration.getComponent(WorkflowEngine.class);
+    /**
+     * Constructs a new {@code WorkflowTestServices} from the given {@link AxonConfiguration}, using the given
+     * {@code moduleName} as the name for the {@link io.axoniq.framework.workflow.configuration.WorkflowModule} under
+     * test.
+     *
+     * @param configuration configuration to use
+     * @param moduleName    name of the {@link io.axoniq.framework.workflow.configuration.WorkflowModule} under test
+     * @return initialized services
+     */
+    public static WorkflowTestServices from(AxonConfiguration configuration, String moduleName) {
+        return new WorkflowTestServices(
+                Objects.requireNonNull(configuration, "Configuration must not be null"),
+                Objects.requireNonNull(moduleName, "Module name must not be null")
+        );
+    }
+
+    private WorkflowTestServices(AxonConfiguration configuration, String moduleName) {
+        this.configuration = configuration;
+        String engineName = "WorkflowEngine[" + moduleName + "]";
+        this.workflowEngine = Objects.requireNonNull(configuration.getComponents(WorkflowEngine.class).get(engineName),
+                                                     "WorkflowEngine with name [" + engineName + "] must not be null.");
         this.delayedPublisher = configuration.getComponent(DelayedPublisher.class);
         this.eventPublisher = configuration.getComponent(TestEventPublisher.class);
-        this.workflowRegistry = configuration.getComponent(WorkflowConfigurationRegistry.class);
-        this.workflowHistoryRepository = configuration.getComponent(MutableWorkflowHistoryRepository.class);
+        String registryName = "WorkflowConfigurationRegistry[" + moduleName + "]";
+        this.workflowRegistry = Objects.requireNonNull(
+                configuration.getComponents(WorkflowConfigurationRegistry.class).get(registryName),
+                "WorkflowConfigurationRegistry with name [" + registryName + "] must not be null."
+        );
+        String cancellationServiceName = "WorkflowCancellationService[" + moduleName + "]";
+        this.workflowCancellationService = Objects.requireNonNull(
+                configuration.getComponents(WorkflowCancellationService.class).get(cancellationServiceName),
+                "WorkflowCancellationService with name [" + cancellationServiceName + "] must not be null."
+        );
+        String historyRepositoryName = "MutableWorkflowHistoryRepository[" + moduleName + "]";
+        this.workflowHistoryRepository = Objects.requireNonNull(
+                configuration.getComponents(MutableWorkflowHistoryRepository.class).get(historyRepositoryName),
+                "MutableWorkflowHistoryRepository with name [" + historyRepositoryName + "] must not be null."
+        );
         this.clock = configuration.getOptionalComponent(TestClock.class).orElse(null);
         this.executeStepActionResolver = configuration.getOptionalComponent(ManualExecuteStepActionResolver.class)
                                                       .orElse(null);
@@ -130,6 +170,15 @@ public class WorkflowTestServices {
     }
 
     /**
+     * Returns the workflow cancellation service available to the test runtime
+     *
+     * @return workflow cancellation service
+     */
+    public WorkflowCancellationService workflowCancellationService() {
+        return workflowCancellationService;
+    }
+
+    /**
      * Returns the workflow history repository used by the test runtime
      *
      * @return workflow history repository
@@ -172,6 +221,6 @@ public class WorkflowTestServices {
     public void shutdown() {
         workflowEngine.shutdown();
         configuration.shutdown();
-        ((MutableWorkflowHistoryRepository) workflowHistoryRepository).clear();
+        workflowHistoryRepository.clear();
     }
 }
