@@ -288,20 +288,25 @@ class PersistentStreamConnectionTest {
         testSubject.close();
 
         // when reopen and deliver
-        testSubject.open((events, ctx) -> CompletableFuture.completedFuture(null));
+        List<EventMessage> eventMessagesAfterReopen = new LinkedList<>();
+        testSubject.open((events, ctx) -> {
+            eventMessagesAfterReopen.addAll(events);
+            return CompletableFuture.completedFuture(null);
+        });
+        MockPersistentStream reopenedStream = mockPersistentStreams.get(STREAM_ID);
 
-        mockPersistentStream.publish(0, eventWithToken(0, "AggregateId-1", 0, "TestAggregate"));
-        mockPersistentStream.publish(0, eventWithToken(1, "AggregateId-1", 1, "TestAggregate"));
+        reopenedStream.publish(0, eventWithToken(0, "AggregateId-1", 0, "TestAggregate"));
+        reopenedStream.publish(0, eventWithToken(1, "AggregateId-1", 1, "TestAggregate"));
 
         // then should deliver again
         await().atMost(Duration.ofSeconds(1))
                .pollDelay(Duration.ofMillis(100))
-               .until(() -> eventMessages.size() == 2);
+               .until(() -> eventMessagesAfterReopen.size() == 2);
         await().atMost(Duration.ofSeconds(1))
                .pollDelay(Duration.ofMillis(100))
-               .until(() -> mockPersistentStream.lastAcknowledged(0) == 1);
+               .until(() -> reopenedStream.lastAcknowledged(0) == 1);
 
-        mockPersistentStream.closeSegment(0);
+        reopenedStream.closeSegment(0);
     }
 
     @Test
@@ -729,6 +734,44 @@ class PersistentStreamConnectionTest {
     }
 
     @Test
+    void reconnectScheduledBeforeCloseDoesNotOpenANewStreamAfterClose() throws InterruptedException {
+        // given — the stream fails, so a reconnect is scheduled after the minimal 1s back-off
+        testSubject.open((events, ctx) -> CompletableFuture.completedFuture(null));
+        MockPersistentStream failedStream = mockPersistentStreams.get(STREAM_ID);
+        failedStream.closeWithError(new RuntimeException("connection lost"));
+
+        // when — the connection is closed while that reconnect is still pending
+        testSubject.close();
+
+        // then — the pending reconnect is dropped, rather than opening a stream nobody will ever read
+        //        from or close
+        Thread.sleep(Duration.ofMillis(1500)); // past the 1s reconnect back-off
+        assertThat(mockPersistentStreams.get(STREAM_ID))
+                .describedAs("no stream may be opened after close()")
+                .isSameAs(failedStream);
+    }
+
+    @Test
+    void reconnectScheduledBeforeReopenDoesNotOpenASecondStream() throws InterruptedException {
+        // given — the stream fails, so a reconnect is scheduled after the minimal 1s back-off
+        testSubject.open((events, ctx) -> CompletableFuture.completedFuture(null));
+        mockPersistentStreams.get(STREAM_ID).closeWithError(new RuntimeException("connection lost"));
+
+        // when — the connection is closed and reopened while that reconnect is still pending
+        testSubject.close();
+        testSubject.open((events, ctx) -> CompletableFuture.completedFuture(null));
+        MockPersistentStream reopenedStream = mockPersistentStreams.get(STREAM_ID);
+
+        // then — the stale reconnect is dropped, so the reopened stream remains the only one
+        Thread.sleep(Duration.ofMillis(1500)); // past the 1s reconnect back-off
+        assertThat(mockPersistentStreams.get(STREAM_ID))
+                .describedAs("a reconnect scheduled for the previous open() must not replace the reopened stream")
+                .isSameAs(reopenedStream);
+
+        reopenedStream.closeSegment(0);
+    }
+
+    @Test
     void pendingWorkDoneIsAcknowledgedWhenSegmentClosesAfterLastBatch() {
         // given — consumer processes events and closes the segment, simulating a server-initiated segment close
         List<EventMessage> received = new LinkedList<>();
@@ -750,7 +793,8 @@ class PersistentStreamConnectionTest {
                .until(() -> received.size() == 1);
         // then — PENDING_WORK_DONE_MARKER is acknowledged because the segment was closed after the final batch
         await().atMost(Duration.ofSeconds(2))
-               .until(() -> mockPersistentStream.lastAcknowledged(0) == PersistentStreamSegment.PENDING_WORK_DONE_MARKER);
+               .until(() -> mockPersistentStream.lastAcknowledged(0)
+                       == PersistentStreamSegment.PENDING_WORK_DONE_MARKER);
 
         mockPersistentStream.closeSegment(0);
     }
@@ -782,6 +826,225 @@ class PersistentStreamConnectionTest {
                        PersistentStreamSegment.PENDING_WORK_DONE_MARKER));
         assertThat(mockPersistentStream.segments.get(0).acknowledgedTokens)
                 .containsExactly(0L, PersistentStreamSegment.PENDING_WORK_DONE_MARKER);
+    }
+
+    @Test
+    void closeDeliversAlreadyBufferedEventsBeforeRetiringTheConsumer() {
+        // given — the first event blocks the consumer on a gate, so by the time close() runs, a second
+        //         event is already sitting, undrained, in the segment's local buffer
+        AtomicBoolean firstEventConsumerStarted = new AtomicBoolean(false);
+        CompletableFuture<Void> firstEventGate = new CompletableFuture<>();
+        List<EventMessage> received = Collections.synchronizedList(new LinkedList<>());
+        testSubject.open((events, ctx) -> {
+            long position = TrackingToken.fromContext(ctx).orElseThrow().position().orElseThrow();
+            if (position == 0L) {
+                firstEventConsumerStarted.set(true);
+                return firstEventGate.thenRun(() -> received.addAll(events));
+            }
+            received.addAll(events);
+            return CompletableFuture.completedFuture(null);
+        });
+        MockPersistentStream mockPersistentStream = mockPersistentStreams.get(STREAM_ID);
+
+        mockPersistentStream.publish(0, eventWithToken(0, "agg-1", 0, "TestAggregate"));
+        await().atMost(Duration.ofSeconds(2)).until(firstEventConsumerStarted::get);
+        MockPersistentStreamSegment segment = mockPersistentStream.segments.get(0);
+        mockPersistentStream.publish(0, eventWithToken(1, "agg-1", 1, "TestAggregate"));
+
+        // when — the connection closes while the second event is still undrained; only then is the
+        //         first event allowed to complete
+        testSubject.close();
+        firstEventGate.complete(null);
+
+        // then — both events reach the real consumer; the still-buffered second event is not skipped
+        //        just because close() has already been called
+        await().atMost(Duration.ofSeconds(2)).until(() -> received.size() == 2);
+        // and — the second event's token, and the pending-work-done marker, are only acknowledged after
+        //       the consumer actually handled it
+        await().atMost(Duration.ofSeconds(2))
+               .until(() -> segment.acknowledgedTokens.contains(PersistentStreamSegment.PENDING_WORK_DONE_MARKER));
+        assertThat(segment.acknowledgedTokens)
+                .containsExactly(0L, 1L, PersistentStreamSegment.PENDING_WORK_DONE_MARKER);
+
+        mockPersistentStream.closeSegment(0);
+    }
+
+    @Test
+    void idleSegmentIsAcknowledgedDoneAsSoonAsConnectionCloses() {
+        // given — an open segment with nothing left buffered and no batch in flight
+        List<EventMessage> received = new LinkedList<>();
+        testSubject.open((events, ctx) -> {
+            received.addAll(events);
+            return CompletableFuture.completedFuture(null);
+        });
+        MockPersistentStream mockPersistentStream = mockPersistentStreams.get(STREAM_ID);
+        mockPersistentStream.publish(0, eventWithToken(0, "agg-1", 0, "TestAggregate"));
+        await().atMost(Duration.ofSeconds(2)).until(() -> received.size() == 1);
+
+        // when — close() while the segment is idle
+        testSubject.close();
+
+        // then — the idle segment's terminal marker is acknowledged without the connection needing a
+        //        separate, synchronous re-check of every segment's state
+        await().atMost(Duration.ofSeconds(2))
+               .until(() -> mockPersistentStream.lastAcknowledged(0)
+                       == PersistentStreamSegment.PENDING_WORK_DONE_MARKER);
+    }
+
+    @Test
+    void closeDuringInFlightBatchFailureDoesNotFalselyAcknowledgeTheUnprocessedBatch() throws InterruptedException {
+        // given — the only batch for this segment is dequeued and its consumer invocation is in flight
+        //         (blocked on a gate) at the moment close() is called; the gate is only released afterwards,
+        //         so the failure happens strictly after close()
+        CompletableFuture<Void> inFlightGate = new CompletableFuture<>();
+        AtomicBoolean consumerStarted = new AtomicBoolean(false);
+        testSubject.open((events, ctx) -> {
+            consumerStarted.set(true);
+            return inFlightGate;
+        });
+        MockPersistentStream mockPersistentStream = mockPersistentStreams.get(STREAM_ID);
+        mockPersistentStream.publish(0, eventWithToken(0, "agg-1", 0, "TestAggregate"));
+        await().atMost(Duration.ofSeconds(2)).until(consumerStarted::get);
+
+        // when — close while the batch is in flight, only then let it fail
+        testSubject.close();
+        inFlightGate.completeExceptionally(new IllegalStateException("fail on purpose"));
+
+        // then — the batch is abandoned rather than falsely acknowledged through the no-op consumer close()
+        //        installs; Axon Server is left free to redeliver it once this stream reconnects
+        MockPersistentStreamSegment segment = mockPersistentStream.segments.get(0);
+        Thread.sleep(Duration.ofMillis(1500)); // past the 1s retry delay, long enough to observe a false ack
+        assertThat(segment.acknowledgedTokens)
+                .describedAs("a batch that failed around close() must never be acknowledged without being processed")
+                .isEmpty();
+    }
+
+    @Test
+    void closeWhileRetryingAFailingConsumerStopsTheRetryLoopWithoutAcknowledging() throws InterruptedException {
+        // given — the consumer always fails, so the only batch for this segment enters RetryState
+        AtomicInteger attempts = new AtomicInteger();
+        testSubject.open((events, ctx) -> {
+            attempts.incrementAndGet();
+            throw new IllegalStateException("always fails");
+        });
+        MockPersistentStream mockPersistentStream = mockPersistentStreams.get(STREAM_ID);
+        mockPersistentStream.publish(0, eventWithToken(0, "agg-1", 0, "TestAggregate"));
+        await().atMost(Duration.ofSeconds(2)).until(() -> attempts.get() >= 1);
+
+        // when — close while the segment keeps retrying against the failing consumer
+        testSubject.close();
+        int attemptsAtClose = attempts.get();
+
+        // then — the retry loop stops instead of continuing to retry against a retired connection, and the
+        //        never-processed batch is not acknowledged
+        Thread.sleep(Duration.ofMillis(1500)); // past the 1s retry delay were the loop to continue
+        assertThat(attempts.get())
+                .describedAs("retry loop must stop once close() has been called")
+                .isEqualTo(attemptsAtClose);
+        assertThat(mockPersistentStream.segments.get(0).acknowledgedTokens)
+                .describedAs("the never-processed batch must not be acknowledged")
+                .isEmpty();
+    }
+
+    @Test
+    void reopenWhileOldSegmentIsRetryingDoesNotRetryTheOldBatchThroughTheNewConsumer() throws InterruptedException {
+        // given — the consumer of the first open() always fails, so the only batch of the first stream
+        //         enters RetryState
+        AtomicInteger firstConsumerAttempts = new AtomicInteger();
+        testSubject.open((events, ctx) -> {
+            firstConsumerAttempts.incrementAndGet();
+            throw new IllegalStateException("always fails");
+        });
+        MockPersistentStream firstStream = mockPersistentStreams.get(STREAM_ID);
+        firstStream.publish(0, eventWithToken(0, "agg-1", 0, "TestAggregate"));
+        await().atMost(Duration.ofSeconds(2)).until(() -> firstConsumerAttempts.get() >= 1);
+        MockPersistentStreamSegment firstStreamSegment = firstStream.segments.get(0);
+
+        // when — close and reopen with a new consumer before the old segment's 1s retry fires
+        testSubject.close();
+        List<EventMessage> receivedByNewConsumer = Collections.synchronizedList(new LinkedList<>());
+        testSubject.open((events, ctx) -> {
+            receivedByNewConsumer.addAll(events);
+            return CompletableFuture.completedFuture(null);
+        });
+
+        // then — the old stream's batch is abandoned, not handed to the consumer of the next open()
+        Thread.sleep(Duration.ofMillis(1500)); // past the 1s retry delay of the old segment
+        assertThat(receivedByNewConsumer)
+                .describedAs("a batch of the closed stream must never reach the consumer of the next open()")
+                .isEmpty();
+        assertThat(firstStreamSegment.acknowledgedTokens)
+                .describedAs("the never-processed batch must not be acknowledged")
+                .isEmpty();
+
+        mockPersistentStreams.get(STREAM_ID).closeSegment(0);
+    }
+
+    @Test
+    void reopenWhileOldSegmentIsDrainingKeepsDeliveringTheOldBufferToTheOldConsumer() {
+        // given — the first event blocks the first consumer on a gate, while a second event is buffered
+        //         behind it
+        List<Long> receivedByFirstConsumer = Collections.synchronizedList(new LinkedList<>());
+        CompletableFuture<Void> firstEventGate = new CompletableFuture<>();
+        testSubject.open((events, ctx) -> {
+            long position = TrackingToken.fromContext(ctx).orElseThrow().position().orElseThrow();
+            receivedByFirstConsumer.add(position);
+            return position == 0L ? firstEventGate : CompletableFuture.completedFuture(null);
+        });
+        MockPersistentStream firstStream = mockPersistentStreams.get(STREAM_ID);
+        firstStream.publish(0, eventWithToken(0, "agg-1", 0, "TestAggregate"));
+        await().atMost(Duration.ofSeconds(2)).until(() -> receivedByFirstConsumer.contains(0L));
+        firstStream.publish(0, eventWithToken(1, "agg-1", 1, "TestAggregate"));
+
+        // when — close and reopen with a new consumer, and only then release the old segment's in-flight batch
+        testSubject.close();
+        List<EventMessage> receivedByNewConsumer = Collections.synchronizedList(new LinkedList<>());
+        testSubject.open((events, ctx) -> {
+            receivedByNewConsumer.addAll(events);
+            return CompletableFuture.completedFuture(null);
+        });
+        firstEventGate.complete(null);
+
+        // then — the still-buffered second event of the old stream drains into the consumer it was
+        //        buffered for
+        await().atMost(Duration.ofSeconds(2)).until(() -> receivedByFirstConsumer.contains(1L));
+        assertThat(receivedByNewConsumer)
+                .describedAs("the old stream's buffer must never drain into the consumer of the next open()")
+                .isEmpty();
+
+        mockPersistentStreams.get(STREAM_ID).closeSegment(0);
+    }
+
+    @Test
+    void reopenBeforeOldSegmentFinishesDrainingDoesNotRetireTheNewConsumer() {
+        // given — the first stream's segment is mid-batch (consumer gated), so close()'s deferred
+        //         retirement of the old consumer has not yet completed when open() is called again
+        AtomicBoolean firstEventConsumerStarted = new AtomicBoolean(false);
+        CompletableFuture<Void> firstEventGate = new CompletableFuture<>();
+        testSubject.open((events, ctx) -> {
+            firstEventConsumerStarted.set(true);
+            return firstEventGate;
+        });
+        MockPersistentStream firstStream = mockPersistentStreams.get(STREAM_ID);
+        firstStream.publish(0, eventWithToken(0, "agg-1", 0, "TestAggregate"));
+        await().atMost(Duration.ofSeconds(2)).until(firstEventConsumerStarted::get);
+
+        // when — close while the batch is still in flight, then reopen immediately with a new consumer,
+        //        and only then let the old segment's batch complete, triggering the deferred retirement
+        testSubject.close();
+        List<EventMessage> receivedByNewConsumer = Collections.synchronizedList(new LinkedList<>());
+        testSubject.open((events, ctx) -> {
+            receivedByNewConsumer.addAll(events);
+            return CompletableFuture.completedFuture(null);
+        });
+        firstEventGate.complete(null);
+
+        // then — the new consumer survives: a freshly published event on the new stream still reaches it
+        MockPersistentStream secondStream = mockPersistentStreams.get(STREAM_ID);
+        secondStream.publish(0, eventWithToken(0, "agg-2", 0, "TestAggregate"));
+        await().atMost(Duration.ofSeconds(2)).until(() -> receivedByNewConsumer.size() == 1);
+
+        secondStream.closeSegment(0);
     }
 
     @Nested
@@ -1179,7 +1442,10 @@ class PersistentStreamConnectionTest {
 
         @Override
         public void close() {
-            callbacks.onClosed();
+            // mirrors the real connector: closing the stream cascades into closing every still-open segment,
+            // appending a terminal marker behind any events already buffered locally for that segment
+            segments.values().forEach(MockPersistentStreamSegment::close);
+            callbacks.onClosed().accept(null);
         }
 
         private void publish(int segmentNumber, EventWithToken eventWithToken) {
@@ -1229,11 +1495,10 @@ class PersistentStreamConnectionTest {
         }
 
         /**
-         * Creates the segment (if absent) and fires one availability notification after setting
-         * {@code failWith} as the exception to throw on the next {@code nextIfAvailable()} call.
-         * Any supplied {@code events} are added to the segment's queue <em>before</em> the exception is
-         * armed so that {@code peek()} still returns a non-null value, causing the {@code finally} block
-         * to reschedule processing.
+         * Creates the segment (if absent) and fires one availability notification after setting {@code failWith} as the
+         * exception to throw on the next {@code nextIfAvailable()} call. Any supplied {@code events} are added to the
+         * segment's queue <em>before</em> the exception is armed so that {@code peek()} still returns a non-null value,
+         * causing the {@code finally} block to reschedule processing.
          */
         private void publishFailing(int segmentNumber, RuntimeException failWith, EventWithToken... events) {
             @SuppressWarnings("resource")
@@ -1251,10 +1516,10 @@ class PersistentStreamConnectionTest {
         }
 
         /**
-         * Creates the segment (if absent), enqueues {@code firstEvent}, arms an
-         * {@link InterruptedException} on the timeout-variant of {@code nextIfAvailable}, and fires
-         * the availability notification. The first {@code nextIfAvailable()} succeeds (adding the event
-         * to the batch), and the subsequent {@code nextIfAvailable(long, TimeUnit)} throws.
+         * Creates the segment (if absent), enqueues {@code firstEvent}, arms an {@link InterruptedException} on the
+         * timeout-variant of {@code nextIfAvailable}, and fires the availability notification. The first
+         * {@code nextIfAvailable()} succeeds (adding the event to the batch), and the subsequent
+         * {@code nextIfAvailable(long, TimeUnit)} throws.
          */
         private void publishWithInterruptOnTimeoutNext(int segmentNumber, EventWithToken firstEvent) {
             @SuppressWarnings("resource")
@@ -1270,10 +1535,10 @@ class PersistentStreamConnectionTest {
         }
 
         /**
-         * Creates the segment (if absent), enqueues {@code event}, arms the segment to close itself
-         * immediately after that event is dequeued by {@code nextIfAvailable()}, and fires the availability
-         * notification. Emulates the segment closing (e.g. reassignment) in the exact window between
-         * {@code readBatch} dequeuing the event and {@code processBatch} handling the resulting batch.
+         * Creates the segment (if absent), enqueues {@code event}, arms the segment to close itself immediately after
+         * that event is dequeued by {@code nextIfAvailable()}, and fires the availability notification. Emulates the
+         * segment closing (e.g. reassignment) in the exact window between {@code readBatch} dequeuing the event and
+         * {@code processBatch} handling the resulting batch.
          */
         private void publishClosingSegmentAfterRead(int segmentNumber, EventWithToken event) {
             @SuppressWarnings("resource")
@@ -1323,7 +1588,9 @@ class PersistentStreamConnectionTest {
     private static class MockPersistentStreamSegment implements PersistentStreamSegment {
 
         private final ConcurrentLinkedDeque<PersistentStreamEvent> entries = new ConcurrentLinkedDeque<>();
-        private final AtomicBoolean closed = new AtomicBoolean();
+        // true once close() is requested — mirrors the real connector appending a terminal marker to the
+        // tail of the buffer: isClosed() only reports true once entries already queued ahead of it are drained
+        private final AtomicBoolean closeRequested = new AtomicBoolean();
         private final int segment;
         private Runnable onAvailable = () -> {
         };
@@ -1364,7 +1631,7 @@ class PersistentStreamConnectionTest {
             }
             PersistentStreamEvent event = entries.isEmpty() ? null : entries.removeFirst();
             if (event != null && closeAfterNextRead.compareAndSet(true, false)) {
-                closed.set(true);
+                closeRequested.set(true);
             }
             return event;
         }
@@ -1376,7 +1643,7 @@ class PersistentStreamConnectionTest {
             }
             long endTime = System.currentTimeMillis() + unit.toMillis(timeout);
             PersistentStreamEvent event = nextIfAvailable();
-            while (event == null && System.currentTimeMillis() < endTime && !closed.get()) {
+            while (event == null && System.currentTimeMillis() < endTime && !isClosed()) {
                 Thread.sleep(1);
                 event = nextIfAvailable();
             }
@@ -1386,7 +1653,7 @@ class PersistentStreamConnectionTest {
         @Override
         public PersistentStreamEvent next() throws InterruptedException {
             PersistentStreamEvent event = nextIfAvailable();
-            while (event == null && !closed.get()) {
+            while (event == null && !isClosed()) {
                 Thread.sleep(1);
                 event = nextIfAvailable();
             }
@@ -1400,12 +1667,15 @@ class PersistentStreamConnectionTest {
 
         @Override
         public void close() {
-            closed.set(true);
+            // mirrors the real connector: appending the terminal marker to the buffer also triggers the
+            // on-available notification, even when the segment was already idle
+            closeRequested.set(true);
+            onAvailable.run();
         }
 
         @Override
         public boolean isClosed() {
-            return closed.get();
+            return closeRequested.get() && entries.isEmpty();
         }
 
         @Override
