@@ -31,7 +31,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 /**
  * An {@link EntitlementManager} for tests, recording the claims made against it.
  * <p>
- * Stands in for {@link EntitlementManager#INSTANCE} so a test need not touch that singleton, nor depend on a licence
+ * Stands in for {@link EntitlementManager#INSTANCE} so a test need not touch that singleton, nor depend on a license
  * being present.
  *
  * @author Allard Buijze

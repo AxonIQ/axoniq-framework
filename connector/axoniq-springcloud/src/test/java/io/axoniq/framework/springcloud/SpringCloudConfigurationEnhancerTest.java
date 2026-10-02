@@ -20,10 +20,11 @@
 package io.axoniq.framework.springcloud;
 
 import io.axoniq.framework.messaging.commandhandling.distributed.CommandBusConnector;
+import io.axoniq.framework.springcloud.command.IncomingCommandInvoker;
+import io.axoniq.framework.springcloud.command.RecordingRemoteCommandDispatcher;
+import io.axoniq.framework.springcloud.command.RemoteCommandDispatcher;
 import io.axoniq.framework.springcloud.discovery.RecordingCapabilityDiscoveryMode;
-import io.axoniq.framework.springcloud.transport.IncomingCommandInvoker;
-import io.axoniq.framework.springcloud.transport.RecordingRemoteCommandDispatcher;
-import io.axoniq.framework.springcloud.transport.RemoteCommandDispatcher;
+import io.axoniq.framework.springcloud.shared.SpringCloudMemberRegistry;
 import io.axoniq.framework.springcloud.util.RecordingDiscoveryClient;
 import io.axoniq.framework.springcloud.util.TestServiceInstance;
 import org.axonframework.common.configuration.ApplicationConfigurer;
