@@ -58,10 +58,10 @@
         <c3p0.version>0.9.1.2</c3p0.version>
         <hikari.version>7.1.0</hikari.version>
         <hsqldb.version>2.7.4</hsqldb.version>
-        <hibernate-core.version>7.4.10.Final</hibernate-core.version>
+        <hibernate-core.version>7.4.11.Final</hibernate-core.version>
         <mysql-connector-java.version>26.7.0</mysql-connector-java.version>
         <postgresql.version>42.7.13</postgresql.version>
-        <ojdbc.version>23.26.1.0.0</ojdbc.version>
+        <ojdbc.version>23.26.3.0.0</ojdbc.version>
         <!-- Jakarta -->
         <jakarta.annotation.version>3.0.0</jakarta.annotation.version>
         <jakarta.el.version>6.0.1</jakarta.el.version>
@@ -100,10 +100,10 @@
         <spring-boot.version>3.5.16</spring-boot.version>
         <spring-data.version>2025.0.7</spring-data.version>
         <spring-security.version>6.5.11</spring-security.version>
-        <spring-cloud-commons.version>4.3.3</spring-cloud-commons.version>
+        <spring-cloud-commons.version>5.0.3</spring-cloud-commons.version>
         <!-- Testing -->
         <assertj.version>3.27.7</assertj.version>
-        <archunit.version>1.5.0</archunit.version>
+        <archunit.version>1.5.1</archunit.version>
         <awaitility.version>4.3.0</awaitility.version>
         <equalsverifier.version>4.5.2</equalsverifier.version>
         <hamcrest.version>3.0</hamcrest.version>
@@ -115,7 +115,7 @@
 
         <!-- Maven plugins -->
         <checkstyle-maven-plugin.version>3.6.0</checkstyle-maven-plugin.version>
-        <checkstyle.version>14.1.0</checkstyle.version>
+        <checkstyle.version>14.3.0</checkstyle.version>
     </properties>
 
     <dependencyManagement>
