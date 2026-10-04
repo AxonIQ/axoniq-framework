@@ -283,10 +283,15 @@ public class SpringCloudQueryBusConnector implements QueryBusConnector {
          * Ends the subscription because a member reported it over, however many members still hold one.
          * <p>
          * A member saying so means there will never be another update. Waiting for the rest would leave the
-         * subscriber holding a subscription that has run its course.
+         * subscriber holding a subscription that has run its course. The initial result is asked for at once if it
+         * has not been yet: no member left to register can emit an update that matters any more, so the result is
+         * the subscription's final state, and the subscriber receives it followed by the completion. Leaving the
+         * wait in place would instead let the completing member's stream ending read as it having stopped
+         * answering, failing the initial result of a subscription that completed.
          */
         private void completeAll() {
             merged.seal();
+            everyMemberOpen.complete(null);
         }
 
         private QueryDispatchException stoppedAnswering(Source source) {
@@ -502,7 +507,9 @@ public class SpringCloudQueryBusConnector implements QueryBusConnector {
         // advertising the query changes, as when the segments of one event processor are spread over the members and
         // all write the read model it reads. An update a member emits before it registered the subscription reaches
         // nobody, so asking any sooner lets one fall between the initial result and the updates. The streams are
-        // opened concurrently, so this waits for the slowest member rather than for all of them in turn.
+        // opened concurrently, so this waits for the slowest member rather than for all of them in turn. A member
+        // reporting the subscription over ends the wait early: nothing can be emitted after that, so there is no
+        // update left for the initial result to be asked ahead of.
         CompletableFuture<Void> everyMemberOpen = new CompletableFuture<>();
         AtomicInteger unopened = new AtomicInteger(members.size());
         SubscriptionUpdates updates =

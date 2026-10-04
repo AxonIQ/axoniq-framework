@@ -537,6 +537,27 @@ class SpringCloudQueryBusConnectorTest {
                 assertThat(received).extracting(QueryResponseMessage::identifier)
                                     .containsExactly("initial-1", "update-from-c");
             }
+
+            @Test
+            void asksForTheInitialResultAndCompletesWhenAMemberReportsItOverBeforeEveryMemberRegistered() {
+                // given the member answering the initial result has registered the subscription, and the other
+                // has not
+                twoRemoteMembersHandleTheQuery();
+                dispatcher.openingOnDemand().answeringWith(response("initial-1"));
+                rotateSoThatTheNextInitialResultComesFrom(remoteMember());
+                MessageStream<QueryResponseMessage> responses = testSubject.subscriptionQuery(query(), null, 16);
+                dispatcher.open(remoteMember());
+
+                // when that member reports the subscription over before the other registered
+                dispatcher.completeSubscription(remoteMember());
+
+                // then no member left to register can emit an update that matters, so the initial result is the
+                // final state, and the subscription completes after it rather than failing
+                assertThat(drain(responses)).extracting(QueryResponseMessage::identifier)
+                                            .containsExactly("initial-1");
+                assertThat(responses.isCompleted()).isTrue();
+                assertThat(responses.error()).isEmpty();
+            }
         }
 
         @Test
