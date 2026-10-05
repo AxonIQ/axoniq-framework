@@ -24,7 +24,7 @@ import io.axoniq.framework.messaging.queryhandling.distributed.DistributedQueryB
 import io.axoniq.framework.testcontainer.AxonServerContainer;
 import io.axoniq.framework.testcontainer.AxonServerContainerUtils;
 import io.axoniq.framework.testcontainer.SharedAxonServerContainer;
-import org.axonframework.common.configuration.Configuration;
+import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.integrationtests.queryhandling.AbstractSubscriptionQueryTestSuite;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
@@ -87,7 +87,14 @@ class DistributedQueryBusSubscriptionQueryIT extends AbstractSubscriptionQueryTe
         return axonServerConfiguration;
     }
 
-    private final Configuration config = createMessagingConfigurer().build();
+    private final AxonConfiguration config = createMessagingConfigurer().build();
+
+    @AfterEach
+    void tearDown() {
+        // A new instance of this class (and thus a new config/connection) is created per test method; without
+        // this, every test leaks its connection to the shared container for the rest of the build.
+        config.shutdown();
+    }
 
     @Override
     public QueryBus queryBus() {
