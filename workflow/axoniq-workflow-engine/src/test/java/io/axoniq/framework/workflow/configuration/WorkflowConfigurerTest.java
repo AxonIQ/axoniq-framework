@@ -31,7 +31,8 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 
 /**
  * Test for the {@link WorkflowConfigurer}.
@@ -90,12 +91,12 @@ class WorkflowConfigurerTest extends ApplicationConfigurerTestSuite<WorkflowConf
         void createRegistersDefaultWorkflowEventProcessingModules() {
             Configuration configuration = buildConfiguration();
 
-            assertEquals(baselineModuleCount(), configuration.getModuleConfigurations().size());
+            assertThat(configuration.getModuleConfigurations()).hasSize(baselineModuleCount());
         }
 
         @Test
         void startSucceedsWithDefaultWorkflowEventProcessingModulesRegistered() {
-            assertDoesNotThrow(() -> testSubject.start());
+            assertThatCode(() -> testSubject.start()).doesNotThrowAnyException();
         }
     }
 
@@ -155,19 +156,21 @@ class WorkflowConfigurerTest extends ApplicationConfigurerTestSuite<WorkflowConf
             Configuration config = buildConfiguration();
 
             // then...
-            assertEquals(TestComponent.of("A"), config.getComponent(TestComponent.class, "A"));
-            assertEquals(TestComponent.of("B"), config.getComponent(TestComponent.class, "B"));
-            assertEquals(TestComponent.of("C"), config.getComponent(TestComponent.class, "C"));
+            assertThat(config.getComponent(TestComponent.class, "A")).isEqualTo(TestComponent.of("A"));
+            assertThat(config.getComponent(TestComponent.class, "B")).isEqualTo(TestComponent.of("B"));
+            assertThat(config.getComponent(TestComponent.class, "C")).isEqualTo(TestComponent.of("C"));
 
             // Every enhancer runs once per implicit module level, on top of the root.
-            assertEquals(expectedEnhancerInvocationCount(), executionOrder.stream().filter("A"::equals).count());
-            assertEquals(expectedEnhancerInvocationCount(), executionOrder.stream().filter("B"::equals).count());
-            assertEquals(expectedEnhancerInvocationCount(), executionOrder.stream().filter("C"::equals).count());
+            assertThat(executionOrder.stream().filter("A"::equals).count()).isEqualTo(expectedEnhancerInvocationCount());
+            assertThat(executionOrder.stream().filter("B"::equals).count()).isEqualTo(expectedEnhancerInvocationCount());
+            assertThat(executionOrder.stream().filter("C"::equals).count()).isEqualTo(expectedEnhancerInvocationCount());
             // Relative order is preserved regardless of how many times each enhancer additionally fires.
-            assertTrue(executionOrder.indexOf("A") < executionOrder.indexOf("C"),
-                       "EnhancerA (order=0) should execute before EnhancerC (order=5)");
-            assertTrue(executionOrder.indexOf("C") < executionOrder.indexOf("B"),
-                       "EnhancerC (order=5) should execute before EnhancerB (order=10)");
+            assertThat(executionOrder.indexOf("A"))
+                    .as("EnhancerA (order=0) should execute before EnhancerC (order=5)")
+                    .isLessThan(executionOrder.indexOf("C"));
+            assertThat(executionOrder.indexOf("C"))
+                    .as("EnhancerC (order=5) should execute before EnhancerB (order=10)")
+                    .isLessThan(executionOrder.indexOf("B"));
         }
 
         @Override
@@ -211,16 +214,19 @@ class WorkflowConfigurerTest extends ApplicationConfigurerTestSuite<WorkflowConf
             Configuration config = buildConfiguration();
 
             // then...
-            assertEquals(TestComponent.of("parent"), config.getComponent(TestComponent.class, "parent"));
-            assertEquals(TestComponent.of("child"), config.getComponent(TestComponent.class, "child"));
+            assertThat(config.getComponent(TestComponent.class, "parent")).isEqualTo(TestComponent.of("parent"));
+            assertThat(config.getComponent(TestComponent.class, "child")).isEqualTo(TestComponent.of("child"));
 
-            assertEquals(expectedEnhancerInvocationCount(), executionOrder.stream().filter("parent"::equals).count());
-            assertEquals(expectedEnhancerInvocationCount(), executionOrder.stream().filter("child"::equals).count());
+            assertThat(executionOrder.stream().filter("parent"::equals).count())
+                    .isEqualTo(expectedEnhancerInvocationCount());
+            assertThat(executionOrder.stream().filter("child"::equals).count())
+                    .isEqualTo(expectedEnhancerInvocationCount());
             // The first execution of parent must precede the first execution of the child it dynamically
             // registers, even though child's order value is lower.
-            assertTrue(executionOrder.indexOf("parent") < executionOrder.indexOf("child"),
-                       "Parent enhancer (order=10) should execute before the child (order=5) it dynamically "
-                               + "registers");
+            assertThat(executionOrder.indexOf("parent"))
+                    .as("Parent enhancer (order=10) should execute before the child (order=5) it dynamically "
+                                + "registers")
+                    .isLessThan(executionOrder.indexOf("child"));
         }
 
         @Nested
@@ -270,13 +276,16 @@ class WorkflowConfigurerTest extends ApplicationConfigurerTestSuite<WorkflowConf
                 Configuration config = buildConfiguration();
 
                 // then...
-                assertEquals(expectedEnhancerInvocationCount(), lowOrderFireCount.get(),
-                             "LowOrderEnhancer (order=10) should execute once per implicit module level");
-                assertFalse(highOrderInvoked.get(),
-                            "HighOrderEnhancer (order=100) should NOT execute because it was disabled");
-                assertEquals(TestComponent.of("low"), config.getComponent(TestComponent.class, "low"));
-                assertFalse(config.getOptionalComponent(TestComponent.class, "high").isPresent(),
-                            "HighOrderEnhancer's component should not exist");
+                assertThat(lowOrderFireCount.get())
+                        .as("LowOrderEnhancer (order=10) should execute once per implicit module level")
+                        .isEqualTo(expectedEnhancerInvocationCount());
+                assertThat(highOrderInvoked.get())
+                        .as("HighOrderEnhancer (order=100) should NOT execute because it was disabled")
+                        .isFalse();
+                assertThat(config.getComponent(TestComponent.class, "low")).isEqualTo(TestComponent.of("low"));
+                assertThat(config.getOptionalComponent(TestComponent.class, "high"))
+                        .as("HighOrderEnhancer's component should not exist")
+                        .isEmpty();
             }
 
             @Override
@@ -325,10 +334,10 @@ class WorkflowConfigurerTest extends ApplicationConfigurerTestSuite<WorkflowConf
                 // then...
                 // Both enhancers keep executing every implicit module level: disabling an already-executed
                 // enhancer never retroactively prevents it from having run, nor does it affect later levels.
-                assertEquals(expectedEnhancerInvocationCount(), lowOrderFireCount.get());
-                assertEquals(expectedEnhancerInvocationCount(), highOrderFireCount.get());
-                assertEquals(TestComponent.of("low"), config.getComponent(TestComponent.class, "low"));
-                assertEquals(TestComponent.of("high"), config.getComponent(TestComponent.class, "high"));
+                assertThat(lowOrderFireCount.get()).isEqualTo(expectedEnhancerInvocationCount());
+                assertThat(highOrderFireCount.get()).isEqualTo(expectedEnhancerInvocationCount());
+                assertThat(config.getComponent(TestComponent.class, "low")).isEqualTo(TestComponent.of("low"));
+                assertThat(config.getComponent(TestComponent.class, "high")).isEqualTo(TestComponent.of("high"));
             }
 
             @Override
@@ -368,13 +377,16 @@ class WorkflowConfigurerTest extends ApplicationConfigurerTestSuite<WorkflowConf
                 Configuration config = buildConfiguration();
 
                 // then...
-                assertEquals(expectedEnhancerInvocationCount(), firstEnhancerFireCount.get(),
-                             "First enhancer should execute once per implicit module level");
-                assertFalse(targetEnhancerInvoked.get(),
-                            "TargetEnhancer should NOT execute (disabled by multiple calls)");
-                assertEquals(TestComponent.of("first"), config.getComponent(TestComponent.class, "first"));
-                assertFalse(config.getOptionalComponent(TestComponent.class, "target").isPresent(),
-                            "TargetEnhancer's component should not exist");
+                assertThat(firstEnhancerFireCount.get())
+                        .as("First enhancer should execute once per implicit module level")
+                        .isEqualTo(expectedEnhancerInvocationCount());
+                assertThat(targetEnhancerInvoked.get())
+                        .as("TargetEnhancer should NOT execute (disabled by multiple calls)")
+                        .isFalse();
+                assertThat(config.getComponent(TestComponent.class, "first")).isEqualTo(TestComponent.of("first"));
+                assertThat(config.getOptionalComponent(TestComponent.class, "target"))
+                        .as("TargetEnhancer's component should not exist")
+                        .isEmpty();
             }
         }
     }
