@@ -17,11 +17,12 @@
  *  https://www.axoniq.io/pricing
  */
 
-package org.axonframework.messaging.core.annotation;
+package org.axonframework.messaging.annotation;
 
-import org.axonframework.messaging.core.NoScopeDescriptor;
-import org.axonframework.messaging.core.Scope;
-import org.axonframework.messaging.core.ScopeDescriptor;
+import org.axonframework.messaging.NoScopeDescriptor;
+import org.axonframework.messaging.Scope;
+import org.axonframework.messaging.ScopeDescriptor;
+import org.axonframework.messaging.core.annotation.ParameterResolver;
 import org.axonframework.messaging.core.unitofwork.StubProcessingContext;
 import org.junit.jupiter.api.*;
 

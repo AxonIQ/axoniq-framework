@@ -17,7 +17,7 @@
  *  https://www.axoniq.io/pricing
  */
 
-package org.axonframework.messaging.core;
+package org.axonframework.messaging;
 
 /**
  * A {@link ScopeDescriptor} describing no active scope.

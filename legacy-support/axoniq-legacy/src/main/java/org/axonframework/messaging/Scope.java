@@ -17,7 +17,7 @@
  *  https://www.axoniq.io/pricing
  */
 
-package org.axonframework.messaging.core;
+package org.axonframework.messaging;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

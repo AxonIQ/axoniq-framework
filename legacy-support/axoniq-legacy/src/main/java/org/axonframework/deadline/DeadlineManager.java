@@ -20,10 +20,10 @@
 package org.axonframework.deadline;
 
 import org.axonframework.common.ClockUtils;
+import org.axonframework.messaging.Scope;
+import org.axonframework.messaging.ScopeDescriptor;
 import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.Metadata;
-import org.axonframework.messaging.core.Scope;
-import org.axonframework.messaging.core.ScopeDescriptor;
 import org.jspecify.annotations.Nullable;
 
 import java.time.Duration;

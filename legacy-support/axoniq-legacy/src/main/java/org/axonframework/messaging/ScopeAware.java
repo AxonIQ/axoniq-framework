@@ -17,8 +17,9 @@
  *  https://www.axoniq.io/pricing
  */
 
-package org.axonframework.messaging.core;
+package org.axonframework.messaging;
 
+import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 
 /**

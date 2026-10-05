@@ -54,7 +54,7 @@ resolved to a wrapper bound to the invocation's `ProcessingContext`, and scope-l
 
 Option A.
 
-- `Scope` lives in `axoniq-legacy` as `org.axonframework.messaging.core.Scope`, unchanged.
+- `Scope` lives in `axoniq-legacy` as `org.axonframework.messaging.Scope`, unchanged.
 - `AnnotatedSaga.handle(...)` makes a per-invocation `ContextAwareScope` the current scope for the duration of
   the synchronous handler invocation. It describes the Saga as Axon Framework 4 did: the simple class name of
   the Saga instance plus the Saga identifier, which is what `AbstractSagaManager.canResolve(...)` compares

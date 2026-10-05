@@ -21,12 +21,12 @@ package org.axonframework.modelling.saga;
 
 import org.axonframework.common.Assert;
 import org.axonframework.common.infra.ComponentDescriptor;
-import org.axonframework.messaging.core.ContextAwareScope;
+import org.axonframework.messaging.ContextAwareScope;
+import org.axonframework.messaging.Scope;
+import org.axonframework.messaging.ScopeDescriptor;
 import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.QualifiedName;
-import org.axonframework.messaging.core.Scope;
-import org.axonframework.messaging.core.ScopeDescriptor;
 import org.axonframework.messaging.core.annotation.MessageHandlingMember;
 import org.axonframework.messaging.core.interception.annotation.MessageHandlerInterceptorMemberChain;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;

@@ -20,13 +20,13 @@
 package org.axonframework.modelling.saga;
 
 import org.axonframework.common.AxonConfigurationException;
+import org.axonframework.messaging.ContextAwareScope;
+import org.axonframework.messaging.Scope;
+import org.axonframework.messaging.ScopeDescriptor;
 import org.axonframework.messaging.core.Context;
-import org.axonframework.messaging.core.ContextAwareScope;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.Metadata;
 import org.axonframework.messaging.core.QualifiedName;
-import org.axonframework.messaging.core.Scope;
-import org.axonframework.messaging.core.ScopeDescriptor;
 import org.axonframework.messaging.core.annotation.MessageHandlingMember;
 import org.axonframework.messaging.core.interception.annotation.ExceptionHandler;
 import org.axonframework.messaging.core.interception.annotation.NoMoreInterceptors;

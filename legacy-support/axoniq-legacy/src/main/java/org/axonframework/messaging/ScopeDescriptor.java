@@ -17,25 +17,21 @@
  *  https://www.axoniq.io/pricing
  */
 
-package org.axonframework.messaging.core;
-
-import java.util.stream.Stream;
+package org.axonframework.messaging;
 
 /**
- * Contract towards a mechanism to provide a {@link Stream} of components which are {@link ScopeAware}.
+ * Denotes the description of a {@link Scope}. This can be used to figure out in what scope a given message should be
+ * handled.
  *
  * @author Steven van Beelen
  * @since 3.3
  */
-public interface ScopeAwareProvider {
+public interface ScopeDescriptor {
 
     /**
-     * Retrieve a {@link Stream} of {@link ScopeAware} components, by performing a check whether that component is able
-     * to handle a {@link Scope} described by a {@link ScopeDescriptor}.
+     * Retrieve a {@link String} description of a {@link Scope} object.
      *
-     * @param scopeDescriptor a {@link ScopeDescriptor} describing the {@link Scope} a component {@link ScopeAware}
-     *                        should be able to handle
-     * @return a {@link Stream} of {@link ScopeAware} components
+     * @return a {@link String} description of a {@link Scope} object
      */
-    Stream<ScopeAware> provideScopeAwareStream(ScopeDescriptor scopeDescriptor);
+    String scopeDescription();
 }
