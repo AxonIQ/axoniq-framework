@@ -21,6 +21,9 @@ package org.axonframework.modelling.saga;
 
 import org.axonframework.common.Assert;
 import org.axonframework.common.infra.ComponentDescriptor;
+import org.axonframework.messaging.ContextAwareScope;
+import org.axonframework.messaging.Scope;
+import org.axonframework.messaging.ScopeDescriptor;
 import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.QualifiedName;
@@ -34,6 +37,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
 /**
  * Implementation of the {@link Saga interface} that allows for a POJO instance with annotated message handlers to act
@@ -47,6 +51,11 @@ import java.util.function.Function;
  * that is not done yet fails handling with a {@link SagaExecutionException}, because the Saga is stored in the
  * invoking thread's transaction and work continuing on another thread would fall outside it. Axon Framework 4 had no
  * way to express an asynchronous handler at all, so nothing that worked there is refused here.
+ * <p>
+ * While a handler method runs, this Saga is the current {@link Scope}, as it was in Axon Framework 4. Code reached
+ * from the handler on the same thread, such as a {@code DeadlineManager}, can therefore describe the Saga through
+ * {@link Scope#describeCurrentScope()} and reach the handler's {@link ProcessingContext} through
+ * {@link ContextAwareScope#currentProcessingContext()}, without being handed either of them.
  *
  * @author Allard Buijze
  * @since 3.0
@@ -131,10 +140,11 @@ public class AnnotatedSaga<T> implements Saga<T>, SagaLifecycle {
         ProcessingContext sagaContext = sagaContext(context);
         return matchingHandler(event, sagaContext)
                 .map(handler -> requireCompleted(
-                        chainedInterceptor.handle(event, sagaContext, sagaInstance, handler)
-                                          .onErrorContinue(failure -> MessageStream.failed(wrapIfChecked(failure)))
-                                          .ignoreEntries()
-                                          .cast(),
+                        new InvocationScope(sagaContext)
+                                .run(() -> chainedInterceptor.handle(event, sagaContext, sagaInstance, handler))
+                                .onErrorContinue(failure -> MessageStream.failed(wrapIfChecked(failure)))
+                                .ignoreEntries()
+                                .cast(),
                         handler
                 ))
                 .orElse(MessageStream.empty());
@@ -229,6 +239,49 @@ public class AnnotatedSaga<T> implements Saga<T>, SagaLifecycle {
     @Override
     public Set<AssociationValue> associationValues() {
         return associationValues.asSet();
+    }
+
+    /**
+     * The {@link Scope} this Saga is while one of its handler methods runs, carrying that invocation's
+     * {@link ProcessingContext}.
+     * <p>
+     * Axon Framework 4 made the {@code AnnotatedSaga} itself the {@link Scope}, which worked because the unit of work
+     * was ambient too. The {@link ProcessingContext} differs per invocation while the Saga instance does not, so a
+     * fresh scope is started for every invocation instead. It describes the Saga exactly as Axon Framework 4 did: the
+     * simple class name of the Saga instance, which is also what
+     * {@link AbstractSagaManager#canResolve(ScopeDescriptor)} compares against.
+     */
+    private final class InvocationScope extends ContextAwareScope {
+
+        private final ProcessingContext context;
+
+        private InvocationScope(ProcessingContext context) {
+            this.context = context;
+        }
+
+        /**
+         * Runs the given {@code invocation} with this scope as the current {@link Scope}, ending the scope once the
+         * invocation returns or throws. Mirrors the Axon Framework 4 behavior to wrap checked exceptions.
+         */
+        private <R> R run(Supplier<R> invocation) {
+            try {
+                return executeWithResult(invocation::get);
+            } catch (RuntimeException | Error e) {
+                throw e;
+            } catch (Exception e) {
+                throw new SagaExecutionException("Exception while handling an Event in a Saga", e);
+            }
+        }
+
+        @Override
+        public ProcessingContext processingContext() {
+            return context;
+        }
+
+        @Override
+        public ScopeDescriptor describeScope() {
+            return new SagaScopeDescriptor(sagaInstance.getClass().getSimpleName(), sagaId);
+        }
     }
 
     @Override

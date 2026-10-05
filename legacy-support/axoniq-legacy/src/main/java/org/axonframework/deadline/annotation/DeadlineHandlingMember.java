@@ -17,21 +17,19 @@
  *  https://www.axoniq.io/pricing
  */
 
-package org.axonframework.messaging.core;
+package org.axonframework.deadline.annotation;
+
+import org.axonframework.common.annotation.Internal;
+import org.axonframework.messaging.core.annotation.MessageHandlingMember;
 
 /**
- * Denotes the description of a {@link Scope}. This can be used to figure out in what scope a given message should be
- * handled.
+ * Interface describing a message handler capable of handling a specific deadline.
  *
- * @author Steven van Beelen
- * @since 3.3
+ * @param <T> the type of entity to which the message handler will delegate the actual handling of the deadline
+ * @author Milan Savic
+ * @since 3.3.0
  */
-public interface ScopeDescriptor {
+@Internal
+public interface DeadlineHandlingMember<T> extends MessageHandlingMember<T> {
 
-    /**
-     * Retrieve a {@link String} description of a {@link Scope} object.
-     *
-     * @return a {@link String} description of a {@link Scope} object
-     */
-    String scopeDescription();
 }
