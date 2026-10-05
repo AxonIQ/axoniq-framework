@@ -22,6 +22,8 @@ package io.axoniq.framework.integrationtests.queryhandling;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration;
 import io.axoniq.framework.messaging.queryhandling.distributed.DistributedQueryBus;
 import io.axoniq.framework.testcontainer.AxonServerContainer;
+import io.axoniq.framework.testcontainer.AxonServerContainerUtils;
+import io.axoniq.framework.testcontainer.SharedAxonServerContainer;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.integrationtests.queryhandling.AbstractSubscriptionQueryTestSuite;
 import org.axonframework.messaging.core.MessageStream;
@@ -37,8 +39,8 @@ import org.axonframework.messaging.queryhandling.QueryUpdateEmitter;
 import org.junit.jupiter.api.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
+import java.io.IOException;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicReference;
@@ -48,31 +50,32 @@ import static org.awaitility.Awaitility.await;
 
 /**
  * An {@link AbstractSubscriptionQueryTestSuite} implementation validating the {@link DistributedQueryBus}.
- * <p>
- * Runs against its own dedicated container rather than the shared one: reproducibly hits a client-side
- * "no connection to AxonServer" (AxonServerManagedChannel$FailingCall) on its very first query registration
- * when pointed at a freshly created context, unlike the otherwise-identical DistributedQueryBusInterceptorIT.
- * Root cause looks to be in axonserver-connector-java rather than in this suite's setup; isolating this test
- * sidesteps it without blocking consolidation of the rest of the suite.
  *
  * @author Mateusz Nowak
  * @author Milan Savic
  * @author Steven van Beelen
  */
-@Testcontainers
 class DistributedQueryBusSubscriptionQueryIT extends AbstractSubscriptionQueryTestSuite {
 
     protected static final Logger logger = LoggerFactory.getLogger(DistributedQueryBusSubscriptionQueryIT.class);
 
-    private static final AxonServerContainer container = new AxonServerContainer()
-            .withAxonServerHostname("localhost")
-            .withDevMode(true)
-            .withDcbContext(true)
-            .withReuse(true);
+    private static final String CONTEXT = "distributed-query-bus-subscription-query-it";
+
+    private static final AxonServerContainer container = SharedAxonServerContainer.INSTANCE;
 
     @BeforeAll
-    static void beforeAll() {
-        container.start();
+    static void beforeAll() throws IOException {
+        SharedAxonServerContainer.ensureStarted();
+
+        try {
+            AxonServerContainerUtils.deleteContext(container.getHost(), container.getHttpPort(), CONTEXT);
+        } catch (IOException ignored) {
+            // Context didn't exist yet.
+        }
+        AxonServerContainerUtils.createContext(container.getHost(),
+                                               container.getHttpPort(),
+                                               CONTEXT,
+                                               AxonServerContainerUtils.DCB_CONTEXT);
         logger.info("Using Axon Server for integration test. UI is available at http://localhost:{}",
                     container.getHttpPort());
     }
@@ -80,6 +83,7 @@ class DistributedQueryBusSubscriptionQueryIT extends AbstractSubscriptionQueryTe
     private static AxonServerConfiguration testContainerAxonServerConfiguration() {
         AxonServerConfiguration axonServerConfiguration = new AxonServerConfiguration();
         axonServerConfiguration.setServers(container.getHost() + ":" + container.getGrpcPort());
+        axonServerConfiguration.setContext(CONTEXT);
         return axonServerConfiguration;
     }
 

@@ -20,20 +20,14 @@
 package io.axoniq.framework.integrationtests.testsuite.infrastructure;
 
 import io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration;
-import io.axoniq.framework.testcontainer.AxonServerContainer;
 import io.axoniq.framework.testcontainer.AxonServerContainerUtils;
+import io.axoniq.framework.testcontainer.SharedAxonServerContainer;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.integrationtests.testsuite.infrastructure.TestInfrastructure;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.io.UncheckedIOException;
-import java.nio.channels.FileChannel;
-import java.nio.channels.FileLock;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.StandardOpenOption;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
@@ -42,15 +36,12 @@ import java.util.function.Consumer;
 import static io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration.*;
 
 /**
- * {@link TestInfrastructure} implementation that wires tests against a real Axon Server instance managed by
- * Testcontainers.
+ * {@link TestInfrastructure} implementation that wires tests against the build-wide
+ * {@link SharedAxonServerContainer}.
  * <p>
- * The underlying {@link AxonServerContainer} is a {@code static final} field of its own, not
- * {@link io.axoniq.framework.testcontainer.SharedAxonServerContainer}, since consumers of this class churn through
- * many tenant contexts and need a container not shared with unrelated suites. It is still reused across JVMs via
- * Testcontainers' reuse hash (see {@link #start()} for the cross-process locking that makes that safe), and shared
- * within one module's JVM via the static field. {@link AxonServerContainer#start()} is idempotent, so calling
- * {@link #start()} from every {@code @BeforeEach} is safe and cheap after the first test.
+ * This class owns no container of its own: it adapts {@link SharedAxonServerContainer#INSTANCE} to the
+ * {@link TestInfrastructure}/{@link ContextManager} abstraction the integration test suites use, so the tenant
+ * contexts created here collapse onto the same container as every other consumer.
  *
  * @since 5.1.0
  */
@@ -58,29 +49,8 @@ public final class AxonServerTestInfrastructure implements TestInfrastructure {
 
     private static final Logger LOG = LoggerFactory.getLogger(AxonServerTestInfrastructure.class);
 
-    public static final String AXON_SERVER_TEST_LICENSE = "axon-server-test.license";
-    private static final AxonServerContainer CONTAINER =
-            new AxonServerContainer("docker.axoniq.io/axoniq/axonserver:latest")
-                    .withAxonServerHostname("localhost")
-                    .withDevMode(true)
-                    // Fixed fork number (see SharedAxonServerContainer) so every module's JVM computes the same hash.
-                    .withEnv("TESTCONTAINERS_FORK_NUMBER", "test-infrastructure")
-                    .withReuse(true)
-                    .withDcbContext(true)
-                    .withLicense(licenseExists() ? AXON_SERVER_TEST_LICENSE : null);
-
-    /**
-     * Cross-process lock file guarding {@link #start()}.
-     */
-    private static final Path START_LOCK_FILE =
-            Paths.get(System.getProperty("java.io.tmpdir"), "axon-server-test-infrastructure-start.lock");
-
     public static boolean licenseExists() {
-        try (var resource = AxonServerTestInfrastructure.class.getResourceAsStream("/" + AXON_SERVER_TEST_LICENSE)) {
-            return resource != null && resource.read() != -1;
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
+        return SharedAxonServerContainer.licenseExists();
     }
 
     private final List<Consumer<ComponentRegistry>> infrastructureConfigurators;
@@ -106,35 +76,17 @@ public final class AxonServerTestInfrastructure implements TestInfrastructure {
         this.infrastructureConfigurators = List.copyOf(infrastructureConfigurators);
     }
 
-    /**
-     * Starts {@link #CONTAINER} if it isn't already running.
-     * <p>
-     * The {@link FileLock} serializes this across processes, since Testcontainers' reuse lookup isn't itself
-     * process-safe. {@code synchronized} covers the same within one JVM, since a second {@link FileLock} attempt
-     * from another thread here throws rather than waiting.
-     */
     @Override
-    public synchronized void start() {
-        if (CONTAINER.isRunning()) {
-            return;
-        }
-        try (FileChannel channel = FileChannel.open(START_LOCK_FILE, StandardOpenOption.CREATE, StandardOpenOption.WRITE);
-             FileLock lock = channel.lock()) {
-            boolean wasRunning = CONTAINER.isRunning();
-            CONTAINER.start();
-            if (!wasRunning) {
-                LOG.info("Axon Server UI at http://localhost:{}", CONTAINER.getHttpPort());
-            }
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
+    public void start() {
+        SharedAxonServerContainer.ensureStarted();
     }
 
     @Override
     public void configureInfrastructure(ComponentRegistry registry) {
         // builder so we can eventually add more configuration options if needed, without having to change impl.
         AxonServerConfiguration.Builder builder = builder()
-                .servers(CONTAINER.getHost() + ":" + CONTAINER.getGrpcPort());
+                .servers(SharedAxonServerContainer.INSTANCE.getHost() + ":"
+                                 + SharedAxonServerContainer.INSTANCE.getGrpcPort());
 
         registry.registerComponent(AxonServerConfiguration.class, c -> builder.build());
         infrastructureConfigurators.forEach(configurator -> configurator.accept(registry));
@@ -147,8 +99,8 @@ public final class AxonServerTestInfrastructure implements TestInfrastructure {
                            .forEach(context -> {
                                try {
                                    AxonServerContainerUtils.purgeEventsFromAxonServer(
-                                           CONTAINER.getHost(),
-                                           CONTAINER.getHttpPort(),
+                                           SharedAxonServerContainer.INSTANCE.getHost(),
+                                           SharedAxonServerContainer.INSTANCE.getHttpPort(),
                                            context,
                                            AxonServerContainerUtils.DCB_CONTEXT,
                                            DEFAULT_REPLICATION_GROUP
@@ -161,7 +113,7 @@ public final class AxonServerTestInfrastructure implements TestInfrastructure {
 
     @Override
     public void stop() {
-        // The container is shared across the JVM (static final, withReuse(true)).
+        // The container is shared build-wide (SharedAxonServerContainer, withReuse(true)).
         // Testcontainers + Ryuk handle cleanup on JVM exit; stopping per test would
         // defeat reuse. No-op on purpose.
     }
@@ -171,8 +123,8 @@ public final class AxonServerTestInfrastructure implements TestInfrastructure {
             @Override
             public List<String> getContexts() {
                 try {
-                    return AxonServerContainerUtils.contexts(CONTAINER.getHost(),
-                                                             CONTAINER.getHttpPort());
+                    return AxonServerContainerUtils.contexts(SharedAxonServerContainer.INSTANCE.getHost(),
+                                                             SharedAxonServerContainer.INSTANCE.getHttpPort());
                 } catch (IOException e) {
                     throw new RuntimeException("Failed to list contexts from Axon Server", e);
                 }
@@ -181,8 +133,8 @@ public final class AxonServerTestInfrastructure implements TestInfrastructure {
             @Override
             public void createContext(String name, boolean dcb) {
                 try {
-                    AxonServerContainerUtils.createContext(CONTAINER.getHost(),
-                                                           CONTAINER.getHttpPort(),
+                    AxonServerContainerUtils.createContext(SharedAxonServerContainer.INSTANCE.getHost(),
+                                                           SharedAxonServerContainer.INSTANCE.getHttpPort(),
                                                            name,
                                                            dcb,
                                                            DEFAULT_REPLICATION_GROUP);
@@ -194,7 +146,8 @@ public final class AxonServerTestInfrastructure implements TestInfrastructure {
             @Override
             public void deleteContext(String name) {
                 try {
-                    AxonServerContainerUtils.deleteContext(CONTAINER.getHost(), CONTAINER.getHttpPort(), name);
+                    AxonServerContainerUtils.deleteContext(SharedAxonServerContainer.INSTANCE.getHost(),
+                                                           SharedAxonServerContainer.INSTANCE.getHttpPort(), name);
                 } catch (IOException e) {
                     throw new RuntimeException("Failed to delete context in Axon Server", e);
                 }
@@ -204,8 +157,8 @@ public final class AxonServerTestInfrastructure implements TestInfrastructure {
             public void emptyContext(String name) {
                 try {
                     AxonServerContainerUtils.purgeEventsFromAxonServer(
-                            CONTAINER.getHost(),
-                            CONTAINER.getHttpPort(),
+                            SharedAxonServerContainer.INSTANCE.getHost(),
+                            SharedAxonServerContainer.INSTANCE.getHttpPort(),
                             name,
                             AxonServerContainerUtils.DCB_CONTEXT,
                             DEFAULT_REPLICATION_GROUP
