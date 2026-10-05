@@ -41,6 +41,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.time.Duration;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicReference;
@@ -63,6 +64,8 @@ class DistributedQueryBusSubscriptionQueryIT extends AbstractSubscriptionQueryTe
 
     private static final AxonServerContainer container = SharedAxonServerContainer.INSTANCE;
 
+    private static AxonConfiguration config;
+
     @BeforeAll
     static void beforeAll() throws IOException {
         SharedAxonServerContainer.ensureStarted();
@@ -78,6 +81,19 @@ class DistributedQueryBusSubscriptionQueryIT extends AbstractSubscriptionQueryTe
                                                AxonServerContainerUtils.DCB_CONTEXT);
         logger.info("Using Axon Server for integration test. UI is available at http://localhost:{}",
                     container.getHttpPort());
+
+        // One connection shared by every test method in this class, rather than one per method: opening and
+        // tearing down a fresh Axon Server connection per test (18 of them here) churns through client
+        // registrations faster than the server's async disconnect processing can keep up, which can transiently
+        // exceed a license's connection limit under CI load. Test query/handler names are already UUID-scoped, so
+        // sharing one connection across methods is safe.
+        config = buildConfigurer().build();
+        awaitQueryRoutingReady(config);
+    }
+
+    @AfterAll
+    static void afterAll() {
+        config.shutdown();
     }
 
     private static AxonServerConfiguration testContainerAxonServerConfiguration() {
@@ -87,13 +103,29 @@ class DistributedQueryBusSubscriptionQueryIT extends AbstractSubscriptionQueryTe
         return axonServerConfiguration;
     }
 
-    private final AxonConfiguration config = createMessagingConfigurer().build();
+    private static MessagingConfigurer buildConfigurer() {
+        return MessagingConfigurer.create()
+                                  .componentRegistry(cr -> cr.registerComponent(
+                                          AxonServerConfiguration.class,
+                                          c -> testContainerAxonServerConfiguration()
+                                  ));
+    }
 
-    @AfterEach
-    void tearDown() {
-        // A new instance of this class (and thus a new config/connection) is created per test method; without
-        // this, every test leaks its connection to the shared container for the rest of the build.
-        config.shutdown();
+    /**
+     * A freshly-opened connection's query stream can briefly lag behind the connection itself becoming usable:
+     * {@code registerQueryHandler} always succeeds locally, but the server-side acknowledgment over the stream can
+     * silently fail if issued before the stream is actually up (only resolved later, asynchronously, when the
+     * connector reconnects and resubscribes). Test methods here don't know that and block on an untimed
+     * {@code join()} for a response that then never arrives. Retrying a throwaway registration on this same
+     * connection, and blocking until it stops failing, closes that race before any real test runs.
+     */
+    private static void awaitQueryRoutingReady(AxonConfiguration configuration) {
+        QueryBus queryBus = configuration.getComponent(QueryBus.class);
+        await().atMost(Duration.ofSeconds(30))
+               .pollInterval(Duration.ofMillis(500))
+               .ignoreExceptions()
+               .untilAsserted(() -> queryBus.subscribe(new QualifiedName("warmup"),
+                                                       (query, context) -> MessageStream.empty()));
     }
 
     @Override
@@ -103,11 +135,7 @@ class DistributedQueryBusSubscriptionQueryIT extends AbstractSubscriptionQueryTe
 
     @Override
     protected MessagingConfigurer createMessagingConfigurer() {
-        return MessagingConfigurer.create()
-                                  .componentRegistry(cr -> cr.registerComponent(
-                                          AxonServerConfiguration.class,
-                                          c -> testContainerAxonServerConfiguration()
-                                  ));
+        return buildConfigurer();
     }
 
     @Test
