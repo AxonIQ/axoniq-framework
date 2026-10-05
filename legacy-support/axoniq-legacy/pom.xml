@@ -40,7 +40,7 @@
     <properties>
         <!-- Loaded in an isolated class loader by Af4SerializerCompatibilityTest. Keeping the AF4 artifact out of the
              dependency graph prevents its org.axonframework classes from colliding with the reactor's AF5 classes. -->
-        <axon4.serializer.version>5.3.2</axon4.serializer.version>
+        <axon4.serializer.version>4.13.2</axon4.serializer.version>
     </properties>
 
     <dependencies>
@@ -116,14 +116,14 @@
         </dependency>
         <dependency>
             <groupId>org.axonframework</groupId>
-            <artifactId>axon-messaging</artifactId>
+            <artifactId>axon-conversion</artifactId>
             <version>${axon-framework.version}</version>
             <type>test-jar</type>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.axonframework</groupId>
-            <artifactId>axon-conversion</artifactId>
+            <artifactId>axon-messaging</artifactId>
             <version>${axon-framework.version}</version>
             <type>test-jar</type>
             <scope>test</scope>
@@ -141,12 +141,6 @@
         <dependency>
             <groupId>org.hibernate.orm</groupId>
             <artifactId>hibernate-core</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <!-- Proves JdbcSagaStore joins an ambient Spring transaction. -->
-        <dependency>
-            <groupId>org.springframework</groupId>
-            <artifactId>spring-jdbc</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -172,6 +166,38 @@
             <artifactId>testcontainers-junit-jupiter</artifactId>
             <version>${testcontainers.version}</version>
             <scope>test</scope>
+        </dependency>
+        <!-- Spring (Boot) testing -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-orm</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-jdbc</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.axonframework.extensions.spring</groupId>
+            <artifactId>axon-spring-boot-starter</artifactId>
+            <version>${axon-framework.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+            <exclusions>
+                <exclusion>
+                    <groupId>ch.qos.logback</groupId>
+                    <artifactId>logback-classic</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.logging.log4j</groupId>
+                    <artifactId>log4j-to-slf4j</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
     </dependencies>
 
