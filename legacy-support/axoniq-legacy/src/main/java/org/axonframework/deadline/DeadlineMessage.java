@@ -1,24 +1,27 @@
 /*
- * Copyright (c) 2010-2026. Axon Framework
+ * Copyright (c) 2010-2026. AxonIQ B.V.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * Licensed under the AXONIQ TERMS OF SERVICE,
+ * Version 29 April 2026 (the "License");
  *
- *    http://www.apache.org/licenses/LICENSE-2.0
+ * The software is available for evaluation use without registration.
+ * Continued use beyond the evaluation period requires registration
+ * and a commercial license. See the License for the specific language
+ * governing permissions and limitations under the License.
+ * You may not use this file except in compliance with the License.
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * You may obtain a copy of the License at:
+ *  https://www.axoniq.io/legal/terms-of-service
+ *
+ * For licensing information and to register, visit:
+ *  https://www.axoniq.io/pricing
  */
 
 package org.axonframework.deadline;
 
 import org.axonframework.common.TypeReference;
-import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.conversion.Converter;
+import org.axonframework.messaging.eventhandling.EventMessage;
 
 import java.lang.reflect.Type;
 import java.util.Map;
@@ -39,7 +42,7 @@ public interface DeadlineMessage extends EventMessage {
     /**
      * Returns the name of the {@link DeadlineMessage deadline} to be handled.
      *
-     * @return The name of the {@link DeadlineMessage deadline}.
+     * @return the name of the {@link DeadlineMessage deadline}
      */
     String getDeadlineName();
 
@@ -50,12 +53,12 @@ public interface DeadlineMessage extends EventMessage {
     DeadlineMessage andMetadata(Map<String, String> additionalMetadata);
 
     @Override
-        default DeadlineMessage withConvertedPayload(Class<?> type, Converter converter) {
+    default DeadlineMessage withConvertedPayload(Class<?> type, Converter converter) {
         return withConvertedPayload((Type) type, converter);
     }
 
     @Override
-        default DeadlineMessage withConvertedPayload(TypeReference<?> type, Converter converter) {
+    default DeadlineMessage withConvertedPayload(TypeReference<?> type, Converter converter) {
         return withConvertedPayload(type.getType(), converter);
     }
 
