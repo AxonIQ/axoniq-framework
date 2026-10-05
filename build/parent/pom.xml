@@ -100,7 +100,7 @@
         <spring-boot.version>3.5.16</spring-boot.version>
         <spring-data.version>2025.0.7</spring-data.version>
         <spring-security.version>6.5.11</spring-security.version>
-        <spring-cloud-commons.version>5.0.3</spring-cloud-commons.version>
+        <spring-cloud-commons.version>4.3.3</spring-cloud-commons.version>
         <!-- Testing -->
         <assertj.version>3.27.7</assertj.version>
         <archunit.version>1.5.1</archunit.version>
