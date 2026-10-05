@@ -123,6 +123,7 @@ class WorkflowConfigurerWakeCheckpointTest {
             // then
             await().atMost(5, TimeUnit.SECONDS).until(() -> covers(storedToken(tokenStore), paidPosition));
             await().atMost(5, TimeUnit.SECONDS)
+                   .ignoreExceptions()
                    .until(() -> durableStatus(configuration, workflowId) == WorkflowStatus.COMPLETED);
         }
 
@@ -149,6 +150,7 @@ class WorkflowConfigurerWakeCheckpointTest {
 
             // then
             await().atMost(10, TimeUnit.SECONDS)
+                   .ignoreExceptions()
                    .until(() -> durableStatus(restarted, workflowId) == WorkflowStatus.COMPLETED);
         }
     }
@@ -169,6 +171,7 @@ class WorkflowConfigurerWakeCheckpointTest {
 
             // then
             await().atMost(5, TimeUnit.SECONDS)
+                   .ignoreExceptions()
                    .until(() -> durableStatus(configuration, workflowId) == WorkflowStatus.COMPLETED);
             await().atMost(5, TimeUnit.SECONDS).until(() -> covers(storedToken(tokenStore), startPosition));
         }
@@ -205,6 +208,7 @@ class WorkflowConfigurerWakeCheckpointTest {
         await().atMost(5, TimeUnit.SECONDS).until(() -> engine.workflowExecutions().size() == 1);
         var workflowId = engine.workflowExecutions().iterator().next().workflowId();
         await().atMost(5, TimeUnit.SECONDS)
+               .ignoreExceptions()
                .until(() -> durableState(configuration, workflowId).containsStep(WAIT_STEP));
         return workflowId;
     }

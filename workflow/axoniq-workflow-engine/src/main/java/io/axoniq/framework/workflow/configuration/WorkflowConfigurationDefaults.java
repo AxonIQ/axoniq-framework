@@ -43,6 +43,7 @@ import org.axonframework.common.lifecycle.Phase;
 import org.axonframework.eventsourcing.configuration.EventSourcingConfigurationDefaults;
 import org.axonframework.eventsourcing.eventstore.MultiTagResolver;
 import org.axonframework.eventsourcing.eventstore.TagResolver;
+import org.axonframework.messaging.core.Metadata;
 import org.axonframework.modelling.repository.Repository;
 import org.jspecify.annotations.Nullable;
 
@@ -198,7 +199,11 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
                         ).build())
                         .entityFactory(c -> (identifier, firstEvent, context) -> new EventSourcedWorkflowState(
                                 identifier,
-                                getWorkflowDefinitionId(firstEvent.metadata()).orElseThrow(
+                                // No prior event exists yet when loadOrCreate runs ahead of the workflow's start
+                                // event becoming durable; empty metadata falls through to the same error below.
+                                getWorkflowDefinitionId(firstEvent == null
+                                                                 ? Metadata.emptyInstance()
+                                                                 : firstEvent.metadata()).orElseThrow(
                                         () -> new IllegalStateException(
                                                 "Workflow state for '%s' cannot be created without workflowDefinitionId metadata.".formatted(
                                                         identifier)))))
