@@ -15,6 +15,7 @@ content:
     branches: [ 'main' ]
   - url: ../..
     start_paths: ['docs/*', '!docs/_*', '!docs/reference/*']
+    branches: [ 'HEAD', 'main' ] # HEAD keeps the triggering branch's own version. "main" keeps the `development` version complete regardless of which branch triggered the build
 
 asciidoc:
   attributes:
