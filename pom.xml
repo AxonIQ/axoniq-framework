@@ -36,7 +36,7 @@
         <revision>5.4.0-SNAPSHOT</revision>
 
         <!-- Global Axoniq version properties -->
-        <axon-framework.version>5.4.0-SNAPSHOT</axon-framework.version>
+        <axon-framework.version>5.4.0-RC1</axon-framework.version>
         <axoniq-entitlement-manager.version>1.3.1</axoniq-entitlement-manager.version>
         <axonserver-connector-java.version>2026.1.0</axonserver-connector-java.version>
         <!-- gRPC -->
@@ -242,6 +242,18 @@
                     <publishingServerId>central</publishingServerId>
                     <excludeArtifacts>
                         <excludeArtifact>axoniq-integrationtests</excludeArtifact>
+                        <excludeArtifact>axoniq-integrationtests-support</excludeArtifact>
+                        <excludeArtifact>axoniq-integrationtests-connector</excludeArtifact>
+                        <excludeArtifact>axoniq-integrationtests-connector-axon-server</excludeArtifact>
+                        <excludeArtifact>axoniq-integrationtests-connector-spring-cloud</excludeArtifact>
+                        <excludeArtifact>axoniq-integrationtests-conformance</excludeArtifact>
+                        <excludeArtifact>axoniq-integrationtests-tracing</excludeArtifact>
+                        <excludeArtifact>axoniq-integrationtests-dead-letter</excludeArtifact>
+                        <excludeArtifact>axoniq-integrationtests-legacy</excludeArtifact>
+                        <excludeArtifact>axoniq-integrationtests-multitenancy</excludeArtifact>
+                        <excludeArtifact>axoniq-integrationtests-multitenancy-core</excludeArtifact>
+                        <excludeArtifact>axoniq-integrationtests-multitenancy-data-protection</excludeArtifact>
+                        <excludeArtifact>axoniq-integrationtests-workflow</excludeArtifact>
                         <excludeArtifact>axoniq-docs-samples</excludeArtifact>
                     </excludeArtifacts>
                 </configuration>
@@ -574,8 +586,10 @@
                                 <dependencySourceInclude>org.axonframework:*</dependencySourceInclude>
                                 <dependencySourceInclude>org.axonframework.extensions.spring:*</dependencySourceInclude>
                                 <dependencySourceInclude>org.axonframework.extensions.kotlin:*</dependencySourceInclude>
-                                <dependencySourceInclude>org.axonframework.extensions.metrics:*</dependencySourceInclude>
-                                <dependencySourceInclude>org.axonframework.extensions.reactor:*</dependencySourceInclude>
+                                <dependencySourceInclude>org.axonframework.extensions.metrics:*
+                                </dependencySourceInclude>
+                                <dependencySourceInclude>org.axonframework.extensions.reactor:*
+                                </dependencySourceInclude>
                             </dependencySourceIncludes>
                             <tags>
                                 <tag>
