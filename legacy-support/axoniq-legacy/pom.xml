@@ -40,7 +40,7 @@
     <properties>
         <!-- Loaded in an isolated class loader by Af4SerializerCompatibilityTest. Keeping the AF4 artifact out of the
              dependency graph prevents its org.axonframework classes from colliding with the reactor's AF5 classes. -->
-        <axon4.serializer.version>4.13.2</axon4.serializer.version>
+        <axon4.serializer.version>5.3.3</axon4.serializer.version>
     </properties>
 
     <dependencies>
