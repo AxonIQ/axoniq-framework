@@ -7,6 +7,8 @@ The transformation runs every time those events are read, handing each handler t
 
 A transformation is the tool for the structural changes that xref:events:event-versioning.adoc[payload conversion] cannot express on its own: combining two fields into one, wrapping values in a new object, lifting a historic event onto a new version, renaming an event whose identity changed, or splitting one bundled event into several.
 
+Note that the Event Transformation feature is part of Axoniq Framework and requires a xref:axoniq-platform-reference:ROOT:licensing/index.adoc[license] for production use.
+
 == When to reach for a transformation
 
 The xref:ROOT:conversion.adoc[`Converter`] absorbs most schema evolution on its own, in two ways:
