@@ -5,6 +5,8 @@
 
 This reference covers every primitive, configuration option, and pattern available in the Axon Workflow Engine.
 
+Note that the Workflow Engine is part of Axoniq Framework and requires a xref:axoniq-platform-reference:ROOT:licensing/index.adoc[license] for production use.
+
 == Status and compatibility
 
 * Java 21.
