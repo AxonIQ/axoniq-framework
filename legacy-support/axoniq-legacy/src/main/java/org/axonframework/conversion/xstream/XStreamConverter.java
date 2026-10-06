@@ -46,11 +46,14 @@ import java.util.UUID;
  * A {@link Converter} implementation that uses an application-supplied {@link XStream} instance to convert objects into
  * and from the XML format that Axon Framework 4's {@code XStreamSerializer} produced.
  * <p>
- * This {@code Converter} exists for exactly one purpose: letting an Axon Framework 5 application read, and keep
- * writing, data that was serialized by an Axon Framework 4 node's XStream-based {@code Serializer}, so that an Axon
- * Framework 4 and an Axon Framework 5 node can run side by side during a rolling upgrade. In practice that is Axon
- * Framework 4 saga state (the legacy saga stores default to {@code XStreamSerializer} when built without one),
- * deadlines scheduled through a {@code DeadlineManager}, and events scheduled through an {@code EventScheduler}.
+ * This {@code Converter} exists for exactly one purpose: giving an Axon Framework 5 application time to let
+ * deadlines and events that an Axon Framework 4 node scheduled, and sagas it started, run their course, instead of
+ * forcing every one of them to fire or complete before the switch to Axon Framework 5. Scheduled deadlines and events
+ * only need to be read back in this format: once one fires, there is nothing left to write. A saga is different,
+ * since it keeps handling events until it ends, so its state is both read and written back in XStream for as long as
+ * it stays active. In practice that is Axon Framework 4 saga state (the legacy saga stores default to
+ * {@code XStreamSerializer} when built without one), deadlines scheduled through a {@code DeadlineManager}, and
+ * events scheduled through an {@code EventScheduler}.
  * <p>
  * Note this {@code Converter} implementation  is <b>not</b> meant to be used for anything new. It is never registered
  * by default, and it should be removed from an application's configuration as soon as all data it was reading has been
