@@ -576,8 +576,8 @@ If you depended strongly on any of the removed features, be sure to reach out.
 | **X**
 | —
 | **✓**
-| TBD
-| Aim for 5.4.0 of Axoniq Framework, potential overflow to 5.5.0
+| 5.5.0
+|
 
 | Persistent Stream integration
 | **X**
@@ -618,10 +618,17 @@ If you depended strongly on any of the removed features, be sure to reach out.
 | **X**
 | —
 | **✓**
-| TBD
+| 5.5.0
 |
 
 6+h| Process Management
+
+| Workflows
+| **X**
+| —
+| **✓**
+| 5.1.0
+| Follows the "Durable Execution" paradigm, fully replacing Saga support from previous versions, as well as supporting many other process management styles
 
 | Saga pattern integration
 | **X**
@@ -630,12 +637,12 @@ If you depended strongly on any of the removed features, be sure to reach out.
 | —
 | Replaced fully with the Workflow integration
 
-| Workflows
+| Saga - Legacy support
 | **X**
 | —
 | **✓**
-| 5.1.0
-| Follows the "Durable Execution" paradigm, fully replacing Saga support from previous versions, as well as supporting many other process management styles
+| **5.4.0**
+| Part of `axoniq-legacy`, used to drain Saga instances that started in Axon Framework 4 to allow an easy upgrade to Axon Framework 5. Supports all previous `SagaStore` implementations.
 
 6+h| Message Interceptors
 
@@ -779,67 +786,32 @@ If you depended strongly on any of the removed features, be sure to reach out.
 6+h| Event Scheduling and Deadline Management
 
 | Event Scheduling API
-| **TBD**
+| **X**
 | —
-| **TBD**
+| **X**
 | —
-| To-be-decided given the ease to have a custom integration
+| Deprecated and removed as of Axon Framework 5 due to ease for custom implementation. In short, select a scheduling tool and use the `EventGateway`, and you're done.
 
-| Event Scheduling - Axon Server integration
-| **TBD**
+| Event Scheduling - Legacy support
+| **X**
 | —
-| **TBD**
-| —
-|
-
-| Event Scheduling - Quartz integration
-| **TBD**
-| —
-| **TBD**
-| —
-|
-
-| Event Scheduling - JobRunr integration
-| **TBD**
-| —
-| **TBD**
-| —
-|
-
-| Event Scheduling - db-scheduler integration
-| **TBD**
-| —
-| **TBD**
-| —
-|
+| **✓**
+| **5.5.0**
+| Part of `axoniq-legacy`, used to drain already scheduled events in Axon Framework 4 to allow an easy upgrade to Axon Framework 5. Supports all previous `EventScheduler` implementations.
 
 | Deadline Manager API
-| **TBD**
+| **X**
 | —
-| **TBD**
+| **X**
 | —
-| To-be-decided given the **relative** ease to have a custom integration
+| Deprecated and removed as of Axon Framework 5 due to ease for custom implementation. In short, select a scheduling tool and use the `CommandGateway`, and you're done.
 
-| Deadline Manager - Quartz integration
-| **TBD**
+| Deadline Manager - Legacy support
+| **X**
 | —
-| **TBD**
-| —
-|
-
-| Deadline Manager - JobRunr integration
-| **TBD**
-| —
-| **TBD**
-| —
-|
-
-| Deadline Manager - db-scheduler integration
-| **TBD**
-| —
-| **TBD**
-| —
-|
+| **✓**
+| **5.4.0**
+| Part of `axoniq-legacy`, used to drain already scheduled deadlines in Axon Framework 4 to allow an easy upgrade to Axon Framework 5. Supports all previous `DeadlineManager` implementations.
 
 6+h| Test fixtures
 
