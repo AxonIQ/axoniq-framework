@@ -195,7 +195,7 @@ public class DeadlineJob implements Job {
             jobData.put(MESSAGE_TIMESTAMP, deadlineMessage.timestamp().toString());
 
             Object payload = deadlineMessage.payload();
-            jobData.put(SERIALIZED_MESSAGE_PAYLOAD, (Object) converter.toStored(payload, byte[].class));
+            jobData.put(SERIALIZED_MESSAGE_PAYLOAD, (Object) converter.payloadToStored(payload, byte[].class));
             jobData.put(MESSAGE_TYPE, StoredDeadlineConverter.typeNameOf(payload));
             jobData.put(MESSAGE_REVISION, (String) null);
 

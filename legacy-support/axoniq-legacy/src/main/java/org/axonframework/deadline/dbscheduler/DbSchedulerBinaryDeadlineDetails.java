@@ -113,7 +113,7 @@ public class DbSchedulerBinaryDeadlineDetails implements Serializable {
                                                     Objects.requireNonNull(converter.toStored(descriptor,
                                                                                               byte[].class)),
                                                     descriptor.getClass().getName(),
-                                                    converter.toStored(payload, byte[].class),
+                                                    converter.payloadToStored(payload, byte[].class),
                                                     StoredDeadlineConverter.typeNameOf(payload),
                                                     null,
                                                     converter.toStored(message.metadata(), byte[].class));

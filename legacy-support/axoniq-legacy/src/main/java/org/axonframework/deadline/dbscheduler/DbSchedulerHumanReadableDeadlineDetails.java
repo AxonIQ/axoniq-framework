@@ -112,7 +112,7 @@ public class DbSchedulerHumanReadableDeadlineDetails implements Serializable {
                 deadlineName,
                 Objects.requireNonNull(converter.toStored(descriptor, String.class)),
                 descriptor.getClass().getName(),
-                converter.toStored(payload, String.class),
+                converter.payloadToStored(payload, String.class),
                 StoredDeadlineConverter.typeNameOf(payload),
                 null,
                 converter.toStored(message.metadata(), String.class)

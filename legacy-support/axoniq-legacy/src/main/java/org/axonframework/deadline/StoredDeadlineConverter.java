@@ -29,6 +29,7 @@ import org.axonframework.messaging.core.MessageTypeResolver;
 import org.axonframework.messaging.core.Metadata;
 import org.jspecify.annotations.Nullable;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -65,7 +66,14 @@ public final class StoredDeadlineConverter {
      */
     public static final String EMPTY_TYPE = "empty";
 
-    private static final TypeReference<Map<String, Object>> UNTYPED_MAP = new TypeReference<>() {
+    private static final String SERIALIZED_NULL = "null";
+
+    /**
+     * The concrete type metadata is read into. A converter with default typing, such as a mirror of Axon Framework 4's
+     * {@code Jackson3Serializer} with {@code defaultTyping()}, expects type information for an abstract target type,
+     * which Axon Framework 4 never wrote around the metadata, as it read its concrete {@code MetaData} class.
+     */
+    private static final TypeReference<LinkedHashMap<String, Object>> UNTYPED_MAP = new TypeReference<>() {
     };
     private static final MessageTypeResolver MESSAGE_TYPE_RESOLVER = new ClassBasedMessageTypeResolver();
 
@@ -100,6 +108,27 @@ public final class StoredDeadlineConverter {
      */
     public static MessageType messageTypeOf(@Nullable Object payload) {
         return MESSAGE_TYPE_RESOLVER.resolveOrThrow(payload == null ? Void.class : payload.getClass());
+    }
+
+    /**
+     * Converts the given deadline {@code payload} into the given stored {@code representation}, {@code byte[]} or
+     * {@code String}. Without a payload, this is the serialized {@code null}, the JSON {@code null}, as Axon Framework
+     * 4's {@code JacksonSerializer} wrote it: Axon Framework 4 nodes do not read the data stored under the type name
+     * {@value #EMPTY_TYPE}, but reject a job whose data is missing.
+     *
+     * @param payload        the payload of the deadline to store, if any
+     * @param representation the stored representation, {@code byte[]} or {@code String}
+     * @param <T>            the stored representation
+     * @return the stored form of the given {@code payload}
+     */
+    public <T> @Nullable T payloadToStored(@Nullable Object payload, Class<T> representation) {
+        if (payload != null) {
+            return converter.convert(payload, representation);
+        }
+        if (representation == byte[].class) {
+            return representation.cast(SERIALIZED_NULL.getBytes(StandardCharsets.UTF_8));
+        }
+        return representation.cast(SERIALIZED_NULL);
     }
 
     /**
