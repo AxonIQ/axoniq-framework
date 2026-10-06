@@ -97,6 +97,7 @@ class MultiTenantQueryHandlingIT {
     private AxonConfiguration application;
     private final Map<String, QueryUpdateEmitter> capturedEmitters = new ConcurrentHashMap<>();
     private TenantProvider tenantDescriptors;
+    private @Nullable String dynamicTenant;
 
     @BeforeAll
     void setUpClass() {
@@ -104,8 +105,10 @@ class MultiTenantQueryHandlingIT {
         contextManager = INFRASTRUCTURE.getContextManager();
         contextManager.createContext(TENANT_A);
         contextManager.createContext(TENANT_B);
+        // The shared container may also be serving other test classes concurrently, so this only asserts our own
+        // contexts are present rather than asserting the full, exclusive content of the container.
         assertThat(contextManager.getContexts())
-                .containsExactlyInAnyOrder(ADMIN_CONTEXT, DEFAULT_CONTEXT, TENANT_A, TENANT_B);
+                .contains(ADMIN_CONTEXT, DEFAULT_CONTEXT, TENANT_A, TENANT_B);
 
         QueryHandlingModule.QueryHandlerPhase queryHandlingModule =
                 QueryHandlingModule.named("multi-tenancy-query-it-module")
@@ -126,7 +129,7 @@ class MultiTenantQueryHandlingIT {
                         DistributedQueryBusConfiguration.class,
                         cfg -> DistributedQueryBusConfiguration.DEFAULT
                                 .preferLocalQueryHandler(preferLocalQueryHandler)))
-                .componentRegistry(TenantFixture::connectOnlyCustomTenantsPredicate)
+                .componentRegistry(registry -> TenantFixture.connectOnlyCustomTenantsPredicate(registry, "query-tenant-"))
                 // Identity factory: the tenant-scoped component IS the resolved TenantDescriptor, so injecting it
                 // into the annotated handler below proves parameter resolution picks the dispatched tenant's instance.
                 .componentRegistry(registry -> registry.registerComponent(TenantComponentProvider.class,
@@ -145,7 +148,11 @@ class MultiTenantQueryHandlingIT {
         if (application != null) {
             application.shutdown();
         }
-        contextManager.deleteAllCustomContexts();
+        if (dynamicTenant != null) {
+            contextManager.deleteContexts(TENANT_A, TENANT_B, dynamicTenant);
+        } else {
+            contextManager.deleteContexts(TENANT_A, TENANT_B);
+        }
         INFRASTRUCTURE.stop();
     }
 
@@ -168,7 +175,7 @@ class MultiTenantQueryHandlingIT {
     void querySentViaDynamicallyAddedTenant() {
         // Unique per run: this class runs twice (once per preferLocalQueryHandler value) against the one
         // shared Axon Server container, so a fixed name would race the other invocation's own creation/teardown.
-        String dynamicTenant = "tenant-D-" + UUID.randomUUID();
+        dynamicTenant = "query-tenant-dynamic-" + UUID.randomUUID();
         QueryGateway queryGateway = application.getComponent(QueryGateway.class);
 
         assertThat(queryTenant(queryGateway, new RecordTenantQuery("for-tenant-a"), TENANT_A))

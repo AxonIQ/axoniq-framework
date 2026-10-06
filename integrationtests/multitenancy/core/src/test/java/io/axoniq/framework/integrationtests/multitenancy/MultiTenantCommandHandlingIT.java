@@ -74,6 +74,7 @@ class MultiTenantCommandHandlingIT {
     // Dedicated to the one test that deletes a tenant, so that destructive test doesn't affect TENANT_A/TENANT_B,
     // which every other test in this class relies on remaining present regardless of test execution order.
     private static final String TENANT_TO_DELETE = "command-tenant-to-delete";
+    private static final String DYNAMIC_TENANT = "command-tenant-dynamic";
 
     private AxonServerTestInfrastructure.ContextManager contextManager;
     private AxonConfiguration application;
@@ -88,8 +89,10 @@ class MultiTenantCommandHandlingIT {
         contextManager.createContext(TENANT_A);
         contextManager.createContext(TENANT_B);
         contextManager.createContext(TENANT_TO_DELETE);
+        // The shared container may also be serving other test classes concurrently, so this only asserts our own
+        // contexts are present rather than asserting the full, exclusive content of the container.
         assertThat(contextManager.getContexts())
-                .containsExactlyInAnyOrder(ADMIN_CONTEXT, DEFAULT_CONTEXT, TENANT_A, TENANT_B, TENANT_TO_DELETE);
+                .contains(ADMIN_CONTEXT, DEFAULT_CONTEXT, TENANT_A, TENANT_B, TENANT_TO_DELETE);
 
         CommandHandlingModule.CommandHandlerPhase commandHandlingModule =
                 CommandHandlingModule.named("multi-tenancy-it-module")
@@ -100,7 +103,7 @@ class MultiTenantCommandHandlingIT {
 
         application = new DefaultAxonApplication()
                 .componentRegistry(INFRASTRUCTURE::configureInfrastructure)
-                .componentRegistry(TenantFixture::connectOnlyCustomTenantsPredicate)
+                .componentRegistry(registry -> TenantFixture.connectOnlyCustomTenantsPredicate(registry, "command-tenant-"))
 
                 // Identity factory: the tenant-scoped component IS the resolved TenantDescriptor, so injecting it
                 // into the annotated handler below proves parameter resolution picks the dispatched tenant's instance.
@@ -120,7 +123,7 @@ class MultiTenantCommandHandlingIT {
         if (application != null) {
             application.shutdown();
         }
-        contextManager.deleteAllCustomContexts();
+        contextManager.deleteContexts(TENANT_A, TENANT_B, TENANT_TO_DELETE, DYNAMIC_TENANT);
         INFRASTRUCTURE.stop();
     }
 
@@ -155,19 +158,18 @@ class MultiTenantCommandHandlingIT {
 
     @Test
     void commandSentViaDynamicallyAddedTenant() {
-        String dynamicTenant = "tenant-D";
         CommandGateway commandGateway = application.getComponent(CommandGateway.class);
 
         commandGateway.send(new RecordTenantCommand("for-tenant-a"),
                             Metadata.with(MetadataBasedTenantResolver.DEFAULT_TENANT_METADATA_KEY, TENANT_A),
                             null);
 
-        contextManager.createContext(dynamicTenant);
+        contextManager.createContext(DYNAMIC_TENANT);
 
-        await().untilAsserted(() -> assertThat(tenantDescriptors.tenants()).anyMatch(d -> dynamicTenant.equals(d.tenantId())));
+        await().untilAsserted(() -> assertThat(tenantDescriptors.tenants()).anyMatch(d -> DYNAMIC_TENANT.equals(d.tenantId())));
 
         commandGateway.send(new RecordTenantCommand("for-tenant-d"),
-                            Metadata.with(MetadataBasedTenantResolver.DEFAULT_TENANT_METADATA_KEY, dynamicTenant),
+                            Metadata.with(MetadataBasedTenantResolver.DEFAULT_TENANT_METADATA_KEY, DYNAMIC_TENANT),
                             null);
 
         await().untilAsserted(() -> assertThat(recordedCommands).hasSize(2));
@@ -179,7 +181,7 @@ class MultiTenantCommandHandlingIT {
         assertThat(recordedCommands)
                 .filteredOn(recorded -> recorded.commandId().equals("for-tenant-d"))
                 .extracting(RecordedCommand::tenantId)
-                .containsExactly(dynamicTenant);
+                .containsExactly(DYNAMIC_TENANT);
     }
 
     @Test

@@ -60,7 +60,6 @@ class ShutdownLatencyIT {
     void setUp() {
         INFRASTRUCTURE.start();
         contextManager = INFRASTRUCTURE.getContextManager();
-        contextManager.deleteAllCustomContexts();
         contextManager.createContext(tenantA);
         contextManager.createContext(tenantB);
         application = TenantBankFixture.startApp(INFRASTRUCTURE, stores, runId, registry -> {
@@ -72,7 +71,7 @@ class ShutdownLatencyIT {
         if (application != null) {
             application.shutdown();
         }
-        contextManager.deleteAllCustomContexts();
+        contextManager.deleteContexts(tenantA, tenantB);
         INFRASTRUCTURE.stop();
     }
 

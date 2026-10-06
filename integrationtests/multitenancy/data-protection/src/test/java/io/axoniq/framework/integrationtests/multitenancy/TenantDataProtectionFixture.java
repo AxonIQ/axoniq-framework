@@ -93,7 +93,7 @@ final class TenantDataProtectionFixture {
 
         EventSourcingConfigurer configurer = EventSourcingConfigurer.create()
                                                                   .componentRegistry(INFRASTRUCTURE::configureInfrastructure)
-                                                                  .componentRegistry(TenantFixture::connectOnlyCustomTenantsPredicate)
+                                                                  .componentRegistry(registry -> TenantFixture.connectOnlyCustomTenantsPredicate(registry, "dataprotection-tenant-"))
                                                                   .componentRegistry(registry -> registry.registerComponent(
                                                                           TenantComponentProvider.class,
                                                                           configuration -> TenantComponentProvider.withFactory(
@@ -122,7 +122,7 @@ final class TenantDataProtectionFixture {
         if (application != null) {
             application.shutdown();
         }
-        contextManager.deleteAllCustomContexts();
+        contextManager.deleteContexts(TENANT_A, TENANT_B);
         INFRASTRUCTURE.stop();
     }
 

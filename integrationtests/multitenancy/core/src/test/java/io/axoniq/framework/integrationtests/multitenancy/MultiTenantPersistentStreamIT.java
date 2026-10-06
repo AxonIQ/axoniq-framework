@@ -71,6 +71,7 @@ class MultiTenantPersistentStreamIT {
     private static final AxonServerTestInfrastructure INFRASTRUCTURE = new AxonServerTestInfrastructure();
     private static final String TENANT_A = "stream-tenant-a";
     private static final String TENANT_B = "stream-tenant-b";
+    private static final String DYNAMIC_TENANT = "stream-tenant-dynamic";
 
     private static AxonServerTestInfrastructure.ContextManager contextManager;
     private static AxonConfiguration application;
@@ -93,7 +94,7 @@ class MultiTenantPersistentStreamIT {
             application.shutdown();
             application = null;
         }
-        contextManager.deleteAllCustomContexts();
+        contextManager.deleteContexts(TENANT_A, TENANT_B, DYNAMIC_TENANT);
         INFRASTRUCTURE.stop();
     }
 
@@ -135,7 +136,7 @@ class MultiTenantPersistentStreamIT {
                .untilAsserted(() -> assertThat(handled).hasSize(1));
 
         // when a tenant is added at runtime and the provider has picked it up
-        String addedTenant = "tenant-C";
+        String addedTenant = DYNAMIC_TENANT;
         contextManager.createContext(addedTenant);
         TenantProvider tenantProvider = application.getComponent(TenantProvider.class);
         await().atMost(30, TimeUnit.SECONDS)
@@ -155,7 +156,7 @@ class MultiTenantPersistentStreamIT {
     private static AxonConfiguration buildApplication() {
         return EventSourcingConfigurer.create()
                                       .componentRegistry(INFRASTRUCTURE::configureInfrastructure)
-                                      .componentRegistry(TenantFixture::connectOnlyCustomTenantsPredicate)
+                                      .componentRegistry(registry -> TenantFixture.connectOnlyCustomTenantsPredicate(registry, "stream-tenant-"))
                                       .messaging(messaging -> messaging.eventProcessing(
                                               processing -> processing.subscribing(
                                                       subscribing -> subscribing.processor(buildProcessorModule()))))

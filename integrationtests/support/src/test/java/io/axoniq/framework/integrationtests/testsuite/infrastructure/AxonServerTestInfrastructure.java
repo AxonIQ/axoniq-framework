@@ -214,11 +214,16 @@ public final class AxonServerTestInfrastructure implements TestInfrastructure {
         void emptyContext(String name);
 
         /**
-         * Delete all contexts except the default and admin contexts
+         * Delete the given contexts, ignoring any that don't currently exist (e.g. already deleted by the test
+         * itself). The shared container may also be in use by other test classes at the same time, so this only
+         * ever touches the exact names passed in -- never every custom context on the container.
+         *
+         * @param names the context names to delete
          */
-        default void deleteAllCustomContexts() {
+        default void deleteContexts(String... names) {
+            Set<String> own = Set.of(names);
             getContexts().stream()
-                         .filter(it -> !Set.of(DEFAULT_CONTEXT, ADMIN_CONTEXT).contains(it))
+                         .filter(own::contains)
                          .forEach(this::deleteContext);
         }
     }
