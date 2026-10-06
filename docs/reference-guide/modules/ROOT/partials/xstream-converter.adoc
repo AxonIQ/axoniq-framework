@@ -1,0 +1,41 @@
+[.axoniq-feature]
+[#xstream_converter]
+=== XStreamConverter
+
+The `XStreamConverter`, part of the `axoniq-legacy` module, wraps an application-supplied https://x-stream.github.io/[XStream] instance to read and write the same XML an Axon Framework 4 node's `XStreamSerializer` produced for that instance's configuration.
+
+It exists for exactly one purpose: giving an Axon Framework 5 application time to let deadlines and events that an Axon Framework 4 node scheduled, and sagas it started, run their course, instead of forcing every one of them to fire or complete before the switch to Axon Framework 5.
+Scheduled deadlines and events only need to be *read* back in this format: once one fires, there is nothing left to write. A saga is different, since it keeps handling events until it ends, so its state is both read and written back in XStream for as long as it stays active.
+Many applications never configured a `Serializer` for their legacy saga stores, which then defaulted to XStream, so this is a common gap when adding Axon Framework 5 nodes to such an application.
+
+CAUTION: `XStreamConverter` is deprecated from the moment it is introduced. It is **not** a general-purpose converter, and Axon Framework never registers it by default. Remove it from your configuration once the data it reads has been drained or rewritten in your application's regular converter format.
+
+`XStreamConverter` allows `"org.axonframework.**"` on the `XStream` instance you give it, the same baseline `XStreamSerializer` added by default, so its own ported types (scope descriptors, metadata) resolve. XStream deserializes by instantiating arbitrary classes named in the XML it reads, which is unsafe against untrusted input unless the set of types it may instantiate is restricted, so this baseline covers only that namespace. You remain responsible for allowing your own saga, deadline, and event payload classes, typically with `XStream#allowTypesByWildcard(String[])` or `XStream#allowTypes(Class[])`.
+
+To use it, add the `axoniq-legacy` module and XStream to your dependencies:
+
+[source,xml]
+----
+<dependency>
+    <groupId>io.axoniq.framework</groupId>
+    <artifactId>axoniq-legacy</artifactId>
+</dependency>
+<dependency>
+    <groupId>com.thoughtworks.xstream</groupId>
+    <artifactId>xstream</artifactId>
+</dependency>
+----
+
+Then construct it with your own `XStream` instance, typically the same one your Axon Framework 4 node used, and pass it to the `converter(...)` builder method of a legacy saga store or deadline manager:
+
+[source,java,role=pseudocode]
+----
+XStream xStream = new XStream();
+// XStream allows you to configure additional types specific to your application
+Converter xStreamConverter = new XStreamConverter(xStream);
+
+JpaSagaStore sagaStore = JpaSagaStore.builder()
+                                     .entityManagerProvider(entityManagerProvider)
+                                     .converter(xStreamConverter)
+                                     .build();
+----
