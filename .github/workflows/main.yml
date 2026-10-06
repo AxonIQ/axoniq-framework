@@ -80,7 +80,7 @@ jobs:
         run: |
           ./mvnw -B -U -ntp -Dstyle.color=always -fae clean verify \
           -Possrh -Pintegration-test -Djacoco.skip=true -Dsurefire.rerunFailingTestsCount=5 -Dfailsafe.rerunFailingTestsCount=5 \
-          -Dparallel=classes -DthreadCount=1 -DforkCount=2 -DforkedProcessTimeoutInSeconds=600
+          -Dparallel=classes -DthreadCount=1 -DforkCount=4 -DforkedProcessTimeoutInSeconds=600
         env:
           AXONIQ_LICENSE: ${{ secrets.AXON_SERVER_LICENSE }}
 
