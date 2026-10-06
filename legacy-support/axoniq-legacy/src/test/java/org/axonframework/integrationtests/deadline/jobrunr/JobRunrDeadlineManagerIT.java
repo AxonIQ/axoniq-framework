@@ -1,75 +1,71 @@
 /*
- * Copyright (c) 2010-2026. Axon Framework
+ * Copyright (c) 2010-2026. AxonIQ B.V.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * Licensed under the AXONIQ TERMS OF SERVICE,
+ * Version 29 April 2026 (the "License");
  *
- *    http://www.apache.org/licenses/LICENSE-2.0
+ * The software is available for evaluation use without registration.
+ * Continued use beyond the evaluation period requires registration
+ * and a commercial license. See the License for the specific language
+ * governing permissions and limitations under the License.
+ * You may not use this file except in compliance with the License.
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * You may obtain a copy of the License at:
+ *  https://www.axoniq.io/legal/terms-of-service
+ *
+ * For licensing information and to register, visit:
+ *  https://www.axoniq.io/pricing
  */
 
 package org.axonframework.integrationtests.deadline.jobrunr;
 
-import org.axonframework.messaging.core.unitofwork.transaction.NoTransactionManager;
-import org.axonframework.common.configuration.Configuration;
-import org.axonframework.deadline.DeadlineManager;
-import org.axonframework.deadline.DeadlineManagerSpanFactory;
+import org.axonframework.conversion.jackson.JacksonConverter;
+import org.axonframework.deadline.AbstractDeadlineManager;
 import org.axonframework.deadline.jobrunr.JobRunrDeadlineManager;
 import org.axonframework.integrationtests.deadline.AbstractDeadlineManagerTestSuite;
-import org.axonframework.messaging.core.ScopeAwareProvider;
+import org.axonframework.messaging.ScopeAwareProvider;
+import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.modelling.command.AggregateScopeDescriptor;
-import org.axonframework.conversion.json.JacksonSerializer;
 import org.jobrunr.configuration.JobRunr;
+import org.jobrunr.jobs.Job;
+import org.jobrunr.jobs.JobId;
+import org.jobrunr.jobs.states.StateName;
+import org.jobrunr.scheduling.JobBuilder;
 import org.jobrunr.scheduling.JobScheduler;
 import org.jobrunr.server.BackgroundJobServer;
 import org.jobrunr.storage.InMemoryStorageProvider;
 import org.jobrunr.storage.StorageProvider;
 import org.junit.jupiter.api.*;
-import org.junit.jupiter.api.extension.*;
-import org.mockito.*;
-import org.mockito.junit.jupiter.*;
 
 import java.time.Duration;
-import java.util.Objects;
+import java.time.Instant;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.awaitility.Awaitility.await;
 import static org.jobrunr.server.BackgroundJobServerConfiguration.usingStandardBackgroundJobServerConfiguration;
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
 
-@Disabled("TODO #3065 - Revisit Deadline support")
-@ExtendWith(MockitoExtension.class)
-class JobrunrDeadlineManagerTest extends AbstractDeadlineManagerTestSuite {
+/**
+ * Runs the {@link AbstractDeadlineManagerTestSuite} against the {@link JobRunrDeadlineManager}, on JobRunr's in-memory
+ * storage.
+ */
+class JobRunrDeadlineManagerIT extends AbstractDeadlineManagerTestSuite {
 
+    private StorageProvider storageProvider;
     private BackgroundJobServer backgroundJobServer;
 
-    @AfterEach
-    void cleanUp() {
-        if (!Objects.isNull(backgroundJobServer)) {
-            backgroundJobServer.stop();
-            backgroundJobServer = null;
-        }
-    }
-
     @Override
-    public DeadlineManager buildDeadlineManager(Configuration configuration) {
-        StorageProvider storageProvider = new InMemoryStorageProvider();
-        JobScheduler scheduler = new JobScheduler(storageProvider);
-        JobRunrDeadlineManager manager = JobRunrDeadlineManager
-                .builder()
-                .jobScheduler(scheduler)
-//                .scopeAwareProvider(new ConfigurationScopeAwareProvider(configuration))
-                .serializer(JacksonSerializer.defaultSerializer())
-                .transactionManager(NoTransactionManager.INSTANCE)
-                .spanFactory(configuration.getComponent(DeadlineManagerSpanFactory.class))
-                .build();
+    protected AbstractDeadlineManager buildDeadlineManager(ScopeAwareProvider scopeAwareProvider,
+                                                           UnitOfWorkFactory unitOfWorkFactory) {
+        storageProvider = new InMemoryStorageProvider();
+        JobRunrDeadlineManager manager = JobRunrDeadlineManager.builder()
+                                                               .jobScheduler(new JobScheduler(storageProvider))
+                                                               .scopeAwareProvider(scopeAwareProvider)
+                                                               .unitOfWorkFactory(unitOfWorkFactory)
+                                                               .converter(new JacksonConverter())
+                                                               .build();
         JobRunr.configure()
-               .useJobActivator(new SimpleActivator(spy(manager)))
+               .useJobActivator(new SimpleActivator<>(manager))
                .useStorageProvider(storageProvider)
                .useBackgroundJobServer(
                        usingStandardBackgroundJobServerConfiguration().andPollInterval(Duration.ofMillis(200))
@@ -79,41 +75,65 @@ class JobrunrDeadlineManagerTest extends AbstractDeadlineManagerTestSuite {
         return manager;
     }
 
-    @Test
-    void shutdownInvokesSchedulerShutdown(@Mock ScopeAwareProvider scopeAwareProvider) {
-        JobScheduler scheduler = spy(new JobScheduler(new InMemoryStorageProvider()));
-        JobRunrDeadlineManager testSubject = JobRunrDeadlineManager.builder()
-                                                                   .jobScheduler(scheduler)
-                                                                   .scopeAwareProvider(scopeAwareProvider)
-                                                                   .serializer(JacksonSerializer.defaultSerializer())
-                                                                   .transactionManager(NoTransactionManager.INSTANCE)
-                                                                   .build();
-
-        testSubject.shutdown();
-
-        verify(scheduler).shutdown();
+    @AfterEach
+    void stopBackgroundJobServer() {
+        if (backgroundJobServer != null) {
+            backgroundJobServer.stop();
+            backgroundJobServer = null;
+        }
     }
 
     @Override
-    @Test
-    @Disabled("Cancel all within scope is not implemented for the non pro version.")
-    public void deadlineCancellationWithinScopeOnSaga() {
-    }
-
-    @Override
-    @Test
-    @Disabled("Cancel all is not implemented for the non pro version.")
-    public void deadlineCancelAllOnSagaIsCorrectlyTraced() {
+    protected boolean supportsCancellingByNameAndScope() {
+        return false;
     }
 
     @Test
-    void doNotThrowIllegalJobStateChangeExceptionForAnAlreadyDeletedJob() {
-        DeadlineManager testSubject = configuration.getComponent(DeadlineManager.class);
+    void cancellingAnAlreadyCancelledScheduleDoesNotThrow() {
+        // given
+        String scheduleId = deadlineManager.schedule(Duration.ofMinutes(15), DEADLINE_NAME, null,
+                                                     new AggregateScopeDescriptor("aggregateType", "aggregateId"));
+        deadlineManager.cancelSchedule(DEADLINE_NAME, scheduleId);
 
-        String deadlineName = "doubleDeleteDoesNotThrowException";
-        String scheduleId = testSubject.schedule(Duration.ofMinutes(15), deadlineName, null,
-                                                 new AggregateScopeDescriptor("aggregateType", "aggregateId"));
-        testSubject.cancelSchedule(deadlineName, scheduleId);
-        assertDoesNotThrow(() -> testSubject.cancelSchedule(deadlineName, scheduleId));
+        // when / then
+        assertThatCode(() -> deadlineManager.cancelSchedule(DEADLINE_NAME, scheduleId)).doesNotThrowAnyException();
+    }
+
+    @Test
+    void aFailingDeliveryIsRetried() {
+        // given
+        scopeAware.failWith(new IllegalStateException("delivery failure"));
+
+        // when
+        deadlineManager.schedule(TRIGGER_DURATION, DEADLINE_NAME, "payload", SAGA_SCOPE);
+        await().atMost(FIRING_TIMEOUT).until(() -> !scopeAware.attempts().isEmpty());
+        scopeAware.failWith(null);
+
+        // then
+        await().atMost(Duration.ofSeconds(30)).until(() -> !scopeAware.deliveries().isEmpty());
+        assertThat(scopeAware.attempts()).hasSizeGreaterThan(1);
+    }
+
+    @Test
+    void aJobWhoseDetailsCannotBeReadIsKeptForRetrying() {
+        // given
+        JobRunrDeadlineManager manager = (JobRunrDeadlineManager) deadlineManager;
+
+        // when
+        JobId jobId = new JobScheduler(storageProvider).create(
+                JobBuilder.aJob()
+                          .withName(DEADLINE_NAME)
+                          .withDetails(() -> manager.execute("not the details of a deadline", "deadlineId"))
+                          .scheduleAt(Instant.now())
+        );
+
+        // then
+        await().atMost(FIRING_TIMEOUT).untilAsserted(() -> {
+            Job job = storageProvider.getJobById(jobId);
+            assertThat(job.getJobStates()).anySatisfy(state -> assertThat(state.getName())
+                    .isEqualTo(StateName.FAILED));
+            assertThat(job.getState()).isEqualTo(StateName.SCHEDULED);
+        });
+        assertThat(scopeAware.attempts()).isEmpty();
     }
 }

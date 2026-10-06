@@ -1,32 +1,31 @@
 /*
- * Copyright (c) 2010-2026. Axon Framework
+ * Copyright (c) 2010-2026. AxonIQ B.V.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * Licensed under the AXONIQ TERMS OF SERVICE,
+ * Version 29 April 2026 (the "License");
  *
- *    http://www.apache.org/licenses/LICENSE-2.0
+ * The software is available for evaluation use without registration.
+ * Continued use beyond the evaluation period requires registration
+ * and a commercial license. See the License for the specific language
+ * governing permissions and limitations under the License.
+ * You may not use this file except in compliance with the License.
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * You may obtain a copy of the License at:
+ *  https://www.axoniq.io/legal/terms-of-service
+ *
+ * For licensing information and to register, visit:
+ *  https://www.axoniq.io/pricing
  */
 
 package org.axonframework.deadline.dbscheduler;
 
-import org.jspecify.annotations.Nullable;
 import org.axonframework.deadline.DeadlineMessage;
 import org.axonframework.deadline.GenericDeadlineMessage;
-import org.axonframework.messaging.core.Message;
-import org.axonframework.messaging.core.MessageType;
-import org.axonframework.messaging.core.Metadata;
-import org.axonframework.messaging.core.ScopeDescriptor;
-import org.axonframework.conversion.SerializedObject;
-import org.axonframework.conversion.Serializer;
-import org.axonframework.conversion.SimpleSerializedObject;
+import org.axonframework.deadline.StoredDeadlineConverter;
+import org.axonframework.messaging.ScopeDescriptor;
+import org.jspecify.annotations.Nullable;
 
+import java.io.Serial;
 import java.io.Serializable;
 import java.util.Objects;
 
@@ -34,9 +33,13 @@ import static java.lang.String.format;
 
 /**
  * Pojo that contains the needed information for a {@link com.github.kagkarlsson.scheduler.task.Task} handling a
- * deadline. Will be serialized and deserialized using the configured {@link Serializer} on the
- * {@link com.github.kagkarlsson.scheduler.Scheduler}. This object is used with the
- * {@code DbSchedulerDeadlineManager#humanReadableTask()}.
+ * deadline, in human-readable form. Will be stored by db-scheduler's own serializer, Java serialization by default, as
+ * the data of the task created by {@link DbSchedulerDeadlineManager#humanReadableTask(java.util.function.Supplier)}.
+ * The scope descriptor, payload and metadata it holds are converted with the configured
+ * {@link org.axonframework.conversion.Converter}.
+ * <p>
+ * The field names and the {@code serialVersionUID} are those of Axon Framework 4.13, so that both versions read
+ * each other's tasks.
  *
  * @author Gerard Klijs
  * @since 4.8.0
@@ -44,220 +47,184 @@ import static java.lang.String.format;
 @SuppressWarnings("Duplicates")
 public class DbSchedulerHumanReadableDeadlineDetails implements Serializable {
 
+    /**
+     * The value Java serialization computed for the Axon Framework 4.13 version of this class, which declared none.
+     */
+    @Serial
+    private static final long serialVersionUID = 1231422756190086139L;
+
     private String deadlineName;
-    private String type;
     private String scopeDescriptor;
     private String scopeDescriptorClass;
-    private String payload;
-    private String payloadClass;
-    private String payloadRevision;
-    private String metadata;
+    private @Nullable String payload;
+    private @Nullable String payloadClass;
+    private @Nullable String payloadRevision;
+    private @Nullable String metaData;
 
+    @SuppressWarnings("NotNullFieldNotInitialized")
     DbSchedulerHumanReadableDeadlineDetails() {
         //no-args constructor needed for deserialization
     }
 
     /**
-     * Creates a new {@link DbSchedulerHumanReadableDeadlineDetails} object, likely based on a {@link DeadlineMessage}.
+     * Creates a new {@code DbSchedulerHumanReadableDeadlineDetails} object from the stored form of a deadline's parts.
      *
-     * @param deadlineName         The {@link String} with the name of the deadline.
-     * @param type                 The {@link Message#type()} of the deadline as a {@link MessageType#toString()}.
-     * @param scopeDescriptor      The {@link String} which tells what the scope is of the deadline.
-     * @param scopeDescriptorClass The {@link String} which tells what the class of the scope descriptor is.
-     * @param payload              The {@link String} with the payload. This can be null.
-     * @param payloadClass         The {@link String} which tells what the class of the scope payload is.
-     * @param payloadRevision      The {@link String} which tells what the revision of the scope payload is.
-     * @param metadata             The {@link String} containing the metadata about the deadline. This can be null.
+     * @param deadlineName         the name of the deadline
+     * @param scopeDescriptor      the stored {@link ScopeDescriptor} describing the scope of the deadline
+     * @param scopeDescriptorClass the class name of the {@link ScopeDescriptor}
+     * @param payload              the stored payload of the deadline, if any
+     * @param payloadClass         the type name of the payload
+     * @param payloadRevision      the revision of the payload type, if any
+     * @param metaData             the stored metadata of the deadline
      */
     @SuppressWarnings("squid:S107")
-    DbSchedulerHumanReadableDeadlineDetails(String deadlineName,
-                                            String type,
-                                            String scopeDescriptor,
-                                            String scopeDescriptorClass,
-                                            @Nullable String payload,
-                                            @Nullable String payloadClass,
-                                            @Nullable String payloadRevision,
-                                            @Nullable String metadata) {
+    public DbSchedulerHumanReadableDeadlineDetails(String deadlineName,
+                                                   String scopeDescriptor,
+                                                   String scopeDescriptorClass,
+                                                   @Nullable String payload,
+                                                   @Nullable String payloadClass,
+                                                   @Nullable String payloadRevision,
+                                                   @Nullable String metaData) {
         this.deadlineName = deadlineName;
-        this.type = type;
         this.scopeDescriptor = scopeDescriptor;
         this.scopeDescriptorClass = scopeDescriptorClass;
         this.payload = payload;
         this.payloadClass = payloadClass;
         this.payloadRevision = payloadRevision;
-        this.metadata = metadata;
+        this.metaData = metaData;
     }
 
     /**
-     * Created a new {@link DbSchedulerHumanReadableDeadlineDetails} object, using the supplied serializer where
-     * needed.
+     * Converts the given deadline into {@code DbSchedulerHumanReadableDeadlineDetails}.
      *
-     * @param deadlineName The {@link String} with the name of the deadline.
-     * @param descriptor   The {@link ScopeDescriptor} which tells what the scope is of the deadline.
-     * @param message      The {@link DeadlineMessage} containing the payload and metadata which needs to be
-     *                     serialized.
-     * @param serializer   The {@link Serializer} used to serialize the {@code descriptor}, {@code payload},
-     *                     {@code metadata}, as well as the whole {@link DbSchedulerHumanReadableDeadlineDetails}.
-     * @return The serialized {@link String} representation of the details.
+     * @param deadlineName the name of the deadline
+     * @param descriptor   the {@link ScopeDescriptor} describing the scope of the deadline
+     * @param message      the {@link DeadlineMessage} to store
+     * @param converter    the converter used to convert the deadline's parts
+     * @return the {@code DbSchedulerHumanReadableDeadlineDetails} of the given deadline
      */
     static DbSchedulerHumanReadableDeadlineDetails serialized(String deadlineName,
-                                                              ScopeDescriptor descriptor,
-                                                              DeadlineMessage message,
-                                                              Serializer serializer) {
-        SerializedObject<String> serializedDescriptor = serializer.serialize(descriptor, String.class);
-        SerializedObject<String> serializedPayload = serializer.serialize(message.payload(), String.class);
-        SerializedObject<String> serializedMetadata = serializer.serialize(message.metadata(), String.class);
-
-        return new DbSchedulerHumanReadableDeadlineDetails(deadlineName,
-                                                           message.type().toString(),
-                                                           serializedDescriptor.getData(),
-                                                           serializedDescriptor.getType().getName(),
-                                                           serializedPayload.getData(),
-                                                           serializedPayload.getType().getName(),
-                                                           serializedPayload.getType().getRevision(),
-                                                           serializedMetadata.getData());
+                                                       ScopeDescriptor descriptor,
+                                                       DeadlineMessage message,
+                                                       StoredDeadlineConverter converter) {
+        Object payload = message.payload();
+        return new DbSchedulerHumanReadableDeadlineDetails(
+                deadlineName,
+                Objects.requireNonNull(converter.toStored(descriptor, String.class)),
+                descriptor.getClass().getName(),
+                converter.toStored(payload, String.class),
+                StoredDeadlineConverter.typeNameOf(payload),
+                null,
+                converter.toStored(message.metadata(), String.class)
+        );
     }
 
     /**
-     * Returns the {@link String} with the name of the deadline.
+     * Returns the name of the deadline.
      *
-     * @return The {@link String} with the name of the deadline.
+     * @return the name of the deadline
      */
     public String getDeadlineName() {
         return deadlineName;
     }
 
     /**
-     * Returns the {@link Message#type()} of this deadline.
+     * Returns the stored {@link ScopeDescriptor} of the deadline.
      *
-     * @return The {@link Message#type()} of this deadline.
-     */
-    public String getType() {
-        return type;
-    }
-
-
-    /**
-     * Returns the serialized {@link String} which tells what the scope is of the deadline.
-     *
-     * @return The serialized {@link String} which tells what the scope is of the deadline.
+     * @return the stored {@link ScopeDescriptor} of the deadline
      */
     public String getScopeDescriptor() {
         return scopeDescriptor;
     }
 
     /**
-     * Returns the {@link String} with the class of the scope descriptor.
+     * Returns the class name of the {@link ScopeDescriptor} of the deadline.
      *
-     * @return The {@link String} with the class of the scope descriptor.
+     * @return the class name of the {@link ScopeDescriptor} of the deadline
      */
     public String getScopeDescriptorClass() {
         return scopeDescriptorClass;
     }
 
     /**
-     * Returns the serialized {@link String} of the payload. This can be null.
+     * Returns the stored payload of the deadline.
      *
-     * @return The serialized {@link String} of the payload. This can be null.
+     * @return the stored payload of the deadline, if any
      */
-    public String getPayload() {
+    public @Nullable String getPayload() {
         return payload;
     }
 
     /**
-     * Returns the {@link String} with the class of the payload. This can be null.
+     * Returns the type name of the payload of the deadline.
      *
-     * @return The {@link String} with the class of the payload. This can be null.
+     * @return the type name of the payload of the deadline
      */
-    public String getPayloadClass() {
+    public @Nullable String getPayloadClass() {
         return payloadClass;
     }
 
     /**
-     * Returns the {@link String} with the revision of the payload. This can be null.
+     * Returns the revision of the payload type of the deadline.
      *
-     * @return The {@link String} with the revision of the payload. This can be null.
+     * @return the revision of the payload type of the deadline, if any
      */
-    public String getPayloadRevision() {
+    public @Nullable String getPayloadRevision() {
         return payloadRevision;
     }
 
     /**
-     * Returns the {@link String} containing the metadata about the deadline.
+     * Returns the stored metadata of the deadline.
      *
-     * @return The {@link String} containing the metadata about the deadline.
+     * @return the stored metadata of the deadline
      */
-    public String getMetadata() {
-        return metadata;
+    public @Nullable String getMetaData() {
+        return metaData;
     }
 
     /**
-     * Returns the {@link DbSchedulerHumanReadableDeadlineDetails} as an {@link GenericDeadlineMessage}, with the
-     * {@code} timestamp set using the {@code GenericEventMessage.clock}.
+     * Converts the stored payload and metadata back into a {@link GenericDeadlineMessage}.
      *
-     * @return the {@link GenericDeadlineMessage} with all the properties of this pojo, and a timestamp.
+     * @param converter the converter used to convert the stored payload and metadata
+     * @return the {@link GenericDeadlineMessage} described by these details
      */
-    public GenericDeadlineMessage asDeadLineMessage(Serializer serializer) {
+    public GenericDeadlineMessage asDeadLineMessage(StoredDeadlineConverter converter) {
+        Object deserializedPayload = converter.payload(
+                payloadClass == null ? StoredDeadlineConverter.EMPTY_TYPE : payloadClass, payloadRevision, payload
+        );
         return new GenericDeadlineMessage(deadlineName,
-                                          MessageType.fromString(type),
-                                          getDeserializedPayload(serializer),
-                                          getDeserializedMetadata(serializer));
-    }
-
-    private Object getDeserializedPayload(Serializer serializer) {
-        SimpleSerializedObject<String> serializedDeadlinePayload =
-                new SimpleSerializedObject<>(payload, String.class, payloadClass, payloadRevision);
-        return serializer.deserialize(serializedDeadlinePayload);
-    }
-
-    private Metadata getDeserializedMetadata(Serializer serializer) {
-        SimpleSerializedObject<String> serializedDeadlineMetadata =
-                new SimpleSerializedObject<>(metadata, String.class, Metadata.class.getName(), null);
-        return serializer.deserialize(serializedDeadlineMetadata);
+                                          StoredDeadlineConverter.messageTypeOf(deserializedPayload),
+                                          deserializedPayload,
+                                          converter.metadata(metaData));
     }
 
     /**
-     * Returns the serialized {@link ScopeDescriptor} using the supplied {@link Serializer}. This will be an instance of
-     * the {@code scopeDescriptorClass} property.
+     * Converts the stored {@link ScopeDescriptor} back into its class.
      *
-     * @return the {@link ScopeDescriptor} that is serialized using the supplied {@link Serializer}.
+     * @param converter the converter used to convert the stored {@link ScopeDescriptor}
+     * @return the {@link ScopeDescriptor} described by these details
      */
-    public ScopeDescriptor getDeserializedScopeDescriptor(Serializer serializer) {
-        SimpleSerializedObject<String> serializedDeadlineScope =
-                new SimpleSerializedObject<>(scopeDescriptor, String.class, scopeDescriptorClass, null);
-        return serializer.deserialize(serializedDeadlineScope);
+    public ScopeDescriptor getDeserializedScopeDescriptor(StoredDeadlineConverter converter) {
+        return converter.scope(scopeDescriptorClass, scopeDescriptor);
     }
 
     @Override
     public String toString() {
         return format("DbScheduler deadline details, deadlineName: [%s], " +
-                              "type: [%s], " +
                               "scopeDescriptor: [%s], " +
                               "scopeDescriptorClass: [%s], " +
                               "payload: [%s], " +
                               "payloadClass: [%s], " +
                               "payloadRevision: [%s], " +
-                              "metadata: [%s]",
-                      deadlineName,
-                      type,
-                      scopeDescriptor,
-                      scopeDescriptorClass,
-                      payload,
-                      payloadClass,
-                      payloadRevision,
-                      metadata);
+                              "metaData: [%s]",
+                      deadlineName, scopeDescriptor, scopeDescriptorClass, payload, payloadClass, payloadRevision,
+                      metaData);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(deadlineName,
-                            type,
-                            scopeDescriptor,
-                            scopeDescriptorClass,
-                            payload,
-                            payloadClass,
-                            payloadRevision,
-                            metadata);
+        return Objects.hash(deadlineName, scopeDescriptor, scopeDescriptorClass, payload, payloadClass,
+                            payloadRevision, metaData);
     }
 
     @Override
@@ -270,12 +237,11 @@ public class DbSchedulerHumanReadableDeadlineDetails implements Serializable {
         }
         final DbSchedulerHumanReadableDeadlineDetails other = (DbSchedulerHumanReadableDeadlineDetails) obj;
         return Objects.equals(this.deadlineName, other.deadlineName) &&
-                Objects.equals(this.type, other.type) &&
                 Objects.equals(this.scopeDescriptor, other.scopeDescriptor) &&
                 Objects.equals(this.scopeDescriptorClass, other.scopeDescriptorClass) &&
                 Objects.equals(this.payload, other.payload) &&
                 Objects.equals(this.payloadClass, other.payloadClass) &&
                 Objects.equals(this.payloadRevision, other.payloadRevision) &&
-                Objects.equals(this.metadata, other.metadata);
+                Objects.equals(this.metaData, other.metaData);
     }
 }

@@ -29,8 +29,9 @@ import java.util.concurrent.CopyOnWriteArrayList;
 /**
  * A test-only {@link AbstractDeadlineManager} recording every call instead of scheduling against a backend. Each method
  * follows the Axon Framework 4 {@code SimpleDeadlineManager}: whatever the caller needs back is computed right away,
- * everything else runs through {@link #runOnPrepareCommitOrNow(Runnable)}. A scheduled deadline passes the registered
- * dispatch interceptors within that call, as it would before reaching a backend.
+ * everything else runs through {@code runOnPrepareCommitOrNow(...)}. A scheduled deadline passes the registered
+ * dispatch interceptors within that call, with the context the call runs for, as it would before reaching a backend.
+ * The cancel calls use the Axon Framework 4 {@link Runnable} variant, so that both variants are exercised.
  */
 final class RecordingDeadlineManager extends AbstractDeadlineManager {
 
@@ -63,8 +64,8 @@ final class RecordingDeadlineManager extends AbstractDeadlineManager {
                            ScopeDescriptor deadlineScope) {
         DeadlineMessage deadlineMessage = asDeadlineMessage(deadlineName, messageOrPayload, triggerDateTime);
         String scheduleId = deadlineMessage.identifier();
-        runOnPrepareCommitOrNow(() -> {
-            DeadlineMessage intercepted = processDispatchInterceptors(deadlineMessage);
+        runOnPrepareCommitOrNow(context -> {
+            DeadlineMessage intercepted = processDispatchInterceptors(deadlineMessage, context);
             scheduled.add(new ScheduledCall(intercepted, deadlineScope));
             timeline.add(name + ":schedule " + deadlineName);
         });
@@ -73,17 +74,17 @@ final class RecordingDeadlineManager extends AbstractDeadlineManager {
 
     @Override
     public void cancelSchedule(String deadlineName, String scheduleId) {
-        runOnPrepareCommitOrNow(() -> timeline.add(name + ":cancelSchedule " + deadlineName + "/" + scheduleId));
+        runOnPrepareCommitOrNow(context -> timeline.add(name + ":cancelSchedule " + deadlineName + "/" + scheduleId));
     }
 
     @Override
     public void cancelAll(String deadlineName) {
-        runOnPrepareCommitOrNow(() -> timeline.add(name + ":cancelAll " + deadlineName));
+        runOnPrepareCommitOrNow(context -> timeline.add(name + ":cancelAll " + deadlineName));
     }
 
     @Override
     public void cancelAllWithinScope(String deadlineName, ScopeDescriptor scope) {
-        runOnPrepareCommitOrNow(() -> timeline.add(
+        runOnPrepareCommitOrNow(context -> timeline.add(
                 name + ":cancelAllWithinScope " + deadlineName + "@" + scope.scopeDescription()
         ));
     }

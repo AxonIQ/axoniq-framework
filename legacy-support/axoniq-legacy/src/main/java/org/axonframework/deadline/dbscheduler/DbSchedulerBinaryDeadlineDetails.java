@@ -1,43 +1,46 @@
 /*
- * Copyright (c) 2010-2026. Axon Framework
+ * Copyright (c) 2010-2026. AxonIQ B.V.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * Licensed under the AXONIQ TERMS OF SERVICE,
+ * Version 29 April 2026 (the "License");
  *
- *    http://www.apache.org/licenses/LICENSE-2.0
+ * The software is available for evaluation use without registration.
+ * Continued use beyond the evaluation period requires registration
+ * and a commercial license. See the License for the specific language
+ * governing permissions and limitations under the License.
+ * You may not use this file except in compliance with the License.
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * You may obtain a copy of the License at:
+ *  https://www.axoniq.io/legal/terms-of-service
+ *
+ * For licensing information and to register, visit:
+ *  https://www.axoniq.io/pricing
  */
 
 package org.axonframework.deadline.dbscheduler;
 
 import org.axonframework.deadline.DeadlineMessage;
 import org.axonframework.deadline.GenericDeadlineMessage;
-import org.axonframework.messaging.core.Message;
-import org.axonframework.messaging.core.MessageType;
-import org.axonframework.messaging.core.Metadata;
-import org.axonframework.messaging.core.ScopeDescriptor;
-import org.axonframework.conversion.SerializedObject;
-import org.axonframework.conversion.Serializer;
-import org.axonframework.conversion.SimpleSerializedObject;
+import org.axonframework.deadline.StoredDeadlineConverter;
+import org.axonframework.messaging.ScopeDescriptor;
+import org.jspecify.annotations.Nullable;
 
+import java.io.Serial;
 import java.io.Serializable;
 import java.util.Arrays;
 import java.util.Objects;
-import org.jspecify.annotations.Nullable;
 
 import static java.lang.String.format;
 
 /**
  * Pojo that contains the needed information for a {@link com.github.kagkarlsson.scheduler.task.Task} handling a
- * deadline, will be serialized and deserialized using the configured {@link Serializer} on the
- * {@link com.github.kagkarlsson.scheduler.Scheduler}. This object is used with the
- * {@code DbSchedulerDeadlineManager#binaryTask()}.
+ * deadline, in binary form. Will be stored by db-scheduler's own serializer, Java serialization by default, as the data
+ * of the task created by {@link DbSchedulerDeadlineManager#binaryTask(java.util.function.Supplier)}. The scope
+ * descriptor, payload and metadata it holds are converted with the configured
+ * {@link org.axonframework.conversion.Converter}.
+ * <p>
+ * The short field names and the {@code serialVersionUID} are those of Axon Framework 4.13, so that both versions read
+ * each other's tasks.
  *
  * @author Gerard Klijs
  * @since 4.8.0
@@ -45,204 +48,179 @@ import static java.lang.String.format;
 @SuppressWarnings("Duplicates")
 public class DbSchedulerBinaryDeadlineDetails implements Serializable {
 
+    /**
+     * The value Java serialization computed for the Axon Framework 4.13 version of this class, which declared none.
+     */
+    @Serial
+    private static final long serialVersionUID = -3092788086374166433L;
+
     private String d;
-    private String t;
     private byte[] s;
     private String sc;
-    private byte[] p;
-    private String pc;
-    private String r;
-    private byte[] m;
+    private byte @Nullable [] p;
+    private @Nullable String pc;
+    private @Nullable String r;
+    private byte @Nullable [] m;
 
+    @SuppressWarnings("NotNullFieldNotInitialized")
     DbSchedulerBinaryDeadlineDetails() {
         //no-args constructor needed for deserialization
     }
 
     /**
-     * Creates a new {@link DbSchedulerBinaryDeadlineDetails} object, likely based on a {@link DeadlineMessage}.
+     * Creates a new {@code DbSchedulerBinaryDeadlineDetails} object from the stored form of a deadline's parts.
      *
-     * @param deadlineName         The {@link String} with the type of the deadline.
-     * @param type                 The {@link Message#type()} of the deadline.
-     * @param scopeDescriptor      The {@link String} which tells what the scope is of the deadline.
-     * @param scopeDescriptorClass The {@link String} which tells what the class of the scope descriptor is.
-     * @param payload              The {@link String} with the payload. This can be null.
-     * @param payloadClass         The {@link String} which tells what the class of the scope payload is.
-     * @param payloadRevision      The {@link String} which tells what the revision of the scope payload is.
-     * @param metadata             The {@link String} containing the metadata about the deadline. This can be null.
+     * @param deadlineName         the name of the deadline
+     * @param scopeDescriptor      the stored {@link ScopeDescriptor} describing the scope of the deadline
+     * @param scopeDescriptorClass the class name of the {@link ScopeDescriptor}
+     * @param payload              the stored payload of the deadline, if any
+     * @param payloadClass         the type name of the payload
+     * @param payloadRevision      the revision of the payload type, if any
+     * @param metaData             the stored metadata of the deadline
      */
     @SuppressWarnings("squid:S107")
     public DbSchedulerBinaryDeadlineDetails(String deadlineName,
-                                            String type,
                                             byte[] scopeDescriptor,
                                             String scopeDescriptorClass,
                                             byte @Nullable [] payload,
                                             @Nullable String payloadClass,
                                             @Nullable String payloadRevision,
-                                            byte @Nullable [] metadata) {
+                                            byte @Nullable [] metaData) {
         this.d = deadlineName;
-        this.t = type;
         this.s = scopeDescriptor;
         this.sc = scopeDescriptorClass;
         this.p = payload;
         this.pc = payloadClass;
         this.r = payloadRevision;
-        this.m = metadata;
+        this.m = metaData;
     }
 
     /**
-     * Create a new {@link DbSchedulerBinaryDeadlineDetails} object, using the supplied serializer where needed.
+     * Converts the given deadline into {@code DbSchedulerBinaryDeadlineDetails}.
      *
-     * @param deadlineName The {@link String} with the name of the deadline.
-     * @param descriptor   The {@link ScopeDescriptor} which tells what the scope is of the deadline.
-     * @param message      The {@link DeadlineMessage} containing the payload and metadata which needs to be
-     *                     serialized.
-     * @param serializer   The {@link Serializer} used to serialize the {@code descriptor}, {@code payload},
-     *                     {@code metadata}, as well as the whole {@link DbSchedulerBinaryDeadlineDetails}.
-     * @return The serialized {@link String} representation of the details.
+     * @param deadlineName the name of the deadline
+     * @param descriptor   the {@link ScopeDescriptor} describing the scope of the deadline
+     * @param message      the {@link DeadlineMessage} to store
+     * @param converter    the converter used to convert the deadline's parts
+     * @return the {@code DbSchedulerBinaryDeadlineDetails} of the given deadline
      */
     static DbSchedulerBinaryDeadlineDetails serialized(String deadlineName,
                                                        ScopeDescriptor descriptor,
                                                        DeadlineMessage message,
-                                                       Serializer serializer) {
-        SerializedObject<byte[]> serializedDescriptor = serializer.serialize(descriptor, byte[].class);
-        SerializedObject<byte[]> serializedPayload = serializer.serialize(message.payload(), byte[].class);
-        SerializedObject<byte[]> serializedMetadata = serializer.serialize(message.metadata(), byte[].class);
-
+                                                       StoredDeadlineConverter converter) {
+        Object payload = message.payload();
         return new DbSchedulerBinaryDeadlineDetails(deadlineName,
-                                                    message.type().toString(),
-                                                    serializedDescriptor.getData(),
-                                                    serializedDescriptor.getType().getName(),
-                                                    serializedPayload.getData(),
-                                                    serializedPayload.getType().getName(),
-                                                    serializedPayload.getType().getRevision(),
-                                                    serializedMetadata.getData());
+                                                    Objects.requireNonNull(converter.toStored(descriptor,
+                                                                                              byte[].class)),
+                                                    descriptor.getClass().getName(),
+                                                    converter.toStored(payload, byte[].class),
+                                                    StoredDeadlineConverter.typeNameOf(payload),
+                                                    null,
+                                                    converter.toStored(message.metadata(), byte[].class));
     }
 
     /**
-     * Returns the {@link String} with the name of the deadline.
+     * Returns the name of the deadline.
      *
-     * @return The {@link String} with the name of the deadline.
+     * @return the name of the deadline
      */
     public String getD() {
         return d;
     }
 
     /**
-     * Returns the {@link Message#type()} of this deadline.
+     * Returns the stored {@link ScopeDescriptor} of the deadline.
      *
-     * @return The {@link Message#type()} of this deadline.
-     */
-    public String getT() {
-        return t;
-    }
-
-    /**
-     * Returns the serialized {@code byte[]} which tells what the scope is of the deadline.
-     *
-     * @return The serialized {@code byte[]} which tells what the scope is of the deadline.
+     * @return the stored {@link ScopeDescriptor} of the deadline
      */
     public byte[] getS() {
         return s;
     }
 
     /**
-     * Returns the {@link String} with the class of the scope descriptor.
+     * Returns the class name of the {@link ScopeDescriptor} of the deadline.
      *
-     * @return The {@link String} with the class of the scope descriptor.
+     * @return the class name of the {@link ScopeDescriptor} of the deadline
      */
     public String getSc() {
         return sc;
     }
 
     /**
-     * Returns the serialized {@code byte[]} of the payload. This can be null.
+     * Returns the stored payload of the deadline.
      *
-     * @return The serialized {@code byte[]} of the payload. This can be null.
+     * @return the stored payload of the deadline, if any
      */
-    public byte[] getP() {
+    public byte @Nullable [] getP() {
         return p;
     }
 
     /**
-     * Returns the {@link String} with the class of the payload. This can be null.
+     * Returns the type name of the payload of the deadline.
      *
-     * @return The {@link String} with the class of the payload. This can be null.
+     * @return the type name of the payload of the deadline
      */
-    public String getPc() {
+    public @Nullable String getPc() {
         return pc;
     }
 
     /**
-     * Returns the {@link String} with the revision of the payload. This can be null.
+     * Returns the revision of the payload type of the deadline.
      *
-     * @return The {@link String} with the revision of the payload. This can be null.
+     * @return the revision of the payload type of the deadline, if any
      */
-    public String getR() {
+    public @Nullable String getR() {
         return r;
     }
 
     /**
-     * Returns the {@code byte[]} containing the metadata about the deadline.
+     * Returns the stored metadata of the deadline.
      *
-     * @return The {@code byte[]} containing the metadata about the deadline.
+     * @return the stored metadata of the deadline
      */
-    public byte[] getM() {
+    public byte @Nullable [] getM() {
         return m;
     }
 
     /**
-     * Returns the {@link DbSchedulerBinaryDeadlineDetails} as an {@link GenericDeadlineMessage}, with the {@code}
-     * timestamp set using the {@code GenericEventMessage.clock}.
+     * Converts the stored payload and metadata back into a {@link GenericDeadlineMessage}.
      *
-     * @return the {@link GenericDeadlineMessage} with all the properties of this pojo, and a timestamp.
+     * @param converter the converter used to convert the stored payload and metadata
+     * @return the {@link GenericDeadlineMessage} described by these details
      */
-    public GenericDeadlineMessage asDeadLineMessage(Serializer serializer) {
+    public GenericDeadlineMessage asDeadLineMessage(StoredDeadlineConverter converter) {
+        Object payload = converter.payload(pc == null ? StoredDeadlineConverter.EMPTY_TYPE : pc, r, p);
         return new GenericDeadlineMessage(d,
-                                          MessageType.fromString(t),
-                                          getDeserializedPayload(serializer),
-                                          getDeserializedMetadata(serializer));
-    }
-
-    private Object getDeserializedPayload(Serializer serializer) {
-        SimpleSerializedObject<byte[]> serializedDeadlinePayload =
-                new SimpleSerializedObject<>(p, byte[].class, pc, r);
-        return serializer.deserialize(serializedDeadlinePayload);
-    }
-
-    private Metadata getDeserializedMetadata(Serializer serializer) {
-        SimpleSerializedObject<byte[]> serializedDeadlineMetadata =
-                new SimpleSerializedObject<>(m, byte[].class, Metadata.class.getName(), null);
-        return serializer.deserialize(serializedDeadlineMetadata);
+                                          StoredDeadlineConverter.messageTypeOf(payload),
+                                          payload,
+                                          converter.metadata(m));
     }
 
     /**
-     * Returns the serialized {@link ScopeDescriptor} using the supplied {@link Serializer}. This will be an instance of
-     * the {@code scopeDescriptorClass} property.
+     * Converts the stored {@link ScopeDescriptor} back into its class.
      *
-     * @return the {@link ScopeDescriptor} that is serialized using the supplied {@link Serializer}.
+     * @param converter the converter used to convert the stored {@link ScopeDescriptor}
+     * @return the {@link ScopeDescriptor} described by these details
      */
-    public ScopeDescriptor getDeserializedScopeDescriptor(Serializer serializer) {
-        SimpleSerializedObject<byte[]> serializedDeadlineScope =
-                new SimpleSerializedObject<>(s, byte[].class, sc, null);
-        return serializer.deserialize(serializedDeadlineScope);
+    public ScopeDescriptor getDeserializedScopeDescriptor(StoredDeadlineConverter converter) {
+        return converter.scope(sc, s);
     }
 
     @Override
     public String toString() {
         return format("DbScheduler deadline details, deadlineName: [%s], " +
-                              "type: [%s], " +
                               "scopeDescriptor: [%s], " +
                               "scopeDescriptorClass: [%s], " +
                               "payload: [%s], " +
                               "payloadClass: [%s], " +
                               "payloadRevision: [%s], " +
-                              "metadata: [%s]",
-                      d, t, Arrays.toString(s), sc, Arrays.toString(p), pc, r, Arrays.toString(m));
+                              "metaData: [%s]",
+                      d, Arrays.toString(s), sc, Arrays.toString(p), pc, r, Arrays.toString(m));
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(d, t, Arrays.hashCode(s), sc, Arrays.hashCode(p), pc, r, Arrays.hashCode(m));
+        return Objects.hash(d, Arrays.hashCode(s), sc, Arrays.hashCode(p), pc, r, Arrays.hashCode(m));
     }
 
     @Override
@@ -255,7 +233,6 @@ public class DbSchedulerBinaryDeadlineDetails implements Serializable {
         }
         final DbSchedulerBinaryDeadlineDetails other = (DbSchedulerBinaryDeadlineDetails) obj;
         return Objects.equals(this.d, other.d) &&
-                Objects.equals(this.t, other.t) &&
                 Arrays.equals(this.s, other.s) &&
                 Objects.equals(this.sc, other.sc) &&
                 Arrays.equals(this.p, other.p) &&

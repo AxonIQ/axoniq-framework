@@ -1,53 +1,74 @@
 /*
- * Copyright (c) 2010-2026. Axon Framework
+ * Copyright (c) 2010-2026. AxonIQ B.V.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * Licensed under the AXONIQ TERMS OF SERVICE,
+ * Version 29 April 2026 (the "License");
  *
- *    http://www.apache.org/licenses/LICENSE-2.0
+ * The software is available for evaluation use without registration.
+ * Continued use beyond the evaluation period requires registration
+ * and a commercial license. See the License for the specific language
+ * governing permissions and limitations under the License.
+ * You may not use this file except in compliance with the License.
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * You may obtain a copy of the License at:
+ *  https://www.axoniq.io/legal/terms-of-service
+ *
+ * For licensing information and to register, visit:
+ *  https://www.axoniq.io/pricing
  */
 
 package org.axonframework.deadline.jobrunr;
 
+import org.axonframework.conversion.jackson.JacksonConverter;
+import org.axonframework.deadline.StoredDeadlineConverter;
 import org.axonframework.deadline.TestScopeDescriptor;
-import org.axonframework.messaging.core.ScopeDescriptor;
-import org.axonframework.conversion.Serializer;
-import org.axonframework.conversion.json.JacksonSerializer;
+import org.axonframework.messaging.ScopeDescriptor;
 import org.junit.jupiter.api.*;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
 
+/**
+ * Test class validating the {@link LabelUtils}.
+ *
+ * @author Gerard Klijs
+ */
 class LabelUtilsTest {
 
     @Test
     void forShortStringLabelShouldBeSameAsInput() {
+        // given
         String expected = "short";
-        assertEquals(expected, LabelUtils.getLabel(expected));
+
+        // when / then
+        assertThat(LabelUtils.getLabel(expected)).isEqualTo(expected);
     }
 
     @Test
     void forLongStringLabelShouldBeConsistentButShorter() {
+        // given
         String longString = "shortsadfsdfsdfsdfsdfsdfsafdsfdgdgdgdgfgfdgdfgdfsfdsfsdfds"
                 + "fdsfsdfdssdjklfisdfikusdufidsufsdfdsufsifsfsfsdfgdfdfgfgdfgdfgdfs";
-        String expected = LabelUtils.getLabel(longString);
-        assertEquals(expected, LabelUtils.getLabel(longString));
-        assertTrue(longString.length() > expected.length());
+
+        // when
+        String label = LabelUtils.getLabel(longString);
+
+        // then
+        assertThat(LabelUtils.getLabel(longString)).isEqualTo(label);
+        assertThat(label).hasSizeLessThan(longString.length());
     }
 
     @Test
     void combinedScopeShouldBeConsistentAndShorterThan45Characters() {
-        String deadLineName = "deadlineName";
-        Serializer serializer = JacksonSerializer.defaultSerializer();
+        // given
+        String deadlineName = "deadlineName";
+        StoredDeadlineConverter converter = new StoredDeadlineConverter(new JacksonConverter());
         ScopeDescriptor descriptor = new TestScopeDescriptor("aggregateType", "identifier");
-        String expected = LabelUtils.getCombinedLabel(serializer, deadLineName, descriptor);
-        assertEquals(expected, LabelUtils.getCombinedLabel(serializer, deadLineName, descriptor));
-        assertTrue(expected.length() < 45);
+
+        // when
+        String label = LabelUtils.getCombinedLabel(converter, deadlineName, descriptor);
+
+        // then
+        assertThat(LabelUtils.getCombinedLabel(converter, deadlineName, descriptor)).isEqualTo(label);
+        assertThat(label).hasSizeLessThan(45);
     }
 }

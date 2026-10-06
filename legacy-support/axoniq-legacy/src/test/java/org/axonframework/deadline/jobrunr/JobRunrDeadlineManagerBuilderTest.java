@@ -1,99 +1,118 @@
 /*
- * Copyright (c) 2010-2026. Axon Framework
+ * Copyright (c) 2010-2026. AxonIQ B.V.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * Licensed under the AXONIQ TERMS OF SERVICE,
+ * Version 29 April 2026 (the "License");
  *
- *    http://www.apache.org/licenses/LICENSE-2.0
+ * The software is available for evaluation use without registration.
+ * Continued use beyond the evaluation period requires registration
+ * and a commercial license. See the License for the specific language
+ * governing permissions and limitations under the License.
+ * You may not use this file except in compliance with the License.
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * You may obtain a copy of the License at:
+ *  https://www.axoniq.io/legal/terms-of-service
+ *
+ * For licensing information and to register, visit:
+ *  https://www.axoniq.io/pricing
  */
 
 package org.axonframework.deadline.jobrunr;
 
 import org.axonframework.common.AxonConfigurationException;
-import org.axonframework.messaging.core.unitofwork.transaction.TransactionManager;
+import org.axonframework.conversion.jackson.JacksonConverter;
 import org.axonframework.deadline.TestScopeDescriptor;
-import org.axonframework.messaging.core.ScopeAwareProvider;
-import org.axonframework.messaging.core.ScopeDescriptor;
-import org.axonframework.conversion.json.JacksonSerializer;
+import org.axonframework.messaging.ScopeAwareProvider;
+import org.axonframework.messaging.core.unitofwork.UnitOfWorkTestUtils;
 import org.jobrunr.scheduling.JobScheduler;
+import org.jobrunr.storage.InMemoryStorageProvider;
 import org.junit.jupiter.api.*;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
+import java.util.stream.Stream;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+/**
+ * Test class validating the {@link JobRunrDeadlineManager.Builder}.
+ */
 class JobRunrDeadlineManagerBuilderTest {
 
     private static final String TEST_DEADLINE_NAME = "deadline-name";
-    private JobRunrDeadlineManager.Builder builder;
-    private final JobScheduler jobScheduler = mock(JobScheduler.class);
-    private final TransactionManager transactionManager = mock(TransactionManager.class);
-    private final ScopeAwareProvider scopeAwareProvider = mock(ScopeAwareProvider.class);
 
-    @BeforeEach
-    void newBuilder() {
-        builder = JobRunrDeadlineManager.builder();
+    private final JobScheduler jobScheduler = new JobScheduler(new InMemoryStorageProvider());
+    private final ScopeAwareProvider scopeAwareProvider = scope -> Stream.empty();
+
+    private JobRunrDeadlineManager.Builder completeBuilder() {
+        return JobRunrDeadlineManager.builder()
+                                     .scopeAwareProvider(scopeAwareProvider)
+                                     .unitOfWorkFactory(UnitOfWorkTestUtils.SIMPLE_FACTORY)
+                                     .jobScheduler(jobScheduler)
+                                     .converter(new JacksonConverter());
     }
 
     @Test
     void whenAllPropertiesAreSetCreatesManager() {
-        JobRunrDeadlineManager manager = builder.scopeAwareProvider(scopeAwareProvider)
-                                                .transactionManager(transactionManager)
-                                                .jobScheduler(jobScheduler)
-                                                .serializer(JacksonSerializer.defaultSerializer())
-                                                .build();
-
-        assertNotNull(manager);
+        // when / then
+        assertThat(completeBuilder().build()).isNotNull();
     }
 
     @Test
-    void validateNeedsAllPropertiesSet() {
-        builder.jobScheduler(jobScheduler)
-               .transactionManager(transactionManager);
-        assertThrows(AxonConfigurationException.class, () -> builder.build());
+    void validateNeedsTheUnitOfWorkFactory() {
+        // given
+        JobRunrDeadlineManager.Builder builder = JobRunrDeadlineManager.builder()
+                                                                       .scopeAwareProvider(scopeAwareProvider)
+                                                                       .jobScheduler(jobScheduler)
+                                                                       .converter(new JacksonConverter());
+
+        // when / then
+        assertThatThrownBy(builder::build).isInstanceOf(AxonConfigurationException.class);
     }
 
     @Test
-    void whenSettingSchedulerWithNullThrowError() {
-        assertThrows(AxonConfigurationException.class, () -> builder.jobScheduler(null));
+    void validateNeedsTheConverter() {
+        // given
+        JobRunrDeadlineManager.Builder builder =
+                JobRunrDeadlineManager.builder()
+                                      .scopeAwareProvider(scopeAwareProvider)
+                                      .jobScheduler(jobScheduler)
+                                      .unitOfWorkFactory(UnitOfWorkTestUtils.SIMPLE_FACTORY);
+
+        // when / then
+        assertThatThrownBy(builder::build).isInstanceOf(AxonConfigurationException.class);
+    }
+
+    @SuppressWarnings("DataFlowIssue")
+    @Test
+    void settingANullComponentThrows() {
+        // given
+        JobRunrDeadlineManager.Builder builder = JobRunrDeadlineManager.builder();
+
+        // when / then
+        assertThatThrownBy(() -> builder.jobScheduler(null)).isInstanceOf(AxonConfigurationException.class);
+        assertThatThrownBy(() -> builder.scopeAwareProvider(null)).isInstanceOf(AxonConfigurationException.class);
+        assertThatThrownBy(() -> builder.unitOfWorkFactory(null)).isInstanceOf(AxonConfigurationException.class);
+        assertThatThrownBy(() -> builder.converter(null)).isInstanceOf(AxonConfigurationException.class);
     }
 
     @Test
-    void whenSettingTransactionManagerWithNullThrowError() {
-        assertThrows(AxonConfigurationException.class, () -> builder.transactionManager(null));
+    void cancelAllIsNotSupported() {
+        // given
+        JobRunrDeadlineManager manager = completeBuilder().build();
+
+        // when / then
+        assertThatThrownBy(() -> manager.cancelAll(TEST_DEADLINE_NAME))
+                .isInstanceOf(UnsupportedOperationException.class);
     }
 
     @Test
-    void whenSettingScopeAwareProviderWithNullThrowError() {
-        assertThrows(AxonConfigurationException.class, () -> builder.scopeAwareProvider(null));
-    }
+    void cancelAllWithinScopeIsNotSupported() {
+        // given
+        JobRunrDeadlineManager manager = completeBuilder().build();
 
-    @Test
-    void cancelAllNotImplemented() {
-        JobRunrDeadlineManager manager = builder.scopeAwareProvider(scopeAwareProvider)
-                                                .transactionManager(transactionManager)
-                                                .jobScheduler(jobScheduler)
-                                                .serializer(JacksonSerializer.defaultSerializer())
-                                                .build();
-        assertThrows(UnsupportedOperationException.class,
-                     () -> manager.cancelAll(TEST_DEADLINE_NAME));
-    }
-
-    @Test
-    void cancelAllWithinScopeNotImplemented() {
-        JobRunrDeadlineManager manager = builder.scopeAwareProvider(scopeAwareProvider)
-                                                .transactionManager(transactionManager)
-                                                .jobScheduler(jobScheduler)
-                                                .serializer(JacksonSerializer.defaultSerializer())
-                                                .build();
-        ScopeDescriptor descriptor = new TestScopeDescriptor("aggregate-type", "aggregate-identifier");
-        assertThrows(UnsupportedOperationException.class,
-                     () -> manager.cancelAllWithinScope(TEST_DEADLINE_NAME, descriptor));
+        // when / then
+        assertThatThrownBy(() -> manager.cancelAllWithinScope(
+                TEST_DEADLINE_NAME, new TestScopeDescriptor("aggregate-type", "aggregate-identifier")
+        )).isInstanceOf(UnsupportedOperationException.class);
     }
 }

@@ -35,21 +35,23 @@ import org.junit.jupiter.api.*;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * Test class validating {@link AbstractDeadlineManager#runOnPrepareCommitOrNow(Runnable)} and
- * {@link AbstractDeadlineManager#processDispatchInterceptors(DeadlineMessage)}, driven through a recording subclass
- * shaped like the Axon Framework 4 {@code SimpleDeadlineManager}: it creates the message and schedule id up front and
- * defers the interception and the actual call.
+ * Test class validating {@link AbstractDeadlineManager#runOnPrepareCommitOrNow(Consumer)} and
+ * {@link AbstractDeadlineManager#processDispatchInterceptors(DeadlineMessage, ProcessingContext)}, driven through a
+ * recording subclass shaped like the Axon Framework 4 {@code SimpleDeadlineManager}: it creates the message and
+ * schedule id up front and defers the interception and the actual call.
  */
 class AbstractDeadlineManagerTest {
 
@@ -444,6 +446,42 @@ class AbstractDeadlineManagerTest {
                     .hasRootCauseInstanceOf(IllegalStateException.class)
                     .hasRootCauseMessage("interceptor failure");
             assertThat(testSubject.scheduled).isEmpty();
+        }
+
+        @Test
+        void interceptorsOfADeferredCallGetTheContextTheCallWasDeferredTo() {
+            // given
+            List<ProcessingContext> interceptionContexts = new CopyOnWriteArrayList<>();
+            testSubject.registerDispatchInterceptor((message, context, chain) -> {
+                interceptionContexts.add(context);
+                return chain.proceed(message, context);
+            });
+            AtomicReference<ProcessingContext> deferringContext = new AtomicReference<>();
+
+            // when
+            runInUnitOfWork(context -> new TestScope(context).run(() -> {
+                deferringContext.set(context);
+                testSubject.schedule(Instant.now(), "deadlineName", "payload", EXPLICIT_SCOPE);
+            }));
+
+            // then
+            assertThat(interceptionContexts).singleElement().isSameAs(deferringContext.get());
+        }
+
+        @Test
+        void interceptorsOfAnImmediateCallGetNoContext() {
+            // given
+            List<Optional<ProcessingContext>> interceptionContexts = new CopyOnWriteArrayList<>();
+            testSubject.registerDispatchInterceptor((message, context, chain) -> {
+                interceptionContexts.add(Optional.ofNullable(context));
+                return chain.proceed(message, context);
+            });
+
+            // when
+            testSubject.schedule(Instant.now(), "deadlineName", "payload", EXPLICIT_SCOPE);
+
+            // then
+            assertThat(interceptionContexts).containsExactly(Optional.empty());
         }
 
         @Test

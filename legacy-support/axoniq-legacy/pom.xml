@@ -41,6 +41,12 @@
         <!-- Loaded in an isolated class loader by Af4SerializerCompatibilityTest. Keeping the AF4 artifact out of the
              dependency graph prevents its org.axonframework classes from colliding with the reactor's AF5 classes. -->
         <axon4.serializer.version>4.13.2</axon4.serializer.version>
+        <!-- The deadline managers' scheduler libraries. Only this module uses them, so it manages their versions. Axon
+             Framework 4 nodes share the libraries' stores during a rolling upgrade, so keep the major versions equal
+             to Axon Framework 4.13's. -->
+        <quartz.version>2.5.2</quartz.version>
+        <jobrunr.version>8.8.2</jobrunr.version>
+        <db-scheduler.version>16.12.0</db-scheduler.version>
     </properties>
 
     <dependencies>
@@ -95,6 +101,26 @@
             <optional>true</optional>
         </dependency>
 
+        <!-- Deadline manager backends -->
+        <dependency>
+            <groupId>org.quartz-scheduler</groupId>
+            <artifactId>quartz</artifactId>
+            <version>${quartz.version}</version>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>org.jobrunr</groupId>
+            <artifactId>jobrunr</artifactId>
+            <version>${jobrunr.version}</version>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>com.github.kagkarlsson</groupId>
+            <artifactId>db-scheduler</artifactId>
+            <version>${db-scheduler.version}</version>
+            <optional>true</optional>
+        </dependency>
+
         <!-- Spring integration for the ported Sagas. Optional: a migrating Spring application already provides
              these on its classpath, while a non-Spring application keeps them off the graph entirely. -->
         <!-- The Spring Saga wiring builds on axon-spring's EventProcessorDefinition processor-configuration SPI, so
@@ -140,6 +166,12 @@
             <artifactId>axon-messaging</artifactId>
             <version>${axon-framework.version}</version>
             <type>test-jar</type>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <!-- Exercises db-scheduler's Gson-based serializer with the deadline details. -->
+            <groupId>com.google.code.gson</groupId>
+            <artifactId>gson</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>
