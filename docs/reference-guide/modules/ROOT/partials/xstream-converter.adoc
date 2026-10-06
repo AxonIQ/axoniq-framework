@@ -1,16 +1,38 @@
 [.axoniq-feature]
 [#xstream_converter]
-=== XStreamConverter
+=== Legacy support - XStreamConverter
 
 The `XStreamConverter`, part of the `axoniq-legacy` module, wraps an application-supplied https://x-stream.github.io/[XStream] instance to read and write the same XML an Axon Framework 4 node's `XStreamSerializer` produced for that instance's configuration.
 
 It exists for exactly one purpose: giving an Axon Framework 5 application time to let deadlines and events that an Axon Framework 4 node scheduled, and sagas it started, run their course, instead of forcing every one of them to fire or complete before the switch to Axon Framework 5.
-Scheduled deadlines and events only need to be *read* back in this format: once one fires, there is nothing left to write. A saga is different, since it keeps handling events until it ends, so its state is both read and written back in XStream for as long as it stays active.
+Scheduled deadlines and events only need to be *read* back in this format: once one fires, there is nothing left to write.
+A saga is different, since it keeps handling events until it ends, so its state is both read and written back in XStream for as long as it stays active.
 Many applications never configured a `Serializer` for their legacy saga stores, which then defaulted to XStream, so this is a common gap when adding Axon Framework 5 nodes to such an application.
 
-CAUTION: `XStreamConverter` is deprecated from the moment it is introduced. It is **not** a general-purpose converter, and Axon Framework never registers it by default. Remove it from your configuration once the data it reads has been drained or rewritten in your application's regular converter format.
+[WARNING]
+.What about the JacksonConverter with an XMLMapper?
+====
+A Jackson `XmlMapper` producing XML is not the same as reading XStream's XML.
+With enough custom `JsonDeserializer`
+implementations and a naming strategy for XStream's escaping, standing in for XStream's own aliases, a `JacksonConverter`
+can read simple, non-polymorphic object graphs an Axon Framework 4 `XStreamSerializer` wrote.
+It stops there: XStream's object references (shared or cyclic identity) and its generic `class`-attribute type resolution have no Jackson equivalent to configure, so anything beyond the simplest graphs needs a deserializer hand-written per concrete type, and even that is not safe against silent data loss rather than a clear failure.
+The other direction fails outright:
+`XStreamSerializer` cannot read what `JacksonConverter` writes, regardless of configuration. `XStreamConverter` exists for exactly this gap.
+====
 
-`XStreamConverter` allows `"org.axonframework.**"` on the `XStream` instance you give it, the same baseline `XStreamSerializer` added by default, so its own ported types (scope descriptors, metadata) resolve. XStream deserializes by instantiating arbitrary classes named in the XML it reads, which is unsafe against untrusted input unless the set of types it may instantiate is restricted, so this baseline covers only that namespace. You remain responsible for allowing your own saga, deadline, and event payload classes, typically with `XStream#allowTypesByWildcard(String[])` or `XStream#allowTypes(Class[])`.
+Note that the `XStreamConverter` is deprecated from the moment it is introduced.
+It is **not** a general-purpose converter, and Axon Framework never registers it by default.
+Remove it from your configuration once the data it reads has been drained or rewritten in your application's regular converter format.
+
+Nothing stops configuring `XStreamConverter` as the general or event `Converter`, to read an event store an Axon Framework 4 node's `XStreamSerializer` wrote.
+Events are not like sagas, deadlines, or scheduled events, though:
+nothing drains them.
+An event store is replayed indefinitely, so events left in XStream format stay dependent on XStream. Hence, we strongly recommend you migrate XStream-serialized events to (for example) JSON.
+
+`XStreamConverter` allows `"org.axonframework.**"` on the `XStream` instance you give it, the same baseline `XStreamSerializer` added by default, so its own ported types (scope descriptors, metadata) resolve.
+XStream deserializes by instantiating arbitrary classes named in the XML it reads, which is unsafe against untrusted input unless the set of types it may instantiate is restricted, so this baseline covers only that namespace.
+You remain responsible for allowing your own saga, deadline, and event payload classes, typically with `XStream#allowTypesByWildcard(String[])` or `XStream#allowTypes(Class[])`.
 
 To use it, add the `axoniq-legacy` module and XStream to your dependencies:
 
