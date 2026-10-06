@@ -1,6 +1,7 @@
 [.axoniq-feature]
 = Workflows
 :navtitle: Workflows
+:page-aliases: sagas:index.adoc, sagas:README.adoc, sagas:implementation.adoc, sagas:associations.adoc, sagas:infrastructure.adoc
 
 This reference covers every primitive, configuration option, and pattern available in the Axon Workflow Engine.
 
