@@ -72,7 +72,7 @@ class Af4SerializerCompatibilityTest {
     @Nested
     class XStreamSerialization {
 
-        private final Converter xStreamConverter = new XStreamConverter(allowingXStream());
+        private final Converter xStreamConverter = new XStreamConverter(new XStream());
 
         @Test
         void xStreamSerializerSagaIsConvertableByXStreamConverter() throws Exception {
@@ -205,12 +205,6 @@ class Af4SerializerCompatibilityTest {
                         .isEqualTo(descriptor.getIdentifier());
                 return null;
             });
-        }
-
-        private XStream allowingXStream() {
-            XStream xStream = new XStream();
-            xStream.allowTypesByWildcard(new String[]{"org.axonframework.**"});
-            return xStream;
         }
     }
 

@@ -39,7 +39,6 @@ class XStreamConverterTest {
     @BeforeEach
     void setUp() {
         xStream = new XStream();
-        xStream.allowTypesByWildcard(new String[]{"org.axonframework.**"});
         testSubject = new XStreamConverter(xStream);
     }
 

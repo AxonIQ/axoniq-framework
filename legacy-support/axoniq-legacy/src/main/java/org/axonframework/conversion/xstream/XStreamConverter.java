@@ -56,11 +56,13 @@ import java.util.UUID;
  * by default, and it should be removed from an application's configuration as soon as all data it was reading has been
  * drained or rewritten in the application's regular {@link Converter} format.
  * <p>
- * Unlike Axon Framework 4's {@code XStreamSerializer}, this {@code Converter} does <b>not</b> configure any type
- * allowlist on the given {@link XStream} instance. XStream deserializes by instantiating arbitrary classes named in the
- * XML it reads, which is unsafe against untrusted input unless the set of types it may instantiate is restricted.
- * Callers must configure this themselves, typically with {@link XStream#allowTypesByWildcard(String[])} or
- * {@link XStream#allowTypes(Class[])}, before handing the {@code XStream} instance to this constructor.
+ * Construction allows {@code "org.axonframework.**"} on the given {@link XStream} instance, the same baseline Axon
+ * Framework 4's {@code XStreamSerializer} added by default. XStream deserializes by instantiating arbitrary classes
+ * named in the XML it reads, which is unsafe against untrusted input unless the set of types it may instantiate is
+ * restricted, so this baseline covers only this module's own namespace. Callers remain responsible for allowing their
+ * <b>own</b> saga, deadline, and event payload classes themselves, typically with
+ * {@link XStream#allowTypesByWildcard(String[])} or {@link XStream#allowTypes(Class[])}, before handing the
+ * {@code XStream} instance to this constructor.
  * <p>
  * This {@code Converter} only ever converts a single payload, metadata map, or scope descriptor at a time; it never
  * sees a whole message envelope. Construction aliases {@link Metadata} to the same {@code <meta-data>} element Axon
@@ -98,8 +100,9 @@ public class XStreamConverter implements Converter {
     /**
      * Constructs an {@code XStreamConverter} using the given {@code xStream} instance.
      * <p>
-     * The {@code xStream} instance is a hard requirement. Its type allowlist is left exactly as configured; see the
-     * class-level documentation for why that configuration is the caller's responsibility.
+     * The {@code xStream} instance is a hard requirement. Construction allows {@code "org.axonframework.**"} on it, so
+     * this module's own ported types resolve; the caller remains responsible for allowing their own application types.
+     * See the class-level documentation for details.
      *
      * @param xStream the {@link XStream} instance used to convert objects into and from XML
      */
@@ -123,6 +126,7 @@ public class XStreamConverter implements Converter {
         this.xStream = Objects.requireNonNull(xStream, "The XStream instance may not be null.");
         this.converter = Objects.requireNonNull(converter, "The ChainingContentTypeConverter may not be null.");
 
+        xStream.allowTypesByWildcard(new String[]{"org.axonframework.**"});
         xStream.alias("meta-data", Metadata.class);
         xStream.registerConverter(new MetadataConverter(xStream.getMapper()));
         xStream.addImmutableType(UUID.class, true);
