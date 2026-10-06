@@ -109,6 +109,7 @@ class SpringCloudMessageDistributionIT {
                             "test.query-handler.enabled=" + NODE_B.equals(nodeName),
                             "test.rename-handler.enabled=" + NODE_B.equals(nodeName),
                             "axon.multitenancy.enabled=false",
+                            "axon.axonserver.enabled=false",
                             "spring.main.banner-mode=off",
                             "logging.level.root=WARN")
                 .run();
