@@ -1,7 +1,7 @@
 # ADR 004: Trace `DeadlineManager`s with a delegating decorator instead of `DeadlineManagerSpanFactory` (issue [#5111](https://github.com/AxonIQ/AxonFramework/issues/5111))
 
 Date: 2026-10-02
-Status: proposed
+Status: accepted
 Related: [#3065](https://github.com/AxonIQ/AxonFramework/issues/3065) (parent), [#5003](https://github.com/AxonIQ/AxonFramework/issues/5003) (deadline core), [#5005](https://github.com/AxonIQ/AxonFramework/issues/5005) (scheduler backends), [#5004](https://github.com/AxonIQ/AxonFramework/issues/5004) (aggregate deadline to command), [#5048](https://github.com/AxonIQ/AxonFramework/issues/5048) (migration tooling), [ADR 003](adr-003-deadline-manager-current-scope.md) (current `Scope`)
 
 ## Context
