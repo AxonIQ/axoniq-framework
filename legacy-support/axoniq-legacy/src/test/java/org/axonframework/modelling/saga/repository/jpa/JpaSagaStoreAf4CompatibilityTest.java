@@ -19,19 +19,22 @@
 
 package org.axonframework.modelling.saga.repository.jpa;
 
+import com.thoughtworks.xstream.XStream;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityManagerFactory;
 import jakarta.persistence.Persistence;
 import org.axonframework.common.jpa.SimpleEntityManagerProvider;
 import org.axonframework.conversion.jackson.JacksonConverter;
+import org.axonframework.conversion.xstream.XStreamConverter;
 import org.axonframework.modelling.saga.AssociationValue;
+import org.axonframework.modelling.saga.repository.Af4CompatibilityTestSuite;
 import org.axonframework.modelling.saga.repository.SagaStore;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
+import org.axonframework.modelling.saga.repository.StubSaga;
+import org.junit.jupiter.api.*;
 
 import java.nio.charset.StandardCharsets;
 
-import org.axonframework.modelling.saga.repository.Af4CompatibilityTestSuite;
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Verifies that {@link JpaSagaStore} satisfies {@link Af4CompatibilityTestSuite} against an HSQLDB table in the Axon
@@ -115,5 +118,31 @@ class JpaSagaStoreAf4CompatibilityTest extends Af4CompatibilityTestSuite {
                                     .setParameter(1, sagaId)
                                     .getSingleResult();
         return value == null ? null : value.toString();
+    }
+
+    @Nested
+    class XStreamConverterReading {
+
+        private JpaSagaStore xStreamStore;
+
+        @BeforeEach
+        void setUp() {
+            XStream xStream = new XStream();
+            xStreamStore = JpaSagaStore.builder()
+                                      .entityManagerProvider(new SimpleEntityManagerProvider(entityManager))
+                                      .converter(new XStreamConverter(xStream))
+                                      .build();
+        }
+
+        @Test
+        void aSagaWrittenByAxonFramework4WithXStreamIsReadBackThroughXStreamConverter() {
+            // given the row seeded by seedAf4Rows() holding real Axon Framework 4 XStreamSerializer XML / when
+            SagaStore.Entry<StubSaga> entry =
+                    xStreamStore.loadSaga(StubSaga.class, SAGA_WITH_XSTREAM_SERIALIZATION);
+
+            // then
+            assertThat(entry).isNotNull();
+            assertThat(entry.saga().getHandledEvents()).containsExactly("OrderPlaced");
+        }
     }
 }

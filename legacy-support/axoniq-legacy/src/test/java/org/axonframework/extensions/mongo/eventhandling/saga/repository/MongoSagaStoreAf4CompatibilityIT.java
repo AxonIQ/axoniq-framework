@@ -21,8 +21,10 @@ package org.axonframework.extensions.mongo.eventhandling.saga.repository;
 
 import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoClients;
+import com.thoughtworks.xstream.XStream;
 import org.axonframework.conversion.ConversionException;
 import org.axonframework.conversion.jackson.JacksonConverter;
+import org.axonframework.conversion.xstream.XStreamConverter;
 import org.axonframework.extensions.mongo.DefaultMongoTemplate;
 import org.axonframework.extensions.mongo.MongoTemplate;
 import org.axonframework.modelling.saga.AssociationValue;
@@ -32,11 +34,7 @@ import org.axonframework.modelling.saga.repository.SagaStore;
 import org.axonframework.modelling.saga.repository.StubSaga;
 import org.bson.Document;
 import org.bson.types.Binary;
-import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Nested;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.mongodb.MongoDBContainer;
@@ -65,9 +63,11 @@ class MongoSagaStoreAf4CompatibilityIT {
 
     private static final AssociationValue ORDER_1 = new AssociationValue("orderId", "order-1");
     private static final AssociationValue ORDER_2 = new AssociationValue("orderId", "order-2");
+    private static final AssociationValue ORDER_XSTREAM = new AssociationValue("orderId", "order-xstream");
 
     private static final String SAGA_1 = "saga-1";
     private static final String SAGA_2 = "saga-2";
+    private static final String SAGA_WITH_XSTREAM_SERIALIZATION = "saga-xstream-serialized";
 
     @Container
     private static final MongoDBContainer MONGO_CONTAINER = new MongoDBContainer("mongo:8.0");
@@ -88,7 +88,7 @@ class MongoSagaStoreAf4CompatibilityIT {
     }
 
     @BeforeEach
-    void setUp() {
+    void setUp() throws Exception {
         mongoTemplate = DefaultMongoTemplate.builder()
                                             .mongoDatabase(mongoClient)
                                             .build();
@@ -101,6 +101,13 @@ class MongoSagaStoreAf4CompatibilityIT {
         String sagaType = StubSaga.class.getName();
         insertAf4Saga(SAGA_1, sagaType, "{\"handledEvents\":[\"OrderPlaced\"]}", ORDER_1);
         insertAf4Saga(SAGA_2, sagaType, "{\"handledEvents\":[\"OrderPlaced\",\"OrderPaid\"]}", ORDER_2);
+
+        StubSaga xStreamSaga = new StubSaga();
+        xStreamSaga.handled("OrderPlaced");
+        String xStreamSerializedSaga = Af4XStreamSupport.withAf4ClassLoader(
+                classLoader -> Af4XStreamSupport.af4XStream(classLoader).toXML(xStreamSaga)
+        );
+        insertAf4Saga(SAGA_WITH_XSTREAM_SERIALIZATION, sagaType, xStreamSerializedSaga, ORDER_XSTREAM);
     }
 
     /**
@@ -163,20 +170,38 @@ class MongoSagaStoreAf4CompatibilityIT {
         }
 
         @Test
-        void xStreamSerializedSagaFailsWhenXStreamConverterIsNotUsed() throws Exception {
-            // given a document whose serializedSaga field is XML, written by an Axon Framework 4 node whose
-            // Serializer defaulted to XStream, read here by a store without an XStreamConverter
-            StubSaga xStreamSaga = new StubSaga();
-            xStreamSaga.handled("OrderPlaced");
-            String xStreamSerializedSaga = Af4XStreamSupport.withAf4ClassLoader(
-                    classLoader -> Af4XStreamSupport.af4XStream(classLoader).toXML(xStreamSaga)
-            );
-            insertAf4Saga("saga-xstream-serialized", StubSaga.class.getName(), xStreamSerializedSaga, ORDER_1);
-
-            // when / then
-            assertThatThrownBy(() -> testSubject.loadSaga(StubSaga.class, "saga-xstream-serialized"))
+        void xStreamSerializedSagaFailsWhenXStreamConverterIsNotUsed() {
+            // given the document seeded by setUp() whose serializedSaga field is XML, written by an Axon Framework 4
+            // node whose Serializer defaulted to XStream, read here by a store without an XStreamConverter / when / then
+            assertThatThrownBy(() -> testSubject.loadSaga(StubSaga.class, SAGA_WITH_XSTREAM_SERIALIZATION))
                     .isInstanceOf(ConversionException.class)
                     .hasMessageContaining(StubSaga.class.getName());
+        }
+    }
+
+    @Nested
+    class XStreamConverterReading {
+
+        private MongoSagaStore xStreamStore;
+
+        @BeforeEach
+        void setUp() {
+            XStream xStream = new XStream();
+            xStreamStore = MongoSagaStore.builder()
+                                         .mongoTemplate(mongoTemplate)
+                                         .converter(new XStreamConverter(xStream))
+                                         .build();
+        }
+
+        @Test
+        void aSagaWrittenByAxonFramework4WithXStreamIsReadBackThroughXStreamConverter() {
+            // given the document seeded by the enclosing setUp() holding real Axon Framework 4 XStreamSerializer
+            // XML / when
+            SagaStore.Entry<StubSaga> entry = xStreamStore.loadSaga(StubSaga.class, SAGA_WITH_XSTREAM_SERIALIZATION);
+
+            // then
+            assertThat(entry).isNotNull();
+            assertThat(entry.saga().getHandledEvents()).containsExactly("OrderPlaced");
         }
     }
 

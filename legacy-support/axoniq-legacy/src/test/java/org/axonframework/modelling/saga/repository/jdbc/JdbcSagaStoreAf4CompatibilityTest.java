@@ -19,14 +19,16 @@
 
 package org.axonframework.modelling.saga.repository.jdbc;
 
+import com.thoughtworks.xstream.XStream;
 import org.axonframework.common.jdbc.DataSourceConnectionProvider;
 import org.axonframework.conversion.jackson.JacksonConverter;
+import org.axonframework.conversion.xstream.XStreamConverter;
 import org.axonframework.modelling.saga.AssociationValue;
 import org.axonframework.modelling.saga.repository.Af4CompatibilityTestSuite;
 import org.axonframework.modelling.saga.repository.SagaStore;
+import org.axonframework.modelling.saga.repository.StubSaga;
 import org.hsqldb.jdbc.JDBCDataSource;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.*;
 
 import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
@@ -118,6 +120,33 @@ class JdbcSagaStoreAf4CompatibilityTest extends Af4CompatibilityTestSuite {
             }
         } catch (SQLException e) {
             throw new IllegalStateException("Failed to read " + column + " for " + sagaId, e);
+        }
+    }
+
+    @Nested
+    class XStreamConverterReading {
+
+        private JdbcSagaStore xStreamStore;
+
+        @BeforeEach
+        void setUp() {
+            XStream xStream = new XStream();
+            xStreamStore = JdbcSagaStore.builder()
+                                       .connectionProvider(new DataSourceConnectionProvider(dataSource))
+                                       .sqlSchema(new HsqlSagaSqlSchema())
+                                       .converter(new XStreamConverter(xStream))
+                                       .build();
+        }
+
+        @Test
+        void aSagaWrittenByAxonFramework4WithXStreamIsReadBackThroughXStreamConverter() {
+            // given the row seeded by seedAf4Rows() holding real Axon Framework 4 XStreamSerializer XML / when
+            SagaStore.Entry<StubSaga> entry =
+                    xStreamStore.loadSaga(StubSaga.class, SAGA_WITH_XSTREAM_SERIALIZATION);
+
+            // then
+            assertThat(entry).isNotNull();
+            assertThat(entry.saga().getHandledEvents()).containsExactly("OrderPlaced");
         }
     }
 }
