@@ -1,0 +1,222 @@
+/*
+ * Copyright (c) 2010-2026. AxonIQ B.V.
+ *
+ * Licensed under the AXONIQ TERMS OF SERVICE,
+ * Version 29 April 2026 (the "License");
+ *
+ * The software is available for evaluation use without registration.
+ * Continued use beyond the evaluation period requires registration
+ * and a commercial license. See the License for the specific language
+ * governing permissions and limitations under the License.
+ * You may not use this file except in compliance with the License.
+ *
+ * You may obtain a copy of the License at:
+ *  https://www.axoniq.io/legal/terms-of-service
+ *
+ * For licensing information and to register, visit:
+ *  https://www.axoniq.io/pricing
+ */
+
+package org.axonframework.conversion.xstream;
+
+import com.thoughtworks.xstream.XStream;
+import com.thoughtworks.xstream.XStreamException;
+import com.thoughtworks.xstream.converters.MarshallingContext;
+import com.thoughtworks.xstream.converters.UnmarshallingContext;
+import com.thoughtworks.xstream.converters.collections.MapConverter;
+import com.thoughtworks.xstream.io.HierarchicalStreamReader;
+import com.thoughtworks.xstream.io.HierarchicalStreamWriter;
+import com.thoughtworks.xstream.mapper.Mapper;
+import org.axonframework.common.annotation.Internal;
+import org.axonframework.common.infra.ComponentDescriptor;
+import org.axonframework.conversion.ChainingContentTypeConverter;
+import org.axonframework.conversion.ConversionException;
+import org.axonframework.conversion.Converter;
+import org.axonframework.messaging.core.Metadata;
+import org.jspecify.annotations.Nullable;
+
+import java.io.InputStream;
+import java.lang.reflect.Type;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Objects;
+import java.util.UUID;
+
+/**
+ * A {@link Converter} implementation that uses an application-supplied {@link XStream} instance to convert objects into
+ * and from the XML format that Axon Framework 4's {@code XStreamSerializer} produced.
+ * <p>
+ * This {@code Converter} exists for exactly one purpose: letting an Axon Framework 5 application read, and keep
+ * writing, data that was serialized by an Axon Framework 4 node's XStream-based {@code Serializer}, so that an Axon
+ * Framework 4 and an Axon Framework 5 node can run side by side during a rolling upgrade. In practice that is Axon
+ * Framework 4 saga state (the legacy saga stores default to {@code XStreamSerializer} when built without one),
+ * deadlines scheduled through a {@code DeadlineManager}, and events scheduled through an {@code EventScheduler}.
+ * <p>
+ * Note this {@code Converter} implementation  is <b>not</b> meant to be used for anything new. It is never registered
+ * by default, and it should be removed from an application's configuration as soon as all data it was reading has been
+ * drained or rewritten in the application's regular {@link Converter} format.
+ * <p>
+ * Unlike Axon Framework 4's {@code XStreamSerializer}, this {@code Converter} does <b>not</b> configure any type
+ * allowlist on the given {@link XStream} instance. XStream deserializes by instantiating arbitrary classes named in the
+ * XML it reads, which is unsafe against untrusted input unless the set of types it may instantiate is restricted.
+ * Callers must configure this themselves, typically with {@link XStream#allowTypesByWildcard(String[])} or
+ * {@link XStream#allowTypes(Class[])}, before handing the {@code XStream} instance to this constructor.
+ * <p>
+ * This {@code Converter} only ever converts a single payload, metadata map, or scope descriptor at a time; it never
+ * sees a whole message envelope. Construction aliases {@link Metadata} to the same {@code <meta-data>} element Axon
+ * Framework 4's {@code MetaData} used, and marks {@link UUID} as an immutable type aliased to {@code uuid}, so that XML
+ * produced by an Axon Framework 4 {@code XStreamSerializer} round-trips through this {@code Converter} unchanged.
+ * Ported scope descriptors such as {@code AggregateScopeDescriptor} and {@code SagaScopeDescriptor} keep their Axon
+ * Framework 4 package and class name in this module, so no further aliasing is required for those to resolve against
+ * Axon Framework 4-written XML.
+ * <p>
+ * Construct this {@code Converter} with a pre-configured {@link XStream} instance, for example the one an application
+ * already uses with Axon Framework 4 (Spring Boot applications typically expose this as the {@code defaultAxonXStream}
+ * bean), and pass it to the {@code converter(...)} builder method of a legacy saga store or deadline manager:
+ * <pre>{@code
+ * XStream xStream = new XStream();
+ * xStream.allowTypesByWildcard(new String[]{"com.example.myapp.**"});
+ * Converter xStreamConverter = new XStreamConverter(xStream);
+ *
+ * JpaSagaStore sagaStore = JpaSagaStore.builder()
+ *                                      .entityManagerProvider(entityManagerProvider)
+ *                                      .converter(xStreamConverter)
+ *                                      .build();
+ * }</pre>
+ *
+ * @author Steven van Beelen
+ * @since 5.4.0
+ * @deprecated Only intended to drain Axon Framework 4 XStream-serialized sagas, deadlines, and scheduled events during
+ * a migration period. Remove it from an application's configuration once that data no longer exists.
+ */
+@Deprecated(forRemoval = true, since = "5.4.0")
+public class XStreamConverter implements Converter {
+
+    private final XStream xStream;
+    private final ChainingContentTypeConverter converter;
+
+    /**
+     * Constructs an {@code XStreamConverter} using the given {@code xStream} instance.
+     * <p>
+     * The {@code xStream} instance is a hard requirement. Its type allowlist is left exactly as configured; see the
+     * class-level documentation for why that configuration is the caller's responsibility.
+     *
+     * @param xStream the {@link XStream} instance used to convert objects into and from XML
+     */
+    public XStreamConverter(XStream xStream) {
+        this(xStream, new ChainingContentTypeConverter());
+    }
+
+    /**
+     * Constructs an {@code XStreamConverter} using the given {@code xStream} instance and {@code converter}.
+     * <p>
+     * This constructor should only be used when a specific {@link ClassLoader} should be given to the
+     * {@link ChainingContentTypeConverter}, to ensure it loads the right set of
+     * {@code ContentTypeConverter ContentTypeConverters}.
+     *
+     * @param xStream   the {@link XStream} instance used to convert objects into and from XML
+     * @param converter the converter used for the {@code byte[]}/{@code String}/{@link InputStream} content type
+     *                  conversions surrounding the XML (de)serialization
+     */
+    @Internal
+    public XStreamConverter(XStream xStream, ChainingContentTypeConverter converter) {
+        this.xStream = Objects.requireNonNull(xStream, "The XStream instance may not be null.");
+        this.converter = Objects.requireNonNull(converter, "The ChainingContentTypeConverter may not be null.");
+
+        xStream.alias("meta-data", Metadata.class);
+        xStream.registerConverter(new MetadataConverter(xStream.getMapper()));
+        xStream.addImmutableType(UUID.class, true);
+        xStream.alias("uuid", UUID.class);
+    }
+
+    @Nullable
+    @Override
+    @SuppressWarnings("unchecked")
+    public <T> T convert(@Nullable Object input, Type targetType) {
+        if (input == null) {
+            return null;
+        }
+
+        Class<?> sourceType = input.getClass();
+        if (sourceType.equals(targetType)) {
+            return (T) input;
+        }
+        if (!(targetType instanceof Class<?> targetClass)) {
+            throw new ConversionException(
+                    "The targetType [" + targetType + "] is not a Class, while XStreamConverter can only convert to "
+                            + "a Class."
+            );
+        }
+
+        boolean sourceIsXmlCarrier = isXmlCarrierType(sourceType);
+        boolean targetIsXmlCarrier = isXmlCarrierType(targetClass);
+        try {
+            if (sourceIsXmlCarrier && targetIsXmlCarrier) {
+                // Neither side needs XStream; this is a plain content type conversion around the XML.
+                return (T) converter.convert(input, targetClass);
+            } else if (targetIsXmlCarrier) {
+                String xml = xStream.toXML(input);
+                return (T) converter.convert(xml, targetClass);
+            } else if (sourceIsXmlCarrier) {
+                String xml = converter.convert(input, String.class);
+                return (T) xStream.fromXML(xml);
+            } else {
+                throw new ConversionException(
+                        "XStreamConverter cannot convert from [" + sourceType.getName() + "] to ["
+                                + targetClass.getName() + "]. One of the two must be a byte[], String, or "
+                                + "InputStream, as XStreamConverter only converts to and from XML."
+                );
+            }
+        } catch (XStreamException e) {
+            throw new ConversionException(
+                    "Exception while trying to convert object of type [" + sourceType.getName() + "] to ["
+                            + targetClass.getName() + "] through XStream.", e
+            );
+        }
+    }
+
+    private static boolean isXmlCarrierType(Class<?> type) {
+        return type.equals(byte[].class) || type.equals(String.class) || InputStream.class.isAssignableFrom(type);
+    }
+
+    @Override
+    public void describeTo(ComponentDescriptor descriptor) {
+        descriptor.describeProperty("xStream", xStream);
+    }
+
+    /**
+     * Marshals and unmarshals {@link Metadata} the way Axon Framework 4's {@code MetaDataConverter} did for
+     * {@code MetaData}: as a plain map, omitted entirely when empty, so the resulting {@code <meta-data>} element is
+     * compatible with what an Axon Framework 4 {@code XStreamSerializer} reads and writes.
+     */
+    private static final class MetadataConverter extends MapConverter {
+
+        private MetadataConverter(Mapper mapper) {
+            super(mapper);
+        }
+
+        @Override
+        public boolean canConvert(Class type) {
+            return Metadata.class.equals(type);
+        }
+
+        @Override
+        public void marshal(Object source, HierarchicalStreamWriter writer, MarshallingContext context) {
+            Metadata metadata = (Metadata) source;
+            if (!metadata.isEmpty()) {
+                super.marshal(new HashMap<>(metadata), writer, context);
+            }
+        }
+
+        @Override
+        public Object unmarshal(HierarchicalStreamReader reader, UnmarshallingContext context) {
+            if (!reader.hasMoreChildren()) {
+                return Metadata.emptyInstance();
+            }
+            Map<String, String> contents = new HashMap<>();
+            //noinspection unchecked
+            populateMap(reader, context, contents);
+            return contents.isEmpty() ? Metadata.emptyInstance() : Metadata.from(contents);
+        }
+    }
+}
