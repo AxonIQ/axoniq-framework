@@ -21,11 +21,13 @@ package org.axonframework.extensions.mongo.eventhandling.saga.repository;
 
 import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoClients;
+import org.axonframework.conversion.ConversionException;
 import org.axonframework.conversion.jackson.JacksonConverter;
 import org.axonframework.extensions.mongo.DefaultMongoTemplate;
 import org.axonframework.extensions.mongo.MongoTemplate;
 import org.axonframework.modelling.saga.AssociationValue;
 import org.axonframework.modelling.saga.AssociationValuesImpl;
+import org.axonframework.modelling.saga.repository.Af4XStreamSupport;
 import org.axonframework.modelling.saga.repository.SagaStore;
 import org.axonframework.modelling.saga.repository.StubSaga;
 import org.bson.Document;
@@ -44,6 +46,7 @@ import java.util.List;
 
 import static java.util.Collections.singleton;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Verifies that {@link MongoSagaStore} reads and writes a sagas collection written by Axon Framework 4.
@@ -157,6 +160,23 @@ class MongoSagaStoreAf4CompatibilityIT {
             assertThat(entry).isNotNull();
             assertThat(entry.saga().getHandledEvents()).containsExactly("OrderPlaced");
             assertThat(entry.associationValues()).containsExactly(ORDER_1);
+        }
+
+        @Test
+        void xStreamSerializedSagaFailsWhenXStreamConverterIsNotUsed() throws Exception {
+            // given a document whose serializedSaga field is XML, written by an Axon Framework 4 node whose
+            // Serializer defaulted to XStream, read here by a store without an XStreamConverter
+            StubSaga xStreamSaga = new StubSaga();
+            xStreamSaga.handled("OrderPlaced");
+            String xStreamSerializedSaga = Af4XStreamSupport.withAf4ClassLoader(
+                    classLoader -> Af4XStreamSupport.af4XStream(classLoader).toXML(xStreamSaga)
+            );
+            insertAf4Saga("saga-xstream-serialized", StubSaga.class.getName(), xStreamSerializedSaga, ORDER_1);
+
+            // when / then
+            assertThatThrownBy(() -> testSubject.loadSaga(StubSaga.class, "saga-xstream-serialized"))
+                    .isInstanceOf(ConversionException.class)
+                    .hasMessageContaining(StubSaga.class.getName());
         }
     }
 

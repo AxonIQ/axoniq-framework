@@ -19,6 +19,7 @@
 
 package org.axonframework.modelling.saga.repository;
 
+import org.axonframework.conversion.ConversionException;
 import org.axonframework.messaging.core.annotation.Namespace;
 import org.axonframework.modelling.saga.AssociationValue;
 import org.axonframework.modelling.saga.AssociationValuesImpl;
@@ -28,6 +29,7 @@ import org.junit.jupiter.api.Test;
 
 import static java.util.Collections.singleton;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Contract that a persistent {@link SagaStore} is expected to satisfy against a saga table written by Axon Framework 4.
@@ -61,6 +63,11 @@ public abstract class Af4CompatibilityTestSuite {
      * Identifier of the seeded saga whose {@code revision} column holds a value written by Axon Framework 4.
      */
     protected static final String SAGA_WITH_REVISION = "saga-with-revision";
+    /**
+     * Identifier of the seeded saga whose {@code serializedSaga} column holds XML an Axon Framework 4 node's
+     * XStream-based {@code Serializer} wrote, rather than JSON.
+     */
+    protected static final String SAGA_WITH_XSTREAM_SERIALIZATION = "saga-xstream-serialized";
 
     /**
      * Returns the {@link SagaStore} under test.
@@ -110,12 +117,20 @@ public abstract class Af4CompatibilityTestSuite {
     /**
      * Seeds the rows every test here expects, exactly as Axon Framework 4 would have left them. Subclasses call this at
      * the end of their own setup, since it needs their store and fixture to be in place.
+     *
+     * @throws Exception whatever reflective exception building the Axon Framework 4 XStream fixture row throws
      */
-    protected final void seedAf4Rows() {
+    protected final void seedAf4Rows() throws Exception {
         String sagaType = StubSaga.class.getName();
+        StubSaga xStreamSaga = new StubSaga();
+        xStreamSaga.handled("OrderPlaced");
+        String xStreamSerializedSaga = Af4XStreamSupport.withAf4ClassLoader(
+                classLoader -> Af4XStreamSupport.af4XStream(classLoader).toXML(xStreamSaga)
+        );
         inTransaction(() -> {
             insertAf4Saga(SAGA_WITHOUT_REVISION, sagaType, null, "{\"handledEvents\":[\"OrderPlaced\"]}");
             insertAf4Saga(SAGA_WITH_REVISION, sagaType, "2", "{\"handledEvents\":[\"OrderPlaced\",\"OrderPaid\"]}");
+            insertAf4Saga(SAGA_WITH_XSTREAM_SERIALIZATION, sagaType, null, xStreamSerializedSaga);
             insertAf4Association(SAGA_WITHOUT_REVISION, sagaType, ORDER_1);
             insertAf4Association(SAGA_WITH_REVISION, sagaType, ORDER_2);
         });
@@ -176,6 +191,15 @@ public abstract class Af4CompatibilityTestSuite {
             SagaStore.Entry<StubSaga> entry = testSubject().loadSaga(StubSaga.class, "aliased-saga");
             assertThat(entry).isNotNull();
             assertThat(entry.associationValues()).isEmpty();
+        }
+
+        @Test
+        void xStreamSerializedSagaFailsWhenXStreamConverterIsNotUsed() {
+            // given a row whose serializedSaga column is XML, written by an Axon Framework 4 node whose Serializer
+            // defaulted to XStream, read here by a store without an XStreamConverter / when / then
+            assertThatThrownBy(() -> testSubject().loadSaga(StubSaga.class, SAGA_WITH_XSTREAM_SERIALIZATION))
+                    .isInstanceOf(ConversionException.class)
+                    .hasMessageContaining(StubSaga.class.getName());
         }
     }
 

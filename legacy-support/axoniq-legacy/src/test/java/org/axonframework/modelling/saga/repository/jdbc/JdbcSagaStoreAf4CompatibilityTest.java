@@ -48,7 +48,7 @@ class JdbcSagaStoreAf4CompatibilityTest extends Af4CompatibilityTestSuite {
     private JdbcSagaStore testSubject;
 
     @BeforeEach
-    void setUp() throws SQLException {
+    void setUp() throws Exception {
         dataSource = new JDBCDataSource();
         dataSource.setUrl("jdbc:hsqldb:mem:af4compat");
         dataSource.setUser("sa");

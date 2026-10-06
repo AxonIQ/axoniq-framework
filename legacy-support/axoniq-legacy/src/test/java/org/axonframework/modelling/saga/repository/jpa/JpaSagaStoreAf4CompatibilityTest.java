@@ -49,7 +49,7 @@ class JpaSagaStoreAf4CompatibilityTest extends Af4CompatibilityTestSuite {
     private JpaSagaStore testSubject;
 
     @BeforeEach
-    void setUp() {
+    void setUp() throws Exception {
         entityManagerFactory = Persistence.createEntityManagerFactory("jpaSagaStorePersistenceUnit");
         entityManager = entityManagerFactory.createEntityManager();
         testSubject = JpaSagaStore.builder()
