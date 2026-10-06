@@ -117,49 +117,9 @@ implementation 'io.axoniq.framework:axoniq-spring-boot-starter'
 
 The Axoniq Framework features are commercial offerings requiring a license for production use.
 Licenses can be obtained through the https://platform.axoniq.io[AxonIQ Platform].
-Once you have platform credentials, configure them in your application:
 
-[tabs]
-====
-Spring Boot::
-+
-[source,properties]
-----
-axoniq.platform.credentials=<environment-id>:<access-token>
-----
-
-Plain Java::
-+
-[source,java]
-----
-import org.axonframework.config.EventSourcingConfigurer;
-import io.axoniq.platform.framework.AxoniqPlatformConfiguration;
-
-// Create and configure your application
-AxoniqPlatformConfiguration platformConfig = new AxoniqPlatformConfiguration(
-        "<environment-id>",
-        "<access-token>",
-        "<application-name>"
-);
-
-EventSourcingConfigurer configurer = EventSourcingConfigurer.create()
-    .componentRegistry(cr -> cr.registerComponent(
-        AxoniqPlatformConfiguration.class,
-        c -> platformConfig
-    ));
-
-// Build and start the configuration
-org.axonframework.config.Configuration configuration = configurer.buildConfiguration();
-configuration.start();
-----
-====
-
-During evaluation, Axoniq Framework modules start without credentials and log a warning.
-Continued production use without a valid license is not permitted under the https://www.axoniq.io/legal/terms-of-service[Axoniq Terms of Service].
-
-For more information on pricing, visit our https://www.axoniq.io/pricing[pricing information page].
-
-Note that smaller organizations may be eligible for complimentary access to Axoniq Framework components. For details about that, reach out to https://www.axoniq.io/contact[our sales team].
+For configuring credentials, evaluating for free, feature entitlement, message throughput limits, and pricing, see the
+xref:axoniq-platform-reference:ROOT:licensing/index.adoc[Axoniq Platform licensing reference].
 
 
 [#axon-server-connector]
