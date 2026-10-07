@@ -19,8 +19,14 @@
 
 package org.axonframework.deadline;
 
+import com.thoughtworks.xstream.XStream;
 import org.axonframework.conversion.Converter;
 import org.axonframework.conversion.jackson.JacksonConverter;
+import org.axonframework.conversion.xstream.XStreamConverter;
+import org.axonframework.messaging.ScopeDescriptor;
+import org.axonframework.modelling.command.AggregateScopeDescriptor;
+import org.axonframework.modelling.saga.SagaScopeDescriptor;
+import org.junit.jupiter.params.provider.*;
 import tools.jackson.databind.DefaultTyping;
 import tools.jackson.databind.json.JsonMapper;
 import tools.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
@@ -42,6 +48,7 @@ import java.time.Instant;
 import java.util.Arrays;
 import java.util.Map;
 import java.util.Objects;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -56,6 +63,15 @@ import static org.assertj.core.api.Assertions.assertThat;
  * @author Jakob Hatzl
  */
 public final class AxonFramework4 implements AutoCloseable {
+
+    /**
+     * A {@code String} payload with characters that JSON and XML escape.
+     */
+    public static final String TEXT_PAYLOAD = "h\u00e9llo <&\"'>\n\tworld";
+    /**
+     * A {@code byte[]} payload that is no valid UTF-8 on its own.
+     */
+    public static final byte[] BINARY_PAYLOAD = {(byte) 0xff, 0x00, 'a', (byte) 0xc3};
 
     private static final Path AF4_JARS = Path.of("target", "af4-serializer");
 
@@ -109,7 +125,7 @@ public final class AxonFramework4 implements AutoCloseable {
                          thread.setContextClassLoader(classLoader);
                          try {
                              constructor.setAccessible(true);
-                             return constructor.newInstance(arguments);
+                             return fromAxonFramework4(constructor.newInstance(arguments));
                          } catch (ReflectiveOperationException e) {
                              throw new IllegalStateException(rootCause(e));
                          } finally {
@@ -149,7 +165,9 @@ public final class AxonFramework4 implements AutoCloseable {
      * @return the serializer
      */
     public Object jacksonSerializer() {
-        return callStatic("org.axonframework.serialization.json.JacksonSerializer", "defaultSerializer");
+        return fromAxonFramework4(
+                callStatic("org.axonframework.serialization.json.JacksonSerializer", "defaultSerializer")
+        );
     }
 
     /**
@@ -161,9 +179,37 @@ public final class AxonFramework4 implements AutoCloseable {
     public Object jackson3Serializer(boolean defaultTyping) {
         String className = "org.axonframework.serialization.jackson3.Jackson3Serializer";
         if (!defaultTyping) {
-            return callStatic(className, "defaultSerializer");
+            return fromAxonFramework4(callStatic(className, "defaultSerializer"));
         }
-        return call(call(callStatic(className, "builder"), "defaultTyping"), "build");
+        return fromAxonFramework4(call(call(callStatic(className, "builder"), "defaultTyping"), "build"));
+    }
+
+    /**
+     * Creates Axon Framework 4's {@code XStreamSerializer} as an Axon Framework 4 application configured it, on the
+     * given {@link XStream} instance, resolving classes through the Axon Framework 4 class loader.
+     * <p>
+     * The serializer gets a {@code ChainingConverter} over the same class loader, as the default one would not find
+     * Axon Framework 4's content type converters inside the isolated class loader.
+     *
+     * @param xStream the XStream instance, possibly with application aliases
+     * @return the serializer
+     */
+    public Object xStreamSerializer(XStream xStream) {
+        Object builder = callStatic("org.axonframework.serialization.xml.XStreamSerializer", "builder");
+        call(builder, "xStream", xStream);
+        call(builder, "classLoader", classLoader);
+        call(builder, "converter", create("org.axonframework.serialization.ChainingConverter", classLoader));
+        return fromAxonFramework4(call(builder, "build"));
+    }
+
+    /**
+     * Returns the class loader Axon Framework 4's classes come from, to assert that a class is really Axon Framework
+     * 4's.
+     *
+     * @return the Axon Framework 4 class loader
+     */
+    public ClassLoader classLoader() {
+        return classLoader;
     }
 
     /**
@@ -278,6 +324,40 @@ public final class AxonFramework4 implements AutoCloseable {
     }
 
     /**
+     * Returns each {@link Flavor} with each {@link CompatScope}.
+     *
+     * @return the combinations, as arguments of a parameterized test
+     */
+    public static Stream<Arguments> flavorsAndScopes() {
+        return Arrays.stream(Flavor.values())
+                     .flatMap(flavor -> Arrays.stream(CompatScope.values())
+                                              .map(scope -> Arguments.of(flavor, scope)));
+    }
+
+    /**
+     * Returns each {@link Flavor} with {@link #TEXT_PAYLOAD} and with {@link #BINARY_PAYLOAD}, the payloads a
+     * {@link Converter} would store as is, as it takes them for content already in its stored form.
+     *
+     * @return the combinations, as arguments of a parameterized test
+     */
+    public static Stream<Arguments> flavorsAndRawPayloads() {
+        return Arrays.stream(Flavor.values())
+                     .flatMap(flavor -> Stream.of(Arguments.of(flavor, TEXT_PAYLOAD),
+                                                  Arguments.of(flavor, BINARY_PAYLOAD)));
+    }
+
+    /**
+     * Asserts that the given object is of a class from Axon Framework 4's jars, so that a test does not silently
+     * compare Axon Framework 5 with itself.
+     */
+    private Object fromAxonFramework4(Object object) {
+        assertThat(object.getClass().getClassLoader())
+                .as("class loader of %s", object.getClass().getName())
+                .isSameAs(classLoader);
+        return object;
+    }
+
+    /**
      * The serializers an Axon Framework 4 deadline manager could store deadlines with, each with the Axon Framework 5
      * {@link Converter} that reads and writes the same form.
      */
@@ -332,6 +412,21 @@ public final class AxonFramework4 implements AutoCloseable {
                                   .build()
                 );
             }
+        },
+        /**
+         * Axon Framework 4's {@code XStreamSerializer}, and an {@link XStreamConverter}.
+         */
+        XSTREAM {
+            @Override
+            public Object axonFramework4Serializer(AxonFramework4 axonFramework4) {
+                return axonFramework4.xStreamSerializer(new XStream());
+            }
+
+            @Override
+            @SuppressWarnings("removal")
+            public Converter axonFramework5Converter() {
+                return new XStreamConverter(new XStream());
+            }
         };
 
         /**
@@ -348,6 +443,67 @@ public final class AxonFramework4 implements AutoCloseable {
          * @return the Axon Framework 5 converter
          */
         public abstract Converter axonFramework5Converter();
+    }
+
+    /**
+     * The scopes a deadline can be scheduled for, in both versions.
+     */
+    public enum CompatScope {
+
+        /**
+         * A Saga scope.
+         */
+        SAGA {
+            @Override
+            public ScopeDescriptor axonFramework5() {
+                return new SagaScopeDescriptor("MySaga", "sagaId");
+            }
+
+            @Override
+            public Object axonFramework4(AxonFramework4 axonFramework4) {
+                return axonFramework4.sagaScope("MySaga", "sagaId");
+            }
+        },
+        /**
+         * An aggregate scope.
+         */
+        AGGREGATE {
+            @Override
+            public ScopeDescriptor axonFramework5() {
+                return new AggregateScopeDescriptor("MyAggregate", "aggregateId");
+            }
+
+            @Override
+            public Object axonFramework4(AxonFramework4 axonFramework4) {
+                return axonFramework4.aggregateScope("MyAggregate", "aggregateId");
+            }
+        };
+
+        /**
+         * Creates the Axon Framework 5 scope descriptor of this scope.
+         *
+         * @return the scope descriptor
+         */
+        public abstract ScopeDescriptor axonFramework5();
+
+        /**
+         * Creates the Axon Framework 4 scope descriptor of this scope.
+         *
+         * @param axonFramework4 the access to Axon Framework 4's classes
+         * @return the scope descriptor
+         */
+        public abstract Object axonFramework4(AxonFramework4 axonFramework4);
+
+        /**
+         * Asserts that the given Axon Framework 4 scope descriptor equals this scope.
+         *
+         * @param axonFramework4 the access to Axon Framework 4's classes
+         * @param af4Scope       the Axon Framework 4 scope descriptor to check
+         */
+        public void assertAxonFramework4Scope(AxonFramework4 axonFramework4, Object af4Scope) {
+            assertThat(af4Scope.getClass().getName()).isEqualTo(axonFramework5().getClass().getName());
+            assertThat(af4Scope).isEqualTo(axonFramework4(axonFramework4));
+        }
     }
 
     /**

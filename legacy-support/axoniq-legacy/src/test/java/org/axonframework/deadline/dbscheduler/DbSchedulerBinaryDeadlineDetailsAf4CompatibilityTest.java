@@ -19,13 +19,16 @@
 
 package org.axonframework.deadline.dbscheduler;
 
+import com.thoughtworks.xstream.XStream;
 import org.axonframework.conversion.Converter;
 import org.axonframework.deadline.AxonFramework4;
+import org.axonframework.deadline.AxonFramework4.CompatScope;
 import org.axonframework.deadline.AxonFramework4.Flavor;
 import org.axonframework.deadline.AxonFramework4.Payloads.CompatPayload;
 import org.axonframework.deadline.DeadlineMessage;
 import org.axonframework.deadline.GenericDeadlineMessage;
 import org.axonframework.deadline.StoredDeadlineConverter;
+import org.axonframework.deadline.UnknownDeadlinePayload;
 import org.axonframework.messaging.ScopeDescriptor;
 import org.axonframework.messaging.core.GenericMessage;
 import org.axonframework.messaging.core.MessageType;
@@ -54,6 +57,7 @@ class DbSchedulerBinaryDeadlineDetailsAf4CompatibilityTest {
 
     private static final String DETAILS = DbSchedulerBinaryDeadlineDetails.class.getName();
     private static final String DEADLINE_NAME = "paymentDue";
+    private static final UUID METADATA_ID = UUID.fromString("0b9e4c4e-3c0c-4bd4-9a51-5bb1a4d1f2a7");
     private static final CompatPayload PAYLOAD = new CompatPayload("text", 3, Instant.parse("2026-10-06T10:15:30Z"));
 
     private static AxonFramework4 axonFramework4;
@@ -69,13 +73,14 @@ class DbSchedulerBinaryDeadlineDetailsAf4CompatibilityTest {
     }
 
     @ParameterizedTest
-    @EnumSource(Flavor.class)
-    void detailsOfAxonFramework4AreReadByAxonFramework5(Flavor flavor) {
+    @MethodSource("org.axonframework.deadline.AxonFramework4#flavorsAndScopes")
+    void detailsOfAxonFramework4AreReadByAxonFramework5(Flavor flavor, CompatScope scope) {
         // given
         Map<String, Object> metadata =
-                Map.of("text", "value", "count", 3, "nested", new LinkedHashMap<>(Map.of("key", "value")));
+                Map.of("text", "value", "count", 3, "id", METADATA_ID,
+                       "nested", new LinkedHashMap<>(Map.of("key", "value")));
         Object af4Details = axonFramework4.callStatic(
-                DETAILS, "serialized", DEADLINE_NAME, axonFramework4.sagaScope("MySaga", "sagaId"),
+                DETAILS, "serialized", DEADLINE_NAME, scope.axonFramework4(axonFramework4),
                 axonFramework4.deadlineMessage(DEADLINE_NAME, PAYLOAD, metadata),
                 flavor.axonFramework4Serializer(axonFramework4)
         );
@@ -91,15 +96,61 @@ class DbSchedulerBinaryDeadlineDetailsAf4CompatibilityTest {
         assertThat(result.getD()).isEqualTo(DEADLINE_NAME);
         assertThat(resultMessage.payload()).isEqualTo(PAYLOAD);
         assertThat(resultMessage.metadata()).containsExactlyInAnyOrderEntriesOf(
-                Map.of("text", "value", "count", "3", "nested", "{\"key\":\"value\"}")
+                Map.of("text", "value", "count", "3", "id", METADATA_ID.toString(), "nested", "{\"key\":\"value\"}")
         );
-        assertThat(result.getDeserializedScopeDescriptor(converter)).isEqualTo(new SagaScopeDescriptor("MySaga",
-                                                                                                         "sagaId"));
+        assertThat(result.getDeserializedScopeDescriptor(converter)).isEqualTo(scope.axonFramework5());
     }
 
     @ParameterizedTest
-    @EnumSource(Flavor.class)
-    void detailsOfAxonFramework5AreReadByAxonFramework4(Flavor flavor) {
+    @MethodSource("org.axonframework.deadline.AxonFramework4#flavorsAndRawPayloads")
+    void detailsOfAxonFramework4WithAStringOrBytesPayloadAreReadByAxonFramework5(Flavor flavor, Object payload) {
+        // given
+        Object af4Details = axonFramework4.callStatic(
+                DETAILS, "serialized", DEADLINE_NAME, CompatScope.SAGA.axonFramework4(axonFramework4),
+                axonFramework4.deadlineMessage(DEADLINE_NAME, payload, Map.of()),
+                flavor.axonFramework4Serializer(axonFramework4)
+        );
+        StoredDeadlineConverter converter = new StoredDeadlineConverter(flavor.axonFramework5Converter());
+
+        // when
+        DbSchedulerBinaryDeadlineDetails details = (DbSchedulerBinaryDeadlineDetails)
+                AxonFramework4.javaDeserializeAsAxonFramework5(AxonFramework4.javaSerialize(af4Details));
+        DeadlineMessage result = details.asDeadLineMessage(converter);
+
+        // then
+        assertThat(result.payload()).isEqualTo(payload);
+    }
+
+    /**
+     * Axon Framework 4 stores an aliased payload class under its alias, which Axon Framework 5 does not resolve.
+     */
+    @Test
+    void detailsOfAxonFramework4WithAnAliasedPayloadAreReadWithAnUnknownPayload() {
+        // given
+        XStream xStream = new XStream();
+        xStream.alias("compatPayload", CompatPayload.class);
+        Object af4Details = axonFramework4.callStatic(
+                DETAILS, "serialized", DEADLINE_NAME, CompatScope.SAGA.axonFramework4(axonFramework4),
+                axonFramework4.deadlineMessage(DEADLINE_NAME, PAYLOAD, Map.of()),
+                axonFramework4.xStreamSerializer(xStream)
+        );
+        StoredDeadlineConverter converter = new StoredDeadlineConverter(Flavor.XSTREAM.axonFramework5Converter());
+
+        // when
+        DbSchedulerBinaryDeadlineDetails details = (DbSchedulerBinaryDeadlineDetails)
+                AxonFramework4.javaDeserializeAsAxonFramework5(AxonFramework4.javaSerialize(af4Details));
+        DeadlineMessage result = details.asDeadLineMessage(converter);
+
+        // then
+        assertThat(result.payload()).isInstanceOfSatisfying(
+                UnknownDeadlinePayload.class,
+                unknown -> assertThat(unknown.typeName()).isEqualTo("compatPayload")
+        );
+    }
+
+    @ParameterizedTest
+    @MethodSource("org.axonframework.deadline.AxonFramework4#flavorsAndScopes")
+    void detailsOfAxonFramework5AreReadByAxonFramework4(Flavor flavor, CompatScope scope) {
         // given
         DeadlineMessage message = new GenericDeadlineMessage(
                 DEADLINE_NAME,
@@ -108,7 +159,7 @@ class DbSchedulerBinaryDeadlineDetailsAf4CompatibilityTest {
         );
         DbSchedulerBinaryDeadlineDetails details = DbSchedulerBinaryDeadlineDetails.serialized(
                 DEADLINE_NAME,
-                new SagaScopeDescriptor("MySaga", "sagaId"),
+                scope.axonFramework5(),
                 message,
                 new StoredDeadlineConverter(flavor.axonFramework5Converter())
         );
@@ -123,8 +174,30 @@ class DbSchedulerBinaryDeadlineDetailsAf4CompatibilityTest {
         assertThat(axonFramework4.call(af4Message, "getDeadlineName")).isEqualTo(DEADLINE_NAME);
         assertThat(axonFramework4.call(af4Message, "getPayload")).isEqualTo(PAYLOAD);
         assertThat(((Map<?, ?>) axonFramework4.call(af4Message, "getMetaData")).get("count")).isEqualTo("3");
-        assertThat(axonFramework4.call(af4Scope, "getType")).isEqualTo("MySaga");
-        assertThat(axonFramework4.call(af4Scope, "getIdentifier")).isEqualTo("sagaId");
+        scope.assertAxonFramework4Scope(axonFramework4, af4Scope);
+    }
+
+    @ParameterizedTest
+    @MethodSource("org.axonframework.deadline.AxonFramework4#flavorsAndRawPayloads")
+    void detailsOfAxonFramework5WithAStringOrBytesPayloadAreReadByAxonFramework4(Flavor flavor, Object payload) {
+        // given
+        DeadlineMessage message = new GenericDeadlineMessage(
+                DEADLINE_NAME, new GenericMessage(new MessageType(payload.getClass()), payload), Instant::now
+        );
+        StoredDeadlineConverter converter = new StoredDeadlineConverter(flavor.axonFramework5Converter());
+        DbSchedulerBinaryDeadlineDetails details =
+                DbSchedulerBinaryDeadlineDetails.serialized(DEADLINE_NAME, CompatScope.SAGA.axonFramework5(),
+                                                            message, converter);
+        Object serializer = flavor.axonFramework4Serializer(axonFramework4);
+
+        // when
+        Object af4Message = axonFramework4.call(
+                axonFramework4.javaDeserializeAsAxonFramework4(AxonFramework4.javaSerialize(details)),
+                "asDeadLineMessage", serializer
+        );
+
+        // then
+        assertThat(axonFramework4.call(af4Message, "getPayload")).isEqualTo(payload);
     }
 
     @ParameterizedTest
@@ -159,7 +232,7 @@ class DbSchedulerBinaryDeadlineDetailsAf4CompatibilityTest {
         Object serializer = flavor.axonFramework4Serializer(axonFramework4);
         Converter converter = flavor.axonFramework5Converter();
         Map<ScopeDescriptor, Object> scopes = Map.of(
-                new SagaScopeDescriptor("MySaga", "sagaId"), axonFramework4.sagaScope("MySaga", "sagaId"),
+                new SagaScopeDescriptor("MySaga", "sagaId"), CompatScope.SAGA.axonFramework4(axonFramework4),
                 new AggregateScopeDescriptor("MyAggregate", identifier),
                 axonFramework4.aggregateScope("MyAggregate", identifier)
         );

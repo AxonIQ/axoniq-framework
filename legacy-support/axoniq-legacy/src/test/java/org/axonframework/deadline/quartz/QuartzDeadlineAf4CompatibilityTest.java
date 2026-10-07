@@ -19,18 +19,20 @@
 
 package org.axonframework.deadline.quartz;
 
+import com.thoughtworks.xstream.XStream;
 import org.axonframework.conversion.Converter;
 import org.axonframework.deadline.AxonFramework4;
+import org.axonframework.deadline.AxonFramework4.CompatScope;
 import org.axonframework.deadline.AxonFramework4.Flavor;
 import org.axonframework.deadline.AxonFramework4.Payloads.CompatPayload;
 import org.axonframework.deadline.DeadlineMessage;
 import org.axonframework.deadline.GenericDeadlineMessage;
 import org.axonframework.deadline.StoredDeadlineConverter;
+import org.axonframework.deadline.UnknownDeadlinePayload;
 import org.axonframework.messaging.ScopeDescriptor;
 import org.axonframework.messaging.core.GenericMessage;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.modelling.command.AggregateScopeDescriptor;
-import org.axonframework.modelling.saga.SagaScopeDescriptor;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.params.*;
 import org.junit.jupiter.params.provider.*;
@@ -55,8 +57,11 @@ class QuartzDeadlineAf4CompatibilityTest {
     private static final String BINDER = "org.axonframework.deadline.quartz.DeadlineJob$DeadlineJobDataBinder";
     private static final String DEADLINE_NAME = "paymentDue";
     private static final CompatPayload PAYLOAD = new CompatPayload("text", 3, Instant.parse("2026-10-06T10:15:30Z"));
-    private static final Map<String, Object> AF4_METADATA =
-            Map.of("text", "value", "count", 3, "flag", true, "nested", new LinkedHashMap<>(Map.of("key", "value")));
+    private static final UUID METADATA_ID = UUID.fromString("0b9e4c4e-3c0c-4bd4-9a51-5bb1a4d1f2a7");
+    private static final Map<String, Object> AF4_METADATA = Map.of(
+            "text", "value", "count", 3, "flag", true, "id", METADATA_ID,
+            "nested", new LinkedHashMap<>(Map.of("key", "value"))
+    );
 
     private static AxonFramework4 axonFramework4;
 
@@ -71,12 +76,12 @@ class QuartzDeadlineAf4CompatibilityTest {
     }
 
     @ParameterizedTest
-    @EnumSource(Flavor.class)
-    void aJobOfAxonFramework4IsReadByAxonFramework5(Flavor flavor) {
+    @MethodSource("org.axonframework.deadline.AxonFramework4#flavorsAndScopes")
+    void aJobOfAxonFramework4IsReadByAxonFramework5(Flavor flavor, CompatScope scope) {
         // given
         Object serializer = flavor.axonFramework4Serializer(axonFramework4);
         Object af4Message = axonFramework4.deadlineMessage(DEADLINE_NAME, PAYLOAD, AF4_METADATA);
-        Object af4Scope = axonFramework4.sagaScope("MySaga", "sagaId");
+        Object af4Scope = scope.axonFramework4(axonFramework4);
         JobDataMap jobData = (JobDataMap) axonFramework4.callStatic(BINDER, "toJobData",
                                                                     serializer, af4Message, af4Scope);
         StoredDeadlineConverter converter = new StoredDeadlineConverter(flavor.axonFramework5Converter());
@@ -91,9 +96,55 @@ class QuartzDeadlineAf4CompatibilityTest {
         assertThat(result.timestamp()).isEqualTo(axonFramework4.call(af4Message, "getTimestamp"));
         assertThat(result.payload()).isEqualTo(PAYLOAD);
         assertThat(result.metadata()).containsExactlyInAnyOrderEntriesOf(
-                Map.of("text", "value", "count", "3", "flag", "true", "nested", "{\"key\":\"value\"}")
+                Map.of("text", "value", "count", "3", "flag", "true", "id", METADATA_ID.toString(),
+                       "nested", "{\"key\":\"value\"}")
         );
-        assertThat(resultScope).isEqualTo(new SagaScopeDescriptor("MySaga", "sagaId"));
+        assertThat(resultScope).isEqualTo(scope.axonFramework5());
+    }
+
+    @ParameterizedTest
+    @MethodSource("org.axonframework.deadline.AxonFramework4#flavorsAndRawPayloads")
+    void aJobOfAxonFramework4WithAStringOrBytesPayloadIsReadByAxonFramework5(Flavor flavor, Object payload) {
+        // given
+        JobDataMap jobData = (JobDataMap) axonFramework4.callStatic(
+                BINDER, "toJobData", flavor.axonFramework4Serializer(axonFramework4),
+                axonFramework4.deadlineMessage(DEADLINE_NAME, payload, Map.of()),
+                CompatScope.SAGA.axonFramework4(axonFramework4)
+        );
+
+        // when
+        DeadlineMessage result = DeadlineJob.DeadlineJobDataBinder.deadlineMessage(
+                new StoredDeadlineConverter(flavor.axonFramework5Converter()), jobData
+        );
+
+        // then
+        assertThat(result.payload()).isEqualTo(payload);
+    }
+
+    /**
+     * Axon Framework 4 stores an aliased payload class under its alias, which Axon Framework 5 does not resolve.
+     */
+    @Test
+    void aJobOfAxonFramework4WithAnAliasedPayloadIsReadWithAnUnknownPayload() {
+        // given
+        XStream xStream = new XStream();
+        xStream.alias("compatPayload", CompatPayload.class);
+        JobDataMap jobData = (JobDataMap) axonFramework4.callStatic(
+                BINDER, "toJobData", axonFramework4.xStreamSerializer(xStream),
+                axonFramework4.deadlineMessage(DEADLINE_NAME, PAYLOAD, Map.of()),
+                CompatScope.SAGA.axonFramework4(axonFramework4)
+        );
+
+        // when
+        DeadlineMessage result = DeadlineJob.DeadlineJobDataBinder.deadlineMessage(
+                new StoredDeadlineConverter(Flavor.XSTREAM.axonFramework5Converter()), jobData
+        );
+
+        // then
+        assertThat(result.payload()).isInstanceOfSatisfying(
+                UnknownDeadlinePayload.class,
+                unknown -> assertThat(unknown.typeName()).isEqualTo("compatPayload")
+        );
     }
 
     @ParameterizedTest
@@ -103,7 +154,7 @@ class QuartzDeadlineAf4CompatibilityTest {
         Object serializer = flavor.axonFramework4Serializer(axonFramework4);
         Object af4Message = axonFramework4.deadlineMessage(DEADLINE_NAME, null, Map.of());
         JobDataMap jobData = (JobDataMap) axonFramework4.callStatic(
-                BINDER, "toJobData", serializer, af4Message, axonFramework4.sagaScope("MySaga", "sagaId")
+                BINDER, "toJobData", serializer, af4Message, CompatScope.SAGA.axonFramework4(axonFramework4)
         );
 
         // when
@@ -144,8 +195,8 @@ class QuartzDeadlineAf4CompatibilityTest {
     }
 
     @ParameterizedTest
-    @EnumSource(Flavor.class)
-    void aJobOfAxonFramework5IsReadByAxonFramework4(Flavor flavor) {
+    @MethodSource("org.axonframework.deadline.AxonFramework4#flavorsAndScopes")
+    void aJobOfAxonFramework5IsReadByAxonFramework4(Flavor flavor, CompatScope scope) {
         // given
         DeadlineMessage message = new GenericDeadlineMessage(
                 DEADLINE_NAME,
@@ -155,7 +206,7 @@ class QuartzDeadlineAf4CompatibilityTest {
         JobDataMap jobData = DeadlineJob.DeadlineJobDataBinder.toJobData(
                 new StoredDeadlineConverter(flavor.axonFramework5Converter()),
                 message,
-                new SagaScopeDescriptor("MySaga", "sagaId")
+                scope.axonFramework5()
         );
         Object serializer = flavor.axonFramework4Serializer(axonFramework4);
 
@@ -168,8 +219,29 @@ class QuartzDeadlineAf4CompatibilityTest {
         assertThat(axonFramework4.call(af4Message, "getIdentifier")).isEqualTo(message.identifier());
         assertThat(axonFramework4.call(af4Message, "getPayload")).isEqualTo(PAYLOAD);
         assertThat(((Map<?, ?>) axonFramework4.call(af4Message, "getMetaData")).get("count")).isEqualTo("3");
-        assertThat(axonFramework4.call(af4Scope, "getType")).isEqualTo("MySaga");
-        assertThat(axonFramework4.call(af4Scope, "getIdentifier")).isEqualTo("sagaId");
+        scope.assertAxonFramework4Scope(axonFramework4, af4Scope);
+    }
+
+    @ParameterizedTest
+    @MethodSource("org.axonframework.deadline.AxonFramework4#flavorsAndRawPayloads")
+    void aJobOfAxonFramework5WithAStringOrBytesPayloadIsReadByAxonFramework4(Flavor flavor, Object payload) {
+        // given
+        DeadlineMessage message = new GenericDeadlineMessage(
+                DEADLINE_NAME, new GenericMessage(new MessageType(payload.getClass()), payload), Instant::now
+        );
+        JobDataMap jobData = DeadlineJob.DeadlineJobDataBinder.toJobData(
+                new StoredDeadlineConverter(flavor.axonFramework5Converter()),
+                message,
+                CompatScope.SAGA.axonFramework5()
+        );
+
+        // when
+        Object af4Message = axonFramework4.callStatic(
+                BINDER, "deadlineMessage", flavor.axonFramework4Serializer(axonFramework4), jobData
+        );
+
+        // then
+        assertThat(axonFramework4.call(af4Message, "getPayload")).isEqualTo(payload);
     }
 
     @ParameterizedTest
@@ -180,7 +252,7 @@ class QuartzDeadlineAf4CompatibilityTest {
         JobDataMap jobData = DeadlineJob.DeadlineJobDataBinder.toJobData(
                 new StoredDeadlineConverter(flavor.axonFramework5Converter()),
                 message,
-                new SagaScopeDescriptor("MySaga", "sagaId")
+                CompatScope.SAGA.axonFramework5()
         );
 
         // when
