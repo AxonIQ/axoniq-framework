@@ -184,6 +184,11 @@ A handler is not left producing responses that nothing receives.
 A node leaving the cluster stops advertising the queries it handled before it stops answering them, so the other nodes route elsewhere rather than discovering it left by timing out.
 Queries already dispatched are waited for: shutdown completes once their responses have arrived, and queries dispatched after shutdown began are rejected.
 
+In a Spring Boot application using this connector, a node stops its streaming event processors before the web server's graceful shutdown starts, rather than after the web server has stopped.
+That is what lets the node tell its subscribers it is leaving while their streams are still open, as <<Ending a subscription>> describes.
+The node still answers the commands and queries that reach it while the web server drains, as it does with any other connector once its event processors have stopped.
+The events those commands publish are handled by the nodes that take over the stopped processors' segments, so a request that waits for a read model those processors maintain to reflect its command waits until another node has claimed the segment.
+
 ==== The query client
 
 Queries and subscription queries are sent on a client of their own, named `axoniqSpringCloudQueryRestClient`.
@@ -234,9 +239,24 @@ They are opened on the client queries are sent with, which keeps them apart from
 
 A node that completes a subscription query says so explicitly, and that ends the subscription: there will never be another update to it, so the subscribing node stops waiting on the other nodes as well.
 
-Any other end of a node's part fails the whole subscription: the node reporting a failure, shutting down, sending nothing for longer than `axon.springcloud.subscription-inactivity-timeout`, or losing its connection.
+A node that shuts down cleanly says it is leaving, and that ends only its own part: the subscription carries on with the nodes still there.
+It says so once its streaming event processors have stopped, so it emits no update after saying it, and the events it would have handled reach the nodes that take over its processors' segments.
+In a Spring Boot application, this happens before the web server's graceful shutdown starts, so the shutdown does not wait on the subscriptions the node answers.
+Once every node answering a subscription has left, the subscription fails with a `SubscriptionQueryMembersChangedException`: nothing is left to emit its updates, and a node that starts handling the query later is not subscribed to.
+
+Any other end of a node's part fails the whole subscription: the node reporting a failure, sending nothing for longer than `axon.springcloud.subscription-inactivity-timeout`, or ending its stream without saying it completed the subscription or is leaving, as a lost connection does.
 The subscribing node cannot tell such a node apart from one that is still emitting updates it no longer receives, so carrying on with the rest would leave the subscriber receiving some of the updates and believing it received all of them.
 Establish the subscription query again to get a fresh initial result and a complete stream of updates from the nodes still there.
+
+[NOTE]
+.Rolling restarts still fail subscriptions
+====
+A node that leaves cleanly ends only its own part, but a node that comes back afterwards is a node that starts handling the query, which fails the subscription as described below.
+A rolling restart of the nodes handling a query therefore fails the subscriptions to it, and subscribers establish them again.
+
+Subscribing event processors are not stopped before the node says it is leaving, as they handle the events of commands the node still accepts at that point.
+An update they emit after that does not reach subscribers on other nodes.
+====
 
 ===== A node that starts handling the query
 

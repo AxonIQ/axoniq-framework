@@ -27,8 +27,8 @@ package io.axoniq.framework.springcloud.query;
  * stream open is not among those decisions -- whether that takes writing anything at all, and what, is the
  * transport's own business, so it lives on the implementation rather than here.
  * <p>
- * A sink is written to until it is terminated, which either {@link #error(QueryDispatchFailure)} or {@link #complete()}
- * does. Nothing is written after that.
+ * A sink is written to until it is terminated, which {@link #error(QueryDispatchFailure)}, {@link #complete()},
+ * {@link #subscriptionComplete(String)} or {@link #leaving(String)} does. Nothing is written after that.
  *
  * @author Allard Buijze
  * @since 5.4.0
@@ -68,13 +68,26 @@ public interface QueryResponseSink {
     /**
      * Reports that the subscription query being answered is over: there will never be another update to it.
      * <p>
-     * Distinct from the stream ending, which is also what a member that shuts down does. That says only that this
-     * member stopped answering, which fails the subscription; this says the subscription itself has run its course,
-     * and the subscriber stops waiting on every other member too.
+     * Distinct from {@link #leaving(String)}, which says only that this member stops answering, and from the stream
+     * merely ending, which fails the subscription. This says the subscription itself has run its course, and the
+     * subscriber stops waiting on every other member too.
      *
      * @param requestIdentifier the identifier of the subscription query that is over
      */
     void subscriptionComplete(String requestIdentifier);
+
+    /**
+     * Ends the response stream, reporting that this member stops answering the subscription query because it is
+     * leaving the cluster.
+     * <p>
+     * Distinct from {@link #subscriptionComplete(String)}, which ends the subscription for every member, and from
+     * {@link #error(QueryDispatchFailure)}, which fails it. This ends only this member's part: it has stopped emitting
+     * updates, so the subscriber carries on with the members that remain. Also distinct from the stream merely ending,
+     * which the subscriber cannot tell apart from a lost connection and so treats as a failure.
+     *
+     * @param requestIdentifier the identifier of the subscription query this member stops answering
+     */
+    void leaving(String requestIdentifier);
 
     /**
      * Ends the response stream, reporting that the query failed.

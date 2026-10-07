@@ -410,6 +410,33 @@ class SpringCloudMessageDistributionIT {
             }
         }
 
+        @Test
+        void carriesOnWithTheRemainingNodeWhenAHandlingNodeShutsDown() {
+            // given a subscription to a query both nodes handle
+            Subscriber subscriber = subscribe(nodeA, new FindCourseCatalog("computer-science"));
+
+            try {
+                subscriber.awaitReceived(1);
+
+                // when node B shuts down cleanly while answering the subscription
+                long shutdownStarted = System.nanoTime();
+                nodeB.close();
+                Duration shutdown = Duration.ofNanos(System.nanoTime() - shutdownStarted);
+                nodeB = null;
+                emitUpdateOn(nodeA, FIND_COURSE_CATALOG, "catalog@" + NODE_A);
+
+                // then the subscription goes on with the node still there, and node B's shutdown did not wait on it
+                Awaitility.await().atMost(Duration.ofSeconds(20))
+                          .until(() -> subscriber.received.size() >= 2 || subscriber.failure.get() != null);
+                assertThat(subscriber.failure.get()).as("failure after a shutdown taking %s", shutdown).isNull();
+                assertThat(subscriber.received.get(1)).isEqualTo("catalog@" + NODE_A);
+                assertThat(subscriber.completed).isFalse();
+                assertThat(shutdown).isLessThan(Duration.ofSeconds(10));
+            } finally {
+                subscriber.dispose();
+            }
+        }
+
         private Subscriber subscribe(ConfigurableApplicationContext node, Object query) {
             Subscriber subscriber = new Subscriber();
             subscriber.subscription =

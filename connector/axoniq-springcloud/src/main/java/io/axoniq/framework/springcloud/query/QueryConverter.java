@@ -50,6 +50,10 @@ import static io.axoniq.framework.springcloud.shared.WireCodec.*;
  * times. Each response is one {@link #RESPONSE_EVENT} event; a failure ending the stream is one {@link #ERROR_EVENT}
  * event. A stream that ends without an error event completed normally, however many responses it carried.
  * <p>
+ * The update stream of a subscription query is held to more than that, because it has no natural end. It ends with a
+ * {@link #COMPLETE_EVENT}, a {@link #LEAVING_EVENT} or an {@link #ERROR_EVENT}; one that ends without any of them was
+ * cut short, and the subscriber cannot know what it missed.
+ * <p>
  * A payload travels as the text its {@link org.axonframework.messaging.core.conversion.MessageConverter} writes it
  * as, which is what the {@code PayloadConvertingQueryBusConnector} wrapped around the connector converts it to before
  * it gets here. A received payload is handed to the message exactly as it arrived, leaving the converter attached to
@@ -83,11 +87,21 @@ final class QueryConverter {
     /**
      * The event type reporting that a subscription query is over: there will never be another update to it.
      * <p>
-     * Written rather than left to the stream simply ending, because the two mean different things. A member that
-     * shuts down or loses its connection ends the stream as well, and that says only that this member stopped
-     * answering, which fails the subscription rather than completing it.
+     * Written rather than left to the stream simply ending, because the two mean different things. A member that loses
+     * its connection ends the stream as well, which fails the subscription rather than completing it, and a member
+     * leaving the cluster writes a {@link #LEAVING_EVENT}, which ends only its own part.
      */
     public static final String COMPLETE_EVENT = "complete";
+
+    /**
+     * The event type reporting that the member answering a subscription query is leaving the cluster, and has stopped
+     * emitting updates to it.
+     * <p>
+     * Ends only that member's part in the subscription, unlike a {@link #COMPLETE_EVENT}, which ends it for every
+     * member. Written rather than left to the stream simply ending, because a stream that ends without saying why may
+     * have been cut short while the member was still emitting updates, which makes the subscription unreliable.
+     */
+    public static final String LEAVING_EVENT = "leaving";
 
     private static final boolean WRITABLE_STACK_TRACE = false;
 

@@ -80,6 +80,12 @@ public class SseQueryResponseSink implements QueryResponseSink {
     }
 
     @Override
+    public void leaving(String requestIdentifier) {
+        write(QueryConverter.LEAVING_EVENT, requestIdentifier);
+        emitter.complete();
+    }
+
+    @Override
     public void error(QueryDispatchFailure error) {
         write(QueryConverter.ERROR_EVENT, error);
         emitter.complete();
