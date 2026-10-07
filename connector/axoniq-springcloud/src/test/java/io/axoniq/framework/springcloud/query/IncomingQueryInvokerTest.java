@@ -428,6 +428,21 @@ class IncomingQueryInvokerTest {
         }
 
         @Test
+        void answersSubscriptionsAgainAfterRejoining() {
+            // given
+            testSubject.leave();
+            testSubject.rejoin();
+
+            // when
+            testSubject.handleSubscription(subscription("query-1"), sink);
+            handler.emit(update("update-1"));
+
+            // then
+            assertThat(sink.leaving()).isEmpty();
+            assertThat(sink.updates()).hasSize(1);
+        }
+
+        @Test
         void leavesASubscriptionTheSubscriberAlreadyReleasedAlone() {
             // given the subscriber went away first, which cancels the registration through the sink
             testSubject.handleSubscription(subscription("query-1"), sink);

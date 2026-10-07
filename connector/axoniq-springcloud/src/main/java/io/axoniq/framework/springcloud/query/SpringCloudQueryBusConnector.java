@@ -422,12 +422,14 @@ public class SpringCloudQueryBusConnector implements QueryBusConnector {
     }
 
     /**
-     * Prepares this connector for dispatching queries, after a previous {@link #shutdownDispatching()} if any.
+     * Prepares this connector for dispatching queries, after a previous {@link #shutdownDispatching()} if any, and
+     * for answering subscriptions again, after a previous {@link #disconnect()} if any.
      * <p>
      * Performed in the {@link Phase#INBOUND_QUERY_CONNECTOR} phase.
      */
     public void start() {
         shutdownLatch.initialize();
+        invoker.rejoin();
         logger.debug("The SpringCloudQueryBusConnector started.");
     }
 

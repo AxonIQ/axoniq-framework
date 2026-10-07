@@ -934,6 +934,26 @@ class SpringCloudQueryBusConnectorTest {
         }
 
         @Test
+        void answersSubscriptionsAgainWhenStartedAfterDisconnecting() {
+            // given a member that left, and is started again
+            testSubject.disconnect();
+            testSubject.start();
+
+            // when another member opens a subscription on it
+            RecordingQueryResponseSink sink = new RecordingQueryResponseSink();
+            invoker.handleSubscription(
+                    new SubscriptionQueryRequest("query-1", FIND_COURSE_TYPE.toString(),
+                                                 new String(PAYLOAD, StandardCharsets.UTF_8),
+                                                 Map.of(), null, 16),
+                    sink
+            );
+
+            // then it is registered, rather than told this member is leaving
+            assertThat(sink.leaving()).isEmpty();
+            assertThat(handler.subscriptions()).hasSize(1);
+        }
+
+        @Test
         void doesNotWaitOnAnOpenSubscriptionQuery() {
             // given a subscription that is behaving correctly, which is to say lasting until the subscriber ends it
             remoteMemberHandlesTheQuery();

@@ -248,6 +248,16 @@ public class IncomingQueryInvoker {
         openSubscriptions.keySet().forEach(this::endSubscription);
     }
 
+    /**
+     * Accepts subscriptions again after a {@link #leave()}, for a member that is started again after it stopped.
+     * <p>
+     * Subscriptions ended by leaving stay ended: their subscribers have already carried on without this member, and
+     * learn it is back from it advertising the query again.
+     */
+    public void rejoin() {
+        leaving.set(false);
+    }
+
     private void endSubscription(String requestIdentifier) {
         OpenSubscription subscription = openSubscriptions.remove(requestIdentifier);
         if (subscription == null) {
