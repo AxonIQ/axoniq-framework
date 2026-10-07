@@ -258,7 +258,6 @@ sagas with each other only: a saga and an ordinary event handler resolving to on
 <<spring-boot-sagas>> for the workaround.
 * *Dead-letter queues are not supported for sagas.* Enabling a dead letter queue for a saga's processor by name has
 no effect.
-* *Deadlines are not ported yet* (see the note in <<legacy-module>>).
 * *A `SagaStore` is mandatory.* Axon Framework 4 quietly fell back to an `InMemorySagaStore` when an application
 registered no `SagaStore`, so a misconfigured application started and stored its sagas in memory, losing them on
 restart. Axon Framework 5 refuses instead: with no `SagaStore` available, `SagaConfigurer` fails to build its Saga
