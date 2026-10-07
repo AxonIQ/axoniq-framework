@@ -23,6 +23,7 @@ import io.axoniq.framework.springcloud.routing.MemberCapabilities;
 import io.axoniq.framework.springcloud.util.TestServiceInstance;
 import org.axonframework.messaging.core.QualifiedName;
 import org.junit.jupiter.api.*;
+import org.springframework.cloud.client.ServiceInstance;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -70,7 +71,7 @@ class IgnoreListingDiscoveryModeTest {
         @Test
         void reportsTheCapabilitiesTheDelegateFound() {
             // when
-            Optional<MemberCapabilities> capabilities = testSubject.capabilities(axonNode);
+            Optional<MemberCapabilities> capabilities = capabilitiesOf(axonNode);
 
             // then
             assertThat(capabilities).contains(CAPABILITIES);
@@ -79,11 +80,17 @@ class IgnoreListingDiscoveryModeTest {
         @Test
         void passesLocalCapabilitiesToTheDelegate() {
             // when
-            testSubject.updateLocalCapabilities(axonNode, CAPABILITIES);
+            testSubject.updateLocalCapabilities(CAPABILITIES);
 
             // then
-            assertThat(delegate.localInstance()).isEqualTo(axonNode);
+            assertThat(delegate.localCapabilities()).isEqualTo(CAPABILITIES);
             assertThat(testSubject.localCapabilities()).isEqualTo(CAPABILITIES);
+        }
+
+        @Test
+        void identifiesThisApplicationByTheNodeIdOfTheDelegate() {
+            // when / then
+            assertThat(testSubject.localNodeId()).isEqualTo(delegate.localNodeId());
         }
 
         @Test
@@ -102,7 +109,7 @@ class IgnoreListingDiscoveryModeTest {
         @Test
         void reportsAnInstanceAnsweringWithAClientErrorAsNotPartOfTheCluster() {
             // when
-            Optional<MemberCapabilities> capabilities = testSubject.capabilities(unrelatedService);
+            Optional<MemberCapabilities> capabilities = capabilitiesOf(unrelatedService);
 
             // then — an empty result leaves it out of the ring entirely, unlike INCAPABLE which keeps it in
             assertThat(capabilities).isEmpty();
@@ -111,12 +118,12 @@ class IgnoreListingDiscoveryModeTest {
         @Test
         void stopsAskingAnInstanceThatAnsweredWithAClientError() {
             // given
-            testSubject.capabilities(unrelatedService);
+            capabilitiesOf(unrelatedService);
             int askedOnce = delegate.asked().size();
 
             // when
-            testSubject.capabilities(unrelatedService);
-            testSubject.capabilities(unrelatedService);
+            capabilitiesOf(unrelatedService);
+            capabilitiesOf(unrelatedService);
 
             // then — the point of the ignore list: an unrelated service is not queried on every heartbeat
             assertThat(delegate.asked()).hasSize(askedOnce);
@@ -125,10 +132,10 @@ class IgnoreListingDiscoveryModeTest {
         @Test
         void goesOnAskingTheOtherInstances() {
             // given
-            testSubject.capabilities(unrelatedService);
+            capabilitiesOf(unrelatedService);
 
             // when
-            Optional<MemberCapabilities> capabilities = testSubject.capabilities(axonNode);
+            Optional<MemberCapabilities> capabilities = capabilitiesOf(axonNode);
 
             // then
             assertThat(capabilities).contains(CAPABILITIES);
@@ -138,25 +145,25 @@ class IgnoreListingDiscoveryModeTest {
         void asksAnIgnoredInstanceAgainOnceTheThresholdHasPassed() {
             // given — the instance answered with a client error only because it was still starting up, and has
             // since come up
-            testSubject.capabilities(unrelatedService);
+            capabilitiesOf(unrelatedService);
             delegate.recovering(unrelatedService, CAPABILITIES);
 
             // when
             clock.advance(IGNORE_PERIOD.plusSeconds(1));
 
             // then — a permanent ignore list would keep a recovering instance out of the cluster for good
-            assertThat(testSubject.capabilities(unrelatedService)).contains(CAPABILITIES);
+            assertThat(capabilitiesOf(unrelatedService)).contains(CAPABILITIES);
         }
 
         @Test
         void keepsIgnoringUntilTheThresholdHasPassed()  {
             // given
-            testSubject.capabilities(unrelatedService);
+            capabilitiesOf(unrelatedService);
             int askedOnce = delegate.asked().size();
 
             // when
             clock.advance(IGNORE_PERIOD.minusSeconds(1));
-            testSubject.capabilities(unrelatedService);
+            capabilitiesOf(unrelatedService);
 
             // then
             assertThat(delegate.asked()).hasSize(askedOnce);
@@ -165,12 +172,12 @@ class IgnoreListingDiscoveryModeTest {
         @Test
         void forgetsIgnoredInstancesThatAreNoLongerReported() {
             // given
-            testSubject.capabilities(unrelatedService);
+            capabilitiesOf(unrelatedService);
 
             // when — discovery no longer reports the unrelated service at all
             testSubject.retainOnly(Set.of(ServiceInstanceKey.of(axonNode)));
             delegate.answering(unrelatedService, CAPABILITIES);
-            testSubject.capabilities(unrelatedService);
+            capabilitiesOf(unrelatedService);
 
             // then — the entry was discarded with the instance, so it is asked again straight away
             assertThat(delegate.asked()).contains(ServiceInstanceKey.of(unrelatedService));
@@ -196,6 +203,10 @@ class IgnoreListingDiscoveryModeTest {
             assertThatThrownBy(() -> new IgnoreListingDiscoveryMode(delegate, Duration.ofMinutes(-1)))
                     .isInstanceOf(IllegalArgumentException.class);
         }
+    }
+
+    private Optional<MemberCapabilities> capabilitiesOf(ServiceInstance instance) {
+        return testSubject.discover(instance).map(MemberAdvertisement::capabilities);
     }
 
     /**

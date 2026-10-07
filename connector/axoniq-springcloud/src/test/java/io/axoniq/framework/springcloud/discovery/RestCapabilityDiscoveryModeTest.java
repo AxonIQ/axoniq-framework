@@ -35,8 +35,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * Tests how {@link RestCapabilityDiscoveryMode} discovers capabilities over HTTP, and how it treats the answers it
- * gets.
+ * Tests how {@link RestCapabilityDiscoveryMode} discovers members over HTTP, and how it treats the answers it gets.
  *
  * @author Steven van Beelen
  * @author Allard Buijze
@@ -45,38 +44,39 @@ class RestCapabilityDiscoveryModeTest {
 
     private static final QualifiedName CREATE_COURSE = new QualifiedName("university.CreateCourse");
     private static final QualifiedName RENAME_COURSE = new QualifiedName("university.RenameCourse");
+    private static final String NODE_B = "node-b-process";
     private static final String CAPABILITIES_JSON =
-            "{\"loadFactor\":100,\"commands\":[\"university.CreateCourse\"],\"queries\":[]}";
+            "{\"nodeId\":\"" + NODE_B + "\",\"loadFactor\":100,\"commands\":[\"university.CreateCourse\"],"
+                    + "\"queries\":[]}";
+    private static final MemberAdvertisement ADVERTISEMENT =
+            new MemberAdvertisement(NODE_B, new MemberCapabilities(100, Set.of(CREATE_COURSE), Set.of()));
     private static final String E_TAG = "\"abc123\"";
 
-    private TestServiceInstance localInstance;
     private TestServiceInstance remoteInstance;
     private StubClientHttpRequestFactory requestFactory;
     private RestCapabilityDiscoveryMode testSubject;
 
     @BeforeEach
     void setUp() {
-        localInstance = TestServiceInstance.instance("university", "node-a", 8080);
         remoteInstance = TestServiceInstance.instance("university", "node-b", 8080);
         requestFactory = new StubClientHttpRequestFactory();
         RestClient restClient = RestClient.builder().requestFactory(requestFactory).build();
         testSubject = new RestCapabilityDiscoveryMode(restClient);
-        testSubject.updateLocalCapabilities(localInstance, MemberCapabilities.INCAPABLE);
     }
 
     @Nested
-    class DiscoveringAnotherMember {
+    class DiscoveringAMember {
 
         @Test
-        void readsTheCapabilitiesItServes() {
+        void readsTheNodeIdAndCapabilitiesItServes() {
             // given
             requestFactory.respondingWith(CAPABILITIES_JSON, E_TAG);
 
             // when
-            Optional<MemberCapabilities> capabilities = testSubject.capabilities(remoteInstance);
+            Optional<MemberAdvertisement> advertisement = testSubject.discover(remoteInstance);
 
             // then
-            assertThat(capabilities).contains(new MemberCapabilities(100, Set.of(CREATE_COURSE), Set.of()));
+            assertThat(advertisement).contains(ADVERTISEMENT);
         }
 
         @Test
@@ -85,7 +85,7 @@ class RestCapabilityDiscoveryModeTest {
             requestFactory.respondingWith(CAPABILITIES_JSON, E_TAG);
 
             // when
-            testSubject.capabilities(remoteInstance);
+            testSubject.discover(remoteInstance);
 
             // then
             assertThat(requestFactory.lastRequest().getURI())
@@ -101,7 +101,7 @@ class RestCapabilityDiscoveryModeTest {
             requestFactory.respondingWith(CAPABILITIES_JSON, E_TAG);
 
             // when
-            customEndpoint.capabilities(remoteInstance);
+            customEndpoint.discover(remoteInstance);
 
             // then
             assertThat(requestFactory.lastRequest().getURI()).hasToString("http://node-b:8080/custom/capabilities");
@@ -109,35 +109,34 @@ class RestCapabilityDiscoveryModeTest {
     }
 
     @Nested
-    class DiscoveringThisMember {
+    class IdentifyingThisApplication {
 
         @Test
-        void answersFromWhatWasPublishedLocallyWithoutMakingARequest() {
-            // given
-            MemberCapabilities published = new MemberCapabilities(100, Set.of(RENAME_COURSE), Set.of());
-            testSubject.updateLocalCapabilities(localInstance, published);
-
-            // when
-            Optional<MemberCapabilities> capabilities = testSubject.capabilities(localInstance);
-
-            // then — asking this application for its own capabilities over HTTP would be pointless, and would fail
-            // while it is still starting up
-            assertThat(capabilities).contains(published);
-            assertThat(requestFactory.requests()).isEmpty();
+        void keepsOneNodeIdForItsWholeLifetime() {
+            // when / then
+            assertThat(testSubject.localNodeId()).isNotBlank().isEqualTo(testSubject.localNodeId());
         }
 
         @Test
-        void recognisesItsOwnInstanceEvenThroughADifferentObject() {
-            // given — discovery reports its own object for this application, not the Registration it was given
-            testSubject.updateLocalCapabilities(localInstance, MemberCapabilities.INCAPABLE);
-            TestServiceInstance sameInstanceReportedByDiscovery =
-                    TestServiceInstance.instance("university", "node-a", 8080);
+        void givesEveryApplicationANodeIdOfItsOwn() {
+            // given — two applications, or one application restarted
+            RestCapabilityDiscoveryMode other =
+                    new RestCapabilityDiscoveryMode(RestClient.builder().requestFactory(requestFactory).build());
+
+            // when / then — a restarted application is a new member, which has not seen what its predecessor did
+            assertThat(other.localNodeId()).isNotEqualTo(testSubject.localNodeId());
+        }
+
+        @Test
+        void servesWhatWasPublishedLocally() {
+            // given
+            MemberCapabilities published = new MemberCapabilities(100, Set.of(RENAME_COURSE), Set.of());
 
             // when
-            testSubject.capabilities(sameInstanceReportedByDiscovery);
+            testSubject.updateLocalCapabilities(published);
 
             // then
-            assertThat(requestFactory.requests()).isEmpty();
+            assertThat(testSubject.localCapabilities()).isEqualTo(published);
         }
 
         @Test
@@ -156,7 +155,7 @@ class RestCapabilityDiscoveryModeTest {
             requestFactory.respondingWith(CAPABILITIES_JSON, E_TAG);
 
             // when
-            testSubject.capabilities(remoteInstance);
+            testSubject.discover(remoteInstance);
 
             // then
             assertThat(requestFactory.lastRequest().getHeaders().get(HttpHeaders.IF_NONE_MATCH)).isNull();
@@ -166,10 +165,10 @@ class RestCapabilityDiscoveryModeTest {
         void sendsTheTagTheMemberItselfIssuedOnTheNextRequest() {
             // given
             requestFactory.respondingWith(CAPABILITIES_JSON, E_TAG).respondingNotModified();
-            testSubject.capabilities(remoteInstance);
+            testSubject.discover(remoteInstance);
 
             // when
-            testSubject.capabilities(remoteInstance);
+            testSubject.discover(remoteInstance);
 
             // then — echoing the member's own tag is what makes the conditional request meaningful; a tag derived
             // locally would only match by coincidence
@@ -180,26 +179,26 @@ class RestCapabilityDiscoveryModeTest {
         void sendsNoConditionalHeaderToAMemberThatIssuesNoTag() {
             // given — a member, or a proxy in front of it, that does not set an ETag
             requestFactory.respondingWith(CAPABILITIES_JSON, null).respondingWith(CAPABILITIES_JSON, null);
-            testSubject.capabilities(remoteInstance);
+            testSubject.discover(remoteInstance);
 
             // when
-            testSubject.capabilities(remoteInstance);
+            testSubject.discover(remoteInstance);
 
             // then — there is nothing to revalidate against, so the full payload is read each time
             assertThat(requestFactory.lastRequest().getHeaders().get(HttpHeaders.IF_NONE_MATCH)).isNull();
         }
 
         @Test
-        void reusesTheCachedCapabilitiesWhenTheMemberIsUnchanged() {
+        void reusesTheCachedAdvertisementWhenTheMemberIsUnchanged() {
             // given
             requestFactory.respondingWith(CAPABILITIES_JSON, E_TAG).respondingNotModified();
-            MemberCapabilities first = testSubject.capabilities(remoteInstance).orElseThrow();
+            testSubject.discover(remoteInstance);
 
             // when — the member answers 304 with no body
-            Optional<MemberCapabilities> second = testSubject.capabilities(remoteInstance);
+            Optional<MemberAdvertisement> second = testSubject.discover(remoteInstance);
 
             // then — this is the point of the ETag: a steady-state poll costs a round trip and nothing more
-            assertThat(second).contains(first);
+            assertThat(second).contains(ADVERTISEMENT);
         }
 
         @Test
@@ -207,29 +206,44 @@ class RestCapabilityDiscoveryModeTest {
             // given
             requestFactory
                     .respondingWith(CAPABILITIES_JSON, E_TAG)
-                    .respondingWith("{\"loadFactor\":100,\"commands\":[\"university.CreateCourse\","
-                                            + "\"university.RenameCourse\"],\"queries\":[]}", "\"def456\"");
-            testSubject.capabilities(remoteInstance);
+                    .respondingWith("{\"nodeId\":\"" + NODE_B + "\",\"loadFactor\":100,\"commands\":"
+                                            + "[\"university.CreateCourse\",\"university.RenameCourse\"],"
+                                            + "\"queries\":[]}", "\"def456\"");
+            testSubject.discover(remoteInstance);
 
             // when
-            Optional<MemberCapabilities> updated = testSubject.capabilities(remoteInstance);
+            Optional<MemberAdvertisement> updated = testSubject.discover(remoteInstance);
 
             // then
-            assertThat(updated).contains(
+            assertThat(updated).map(MemberAdvertisement::capabilities).contains(
                     new MemberCapabilities(100, Set.of(CREATE_COURSE, RENAME_COURSE), Set.of())
             );
+        }
+
+        @Test
+        void readsTheNewNodeIdOfAMemberRestartedAtTheSameAddress() {
+            // given
+            requestFactory.respondingWith(CAPABILITIES_JSON, E_TAG)
+                          .respondingWith(CAPABILITIES_JSON.replace(NODE_B, "node-b-restarted"), "\"ghi789\"");
+            testSubject.discover(remoteInstance);
+
+            // when
+            Optional<MemberAdvertisement> afterRestart = testSubject.discover(remoteInstance);
+
+            // then
+            assertThat(afterRestart).map(MemberAdvertisement::nodeId).contains("node-b-restarted");
         }
 
         @Test
         void forgetsWhatItCachedForAMemberThatIsGone() {
             // given
             requestFactory.respondingWith(CAPABILITIES_JSON, E_TAG);
-            testSubject.capabilities(remoteInstance);
+            testSubject.discover(remoteInstance);
 
             // when
-            testSubject.retainOnly(Set.of(ServiceInstanceKey.of(localInstance)));
+            testSubject.retainOnly(Set.of());
             requestFactory.respondingWith(CAPABILITIES_JSON, E_TAG);
-            testSubject.capabilities(remoteInstance);
+            testSubject.discover(remoteInstance);
 
             // then — no stale tag is sent for an instance that went away and came back
             assertThat(requestFactory.lastRequest().getHeaders().get(HttpHeaders.IF_NONE_MATCH)).isNull();
@@ -245,45 +259,87 @@ class RestCapabilityDiscoveryModeTest {
             requestFactory.respondingWithStatus(HttpStatus.NOT_FOUND);
 
             // when / then
-            assertThatThrownBy(() -> testSubject.capabilities(remoteInstance))
+            assertThatThrownBy(() -> testSubject.discover(remoteInstance))
                     .isInstanceOf(ServiceInstanceClientException.class)
                     .hasMessageContaining("404");
         }
 
         @Test
-        void reportsAServerErrorAsAMemberHandlingNothing() {
+        void keepsAMemberThatFailsToAnswerAsTheSameMemberHandlingNothing() {
+            // given
+            requestFactory.respondingWith(CAPABILITIES_JSON, E_TAG)
+                          .respondingWithStatus(HttpStatus.SERVICE_UNAVAILABLE);
+            testSubject.discover(remoteInstance);
+
+            // when
+            Optional<MemberAdvertisement> advertisement = testSubject.discover(remoteInstance);
+
+            // then — the member is expected back, so it stays in the ring handling nothing rather than being removed
+            assertThat(advertisement).contains(new MemberAdvertisement(NODE_B, MemberCapabilities.INCAPABLE));
+        }
+
+        @Test
+        void keepsAMemberThatCannotBeConnectedToAsTheSameMemberHandlingNothing() {
+            // given
+            requestFactory.respondingWith(CAPABILITIES_JSON, E_TAG).failingToConnect();
+            testSubject.discover(remoteInstance);
+
+            // when
+            Optional<MemberAdvertisement> advertisement = testSubject.discover(remoteInstance);
+
+            // then
+            assertThat(advertisement).contains(new MemberAdvertisement(NODE_B, MemberCapabilities.INCAPABLE));
+        }
+
+        @Test
+        void leavesOutAnInstanceThatNeverAnswered() {
             // given
             requestFactory.respondingWithStatus(HttpStatus.INTERNAL_SERVER_ERROR);
 
             // when
-            Optional<MemberCapabilities> capabilities = testSubject.capabilities(remoteInstance);
+            Optional<MemberAdvertisement> advertisement = testSubject.discover(remoteInstance);
 
-            // then — the member is expected back, so it stays in the ring handling nothing rather than being removed
-            assertThat(capabilities).contains(MemberCapabilities.INCAPABLE);
+            // then — without an answer there is no node id to tell the instance apart by
+            assertThat(advertisement).isEmpty();
         }
 
         @Test
-        void reportsAConnectionFailureAsAMemberHandlingNothing() {
+        void leavesOutAnInstanceAnsweringWithoutANodeId() {
             // given
-            requestFactory.failingToConnect();
+            requestFactory.respondingWith("{\"loadFactor\":100,\"commands\":[\"university.CreateCourse\"]}", E_TAG);
 
             // when
-            Optional<MemberCapabilities> capabilities = testSubject.capabilities(remoteInstance);
+            Optional<MemberAdvertisement> advertisement = testSubject.discover(remoteInstance);
 
             // then
-            assertThat(capabilities).contains(MemberCapabilities.INCAPABLE);
+            assertThat(advertisement).isEmpty();
+        }
+
+        @Test
+        void forgetsTheNodeIdOfAMemberThatIsGone() {
+            // given
+            requestFactory.respondingWith(CAPABILITIES_JSON, E_TAG);
+            testSubject.discover(remoteInstance);
+            testSubject.retainOnly(Set.of());
+
+            // when
+            requestFactory.failingToConnect();
+            Optional<MemberAdvertisement> advertisement = testSubject.discover(remoteInstance);
+
+            // then
+            assertThat(advertisement).isEmpty();
         }
 
         @Test
         void discardsTheCachedTagWhenAMemberStopsAnswering() {
             // given
             requestFactory.respondingWith(CAPABILITIES_JSON, E_TAG).failingToConnect();
-            testSubject.capabilities(remoteInstance);
-            testSubject.capabilities(remoteInstance);
+            testSubject.discover(remoteInstance);
+            testSubject.discover(remoteInstance);
 
             // when
             requestFactory.respondingWith(CAPABILITIES_JSON, E_TAG);
-            testSubject.capabilities(remoteInstance);
+            testSubject.discover(remoteInstance);
 
             // then — revalidating against a tag whose cached value was dropped would yield a 304 with nothing to
             // fall back on
@@ -291,15 +347,16 @@ class RestCapabilityDiscoveryModeTest {
         }
 
         @Test
-        void reportsAnEmptyBodyAsAMemberHandlingNothing() {
+        void reportsAnEmptyBodyFromAKnownMemberAsTheSameMemberHandlingNothing() {
             // given — a 200 with no body, which the member should never send
-            requestFactory.respondingWithStatus(HttpStatus.OK);
+            requestFactory.respondingWith(CAPABILITIES_JSON, E_TAG).respondingWithStatus(HttpStatus.OK);
+            testSubject.discover(remoteInstance);
 
             // when
-            Optional<MemberCapabilities> capabilities = testSubject.capabilities(remoteInstance);
+            Optional<MemberAdvertisement> advertisement = testSubject.discover(remoteInstance);
 
             // then
-            assertThat(capabilities).contains(MemberCapabilities.INCAPABLE);
+            assertThat(advertisement).contains(new MemberAdvertisement(NODE_B, MemberCapabilities.INCAPABLE));
         }
     }
 
@@ -311,7 +368,9 @@ class RestCapabilityDiscoveryModeTest {
             // when / then
             assertThatThrownBy(() -> new RestCapabilityDiscoveryMode(null))
                     .isInstanceOf(NullPointerException.class);
-            assertThatThrownBy(() -> testSubject.capabilities(null)).isInstanceOf(NullPointerException.class);
+            assertThatThrownBy(() -> testSubject.discover(null)).isInstanceOf(NullPointerException.class);
+            assertThatThrownBy(() -> testSubject.updateLocalCapabilities(null))
+                    .isInstanceOf(NullPointerException.class);
             assertThatThrownBy(() -> testSubject.retainOnly(null)).isInstanceOf(NullPointerException.class);
         }
     }

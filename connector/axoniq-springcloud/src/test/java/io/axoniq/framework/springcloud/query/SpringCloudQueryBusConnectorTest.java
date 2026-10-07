@@ -86,8 +86,8 @@ class SpringCloudQueryBusConnectorTest {
         localInstance = TestServiceInstance.instance("university", "node-a", 8080);
         remoteInstance = TestServiceInstance.instance("university", "node-b", 8080);
         discoveryClient = new RecordingDiscoveryClient().register("university", localInstance);
-        discoveryMode = new RecordingCapabilityDiscoveryMode();
-        registry = new SpringCloudMemberRegistry(discoveryClient, localInstance, discoveryMode);
+        discoveryMode = new RecordingCapabilityDiscoveryMode().answeringAsLocal(localInstance);
+        registry = new SpringCloudMemberRegistry(discoveryClient, discoveryMode);
         handler = new RecordingQueryHandler();
         dispatcher = new RecordingRemoteQueryDispatcher();
         entitlementManager = new RecordingEntitlementManager();
@@ -160,9 +160,8 @@ class SpringCloudQueryBusConnectorTest {
         private final AtomicReference<@Nullable Runnable> pending = new AtomicReference<>();
 
         private JoiningBetweenResolutions(RecordingDiscoveryClient discoveryClient,
-                                          TestServiceInstance localInstance,
                                           RecordingCapabilityDiscoveryMode discoveryMode) {
-            super(discoveryClient, localInstance, discoveryMode);
+            super(discoveryClient, discoveryMode);
         }
 
         /**
@@ -485,7 +484,7 @@ class SpringCloudQueryBusConnectorTest {
             // given a registry whose ring changes in the instant between resolving every member advertising the query
             // and resolving the one to ask for the initial result
             JoiningBetweenResolutions joining =
-                    new JoiningBetweenResolutions(discoveryClient, localInstance, discoveryMode);
+                    new JoiningBetweenResolutions(discoveryClient, discoveryMode);
             SpringCloudQueryBusConnector connector = new SpringCloudQueryBusConnector(
                     joining, new IncomingQueryInvoker(() -> "node-a", null), dispatcher, null, entitlementManager
             );

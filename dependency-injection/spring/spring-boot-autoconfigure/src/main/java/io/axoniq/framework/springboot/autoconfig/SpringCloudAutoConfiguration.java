@@ -51,7 +51,6 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplicat
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.cloud.client.ServiceInstance;
 import org.springframework.cloud.client.discovery.DiscoveryClient;
-import org.springframework.cloud.client.serviceregistry.Registration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.client.ClientHttpRequestFactory;
@@ -80,10 +79,14 @@ import java.util.function.Predicate;
  * invokes only on beans it manages, and the two controllers are only mapped as endpoints if Spring MVC knows about
  * them. The rest follows those two.
  * <p>
- * Activates when a Spring Cloud {@link DiscoveryClient} and a {@link Registration} are available — that is, when the
- * application has chosen a discovery implementation of its own — and can be switched off with
- * {@code axon.springcloud.enabled=false}. As members reach each other over HTTP through Spring MVC controllers, it also
- * requires a servlet web application; see {@link NonWebApplicationGuard} and {@link ReactiveWebApplicationGuard}.
+ * Activates when a Spring Cloud {@link DiscoveryClient} is available — that is, when the application has chosen a
+ * discovery implementation of its own — and can be switched off with {@code axon.springcloud.enabled=false}. As
+ * members reach each other over HTTP through Spring MVC controllers, it also requires a servlet web application; see
+ * {@link NonWebApplicationGuard} and {@link ReactiveWebApplicationGuard}.
+ * <p>
+ * No Spring Cloud {@code Registration} is needed: members identify themselves through the capabilities endpoint, so
+ * the connector works the same with discovery implementations that register the application, such as Eureka, and with
+ * those that leave registration to the platform, such as Spring Cloud Kubernetes.
  *
  * @author Allard Buijze
  * @author Steven van Beelen
@@ -128,6 +131,11 @@ public class SpringCloudAutoConfiguration {
      * The name of the {@link Executor} bean the keep-alive writes of subscriptions being answered run on.
      */
     public static final String KEEP_ALIVE_EXECUTOR_BEAN = "axoniqSpringCloudKeepAliveExecutor";
+
+    /**
+     * The name of the {@link ExecutorService} bean discovery rounds, and the capability requests within them, run on.
+     */
+    public static final String DISCOVERY_EXECUTOR_BEAN = "axoniqSpringCloudDiscoveryExecutor";
 
     /**
      * Bean creation method for a {@link ConfigurationEnhancer} that disables the
@@ -276,8 +284,8 @@ public class SpringCloudAutoConfiguration {
          * <p>
          * Separate from the client commands are sent with, because the two need opposite deadlines. A command may
          * legitimately take as long as the handler needs, while a capabilities request happens on every discovery
-         * heartbeat and must not outlast it — one unresponsive instance would otherwise hold up the round that rebuilds
-         * the routing ring for every member.
+         * round and must not outlast it — one unresponsive instance would otherwise hold up the round that rebuilds the
+         * routing ring for every member.
          *
          * @param properties the connector's properties
          * @return the client used to ask other instances for their capabilities
@@ -332,26 +340,59 @@ public class SpringCloudAutoConfiguration {
          * rejected by the predicate are never asked for their capabilities, which is cheaper than letting the ignore
          * list learn about them one heartbeat at a time. Every instance is considered when no such bean is present.
          *
+         * Capabilities are refreshed every {@link SpringCloudProperties#getCapabilitiesRefreshInterval()}, as decided
+         * on the {@link #axoniqSpringCloudQueryScheduler() query scheduler}. That scheduler only hands the refresh to
+         * the {@link #axoniqSpringCloudDiscoveryExecutor() discovery executor}, which is where the requests are made,
+         * so nothing on it blocks.
+         *
          * @param discoveryClientProvider provides the client reporting the service instances making up the cluster
-         * @param registrationProvider    provides the registration representing this application
          * @param discoveryMode           the mode used to discover the capabilities of other members
+         * @param instanceFilterProvider  provides the filter deciding which discovered instances are considered
          * @param properties              the connector's properties
+         * @param discoveryExecutor       the executor discovery rounds and their capability requests run on
+         * @param scheduler               the scheduler deciding when capabilities are due a refresh
          * @return the registry maintaining the routing ring
          */
         @Bean
         @ConditionalOnMissingBean
         public SpringCloudMemberRegistry axoniqSpringCloudMemberRegistry(
                 ObjectProvider<DiscoveryClient> discoveryClientProvider,
-                ObjectProvider<Registration> registrationProvider,
                 CapabilityDiscoveryMode discoveryMode,
                 ObjectProvider<Predicate<ServiceInstance>> instanceFilterProvider,
-                SpringCloudProperties properties
+                SpringCloudProperties properties,
+                @Qualifier(DISCOVERY_EXECUTOR_BEAN) ExecutorService discoveryExecutor,
+                @Qualifier(QUERY_SCHEDULER_BEAN) ScheduledExecutorService scheduler
         ) {
-            return new SpringCloudMemberRegistry(required(discoveryClientProvider, DiscoveryClient.class),
-                                                 required(registrationProvider, Registration.class),
-                                                 discoveryMode,
-                                                 instanceFilterProvider.getIfAvailable(() -> instance -> true),
-                                                 properties.getContextRootMetadataPropertyName());
+            SpringCloudMemberRegistry registry = new SpringCloudMemberRegistry(
+                    required(discoveryClientProvider, DiscoveryClient.class),
+                    discoveryMode,
+                    instanceFilterProvider.getIfAvailable(() -> instance -> true),
+                    properties.getContextRootMetadataPropertyName(),
+                    properties.getCapabilitiesRefreshInterval(),
+                    discoveryExecutor
+            );
+            // Cancelled along with the scheduler, which is shut down when the application context closes.
+            registry.scheduleCapabilityRefresh(scheduler);
+            return registry;
+        }
+
+        /**
+         * Bean creation method for the {@link ExecutorService} discovery rounds, and the capability requests within
+         * them, run on.
+         * <p>
+         * A virtual-thread-per-task executor by default, as the work on it is blocking HTTP calls, one per discovered
+         * instance, concurrently. An application can supply its own under the {@value #DISCOVERY_EXECUTOR_BEAN} name. A
+         * round waits for the requests it makes, so that executor must run more than one task at a time.
+         * <p>
+         * Shut down with {@code shutdownNow} rather than the {@link ExecutorService#close()} Spring would infer, so
+         * that shutting down does not wait for a round still asking an instance that no longer answers.
+         *
+         * @return the executor discovery rounds run on
+         */
+        @Bean(destroyMethod = "shutdownNow", name = DISCOVERY_EXECUTOR_BEAN)
+        @ConditionalOnMissingBean(name = DISCOVERY_EXECUTOR_BEAN)
+        public ExecutorService axoniqSpringCloudDiscoveryExecutor() {
+            return Executors.newVirtualThreadPerTaskExecutor();
         }
 
         /**
@@ -570,11 +611,11 @@ public class SpringCloudAutoConfiguration {
         /**
          * Returns the bean the given {@code provider} supplies, explaining what is missing when it supplies none.
          * <p>
-         * A {@code DiscoveryClient} and a {@code Registration} come from the discovery implementation the application
-         * chose, and this connector cannot distribute anything without both. They are resolved here, as the bean is
-         * built, rather than through {@code @ConditionalOnBean}: a bean-presence condition is evaluated in
-         * autoconfiguration order, so a discovery implementation whose autoconfiguration happens to run after this one
-         * would leave the condition unmet and this connector quietly absent. Resolving at construction is independent
+         * A {@code DiscoveryClient} comes from the discovery implementation the application chose, and this connector
+         * cannot distribute anything without one. It is resolved here, as the bean is built, rather than through
+         * {@code @ConditionalOnBean}: a bean-presence condition is evaluated in autoconfiguration order, so a discovery
+         * implementation whose autoconfiguration happens to run after this one would leave the condition unmet and
+         * this connector quietly absent. Resolving at construction is independent
          * of that order, and an application missing a discovery implementation is told so rather than left with
          * messages that are never distributed.
          *

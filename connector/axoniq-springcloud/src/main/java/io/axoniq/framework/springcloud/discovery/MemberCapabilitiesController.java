@@ -34,13 +34,16 @@ import java.util.Objects;
  * Serves this application's own {@link io.axoniq.framework.springcloud.routing.MemberCapabilities capabilities} over
  * HTTP, so that other members of the cluster can learn which commands and queries this one handles.
  * <p>
+ * The capabilities are served along with this application's node id, which is what other members identify this one
+ * by. This application asks its own instance as well, and recognizes itself by that id.
+ * <p>
  * Every member of a cluster using {@link RestCapabilityDiscoveryMode} must expose this endpoint, since that is the
  * only way capabilities travel: they cannot be published through
  * {@link org.springframework.cloud.client.ServiceInstance#getMetadata() service instance metadata}, which is fixed at
  * registration time.
  * <p>
- * The response carries an {@code ETag} derived from the capabilities themselves. A member polling this endpoint on
- * every discovery heartbeat sends its last-seen tag as {@code If-None-Match}, and an unchanged member is answered with
+ * The response carries an {@code ETag} derived from the node id and capabilities. A member polling this endpoint on
+ * every refresh sends its last-seen tag as {@code If-None-Match}, and an unchanged member is answered with
  * {@code 304 Not Modified} and no body. Steady-state polling therefore costs a round trip and nothing more.
  * <p>
  * This controller is registered by the Spring Boot autoconfiguration; the path it is mapped to is the value of the
@@ -69,8 +72,8 @@ public class MemberCapabilitiesController {
     }
 
     /**
-     * Returns this application's own capabilities, or {@code 304 Not Modified} when the given {@code ifNoneMatch}
-     * already identifies them.
+     * Returns this application's node id and capabilities, or {@code 304 Not Modified} when the given
+     * {@code ifNoneMatch} already identifies them.
      *
      * @param ifNoneMatch the {@code If-None-Match} header of the request, carrying the entity tag the requesting
      *                    member last saw, or {@code null} when it has not seen these capabilities before
@@ -80,7 +83,8 @@ public class MemberCapabilitiesController {
     public ResponseEntity<MemberCapabilitiesPayload> localMemberCapabilities(
             @RequestHeader(value = HttpHeaders.IF_NONE_MATCH, required = false) @Nullable String ifNoneMatch
     ) {
-        MemberCapabilitiesPayload payload = MemberCapabilitiesPayload.from(discoveryMode.localCapabilities());
+        MemberCapabilitiesPayload payload = MemberCapabilitiesPayload.from(discoveryMode.localNodeId(),
+                                                                           discoveryMode.localCapabilities());
         String entityTag = payload.quotedEntityTag();
         if (entityTag.equals(ifNoneMatch)) {
             return ResponseEntity.status(HttpStatus.NOT_MODIFIED).eTag(entityTag).build();

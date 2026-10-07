@@ -624,7 +624,7 @@ class HttpRemoteQueryDispatcherTest {
         @Test
         void reportsAMemberWithNoEndpointToSendTo() {
             // given a member discovery reported without a usable address
-            Member unreachable = Member.unregisteredLocalMember("node-c");
+            Member unreachable = Member.localMember("node-c");
 
             // when
             MessageStream<QueryResponseMessage> responses = dispatcher(1024).dispatch(unreachable, query());

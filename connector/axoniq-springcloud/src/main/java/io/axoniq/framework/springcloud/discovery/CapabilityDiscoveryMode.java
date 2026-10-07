@@ -29,6 +29,11 @@ import java.util.Set;
  * Discovers the {@link MemberCapabilities} of the {@link ServiceInstance}s reported by Spring Cloud Discovery, and
  * publishes this application's own.
  * <p>
+ * Every application is identified by a {@link #localNodeId() node id} of its own, which it reports along with its
+ * capabilities. Members are told apart by that id rather than by what discovery reports about them, so that one
+ * application reported more than once is still one member, and so that this application recognizes its own instance
+ * among the others without having to match its address.
+ * <p>
  * Capabilities cannot travel through {@link ServiceInstance#getMetadata() service instance metadata}: that metadata is
  * fixed at registration time, and mutating it after the fact is silently ignored by several discovery
  * implementations — Kubernetes among them. Since the set of subscribed command names changes as an application starts
@@ -42,37 +47,48 @@ import java.util.Set;
 public interface CapabilityDiscoveryMode {
 
     /**
-     * Publishes the given {@code capabilities} as those of the given {@code localInstance}, replacing whatever was
-     * published before.
+     * Returns the identifier of this application, which it reports to other members along with its capabilities.
+     * <p>
+     * Unique to the running process: an application that restarts is a new member, which matters because it has not
+     * seen what the previous process did.
+     *
+     * @return the identifier of this application
+     */
+    String localNodeId();
+
+    /**
+     * Publishes the given {@code capabilities} as this application's own, replacing whatever was published before.
      * <p>
      * Called whenever a command or query handler is subscribed to, or unsubscribed from, this application's connector.
      *
-     * @param localInstance the {@link ServiceInstance} representing this application
-     * @param capabilities  the messages this application handles, and the command load it asks for
+     * @param capabilities the messages this application handles, and the command load it asks for
      */
-    void updateLocalCapabilities(ServiceInstance localInstance, MemberCapabilities capabilities);
+    void updateLocalCapabilities(MemberCapabilities capabilities);
 
     /**
-     * Discovers the capabilities of the given {@code serviceInstance}.
+     * Discovers which member the given {@code serviceInstance} is, and what it handles.
      * <p>
      * An empty {@link Optional} means the instance should be left out of the routing ring entirely — it is not a
-     * member of this cluster, or is not currently answering for one. That differs from returning
+     * member of this cluster, or is not currently answering for one. That differs from an advertisement carrying
      * {@link MemberCapabilities#INCAPABLE}, which keeps the instance in the ring as a member that handles nothing.
+     * <p>
+     * This application's own instance is discovered like any other, answering with this application's
+     * {@link #localNodeId() node id}.
      * <p>
      * Called concurrently, once per discovered instance, for every instance of one discovery round. Implementations
      * must therefore be thread-safe.
      *
-     * @param serviceInstance the instance to discover the capabilities of
-     * @return the capabilities of the given {@code serviceInstance}, or {@link Optional#empty()} when it should not be
-     * part of the routing ring
+     * @param serviceInstance the instance to discover
+     * @return the member the given {@code serviceInstance} is and what it handles, or {@link Optional#empty()} when it
+     * should not be part of the routing ring
      * @throws ServiceInstanceClientException when the given {@code serviceInstance} answers with a client error,
      *                                        indicating it does not serve capabilities at all
      */
-    Optional<MemberCapabilities> capabilities(ServiceInstance serviceInstance);
+    Optional<MemberAdvertisement> discover(ServiceInstance serviceInstance);
 
     /**
      * Returns this application's own capabilities, as last published through
-     * {@link #updateLocalCapabilities(ServiceInstance, MemberCapabilities)}.
+     * {@link #updateLocalCapabilities(MemberCapabilities)}.
      * <p>
      * A mode is told what this application handles so it can publish it; that same knowledge is what
      * {@link MemberCapabilitiesController} serves to other members, which is why reading it back is part of this
