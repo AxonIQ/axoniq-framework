@@ -30,10 +30,9 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Method;
-import java.net.URL;
-import java.net.URLClassLoader;
-import java.nio.file.Path;
+import java.nio.charset.StandardCharsets;
 import java.util.Map;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -44,10 +43,6 @@ import static org.assertj.core.api.Assertions.assertThat;
  * @author Mateusz Nowak
  */
 class Af4SerializerCompatibilityTest {
-
-    private static final Path AF4_MESSAGING_JAR = Path.of(
-            "target", "af4-serializer", "axon-messaging-af4.jar"
-    );
 
     @Nested
     class JacksonSerialization {
@@ -82,8 +77,8 @@ class Af4SerializerCompatibilityTest {
             saga.handled("OrderPaid");
 
             // when
-            String af4Xml = Af4XStreamSupport.withAf4ClassLoader(
-                    classLoader -> Af4XStreamSupport.af4XStream(classLoader).toXML(saga)
+            String af4Xml = Af4ClassLoaderSupport.withAf4ClassLoader(
+                    classLoader -> Af4ClassLoaderSupport.af4XStream(classLoader).toXML(saga)
             );
             StubSaga converted = xStreamConverter.convert(af4Xml, StubSaga.class);
 
@@ -99,8 +94,8 @@ class Af4SerializerCompatibilityTest {
 
             // when
             String af5Xml = xStreamConverter.convert(saga, String.class);
-            StubSaga deserialized = Af4XStreamSupport.withAf4ClassLoader(
-                    classLoader -> (StubSaga) Af4XStreamSupport.af4XStream(classLoader).fromXML(af5Xml)
+            StubSaga deserialized = Af4ClassLoaderSupport.withAf4ClassLoader(
+                    classLoader -> (StubSaga) Af4ClassLoaderSupport.af4XStream(classLoader).fromXML(af5Xml)
             );
 
             // then
@@ -110,19 +105,19 @@ class Af4SerializerCompatibilityTest {
         @Test
         void xStreamSerializedMetadataIsConvertableByXStreamConverter() throws Exception {
             // given
-            Map<String, String> entries = Map.of("traceId", "abc-123", "userId", "steven");
+            Map<String, Object> entries = Map.of("traceId", "abc-123", "userId", "steven");
 
             // when
-            String af4Xml = Af4XStreamSupport.withAf4ClassLoader(classLoader -> {
+            String af4Xml = Af4ClassLoaderSupport.withAf4ClassLoader(classLoader -> {
                 Object af4MetaData = classLoader.loadClass("org.axonframework.messaging.MetaData")
                                                 .getConstructor(Map.class)
                                                 .newInstance(entries);
-                return Af4XStreamSupport.af4XStream(classLoader).toXML(af4MetaData);
+                return Af4ClassLoaderSupport.af4XStream(classLoader).toXML(af4MetaData);
             });
             Metadata converted = xStreamConverter.convert(af4Xml, Metadata.class);
 
             // then
-            assertThat(converted).containsExactlyInAnyOrderEntriesOf(entries);
+            assertThat(converted).containsExactlyInAnyOrderEntriesOf(Map.of("traceId", "abc-123", "userId", "steven"));
         }
 
         @Test
@@ -133,12 +128,94 @@ class Af4SerializerCompatibilityTest {
             // when
             String af5Xml = xStreamConverter.convert(metadata, String.class);
             @SuppressWarnings("unchecked")
-            Map<String, Object> deserialized = Af4XStreamSupport.withAf4ClassLoader(
-                    classLoader -> (Map<String, Object>) Af4XStreamSupport.af4XStream(classLoader).fromXML(af5Xml)
+            Map<String, Object> deserialized = Af4ClassLoaderSupport.withAf4ClassLoader(
+                    classLoader -> (Map<String, Object>) Af4ClassLoaderSupport.af4XStream(classLoader).fromXML(af5Xml)
             );
 
             // then
             assertThat(deserialized).containsExactlyInAnyOrderEntriesOf(metadata);
+        }
+
+        @Test
+        void xStreamSerializedEmptyMetadataIsConvertableByXStreamConverter() throws Exception {
+            // given
+            String af4Xml = Af4ClassLoaderSupport.withAf4ClassLoader(classLoader -> {
+                Object af4MetaData = classLoader.loadClass("org.axonframework.messaging.MetaData")
+                                                .getConstructor(Map.class)
+                                                .newInstance(Map.of());
+                return Af4ClassLoaderSupport.af4XStream(classLoader).toXML(af4MetaData);
+            });
+
+            // when
+            Metadata converted = xStreamConverter.convert(af4Xml, Metadata.class);
+
+            // then
+            assertThat(converted).isEmpty();
+        }
+
+        @Test
+        void xStreamSerializedUuidIsConvertableByXStreamConverter() throws Exception {
+            // given
+            UUID id = UUID.randomUUID();
+            String af4Xml = Af4ClassLoaderSupport.withAf4ClassLoader(
+                    classLoader -> Af4ClassLoaderSupport.af4XStream(classLoader).toXML(id)
+            );
+
+            // when
+            UUID converted = xStreamConverter.convert(af4Xml, UUID.class);
+
+            // then
+            assertThat(af4Xml).contains("<uuid>");
+            assertThat(converted).isEqualTo(id);
+        }
+
+        @Test
+        void xStreamConvertedUuidIsDeserializedByXStreamSerializer() throws Exception {
+            // given
+            UUID id = UUID.randomUUID();
+
+            // when
+            String af5Xml = xStreamConverter.convert(id, String.class);
+            UUID deserialized = Af4ClassLoaderSupport.withAf4ClassLoader(
+                    classLoader -> (UUID) Af4ClassLoaderSupport.af4XStream(classLoader).fromXML(af5Xml)
+            );
+
+            // then
+            assertThat(deserialized).isEqualTo(id);
+        }
+
+        @Test
+        void xStreamSerializedNonAsciiPayloadIsConvertableThroughByteArray() throws Exception {
+            // given
+            StubSaga saga = new StubSaga();
+            saga.handled("Café 日本語");
+            byte[] af4Bytes = Af4ClassLoaderSupport.withAf4ClassLoader(
+                    classLoader -> Af4ClassLoaderSupport.af4XStream(classLoader).toXML(saga)
+            ).getBytes(StandardCharsets.UTF_8);
+
+            // when
+            StubSaga converted = xStreamConverter.convert(af4Bytes, StubSaga.class);
+
+            // then
+            assertThat(converted).isEqualTo(saga);
+        }
+
+        @Test
+        void xStreamConvertedNonAsciiPayloadIsDeserializableThroughByteArray() throws Exception {
+            // given
+            StubSaga saga = new StubSaga();
+            saga.handled("Café 日本語");
+
+            // when
+            byte[] af5Bytes = xStreamConverter.convert(saga, byte[].class);
+            StubSaga deserialized = Af4ClassLoaderSupport.withAf4ClassLoader(
+                    classLoader -> (StubSaga) Af4ClassLoaderSupport.af4XStream(classLoader)
+                                                                    .fromXML(new String(af5Bytes,
+                                                                                         StandardCharsets.UTF_8))
+            );
+
+            // then
+            assertThat(deserialized).isEqualTo(saga);
         }
 
         @Test
@@ -147,9 +224,9 @@ class Af4SerializerCompatibilityTest {
             AggregateScopeDescriptor descriptor = new AggregateScopeDescriptor("aggregateType", "aggregateId");
 
             // when
-            String af4Xml = Af4XStreamSupport.withAf4ClassLoader(
-                    classLoader -> Af4XStreamSupport.af4XStream(classLoader)
-                                                    .toXML(Af4XStreamSupport.construct(
+            String af4Xml = Af4ClassLoaderSupport.withAf4ClassLoader(
+                    classLoader -> Af4ClassLoaderSupport.af4XStream(classLoader)
+                                                    .toXML(Af4ClassLoaderSupport.construct(
                                                             classLoader,
                                                             "org.axonframework.modelling.command.AggregateScopeDescriptor",
                                                             descriptor.getType(),
@@ -167,8 +244,8 @@ class Af4SerializerCompatibilityTest {
             // Axon Framework 4 node would, so its fields are asserted reflectively rather than casting to the Axon
             // Framework 5 class.
             String af5Xml = xStreamConverter.convert(descriptor, String.class);
-            Af4XStreamSupport.withAf4ClassLoader(classLoader -> {
-                Object fromAf5 = Af4XStreamSupport.af4XStream(classLoader).fromXML(af5Xml);
+            Af4ClassLoaderSupport.withAf4ClassLoader(classLoader -> {
+                Object fromAf5 = Af4ClassLoaderSupport.af4XStream(classLoader).fromXML(af5Xml);
                 assertThat(fromAf5.getClass().getMethod("getType").invoke(fromAf5)).isEqualTo(descriptor.getType());
                 assertThat(fromAf5.getClass().getMethod("getIdentifier").invoke(fromAf5))
                         .isEqualTo(descriptor.getIdentifier());
@@ -182,9 +259,9 @@ class Af4SerializerCompatibilityTest {
             SagaScopeDescriptor descriptor = new SagaScopeDescriptor("sagaType", "sagaId");
 
             // when
-            String af4Xml = Af4XStreamSupport.withAf4ClassLoader(
-                    classLoader -> Af4XStreamSupport.af4XStream(classLoader)
-                                                    .toXML(Af4XStreamSupport.construct(
+            String af4Xml = Af4ClassLoaderSupport.withAf4ClassLoader(
+                    classLoader -> Af4ClassLoaderSupport.af4XStream(classLoader)
+                                                    .toXML(Af4ClassLoaderSupport.construct(
                                                             classLoader,
                                                             "org.axonframework.modelling.saga.SagaScopeDescriptor",
                                                             descriptor.getType(),
@@ -198,8 +275,8 @@ class Af4SerializerCompatibilityTest {
             // when: Axon Framework 4 reads what this Converter wrote; see the equivalent note in
             // aggregateScopeDescriptorRoundTripsBothWays() on why this is asserted reflectively.
             String af5Xml = xStreamConverter.convert(descriptor, String.class);
-            Af4XStreamSupport.withAf4ClassLoader(classLoader -> {
-                Object fromAf5 = Af4XStreamSupport.af4XStream(classLoader).fromXML(af5Xml);
+            Af4ClassLoaderSupport.withAf4ClassLoader(classLoader -> {
+                Object fromAf5 = Af4ClassLoaderSupport.af4XStream(classLoader).fromXML(af5Xml);
                 assertThat(fromAf5.getClass().getMethod("getType").invoke(fromAf5)).isEqualTo(descriptor.getType());
                 assertThat(fromAf5.getClass().getMethod("getIdentifier").invoke(fromAf5))
                         .isEqualTo(descriptor.getIdentifier());
@@ -209,9 +286,7 @@ class Af4SerializerCompatibilityTest {
     }
 
     private static Af4SerializedObject serializeWithAf4JacksonSerializer(Object value) throws Exception {
-        assertThat(AF4_MESSAGING_JAR).isRegularFile();
-        URL serializerJar = AF4_MESSAGING_JAR.toUri().toURL();
-        try (URLClassLoader classLoader = new AxonFramework4ClassLoader(serializerJar)) {
+        return Af4ClassLoaderSupport.withAf4ClassLoader(classLoader -> {
             Class<?> serializerContract = classLoader.loadClass("org.axonframework.serialization.Serializer");
             Class<?> serializerType = classLoader.loadClass(
                     "org.axonframework.serialization.json.JacksonSerializer"
@@ -228,38 +303,10 @@ class Af4SerializerCompatibilityTest {
             Object type = serializedObjectType.getMethod("getType").invoke(serialized);
             Method getName = type.getClass().getMethod("getName");
             return new Af4SerializedObject(data, (String) getName.invoke(type));
-        }
+        });
     }
 
     private record Af4SerializedObject(byte[] data, String typeName) {
 
-    }
-
-    private static final class AxonFramework4ClassLoader extends URLClassLoader {
-
-        private AxonFramework4ClassLoader(URL serializerJar) {
-            super(new URL[]{serializerJar}, Af4SerializerCompatibilityTest.class.getClassLoader());
-        }
-
-        @Override
-        protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
-            synchronized (getClassLoadingLock(name)) {
-                Class<?> loadedClass = findLoadedClass(name);
-                if (loadedClass == null && name.startsWith("org.axonframework.")) {
-                    try {
-                        loadedClass = findClass(name);
-                    } catch (ClassNotFoundException ignored) {
-                        // The saga test fixture is an AF5 class and therefore comes from the parent class loader.
-                    }
-                }
-                if (loadedClass == null) {
-                    loadedClass = super.loadClass(name, false);
-                }
-                if (resolve) {
-                    resolveClass(loadedClass);
-                }
-                return loadedClass;
-            }
-        }
     }
 }

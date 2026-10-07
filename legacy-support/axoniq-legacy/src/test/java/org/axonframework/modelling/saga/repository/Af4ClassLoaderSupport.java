@@ -27,23 +27,24 @@ import java.net.URLClassLoader;
 import java.nio.file.Path;
 
 /**
- * Builds a {@link XStream} instance configured exactly as Axon Framework 4's {@code XStreamSerializer} would, inside
- * the child-first class loader that keeps the Axon Framework 4 jar's classes out of the reactor's Axon Framework 5
- * classes. Shared by tests that compare Axon Framework 4's XStream XML against the Axon Framework 5
- * {@code XStreamConverter}.
+ * Runs reflective actions through the child-first class loader that keeps the Axon Framework 4 jars' classes out of
+ * the reactor's Axon Framework 5 classes, and builds a {@link XStream} instance configured exactly as Axon
+ * Framework 4's {@code XStreamSerializer} would inside it. Shared by tests that compare Axon Framework 4-produced
+ * serialized forms against their Axon Framework 5 {@code Converter} counterparts.
  *
  * @author Steven van Beelen
  */
-public final class Af4XStreamSupport {
+public final class Af4ClassLoaderSupport {
 
     private static final Path AF4_MESSAGING_JAR = Path.of("target", "af4-serializer", "axon-messaging-af4.jar");
+    private static final Path AF4_MODELLING_JAR = Path.of("target", "af4-serializer", "axon-modelling-af4.jar");
 
-    private Af4XStreamSupport() {
+    private Af4ClassLoaderSupport() {
         // Utility class
     }
 
     /**
-     * Runs the given {@code action} with a class loader that resolves Axon Framework 4 classes from the jar copied by
+     * Runs the given {@code action} with a class loader that resolves Axon Framework 4 classes from the jars copied by
      * this module's {@code copy-af4-serializer} build step, closing it once {@code action} returns.
      *
      * @param action the action to run with the Axon Framework 4 class loader
@@ -53,8 +54,10 @@ public final class Af4XStreamSupport {
      */
     public static <T> T withAf4ClassLoader(Af4Action<T> action) throws Exception {
         Assertions.assertThat(AF4_MESSAGING_JAR).isRegularFile();
-        URL serializerJar = AF4_MESSAGING_JAR.toUri().toURL();
-        try (AxonFramework4ClassLoader classLoader = new AxonFramework4ClassLoader(serializerJar)) {
+        Assertions.assertThat(AF4_MODELLING_JAR).isRegularFile();
+        URL messagingJar = AF4_MESSAGING_JAR.toUri().toURL();
+        URL modellingJar = AF4_MODELLING_JAR.toUri().toURL();
+        try (AxonFramework4ClassLoader classLoader = new AxonFramework4ClassLoader(messagingJar, modellingJar)) {
             return action.run(classLoader);
         }
     }
@@ -95,6 +98,10 @@ public final class Af4XStreamSupport {
     public static Object construct(ClassLoader classLoader, String className, String type, Object identifier)
             throws Exception {
         Class<?> loadedType = classLoader.loadClass(className);
+        Assertions.assertThat(loadedType.getClassLoader())
+                  .as("[%s] must resolve from the Axon Framework 4 class loader, not fall back to the parent "
+                              + "class loader's Axon Framework 5 class of the same name", className)
+                  .isEqualTo(classLoader);
         return loadedType.getConstructor(String.class, Object.class).newInstance(type, identifier);
     }
 
@@ -116,13 +123,13 @@ public final class Af4XStreamSupport {
     }
 
     /**
-     * Loads {@code org.axonframework.**} classes from the Axon Framework 4 jar first, falling back to the parent class
-     * loader for anything it does not contain, such as Axon Framework 5 test fixtures under the same namespace.
+     * Loads {@code org.axonframework.**} classes from the Axon Framework 4 jars first, falling back to the parent
+     * class loader for anything they do not contain, such as Axon Framework 5 test fixtures under the same namespace.
      */
     private static final class AxonFramework4ClassLoader extends URLClassLoader {
 
-        private AxonFramework4ClassLoader(URL serializerJar) {
-            super(new URL[]{serializerJar}, Af4XStreamSupport.class.getClassLoader());
+        private AxonFramework4ClassLoader(URL... af4Jars) {
+            super(af4Jars, Af4ClassLoaderSupport.class.getClassLoader());
         }
 
         @Override
