@@ -117,7 +117,11 @@ class SpringCloudMessageDistributionIT {
                             "test.cluster.ports=" + portA + "," + portB,
                             "test.query-handler.enabled=" + NODE_B.equals(nodeName),
                             "test.rename-handler.enabled=" + NODE_B.equals(nodeName),
+                            // The test's discovery keeps reporting a node after it stops, as a registry does until it
+                            // evicts it, so a stopped node is only noticed once its capabilities are refreshed.
+                            "axon.springcloud.capabilities-refresh-interval=1s",
                             "axon.multitenancy.enabled=false",
+                            "axon.axonserver.enabled=false",
                             "spring.main.banner-mode=off",
                             "logging.level.root=WARN")
                 .run();

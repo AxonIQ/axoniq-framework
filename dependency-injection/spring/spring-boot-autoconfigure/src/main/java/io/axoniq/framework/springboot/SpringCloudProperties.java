@@ -26,6 +26,7 @@ import io.axoniq.framework.springcloud.discovery.RestCapabilityDiscoveryMode;
 import io.axoniq.framework.springcloud.query.HttpRemoteQueryDispatcher;
 import io.axoniq.framework.springcloud.query.SpringCloudQueryController;
 import io.axoniq.framework.springcloud.query.SpringCloudQueryControllerConfiguration;
+import io.axoniq.framework.springcloud.shared.SpringCloudMemberRegistry;
 import org.jspecify.annotations.Nullable;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
@@ -142,9 +143,9 @@ public class SpringCloudProperties {
     /**
      * How long an instance is given to answer a capabilities request, both to connect and to respond.
      * <p>
-     * Capabilities are asked for on every discovery heartbeat, so this deadline has to stay well under the heartbeat
-     * interval. An instance that accepts a connection and then answers nothing would otherwise hold up the round that
-     * rebuilds the routing ring, and with it every member's view of who handles what. Defaults to
+     * Capabilities are asked for on every discovery round, so this deadline has to stay well under the capabilities
+     * refresh interval. An instance that accepts a connection and then answers nothing would otherwise hold up the
+     * round that rebuilds the routing ring, and with it every member's view of who handles what. Defaults to
      * {@link RestCapabilityDiscoveryMode#DEFAULT_CAPABILITIES_TIMEOUT}.
      */
     private Duration capabilitiesTimeout = RestCapabilityDiscoveryMode.DEFAULT_CAPABILITIES_TIMEOUT;
@@ -165,6 +166,17 @@ public class SpringCloudProperties {
      * Leave unset when services are served from the root, which is the default and is what {@code null} means here.
      */
     private @Nullable String contextRootMetadataPropertyName;
+
+    /**
+     * How long a member's capabilities are taken as current before it is asked for them again.
+     * <p>
+     * Which members there are comes from the discovery implementation, which signals a change. What each member
+     * handles changes whenever it subscribes or unsubscribes a handler, which no discovery implementation signals, so
+     * it is asked again once this interval has passed, at the latest one and a half intervals after it last answered.
+     * A zero or negative interval asks every member on every discovery heartbeat instead. Defaults to
+     * {@link SpringCloudMemberRegistry#DEFAULT_CAPABILITIES_REFRESH_INTERVAL}.
+     */
+    private Duration capabilitiesRefreshInterval = SpringCloudMemberRegistry.DEFAULT_CAPABILITIES_REFRESH_INTERVAL;
 
     /**
      * Returns whether the Spring Cloud connector is enabled.
@@ -399,5 +411,24 @@ public class SpringCloudProperties {
      */
     public void setCapabilitiesTimeout(Duration capabilitiesTimeout) {
         this.capabilitiesTimeout = capabilitiesTimeout;
+    }
+
+    /**
+     * Returns how long a member's capabilities are taken as current before it is asked for them again.
+     *
+     * @return how long a member's capabilities are taken as current
+     */
+    public Duration getCapabilitiesRefreshInterval() {
+        return capabilitiesRefreshInterval;
+    }
+
+    /**
+     * Sets how long a member's capabilities are taken as current before it is asked for them again. A zero or negative
+     * interval asks every member on every discovery heartbeat instead.
+     *
+     * @param capabilitiesRefreshInterval how long a member's capabilities are taken as current
+     */
+    public void setCapabilitiesRefreshInterval(Duration capabilitiesRefreshInterval) {
+        this.capabilitiesRefreshInterval = capabilitiesRefreshInterval;
     }
 }

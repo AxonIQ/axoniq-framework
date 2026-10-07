@@ -110,7 +110,8 @@ Axoniq Framework does not manage the versions of the discovery implementations, 
 ----
 
 The starter brings the connector, its autoconfiguration, and the servlet web stack commands travel over.
-The discovery implementation stays your choice, and is what supplies the `DiscoveryClient` and `Registration` the connector needs.
+The discovery implementation stays your choice, and is what supplies the `DiscoveryClient` the connector needs.
+It works the same with implementations that register the application, such as Eureka and Consul, and with those that leave registration to the platform, such as Spring Cloud Kubernetes.
 No configuration of the connector itself is needed.
 
 An application that adds the starter without a discovery implementation says so on start-up rather than starting with commands that are never distributed.
@@ -170,12 +171,28 @@ axon.springcloud.context-root-metadata-property-name=contextRoot
 
 ==== Keeping up with the cluster
 
-Members ask each other what they handle once per discovery heartbeat, which makes the heartbeat interval the speed at which a change reaches the rest of the cluster.
-The heartbeats come from the discovery implementation: Eureka publishes one on every registry fetch, `eureka.client.registry-fetch-interval-seconds`, which is 30 seconds by default.
-A deployment whose discovery implementation publishes no heartbeats can drive a round itself, by calling `updateMemberships()` on the `SpringCloudMemberRegistry` bean.
+The connector learns which members there are and what each of them handles separately.
 
-A command no member reports handling fails with a `NoHandlerForCommandException`, which is also what a dispatch sees for up to one heartbeat after the last member handling that command has gone away.
-A member that does not answer within `axon.springcloud.command-reply-timeout` fails the command it was sent and is taken out of the ring, so the commands behind it go elsewhere until a later heartbeat finds it again.
+Which members there are comes from the discovery implementation, which signals a change with a heartbeat.
+Eureka publishes one on every registry fetch, `eureka.client.registry-fetch-interval-seconds`, which is 30 seconds by default.
+Spring Cloud Kubernetes publishes one whenever the set of endpoints changes.
+On each heartbeat, the connector asks the members it has not heard from yet what they handle, and drops the ones discovery no longer reports.
+A deployment whose discovery implementation publishes no heartbeats at all drives this itself, by calling `updateMemberships()` on the `SpringCloudMemberRegistry` bean.
+
+What a member handles changes whenever it subscribes or unsubscribes a handler, which no discovery implementation signals.
+The connector therefore asks each member again once what it last answered is older than `axon.springcloud.capabilities-refresh-interval`, 30 seconds by default, and at the latest one and a half intervals after it answered.
+This is also how a member that stopped without discovery noticing yet drops out of the ring.
+Membership and capability requests run on an executor of virtual threads by default.
+Define an `ExecutorService` bean named `axoniqSpringCloudDiscoveryExecutor` to run them elsewhere.
+
+Each application identifies itself with a node ID it generates at start-up, and serves along with what it handles.
+Members are told apart by that ID rather than by how discovery reports them.
+An application discovery reports more than once, for example because two Kubernetes Services select it, is still one member.
+An application recognizes its own instance among the ones discovery reports the same way, so it needs no `Registration` to do so.
+An application that restarts comes back as a new member.
+
+A command no member reports handling fails with a `NoHandlerForCommandException`, which is also what a dispatch sees until the connector learns that the last member handling that command has gone away.
+A member that does not answer within `axon.springcloud.command-reply-timeout` fails the command it was sent and is taken out of the ring, so the commands behind it go elsewhere until it answers the connector's capabilities request again.
 A member that answers with a failure of its own, such as a handler that threw, stays in the ring, since it was reachable.
 
 ==== Narrowing which instances are considered
@@ -207,12 +224,15 @@ The rest rarely need changing:
 axon.springcloud.enabled=true
 # How long a member is given to answer a command before it is treated as unreachable.
 axon.springcloud.command-reply-timeout=30s
-# How long an instance is given to answer a capabilities request. Keep it well under the heartbeat interval.
+# How long an instance is given to answer a capabilities request. Keep it well under the refresh interval.
 axon.springcloud.capabilities-timeout=2s
 # How long a service instance is left alone after answering the capabilities endpoint with a client error.
 axon.springcloud.ignore-period=1m
 # The metadata property holding an instance's context root. Unset by default, for instances served from the root.
 #axon.springcloud.context-root-metadata-property-name=contextRoot
+# How long what a member handles is taken as current before it is asked again, such as 30s, 1m or 30000ms.
+# Zero asks every member on every discovery heartbeat instead.
+axon.springcloud.capabilities-refresh-interval=30s
 ----
 
 The properties governing how queries are answered are described with the xref:queries:infrastructure.adoc#SpringCloudQueryBusConnector[query connector].

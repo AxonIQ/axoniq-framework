@@ -39,7 +39,6 @@ import org.axonframework.messaging.core.GenericMessage;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
 import org.junit.jupiter.api.*;
-import org.springframework.cloud.client.discovery.event.InstanceRegisteredEvent;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
@@ -79,8 +78,8 @@ class SpringCloudCommandBusConnectorTest {
         localInstance = TestServiceInstance.instance("university", "node-a", 8080);
         remoteInstance = TestServiceInstance.instance("university", "node-b", 8080);
         discoveryClient = new RecordingDiscoveryClient().register("university", localInstance);
-        discoveryMode = new RecordingCapabilityDiscoveryMode();
-        registry = new SpringCloudMemberRegistry(discoveryClient, localInstance, discoveryMode);
+        discoveryMode = new RecordingCapabilityDiscoveryMode().answeringAsLocal(localInstance);
+        registry = new SpringCloudMemberRegistry(discoveryClient, discoveryMode);
         handler = new RecordingCommandHandler();
         dispatcher = new RecordingRemoteCommandDispatcher();
         entitlementManager = new RecordingEntitlementManager();
@@ -106,7 +105,7 @@ class SpringCloudCommandBusConnectorTest {
     private Member discoverRemoteMemberHandling(QualifiedName... commands) {
         discoveryClient.register("university", remoteInstance);
         discoveryMode.answering(remoteInstance, new MemberCapabilities(LOAD_FACTOR, Set.of(commands), Set.of()));
-        registry.onInstanceRegistered(new InstanceRegisteredEvent<>(this, localInstance));
+        registry.updateMemberships();
         return registry.ring().members().stream()
                        .filter(member -> !member.local())
                        .findFirst()

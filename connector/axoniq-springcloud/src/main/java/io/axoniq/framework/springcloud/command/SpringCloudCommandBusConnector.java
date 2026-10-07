@@ -70,7 +70,7 @@ import java.util.concurrent.ConcurrentHashMap;
  *     <li>{@link #subscribe(QualifiedName, int)} completes immediately, recording the subscription locally and
  *     publishing the updated capabilities. It deliberately does not wait for other members to observe the change:
  *     {@code DistributedCommandBus} joins this future on the subscribing thread, and other members learn of the
- *     subscription on their next discovery heartbeat regardless.</li>
+ *     subscription when they next refresh its capabilities regardless.</li>
  * </ul>
  * This connector is wired by {@link io.axoniq.framework.springcloud.SpringCloudConfigurationEnhancer}, wrapped in a
  * {@code PayloadConvertingCommandBusConnector} that converts payloads to {@code String} on the way out. It is not

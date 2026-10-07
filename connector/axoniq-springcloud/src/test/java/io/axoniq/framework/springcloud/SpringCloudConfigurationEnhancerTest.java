@@ -57,9 +57,10 @@ class SpringCloudConfigurationEnhancerTest {
     @BeforeEach
     void setUp() {
         TestServiceInstance localInstance = TestServiceInstance.instance("university", "node-a", 8080);
-        registry = new SpringCloudMemberRegistry(new RecordingDiscoveryClient().register("university", localInstance),
-                                                 localInstance,
-                                                 new RecordingCapabilityDiscoveryMode());
+        registry = new SpringCloudMemberRegistry(
+                new RecordingDiscoveryClient().register("university", localInstance),
+                new RecordingCapabilityDiscoveryMode().answeringAsLocal(localInstance)
+        );
         invoker = new IncomingCommandInvoker(() -> "node-a", null);
         dispatcher = new RecordingRemoteCommandDispatcher();
     }

@@ -331,7 +331,6 @@ single method that reads top to bottom, using the regular event store for event-
 [NOTE]
 ====
 Workflows are an Axoniq Framework feature and require an Axoniq license to run in production.
-Workflows are currently available as a preview and can be tried out without a license.
 ====
 
 Saga concepts map onto Workflow concepts:
