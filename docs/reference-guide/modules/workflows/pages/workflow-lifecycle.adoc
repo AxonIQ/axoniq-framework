@@ -2,12 +2,13 @@
 :navtitle: Workflow Lifecycle
 
 A workflow moves through a series of states during its lifetime.
-This section covers how workflows terminate—both intentionally and unexpectedly—and how to react to state changes with lifecycle listeners.
+This section covers how workflows terminate, both intentionally and unexpectedly, and how to react to state changes with lifecycle listeners.
 
 [NOTE]
 ====
 Each workflow instance runs on a **virtual thread**.
-Virtual threads are lightweight—a suspended workflow (for example, waiting for an event) consumes almost no memory or OS resources, so you can run thousands of concurrent workflow instances without issue.
+Virtual threads are lightweight.
+A suspended workflow (for example, waiting for an event) consumes almost no memory or OS resources, so you can run thousands of concurrent workflow instances without issue.
 Memory use is proportional to the number of non-terminal instances on the node.
 In a future version, the engine will support offloading long-running suspended workflows to disk, freeing memory entirely until they are resumed.
 ====
@@ -24,7 +25,7 @@ Once started, a workflow is always in one of these states:
 |The workflow is actively executing steps.
 
 |`COMPLETED`
-|The workflow method returned normally—all work is done.
+|The workflow method returned normally since all work is done.
 Any async steps still running are interrupted (see <<complete-with-running-steps>>).
 
 |`FAILED`
@@ -37,7 +38,8 @@ Any async steps still running are interrupted (see <<complete-with-running-steps
 |A `TimeoutException` escaped the workflow body.
 |===
 
-`COMPLETED`, `FAILED`, `CANCELLED`, and `TIMED_OUT` are **terminal states**—the workflow will not be retried or resumed.
+`COMPLETED`, `FAILED`, `CANCELLED`, and `TIMED_OUT` are **terminal states*.
+The workflow will not be retried or resumed when any of these occur.
 
 [NOTE]
 ====
@@ -50,45 +52,43 @@ The engine writes workflow lifecycle events with event-store tags as well:
 == The workflow context
 
 The workflow context passed to your workflow method is your single entry point to all engine capabilities.
-For Java, `WorkflowContext` is the shared author-facing workflow-body contract. `BaseWorkflowContext` is the
-canonical Java DSL layer implementing it, with Java-friendly named overloads; `SimpleWorkflowContext` adds further
-convenience methods on top.
+For Java, `WorkflowContext` is the shared author-facing workflow-body contract. `BaseWorkflowContext` is the canonical Java DSL layer implementing it, with Java-friendly named overloads; `SimpleWorkflowContext` adds further convenience methods on top.
 
 [cols="1,2"]
 |===
 |Category |What you can do
 
 |*Workflow data*
-|`workflowId()`—the unique workflow instance ID +
-`workflowDefinitionId()`—the workflow definition identity; use `.version()` for its current definition version (see xref:versioning.adoc[Workflow Versioning]) +
-`workflowPayload()`—the current workflow payload +
-`workflowStatus()`—the current status (STARTED, COMPLETED, FAILED, ...) +
-`workflowStepNames()`—names of steps in this workflow execution +
-`getStep(stepName)` / `containsStep(stepName)`—inspect whether a named step exists and retrieve it when present
+|`workflowId()`: the unique workflow instance ID +
+`workflowDefinitionId()`: the workflow definition identity; use `.version()` for its current definition version (see xref:versioning.adoc[Workflow Versioning]) +
+`workflowPayload()`: the current workflow payload +
+`workflowStatus()`: the current status (STARTED, COMPLETED, FAILED, ...) +
+`workflowStepNames()`: names of steps in this workflow execution +
+`getStep(stepName)` / `containsStep(stepName)`: inspect whether a named step exists and retrieve it when present
 
 |*Component access*
-|`resolveComponent(componentType)`—resolve a component from the processing context for this workflow invocation
+|`resolveComponent(componentType)`: resolve a component from the processing context for this workflow invocation
 
 |*Execute actions*
-|`awaitExecute(...)`—run an action and wait for the result +
-`execute(...)`—run an action without waiting (returns `WorkflowStepResult`)
+|`awaitExecute(...)`: run an action and wait for the result +
+`execute(...)`: run an action without waiting (returns `WorkflowStepResult`)
 
 |*Wait for events*
-|`awaitEvent(...)`—blocking event wait on `BaseWorkflowContext`, plus a typed convenience overload on `SimpleWorkflowContext` +
-`waitForEvent(...)`—non-blocking wait primitive on `BaseWorkflowContext` and `SimpleWorkflowContext` +
-`sleep(...)` / `awaitSleep(...)`—durable delay primitives
+|`awaitEvent(...)`: blocking event wait on `BaseWorkflowContext`, plus a typed convenience overload on `SimpleWorkflowContext` +
+`waitForEvent(...)`: non-blocking wait primitive on `BaseWorkflowContext` and `SimpleWorkflowContext` +
+`sleep(...)` / `awaitSleep(...)`: durable delay primitives
 
 |*Manage state*
-|`modifyPayload(...)` / `awaitModifyPayload(...)`—canonical payload mutation primitives +
-`setPayload(...)`—`SimpleWorkflowContext` convenience for replacing payload fields from an object
+|`modifyPayload(...)` / `awaitModifyPayload(...)`: canonical payload mutation primitives +
+`setPayload(...)`: `SimpleWorkflowContext` convenience for replacing payload fields from an object
 
 |*Terminate*
-|`fail(...)`—terminate the workflow with a failure +
-`cancel(...)`—cancel the workflow +
-`cancelStep(...)`—cancel a single step
+|`fail(...)`: terminate the workflow with a failure +
+`cancel(...)`: cancel the workflow +
+`cancelStep(...)`: cancel a single step
 
 |*Orchestrate*
-|`allMatch(...)`, `anyMatch(...)`, `noneMatch(...)`—combine multiple non-blocking results
+|`allMatch(...)`, `anyMatch(...)`, `noneMatch(...)`: combine multiple non-blocking results
 |===
 
 In Kotlin, `WorkflowKontext` is the workflow context instance and `Kontext` is the author-facing wrapper.
@@ -96,7 +96,8 @@ In Kotlin, `WorkflowKontext` is the workflow context instance and `Kontext` is t
 
 [TIP]
 ====
-You can also build your own custom workflow context with domain-specific methods. See xref:configuration.adoc#custom-workflow-context[Custom Workflow Context].
+You can also build your own custom workflow context with domain-specific methods.
+See xref:configuration.adoc#custom-workflow-context[Custom Workflow Context].
 ====
 
 [[fail-vs-cancel]]
@@ -119,7 +120,7 @@ Both terminate the workflow, but they signal different intent and are called fro
 |The workflow logic has determined that it should stop gracefully.
 |===
 
-=== `fail`—internal termination
+=== `fail`: internal termination
 
 Use `fail` inside your workflow code when the business logic determines the workflow should stop.
 
@@ -127,23 +128,9 @@ If the workflow has running steps (for example, parallel steps started with `exe
 
 [source,java]
 ----
-// Start two steps in parallel (non-blocking)
-var shipping = ctx.execute("shipOrder", ctx.workflowPayload(),
-                            ShippingService::shipOrder,
-                            step -> step.timeout(Duration.ofMinutes(5)));
-
-var notification = ctx.execute("notifyCustomer", ctx.workflowPayload(),
-                                NotificationService::notifyCustomer,
-                                step -> step.timeout(Duration.ofMinutes(1)));
-
-// Meanwhile, check stock - if unavailable, fail the workflow
-var reservation = ctx.awaitExecute("reserveStock",
-        Map.of(),
-        (pc, input) -> Map.of("reserved", InventoryService.reserveStock()));
-if (!Boolean.TRUE.equals(reservation.get("reserved"))) {
-    ctx.fail(new RuntimeException("Stock unavailable")); // <1>
-}
+include::example$workflows/workflowlifecycle/TerminationExamples.java[tag=fail-internal,indent=0]
 ----
+
 <.> Interrupts `shipOrder` and `notifyCustomer`, then terminates the workflow with FAILED status.
 
 ++++
@@ -161,34 +148,25 @@ if (!Boolean.TRUE.equals(reservation.get("reserved"))) {
 <!-- vale on -->
 ++++
 
-The last event recorded for `shipOrder` and `notifyCustomer` is their `Started`; the workflow's `Failed` is the terminal event, and no further events are published for the workflow. The `Failed` event records the original exception's class and message (`RuntimeException` here), not the wrapper. To record a terminal outcome and run compensation for a running step, cancel it individually with `ctx.cancelStep(...)` before failing the workflow.
+The last event recorded for `shipOrder` and `notifyCustomer` is their `Started`; the workflow's `Failed` is the terminal event, and no further events are published for the workflow.
+The `Failed` event records the original exception's class and message (`RuntimeException` here), not the wrapper.
+To record a terminal outcome and run compensation for a running step, cancel it individually with `ctx.cancelStep(...)` before failing the workflow.
 
-=== `cancel`—internal termination
+=== `cancel`: internal termination
 
-Use `ctx.cancel()` inside a workflow when its business logic determines that it should stop gracefully. Like `fail`,
-cancellation interrupts running steps and then terminates the workflow with a single workflow-level event.
+Use `ctx.cancel()` inside a workflow when its business logic determines that it should stop gracefully.
+Like `fail`, cancellation interrupts running steps and then terminates the workflow with a single workflow-level event.
 
 Given a workflow with parallel steps running:
 
 [source,java]
 ----
-// Inside the workflow - two long-running steps in parallel
-var shipping = ctx.execute("shipOrder", ctx.workflowPayload(),
-                            ShippingService::shipOrder,
-                            step -> step.timeout(Duration.ofMinutes(5)));
-
-var notification = ctx.execute("notifyCustomer", ctx.workflowPayload(),
-                                NotificationService::notifyCustomer,
-                                step -> step.timeout(Duration.ofMinutes(1)));
+include::example$workflows/workflowlifecycle/TerminationExamples.java[tag=cancel-parallel-steps,indent=0]
 ----
 
 [source,java]
 ----
-// A business condition reached by the workflow cancels it and interrupts
-// shipOrder and notifyCustomer.
-if (orderCancelled()) {
-    ctx.cancel("Order cancelled by customer");
-}
+include::example$workflows/workflowlifecycle/TerminationExamples.java[tag=cancel-condition,indent=0]
 ----
 
 ++++
@@ -204,28 +182,28 @@ if (orderCancelled()) {
 <!-- vale on -->
 ++++
 
-As the log shows, the last event recorded for `shipOrder` and `notifyCustomer` is their `Started`; the workflow's `Cancelled` is the terminal event. To record a terminal outcome and run compensation for a specific step, cancel it individually with `ctx.cancelStep(...)` (see xref:step-orchestration.adoc[]).
+As the log shows, the last event recorded for `shipOrder` and `notifyCustomer` is their `Started`; the workflow's `Cancelled` is the terminal event.
+To record a terminal outcome and run compensation for a specific step, cancel it individually with `ctx.cancelStep(...)` (see xref:step-orchestration.adoc[]).
 
-If the workflow body itself is blocked on the interrupted step (for example inside `awaitExecute(...)` or `.await()`), that call unblocks with a `StepInterruptedException`, which the body can catch (or its parent `StepFailedException`) to run compensation or cleanup. This is purely an in-body signal: it does not change what is recorded, the step's last event-log entry still stays `Started`.
+If the workflow body itself is blocked on the interrupted step (for example inside `awaitExecute(...)` or `.await()`), that call unblocks with a `StepInterruptedException`, which the body can catch (or its parent `StepFailedException`) to run compensation or cleanup.
+This is purely an in-body signal: it does not change what is recorded, the step's last event-log entry still stays `Started`.
 
 == External cancellation
 
-Use `WorkflowManager` when an application, operator, or support tool needs to request cancellation from outside the
-workflow. It targets a live workflow by a `WorkflowStateQuery` and returns a `CompletableFuture`:
+Use `WorkflowManager` when an application, operator, or support tool needs to request cancellation from outside the workflow.
+It targets a live workflow by a `WorkflowStateQuery` and returns a `CompletableFuture`:
 
 [source,java]
 ----
-workflowManager.findOne(WorkflowStateQuery.byWorkflowId(orderId))
-               .requestWorkflowCancellation(null);
+include::example$workflows/workflowlifecycle/TerminationExamples.java[tag=external-cancellation,indent=0]
 ----
 
-The result has the same workflow-level effect as `ctx.cancel()`: running steps are interrupted and the workflow
-records one `CANCELLED` terminal event. The difference is where the decision originates. `ctx.cancel()` is called by
-workflow logic, while `WorkflowManager` delivers an outside-in request to an existing live execution.
+The result has the same workflow-level effect as `ctx.cancel()`: running steps are interrupted and the workflow records one `CANCELLED` terminal event.
+The difference is where the decision originates. `ctx.cancel()` is called by workflow logic, while `WorkflowManager` delivers an outside-in request to an existing live execution.
 
-The manager can also cancel one step or all running steps without terminating the workflow. It never sends cancellation
-requests to historic instances. See xref:workflow-manager.adoc[Managing Workflow Instances] for querying, state reads,
-and all cancellation operations.
+The manager can also cancel one step or all running steps without terminating the workflow.
+It never sends cancellation requests to historic instances.
+See xref:workflow-manager.adoc[Managing Workflow Instances] for querying, state reads, and all cancellation operations.
 
 [[complete-with-running-steps]]
 === Normal completion with running steps
@@ -236,14 +214,7 @@ When your workflow body returns, the engine interrupts any such step and publish
 
 [source,java]
 ----
-public void execute(SimpleWorkflowContext ctx) {
-    // fire-and-forget - notice there is no .await() on the returned result
-    ctx.execute("sendReceipt", ctx.workflowPayload(),
-                NotificationService::sendReceipt,
-                step -> step.timeout(Duration.ofMinutes(1)));
-
-    // workflow body returns while sendReceipt is still running
-}
+include::example$workflows/workflowlifecycle/TerminationExamples.java[tag=fire-and-forget,indent=0]
 ----
 
 ++++
@@ -256,8 +227,10 @@ public void execute(SimpleWorkflowContext ctx) {
 </div>
 ++++
 
-The workflow terminal is a single workflow-level event; a step left running is interrupted, not driven to a terminal state. If you need a started step to reach a terminal state (for example to trigger compensation), await it or cancel it individually before the workflow completes.
-Interrupting a step only completes its future; it does not force-interrupt a user `execute` action already running on the executor. That action runs to completion and its late result is simply discarded.
+The workflow terminal is a single workflow-level event; a step left running is interrupted, not driven to a terminal state.
+If you need a started step to reach a terminal state (for example to trigger compensation), await it or cancel it individually before the workflow completes.
+Interrupting a step only completes its future; it does not force-interrupt a user `execute` action already running on the executor.
+That action runs to completion and its late result is simply discarded.
 
 [TIP]
 ====
@@ -268,13 +241,11 @@ See xref:execute-steps.adoc[] and xref:step-orchestration.adoc[].
 == Unhandled exceptions
 
 An exception that escapes the workflow body ends the workflow with `FAILED` when it is a `StepFailedException`
-or a code defect such as a `NullPointerException`. A recoverable exception, an engine shutdown or a replay
-drift stop the body without ending the workflow: the status stays `STARTED`, there is no `PAUSED` status, and
-the engine re-drives the workflow on the next restart or segment claim.
+or a code defect such as a `NullPointerException`.
+A recoverable exception, an engine shutdown or a replay drift stop the body without ending the workflow: the status stays `STARTED`, there is no `PAUSED` status, and the engine re-drives the workflow on the next restart or segment claim.
 
-Always give your workflow explicit terminal paths: call `fail` or `cancel` for every error condition you
-anticipate, or let the workflow complete normally. See xref:error-handling.adoc[Error Handling] for the full
-classification and how a stopped workflow resumes.
+Always give your workflow explicit terminal paths: call `fail` or `cancel` for every error condition you anticipate, or let the workflow complete normally.
+See xref:error-handling.adoc[Error Handling] for the full classification and how a stopped workflow resumes.
 
 == Lifecycle listeners
 
@@ -287,34 +258,9 @@ The simplest way is to annotate methods on your workflow class:
 
 [source,java]
 ----
-public class OrderFulfillmentWorkflow {
-
-    @Workflow(idProperty = "orderId", startOnEventClass = OrderPlacedEvent.class)
-    public void execute(SimpleWorkflowContext ctx) {
-        // ... workflow logic
-    }
-
-    @WorkflowCompletedHandler // <1>
-    public void onCompleted(WorkflowStatus status, SimpleWorkflowContext ctx) {
-        logger.info("Order {} fulfilled successfully!", ctx.workflowPayload().get("orderId"));
-    }
-
-    @WorkflowFailedHandler // <2>
-    public void onFailed(WorkflowStatus status, SimpleWorkflowContext ctx) {
-        logger.warn("Order {} failed: {}", ctx.workflowPayload().get("orderId"), status);
-    }
-
-    @WorkflowCancelledHandler // <3>
-    public void onCancelled(WorkflowStatus status, SimpleWorkflowContext ctx) {
-        logger.info("Order {} was cancelled", ctx.workflowPayload().get("orderId"));
-    }
-
-    @WorkflowTimedOutHandler // <4>
-    public void onTimedOut(WorkflowStatus status, SimpleWorkflowContext ctx) {
-        logger.warn("Order {} timed out", ctx.workflowPayload().get("orderId"));
-    }
-}
+include::example$workflows/workflowlifecycle/OrderFulfillmentWorkflow.java[tag=annotation-listeners,indent=0]
 ----
+
 <.> Called when the workflow completes successfully (`COMPLETED` status).
 <.> Called when the workflow fails (`FAILED` status).
 <.> Called when the workflow is cancelled (`CANCELLED` status).
@@ -322,16 +268,14 @@ public class OrderFulfillmentWorkflow {
 
 Each listener method receives the `WorkflowStatus` and the `WorkflowContext`, giving you access to the workflow payload and ID.
 
-Annotation-based listeners execute through the same handler pipeline as every other Axon Framework message
-handler: tracing, handler timeouts, `@MessageHandlerInterceptor`, replay-awareness, and any
+Annotation-based listeners execute through the same handler pipeline as every other Axon Framework message handler: tracing, handler timeouts, `@MessageHandlerInterceptor`, replay-awareness, and any
 `HandlerEnhancerDefinition` registered in the configuration all apply automatically, with no extra setup.
 
 [NOTE]
 ====
 Lifecycle listeners must be defined in the same class as the `@Workflow` method.
 Only methods on the workflow instance's class (and its type hierarchy) are scanned for listener annotations.
-Use the `workflowName` attribute (for example, `@WorkflowCompletedHandler(workflowName = "myWorkflow")`) to bind
-a listener to a specific workflow when multiple workflows are defined in the same class.
+Use the `workflowName` attribute (for example, `@WorkflowCompletedHandler(workflowName = "myWorkflow")`) to bind a listener to a specific workflow when multiple workflows are defined in the same class.
 ====
 
 === Programmatic listeners
@@ -340,29 +284,19 @@ For more control, register listeners via the declarative configuration:
 
 [source,java]
 ----
-.customized((c, w) -> w
-        .registerWorkflowStatusChangeListener(WorkflowStatus.COMPLETED,
-                (status, context, processingContext) -> {
-                    logger.info("Workflow {} completed", context.workflowId());
-                })
-        .registerWorkflowStatusChangeListener(WorkflowStatus.FAILED,
-                (status, context, processingContext) -> {
-                    logger.warn("Workflow {} failed", context.workflowId());
-                })
-)
+include::example$workflows/workflowlifecycle/LifecycleListenerConfigurationExamples.java[tag=programmatic-listeners,indent=0]
 ----
 
 You can also unregister listeners:
 
 [source,java]
 ----
-w.unregisterWorkflowStatusChangeListener(WorkflowStatus.COMPLETED, myListener);
+include::example$workflows/workflowlifecycle/LifecycleListenerConfigurationExamples.java[tag=unregister-listener,indent=0]
 ----
 
 `WorkflowStatusChangeListener` is a functional interface with a single method,
-`onWorkflowStatus(WorkflowStatus, WorkflowContext, ProcessingContext)`. Receiving the `ProcessingContext` lets a
-programmatic listener participate in the same handler pipeline annotation-based listeners do, for example,
-propagating correlation data or interacting with the active transaction, with no extra setup required.
+`onWorkflowStatus(WorkflowStatus, WorkflowContext, ProcessingContext)`.
+Receiving the `ProcessingContext` lets a programmatic listener participate in the same handler pipeline annotation-based listeners do, for example, propagating correlation data or interacting with the active transaction, with no extra setup required.
 
 [NOTE]
 ====
@@ -372,16 +306,11 @@ They run in the context of the workflow execution and have access to the full wo
 
 == Method parameters
 
-Both the `@Workflow` method and annotation-based lifecycle listeners can declare additional parameters beyond
-the workflow context, resolved the same way every other Axon Framework annotated handler resolves its
-parameters:
+Both the `@Workflow` method and annotation-based lifecycle listeners can declare additional parameters beyond the workflow context, resolved the same way every other Axon Framework annotated handler resolves its parameters:
 
 [source,java]
 ----
-@WorkflowCompletedHandler
-public void onCompleted(WorkflowStatus status, SimpleWorkflowContext ctx, WorkflowState state) {
-    logger.info("Order {} fulfilled successfully! (status: {})", ctx.workflowPayload().get("orderId"), state.workflowStatus());
-}
+include::example$workflows/workflowlifecycle/MethodParametersExample.java[tag=method-parameters-example,indent=0]
 ----
 
 The following parameters are supported for workflow related handler methods:
@@ -407,13 +336,9 @@ Declaring it on the `@Workflow` method itself has no matching value, so that met
 
 == Event versioning
 
-Every event a workflow emits—started, step started/completed/failed/cancelled/retrying/retry-started/timed-out,
-completed/failed/cancelled/timed-out workflow, and version markers—carries the workflow's current
-definition version on its `MessageType.version()`.
-This is Axon Framework 5's native event-versioning channel, *not* a separate metadata key.
+Every event a workflow emits, like started, step started/completed/failed/cancelled/retrying/retry-started/timed-out, completed/failed/cancelled/timed-out workflow, and version markers, carry the workflow's current definition version on its `MessageType.version()`.
+This is Axon Framework's native event-versioning channel, *not* a separate metadata key.
 
-For a workflow declared with `@Workflow(version = "0.0.2")`, the runtime writes every emitted event
-as `new MessageType(name, "0.0.2")`.
-At replay time, the engine reads `event.type().version()` from the workflow's started event and
-routes the instance to the registered workflow definition matching that version.
+For a workflow declared with `@Workflow(version = "0.0.2")`, the runtime writes every emitted event as `new MessageType(name, "0.0.2")`.
+At replay time, the engine reads `event.type().version()` from the workflow's started event and routes the instance to the registered workflow definition matching that version.
 See xref:versioning.adoc[Workflow Versioning] for the full routing model.
