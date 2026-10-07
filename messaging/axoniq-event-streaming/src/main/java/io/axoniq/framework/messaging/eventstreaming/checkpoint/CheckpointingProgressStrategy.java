@@ -43,6 +43,7 @@ import java.util.function.Function;
 
 import static java.util.Objects.requireNonNull;
 import static org.axonframework.common.FutureUtils.emptyCompletedFuture;
+import static org.axonframework.common.FutureUtils.joinAndUnwrap;
 
 /**
  * {@link SegmentProgressStrategy} that lets self-checkpointing {@link Checkpointing} units manage when their segment's
@@ -136,9 +137,9 @@ public final class CheckpointingProgressStrategy implements SegmentProgressStrat
         if (requested == null) {
             return emptyCompletedFuture();
         }
-        return requestEach(participant -> requestAdvance(participant, requested))
-                .thenCompose(this::reconcile)
-                .thenCompose(agreed -> context.persistProgress(agreed, processingContext));
+        return persistOnCallingThread(requestEach(participant -> requestAdvance(participant, requested))
+                                              .thenCompose(this::reconcile),
+                                      processingContext);
     }
 
     @Override
@@ -172,7 +173,7 @@ public final class CheckpointingProgressStrategy implements SegmentProgressStrat
             // anything to store.
             return emptyCompletedFuture();
         }
-        return requestEach(participant -> participant.onSegmentReleased(segment, upTo)
+        return persistOnCallingThread(requestEach(participant -> participant.onSegmentReleased(segment, upTo)
                                                      .thenApply(this::resolveLatest))
                 .thenCompose(reported -> reconcile(reported).exceptionally(error -> {
                     // The claim must still be released: if the components cannot be reconciled, fall back to the
@@ -181,8 +182,7 @@ public final class CheckpointingProgressStrategy implements SegmentProgressStrat
                                         + "storing the lowest reported safe token.",
                                 segment, error);
                     return TrackingTokenUtils.lowerBound(reported.values());
-                }))
-                .thenCompose(agreed -> context.persistProgress(agreed, processingContext))
+                })), processingContext)
                 // The claim must be released regardless of whether a final token could be stored: if a component's
                 // release future failed (so no safe token could even be determined) or the store itself failed, leave
                 // the stored token where it is and let the uncovered tail be reprocessed from there on the next claim.
@@ -289,6 +289,15 @@ public final class CheckpointingProgressStrategy implements SegmentProgressStrat
             );
         }
         return actual;
+    }
+
+    private CompletableFuture<Void> persistOnCallingThread(CompletableFuture<@Nullable TrackingToken> agreed,
+                                                           ProcessingContext processingContext) {
+        try {
+            return context.persistProgress(joinAndUnwrap(agreed), processingContext);
+        } catch (Exception e) {
+            return CompletableFuture.failedFuture(e);
+        }
     }
 
     /**
