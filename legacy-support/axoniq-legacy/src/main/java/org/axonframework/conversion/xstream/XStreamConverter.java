@@ -164,18 +164,18 @@ public class XStreamConverter implements Converter {
         }
         Class<?> targetClass = rawClassOf(targetType);
 
-        boolean sourceIsXmlCarrier = isXmlCarrierType(sourceType);
-        boolean targetIsXmlCarrier = isXmlCarrierType(targetClass);
         try {
-            if (sourceIsXmlCarrier && targetIsXmlCarrier) {
+            if (converter.canConvert(sourceType, targetClass)) {
                 // Neither side needs XStream; this is a plain content type conversion around the XML.
                 return (T) converter.convert(input, targetClass);
-            } else if (targetIsXmlCarrier) {
+            } else if (converter.canConvert(String.class, targetClass)) {
+                // Writing: object -> XML -> requested representation.
                 String xml = xStream.toXML(input);
                 return (T) converter.convert(xml, targetClass);
-            } else if (sourceIsXmlCarrier) {
+            } else if (converter.canConvert(sourceType, String.class)) {
+                // Reading: stored representation -> XML -> object.
                 String xml = converter.convert(input, String.class);
-                return (T) xStream.fromXML(xml);
+                return (T) convertFromXml(xml, targetClass);
             } else {
                 throw new ConversionException(
                         "XStreamConverter cannot convert from [" + sourceType.getName() + "] to ["
