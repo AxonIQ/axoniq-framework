@@ -144,7 +144,7 @@ public class XStreamConverter implements Converter {
 
         xStream.allowTypesByWildcard(new String[]{"org.axonframework.**"});
         xStream.alias("meta-data", Metadata.class);
-        xStream.registerConverter(new MetadataConverter(xStream.getMapper()));
+        xStream.registerConverter(new MetadataXStreamConverter(xStream.getMapper()));
         xStream.addImmutableType(UUID.class, true);
         xStream.alias("uuid", UUID.class);
     }
@@ -209,9 +209,9 @@ public class XStreamConverter implements Converter {
      * {@code MetaData}: as a plain map, omitted entirely when empty, so the resulting {@code <meta-data>} element is
      * compatible with what an Axon Framework 4 {@code XStreamSerializer} reads and writes.
      */
-    private static final class MetadataConverter extends MapConverter {
+    private static final class MetadataXStreamConverter extends MapConverter {
 
-        private MetadataConverter(Mapper mapper) {
+        private MetadataXStreamConverter(Mapper mapper) {
             super(mapper);
         }
 
