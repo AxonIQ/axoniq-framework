@@ -184,6 +184,11 @@ A handler is not left producing responses that nothing receives.
 A node leaving the cluster stops advertising the queries it handled before it stops answering them, so the other nodes route elsewhere rather than discovering it left by timing out.
 Queries already dispatched are waited for: shutdown completes once their responses have arrived, and queries dispatched after shutdown began are rejected.
 
+In a Spring Boot application using this connector, a node stops its streaming event processors before the web server's graceful shutdown starts, rather than after the web server has stopped.
+That is what lets the node tell its subscribers it is leaving while their streams are still open, as <<Ending a subscription>> describes.
+The node still answers the commands and queries that reach it while the web server drains, as it does with any other connector once its event processors have stopped.
+The events those commands publish are handled by the nodes that take over the stopped processors' segments, so a request that waits for a read model those processors maintain to reflect its command waits until another node has claimed the segment.
+
 ==== Subscription queries
 
 A subscription query is two activities.
