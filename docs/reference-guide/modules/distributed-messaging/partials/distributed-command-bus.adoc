@@ -152,9 +152,14 @@ Keep them off any ingress reachable from outside the cluster.
 An application with Spring Security in place has to permit all three paths and exempt the command and query endpoints from cross-site request forgery protection, or members cannot reach each other.
 
 Outgoing requests to other members use the application's own `RestClient.Builder` bean when it has one, which is where an interceptor authenticating them belongs.
-Spring Boot contributes such a builder by default, so the application's `spring.http.client.*` settings apply to this traffic as well.
-Define a `RestClient` bean named `axoniqSpringCloudRestClient` to give this traffic a client of its own.
+Spring Boot contributes such a builder by default, so the application's `spring.http.client.*` settings apply to commands as well.
+Define a `RestClient` bean named `axoniqSpringCloudRestClient` for commands to give that traffic a client of its own.
 An application whose `RestClient.Builder` is load balanced has to do so: members are addressed by host and port rather than by service ID, which a load-balanced client cannot resolve.
+
+Members ask each other for their capabilities on a client with a transport of its own, named `axoniqSpringCloudCapabilitiesRestClient`.
+Transport settings on the application's HTTP client, such as an SSL bundle set through `spring.http.client.*`, do not reach it, while settings the JVM applies to every connection, such as the `javax.net.ssl.trustStore` system property, do.
+Members that trust each other only through an SSL bundle, or authenticate each other with client certificates, define this client themselves, with a read timeout no longer than `axon.springcloud.capabilities-timeout`.
+Without it, members fail to learn what the others handle, and route nothing to each other.
 
 Instances that are not served from the root publish their context root as service instance metadata, and tell the connector which metadata property holds it:
 

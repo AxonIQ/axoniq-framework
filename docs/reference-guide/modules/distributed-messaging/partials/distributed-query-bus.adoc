@@ -184,12 +184,30 @@ A handler is not left producing responses that nothing receives.
 A node leaving the cluster stops advertising the queries it handled before it stops answering them, so the other nodes route elsewhere rather than discovering it left by timing out.
 Queries already dispatched are waited for: shutdown completes once their responses have arrived, and queries dispatched after shutdown began are rejected.
 
+==== The query client
+
+Queries and subscription queries are sent on a client of their own, named `axoniqSpringCloudQueryRestClient`.
+It is built from the application's `RestClient.Builder` when there is one, so interceptors such as authentication still apply, but on a transport with no read timeout and no shared connection pool.
+An application whose `RestClient.Builder` is load balanced defines this client itself, as it does the xref:commands:infrastructure.adoc#SpringCloudCommandBusConnector[command client].
+
+Transport settings on the application's HTTP client do not reach the query client: an SSL bundle set through `spring.http.client.*`, or a custom `ClientHttpRequestFactory` on the builder.
+Settings the JVM applies to every connection, such as the `javax.net.ssl.trustStore` system property, still do.
+Members that trust each other only through an SSL bundle, or authenticate each other with client certificates, define the query client themselves, free of a read timeout and of a bounded connection pool:
+
+[source,java]
+----
+include::example$distributedmessaging/distributedquerybus/springcloudqueryclient/AxonConfig.java[tag=query-rest-client-with-ssl-bundle,indent=0]
+----
+
 ==== Subscription queries
 
 A subscription query is two activities.
 First, an update stream is opened on every node advertising the query's name.
 Second, one of those nodes is asked for the initial result, which is a query like any other.
 The two are returned as a single stream: the initial result, and then the updates.
+
+The initial result is asked for only once every node has registered the subscription, not just the node answering it.
+The nodes are subscribed to in parallel, so this waits for the slowest of them to answer.
 
 Every node advertising the name is subscribed to, not just the one a plain query would route to.
 An update is emitted on whichever node's state changed, and reaches only the subscriptions that node holds a registration for, so a subscriber reaching one node would miss every update emitted on the others.
@@ -209,13 +227,16 @@ Keep the interval comfortably below the idle timeout of whatever sits between th
 Unlike a plain query, a subscription has no deadline of its own: it lasts as long as the subscriber wants it to, and a node with nothing to report is behaving correctly.
 What stands in for a deadline is silence, which is how a node that disappeared without its socket reporting so looks.
 
+Each open subscription holds a connection to every node advertising its query for as long as it lasts, so a node holding 50 subscriptions to a query three nodes handle holds 150 connections.
+They are opened on the client queries are sent with, which keeps them apart from the connections commands use.
+
 ===== Ending a subscription
 
 A node that completes a subscription query says so explicitly, and that ends the subscription: there will never be another update to it, so the subscribing node stops waiting on the other nodes as well.
 
-A node that simply stops answering, having shut down or been partitioned away, is a different thing.
-That ends its own part in the subscription and says nothing about the subscription itself, so the remaining nodes carry on and the subscription ends once the last of them has.
-A node that fails, rather than ending quietly, fails the whole subscription: carrying on with the rest would leave the subscriber receiving some of the updates and believing it received all of them.
+Any other end of a node's part fails the whole subscription: the node reporting a failure, shutting down, sending nothing for longer than `axon.springcloud.subscription-inactivity-timeout`, or losing its connection.
+The subscribing node cannot tell such a node apart from one that is still emitting updates it no longer receives, so carrying on with the rest would leave the subscriber receiving some of the updates and believing it received all of them.
+Establish the subscription query again to get a fresh initial result and a complete stream of updates from the nodes still there.
 
 ===== A node that starts handling the query
 

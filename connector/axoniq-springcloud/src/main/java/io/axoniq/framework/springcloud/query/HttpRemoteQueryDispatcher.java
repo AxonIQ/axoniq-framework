@@ -436,7 +436,7 @@ public class HttpRemoteQueryDispatcher implements RemoteQueryDispatcher {
         switch (event.event()) {
             case QueryConverter.UPDATE_EVENT -> {
                 QueryDispatchResponse update = parse(event.data(), QueryDispatchResponse.class);
-                if (!updates.offer(QueryConverter.convertResponse(update, converter), Context.empty())) {
+                if (!updates.offer(QueryConverter.convertUpdate(update, converter), Context.empty())) {
                     throw new IllegalStateException(
                             ("The answering member produced more than %d updates ahead of this application consuming "
                                     + "them. Consume the updates sooner, or raise the update buffer size.")

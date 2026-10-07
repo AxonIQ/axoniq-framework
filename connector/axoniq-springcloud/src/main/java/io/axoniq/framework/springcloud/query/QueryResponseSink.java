@@ -68,9 +68,9 @@ public interface QueryResponseSink {
     /**
      * Reports that the subscription query being answered is over: there will never be another update to it.
      * <p>
-     * Distinct from the stream ending, which is also what a member leaving the cluster does. That says this member
-     * has stopped answering; this says the subscription itself has run its course, and the subscriber stops waiting
-     * on every other member too.
+     * Distinct from the stream ending, which is also what a member that shuts down does. That says only that this
+     * member stopped answering, which fails the subscription; this says the subscription itself has run its course,
+     * and the subscriber stops waiting on every other member too.
      *
      * @param requestIdentifier the identifier of the subscription query that is over
      */

@@ -103,6 +103,12 @@ public class SpringCloudAutoConfiguration {
     public static final String REST_CLIENT_BEAN = "axoniqSpringCloudRestClient";
 
     /**
+     * The name of the {@link RestClient} bean used to send queries and subscription queries to other members of the
+     * cluster.
+     */
+    public static final String QUERY_REST_CLIENT_BEAN = "axoniqSpringCloudQueryRestClient";
+
+    /**
      * The name of the {@link RestClient} bean used to ask other instances for their capabilities.
      */
     public static final String CAPABILITIES_REST_CLIENT_BEAN = "axoniqSpringCloudCapabilitiesRestClient";
@@ -276,6 +282,37 @@ public class SpringCloudAutoConfiguration {
                                                           properties.getCommandReplyTimeout())
                                                   )
                           )
+                          .build();
+        }
+
+        /**
+         * Bean creation method for the {@link RestClient} used to send queries and subscription queries to other
+         * members.
+         * <p>
+         * Built from the application's own {@link RestClient.Builder} when it has one, keeping what it configured
+         * there, such as interceptors adding authentication, but always on a transport of its own: a JDK client with a
+         * connect timeout and no read timeout, which opens a connection per stream rather than borrowing one from a
+         * bounded pool. The dispatcher bounds the streams itself, with a deadline per query and a silence check per
+         * subscription.
+         * <p>
+         * Because the transport is this client's own, transport settings of the application's client do not reach
+         * it, such as an SSL bundle configured for it or a custom request factory on the builder. Settings the JVM
+         * applies to every connection still do. An application whose members trust each other through an SSL bundle,
+         * or authenticate each other with client certificates, defines a bean named {@link #QUERY_REST_CLIENT_BEAN}
+         * itself, keeping it free of a read timeout and of a bounded connection pool. The same holds for the client
+         * named {@link #CAPABILITIES_REST_CLIENT_BEAN}, which is built without the application's builder altogether.
+         *
+         * @param builderProvider provides the application's {@link RestClient.Builder}, if it has one
+         * @return the client used to send queries and subscription queries to other members
+         */
+        @Bean(QUERY_REST_CLIENT_BEAN)
+        @ConditionalOnMissingBean(name = QUERY_REST_CLIENT_BEAN)
+        public RestClient axoniqSpringCloudQueryRestClient(ObjectProvider<RestClient.Builder> builderProvider) {
+            RestClient.Builder applicationBuilder = builderProvider.getIfAvailable();
+            RestClient.Builder builder = applicationBuilder != null ? applicationBuilder.clone() : RestClient.builder();
+            return builder.requestFactory(new JdkClientHttpRequestFactory(
+                                  HttpClient.newBuilder().connectTimeout(CONNECT_TIMEOUT).build()
+                          ))
                           .build();
         }
 
@@ -517,7 +554,7 @@ public class SpringCloudAutoConfiguration {
         /**
          * Bean creation method for the {@link RemoteQueryDispatcher} sending queries to other members.
          *
-         * @param restClient the client sending the queries
+         * @param restClient the client sending the queries and subscription queries
          * @param executor   the executor each query's response stream is read on
          * @param scheduler  the scheduler each query's deadline runs on
          * @param converter  the converter the events of a query's response stream are read with
@@ -527,7 +564,7 @@ public class SpringCloudAutoConfiguration {
         @Bean
         @ConditionalOnMissingBean
         public RemoteQueryDispatcher axoniqSpringCloudRemoteQueryDispatcher(
-                @Qualifier(REST_CLIENT_BEAN) RestClient restClient,
+                @Qualifier(QUERY_REST_CLIENT_BEAN) RestClient restClient,
                 @Qualifier(DISPATCH_EXECUTOR_BEAN) Executor executor,
                 @Qualifier(QUERY_SCHEDULER_BEAN) ScheduledExecutorService scheduler,
                 MessageConverter converter,

@@ -106,6 +106,16 @@ final class SpringCloudNodes {
     }
 
     /**
+     * A query every node handles, so that a subscription to it reaches more than the node answering its initial
+     * result.
+     *
+     * @param faculty the faculty whose course catalog to find
+     */
+    record FindCourseCatalog(String faculty) {
+
+    }
+
+    /**
      * The application each node runs.
      * <p>
      * Both nodes run the same application and handle the same command; which node handles a given command is decided
@@ -199,7 +209,6 @@ final class SpringCloudNodes {
     static class FindCourseHandler {
 
         private final String nodeName;
-        private volatile boolean emittedUpdate;
 
         FindCourseHandler(@Value("${test.node.name}") String nodeName) {
             this.nodeName = nodeName;
@@ -212,16 +221,29 @@ final class SpringCloudNodes {
 
         @EventHandler
         void handle(CourseRenamed event, ProcessingContext context) {
-            emittedUpdate = true;
             QueryUpdateEmitter.forContext(context).emit(
                     FindCourse.class,
                     query -> query.courseId().equals(event.courseId()),
                     () -> nodeName + "-renamed"
             );
         }
+    }
 
-        boolean emittedUpdate() {
-            return emittedUpdate;
+    /**
+     * Handles {@link FindCourseCatalog} on every node, answering with that node's name.
+     */
+    @Component
+    static class FindCourseCatalogHandler {
+
+        private final String nodeName;
+
+        FindCourseCatalogHandler(@Value("${test.node.name}") String nodeName) {
+            this.nodeName = nodeName;
+        }
+
+        @QueryHandler
+        String handle(FindCourseCatalog query) {
+            return nodeName;
         }
     }
 

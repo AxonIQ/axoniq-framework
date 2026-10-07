@@ -26,10 +26,12 @@ import org.axonframework.messaging.core.HandlerExecutionException;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.queryhandling.GenericQueryMessage;
 import org.axonframework.messaging.queryhandling.GenericQueryResponseMessage;
+import org.axonframework.messaging.queryhandling.GenericSubscriptionQueryUpdateMessage;
 import org.axonframework.messaging.queryhandling.NoHandlerForQueryException;
 import org.axonframework.messaging.queryhandling.QueryExecutionException;
 import org.axonframework.messaging.queryhandling.QueryMessage;
 import org.axonframework.messaging.queryhandling.QueryResponseMessage;
+import org.axonframework.messaging.queryhandling.SubscriptionQueryUpdateMessage;
 import org.junit.jupiter.api.*;
 
 import java.nio.charset.StandardCharsets;
@@ -144,6 +146,28 @@ class QueryConverterTest {
 
             // then
             assertThat(received.identifier()).isEqualTo("response-1");
+            assertThat(received.type()).isEqualTo(RESPONSE_TYPE);
+            assertThat(received.metadata()).containsEntry("tenant", "acme");
+            assertThat(received.payload()).isEqualTo(PAYLOAD);
+        }
+    }
+
+    @Nested
+    class UpdatingASubscription {
+
+        @Test
+        void rebuildsTheUpdateTheMemberSentAsASubscriptionQueryUpdate() {
+            // given
+            SubscriptionQueryUpdateMessage update = new GenericSubscriptionQueryUpdateMessage(
+                    new GenericMessage("update-1", RESPONSE_TYPE, PAYLOAD, Map.of("tenant", "acme"))
+            );
+            QueryDispatchResponse event = QueryConverter.convertResponseMessage(update, "query-1");
+
+            // when
+            SubscriptionQueryUpdateMessage received = QueryConverter.convertUpdate(event, null);
+
+            // then
+            assertThat(received.identifier()).isEqualTo("update-1");
             assertThat(received.type()).isEqualTo(RESPONSE_TYPE);
             assertThat(received.metadata()).containsEntry("tenant", "acme");
             assertThat(received.payload()).isEqualTo(PAYLOAD);
