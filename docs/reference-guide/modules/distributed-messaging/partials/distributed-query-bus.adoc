@@ -189,6 +189,21 @@ That is what lets the node tell its subscribers it is leaving while their stream
 The node still answers the commands and queries that reach it while the web server drains, as it does with any other connector once its event processors have stopped.
 The events those commands publish are handled by the nodes that take over the stopped processors' segments, so a request that waits for a read model those processors maintain to reflect its command waits until another node has claimed the segment.
 
+==== The query client
+
+Queries and subscription queries are sent on a client of their own, named `axoniqSpringCloudQueryRestClient`.
+It is built from the application's `RestClient.Builder` when there is one, so interceptors such as authentication still apply, but on a transport with no read timeout and no shared connection pool.
+An application whose `RestClient.Builder` is load balanced defines this client itself, as it does the xref:commands:infrastructure.adoc#SpringCloudCommandBusConnector[command client].
+
+Transport settings on the application's HTTP client do not reach the query client: an SSL bundle set through `spring.http.client.*`, or a custom `ClientHttpRequestFactory` on the builder.
+Settings the JVM applies to every connection, such as the `javax.net.ssl.trustStore` system property, still do.
+Members that trust each other only through an SSL bundle, or authenticate each other with client certificates, define the query client themselves, free of a read timeout and of a bounded connection pool:
+
+[source,java]
+----
+include::example$distributedmessaging/distributedquerybus/springcloudqueryclient/AxonConfig.java[tag=query-rest-client-with-ssl-bundle,indent=0]
+----
+
 ==== Subscription queries
 
 A subscription query is two activities.
@@ -197,7 +212,6 @@ Second, one of those nodes is asked for the initial result, which is a query lik
 The two are returned as a single stream: the initial result, and then the updates.
 
 The initial result is asked for only once every node has registered the subscription, not just the node answering it.
-It often reflects state other nodes change too, as when the segments of one event processor are spread over the nodes and all of them write one read model, and an update a node emits before registering reaches nobody.
 The nodes are subscribed to in parallel, so this waits for the slowest of them to answer.
 
 Every node advertising the name is subscribed to, not just the one a plain query would route to.

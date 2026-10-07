@@ -283,20 +283,11 @@ public class SpringCloudAutoConfiguration {
          * Bean creation method for the {@link RestClient} used to send queries and subscription queries to other
          * members.
          * <p>
-         * Separate from the client commands are sent with, because a query's responses are a stream rather than a
-         * reply. A subscription's stream lasts for as long as the subscriber wants it, and a plain query's for as long
-         * as its answer takes to produce. A read timeout would cut either off however much the answering member is
-         * still sending, and a bounded pool of connections would be drained by the subscriptions holding one each,
-         * leaving every other message to wait for a connection that is not coming back.
-         * <p>
-         * So this client is built from the application's own {@link RestClient.Builder} when it has one, keeping what
-         * it configured there, such as interceptors adding authentication, but always on a transport of its own: a
-         * JDK client with a connect timeout and no read timeout, which opens a connection per stream rather than
-         * borrowing one from a bounded pool. The dispatcher bounds the streams itself, with a deadline per query and
-         * a silence check per subscription.
-         * <p>
-         * Each open subscription holds one connection to every member advertising its query, and each plain query
-         * one for as long as its responses are arriving.
+         * Built from the application's own {@link RestClient.Builder} when it has one, keeping what it configured
+         * there, such as interceptors adding authentication, but always on a transport of its own: a JDK client with a
+         * connect timeout and no read timeout, which opens a connection per stream rather than borrowing one from a
+         * bounded pool. The dispatcher bounds the streams itself, with a deadline per query and a silence check per
+         * subscription.
          * <p>
          * Because the transport is this client's own, transport settings of the application's client do not reach
          * it, such as an SSL bundle configured for it or a custom request factory on the builder. Settings the JVM

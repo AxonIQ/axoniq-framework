@@ -17,7 +17,7 @@
  *  https://www.axoniq.io/pricing
  */
 
-package distributedmessaging.distributedcommandbus.springcloudqueryclient;
+package distributedmessaging.distributedquerybus.springcloudqueryclient;
 
 // tag::query-rest-client-with-ssl-bundle[]
 import io.axoniq.framework.springboot.autoconfig.SpringCloudAutoConfiguration;

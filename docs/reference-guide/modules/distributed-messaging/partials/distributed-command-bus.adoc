@@ -152,24 +152,13 @@ An application with Spring Security in place has to permit all three paths and e
 
 Outgoing requests to other members use the application's own `RestClient.Builder` bean when it has one, which is where an interceptor authenticating them belongs.
 Spring Boot contributes such a builder by default, so the application's `spring.http.client.*` settings apply to commands as well.
-Queries and subscription queries are sent on a client of their own, built from the same builder but on a transport with no read timeout and no shared connection pool.
-Their responses are streams, and a subscription lasts as long as the subscriber wants it, so a read timeout would cut them off and a bounded pool would be drained by the subscriptions holding a connection each.
-Define a `RestClient` bean named `axoniqSpringCloudRestClient` for commands, or `axoniqSpringCloudQueryRestClient` for queries, to give that traffic a client of its own.
-An application whose `RestClient.Builder` is load balanced has to define both: members are addressed by host and port rather than by service ID, which a load-balanced client cannot resolve.
+Define a `RestClient` bean named `axoniqSpringCloudRestClient` for commands to give that traffic a client of its own.
+An application whose `RestClient.Builder` is load balanced has to do so: members are addressed by host and port rather than by service ID, which a load-balanced client cannot resolve.
 
-Two clients bring a transport of their own: the query client, and the client members ask each other for their capabilities with.
-Transport settings on the application's HTTP client do not reach either of them: an SSL bundle set through `spring.http.client.*`, or a custom `ClientHttpRequestFactory` on the builder.
-Settings the JVM applies to every connection, such as the `javax.net.ssl.trustStore` system property, still apply to both.
-Members that trust each other only through an SSL bundle, or authenticate each other with client certificates, therefore define both clients themselves.
-Without them, members fail to learn what the others handle, and route nothing to each other.
-Keep the query client free of a read timeout and of a bounded connection pool, for the same reasons:
-
-[source,java]
-----
-include::example$distributedmessaging/distributedcommandbus/springcloudqueryclient/AxonConfig.java[tag=query-rest-client-with-ssl-bundle,indent=0]
-----
-
-Define the capabilities client the same way, as a bean named `axoniqSpringCloudCapabilitiesRestClient`, but with a read timeout no longer than `axon.springcloud.capabilities-timeout`: members are asked on every discovery heartbeat, and one that does not answer must not hold up the round.
+Members ask each other for their capabilities on a client with a transport of its own, named `axoniqSpringCloudCapabilitiesRestClient`.
+Transport settings on the application's HTTP client, such as an SSL bundle set through `spring.http.client.*`, do not reach it, while settings the JVM applies to every connection, such as the `javax.net.ssl.trustStore` system property, do.
+Members that trust each other only through an SSL bundle, or authenticate each other with client certificates, define this client themselves, with a read timeout no longer than `axon.springcloud.capabilities-timeout`.
+Without it, members fail to learn what the others handle, and route nothing to each other.
 
 Instances that are not served from the root publish their context root as service instance metadata, and tell the connector which metadata property holds it:
 
