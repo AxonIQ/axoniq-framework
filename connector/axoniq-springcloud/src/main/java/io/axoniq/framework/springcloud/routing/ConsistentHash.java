@@ -256,7 +256,7 @@ public final class ConsistentHash {
      * A {@link Member} as registered with a {@link ConsistentHash}, paired with its {@link MemberCapabilities} and
      * the ring positions it claims.
      * <p>
-     * The positions are computed once, on construction, because a ring is rebuilt on every discovery heartbeat and
+     * The positions are computed once, on construction, because a ring is rebuilt on every discovery round and
      * recomputing a hash per position per lookup would dominate the cost of routing a command.
      *
      * @param member       the member registered with the ring
