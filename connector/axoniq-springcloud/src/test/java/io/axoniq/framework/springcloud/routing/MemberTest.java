@@ -38,8 +38,8 @@ class MemberTest {
 
         @Test
         void acceptsALocalMemberWithoutAnEndpoint() {
-            // given / when — an application that has not finished registering does not know its own URI yet
-            Member member = Member.unregisteredLocalMember("SERVICE[LOCAL]");
+            // given / when — this application is never reached over HTTP, so it needs no endpoint
+            Member member = Member.localMember("node-a");
 
             // then
             assertThat(member.local()).isTrue();

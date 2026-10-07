@@ -40,6 +40,12 @@
             <artifactId>axoniq-spring-boot-autoconfigure</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <!-- the default starter will assume Axon Server -->
+        <dependency>
+            <groupId>io.axoniq.framework</groupId>
+            <artifactId>axon-server-connector</artifactId>
+            <version>${project.version}</version>
+        </dependency>
     </dependencies>
 
     <build>

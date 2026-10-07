@@ -64,7 +64,7 @@ jobs:
           # account for the license file copy, so whichever module's JVM starts the shared container first
           # determines whether it ends up licensed. Without the license present everywhere, an unlicensed
           # module could "poison" the shared container for modules that need multi-context support.
-          for dir in integrationtests/support connector/axon-server-connector integrationtests/connector/axon-server integrationtests/conformance; do
+          for dir in integrationtests/support connector/axon-server-connector integrationtests/connector/axon-server integrationtests/conformance dependency-injection/spring/spring-boot-autoconfigure; do
             mkdir -p "$dir/src/test/resources"
             printf '%s' "$AXON_SERVER_LICENSE" > "$dir/src/test/resources/axon-server-test.license"
             echo "Axon Server test license written to $dir/src/test/resources/axon-server-test.license"

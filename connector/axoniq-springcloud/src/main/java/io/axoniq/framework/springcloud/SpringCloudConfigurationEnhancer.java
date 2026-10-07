@@ -53,8 +53,8 @@ import org.slf4j.LoggerFactory;
  * connector is present. No bus needs to be constructed here.
  * <p>
  * This enhancer does nothing unless a {@link SpringCloudMemberRegistry} is present, which the Spring Boot
- * autoconfiguration provides once a Spring Cloud {@code DiscoveryClient} and {@code Registration} are on hand. The two
- * connectors are registered independently, so a configuration already carrying one of them still gains the other.
+ * autoconfiguration provides once a Spring Cloud {@code DiscoveryClient} is on hand. The two connectors are registered
+ * independently, so a configuration already carrying one of them still gains the other.
  * <p>
  * Distributing messages through Spring Cloud and through Axon Server are alternatives, not layers: an application uses
  * one or the other. This enhancer does not attempt to diagnose an application that configures both, because it cannot

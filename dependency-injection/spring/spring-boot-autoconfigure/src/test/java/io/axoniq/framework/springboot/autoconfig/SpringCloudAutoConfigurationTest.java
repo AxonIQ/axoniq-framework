@@ -58,6 +58,7 @@ import org.springframework.cloud.client.discovery.DiscoveryClient;
 import org.springframework.cloud.client.serviceregistry.Registration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.client.ClientHttpRequestFactory;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
@@ -71,6 +72,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -114,7 +116,8 @@ class SpringCloudAutoConfigurationTest {
                                              "axon.springcloud.query-buffer-size=7",
                                              "axon.springcloud.capabilities-timeout=3s",
                                              "axon.springcloud.ignore-period=14s",
-                                             "axon.springcloud.context-root-metadata-property-name=root")
+                                             "axon.springcloud.context-root-metadata-property-name=root",
+                                             "axon.springcloud.capabilities-refresh-interval=15s")
                          // when / then each one reaches the properties the components are built from
                          .run(context -> {
                              SpringCloudProperties properties = context.getBean(SpringCloudProperties.class);
@@ -128,6 +131,8 @@ class SpringCloudAutoConfigurationTest {
                              assertThat(properties.getCapabilitiesTimeout()).isEqualTo(Duration.ofSeconds(3));
                              assertThat(properties.getIgnorePeriod()).isEqualTo(Duration.ofSeconds(14));
                              assertThat(properties.getContextRootMetadataPropertyName()).isEqualTo("root");
+                             assertThat(properties.getCapabilitiesRefreshInterval())
+                                     .isEqualTo(Duration.ofSeconds(15));
                          });
         }
 
@@ -146,6 +151,23 @@ class SpringCloudAutoConfigurationTest {
                 assertThat(properties.getCapabilitiesEndpoint())
                         .isEqualTo(RestCapabilityDiscoveryMode.DEFAULT_CAPABILITIES_ENDPOINT);
             });
+        }
+
+        @Test
+        void refreshesCapabilitiesEveryThirtySecondsByDefault() {
+            // when
+            contextRunner.run(context -> assertThat(context.getBean(SpringCloudProperties.class)
+                                                           .getCapabilitiesRefreshInterval())
+                    .isEqualTo(Duration.ofSeconds(30)));
+        }
+
+        @Test
+        void bindsTheRefreshIntervalInWhicheverUnitItIsGivenIn() {
+            // when
+            contextRunner.withPropertyValues("axon.springcloud.capabilities-refresh-interval=1m")
+                         .run(context -> assertThat(context.getBean(SpringCloudProperties.class)
+                                                           .getCapabilitiesRefreshInterval())
+                                 .isEqualTo(Duration.ofSeconds(60)));
         }
 
         @Test
@@ -212,6 +234,26 @@ class SpringCloudAutoConfigurationTest {
     }
 
     @Nested
+    class WithoutARegistration {
+
+        @Test
+        void startsWithADiscoveryImplementationThatDoesNotRegisterTheApplication() {
+            // given — a discovery implementation like Spring Cloud Kubernetes supplies a DiscoveryClient, but leaves
+            // registration to the platform
+            new WebApplicationContextRunner()
+                    .withConfiguration(AutoConfigurations.of(SpringCloudAutoConfiguration.class))
+                    .withUserConfiguration(DiscoveryClientConfiguration.class)
+                    .withBean(MessageConverter.class, () -> new DelegatingMessageConverter(new JacksonConverter()))
+                    .withPropertyValues("axon.springcloud.enabled=true")
+                    // when / then — members identify themselves through the capabilities endpoint instead
+                    .run(context -> assertThat(context)
+                            .hasNotFailed()
+                            .doesNotHaveBean(Registration.class)
+                            .hasSingleBean(SpringCloudMemberRegistry.class));
+        }
+    }
+
+    @Nested
     class WhenSwitchedOff {
 
         @Test
@@ -243,6 +285,16 @@ class SpringCloudAutoConfigurationTest {
                                  .hasSingleBean(CapabilityDiscoveryMode.class)
                                  .getBean(CapabilityDiscoveryMode.class)
                                  .isSameAs(context.getBean("customDiscoveryMode")));
+        }
+
+        @Test
+        void runsDiscoveryOnAnApplicationsOwnExecutor() {
+            contextRunner.withBean(SpringCloudAutoConfiguration.DISCOVERY_EXECUTOR_BEAN,
+                                   ExecutorService.class,
+                                   () -> CustomDiscoveryExecutor.EXECUTOR)
+                         .run(context -> assertThat(context)
+                                 .getBean(SpringCloudAutoConfiguration.DISCOVERY_EXECUTOR_BEAN)
+                                 .isSameAs(CustomDiscoveryExecutor.EXECUTOR));
         }
 
         @Test
@@ -579,7 +631,7 @@ class SpringCloudAutoConfigurationTest {
     }
 
     @Configuration(proxyBeanMethods = false)
-    static class DiscoveryConfiguration {
+    static class DiscoveryClientConfiguration {
 
         private static final ServiceInstance INSTANCE =
                 new DefaultServiceInstance("university-8080", "university", "localhost", 8080, false, Map.of());
@@ -603,6 +655,16 @@ class SpringCloudAutoConfigurationTest {
                 }
             };
         }
+
+    }
+
+    /**
+     * A discovery implementation that registers the application, such as Eureka, supplying a {@link Registration}
+     * along with its {@link DiscoveryClient}.
+     */
+    @Configuration(proxyBeanMethods = false)
+    @Import(DiscoveryClientConfiguration.class)
+    static class DiscoveryConfiguration {
 
         @Bean
         Registration registration() {
@@ -669,5 +731,10 @@ class SpringCloudAutoConfigurationTest {
         RestClient axoniqSpringCloudQueryRestClient() {
             return APPLICATION_QUERY_REST_CLIENT;
         }
+    }
+
+    static class CustomDiscoveryExecutor {
+
+        static final ExecutorService EXECUTOR = Executors.newFixedThreadPool(4);
     }
 }

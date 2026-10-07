@@ -22,6 +22,7 @@ package io.axoniq.framework.springcloud.discovery;
 import io.axoniq.framework.springcloud.routing.MemberCapabilities;
 import org.axonframework.common.digest.Digester;
 import org.axonframework.messaging.core.QualifiedName;
+import org.jspecify.annotations.Nullable;
 
 import java.util.List;
 import java.util.Objects;
@@ -29,8 +30,8 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * The wire representation of a member's {@link MemberCapabilities}, as served by
- * {@link MemberCapabilitiesController} and read by {@link RestCapabilityDiscoveryMode}.
+ * The wire representation of a member's {@link MemberAdvertisement}: its node id and its {@link MemberCapabilities}, as
+ * served by {@link MemberCapabilitiesController} and read by {@link RestCapabilityDiscoveryMode}.
  * <p>
  * This record exists separately from {@code MemberCapabilities} so that the JSON on the wire is fixed by a type of
  * this module's own, rather than following the record shape of
@@ -41,17 +42,24 @@ import java.util.stream.Collectors;
  * The {@code queries} field may be absent from a member running a version that predates query distribution, so
  * members reading it must tolerate an absent or empty list.
  *
+ * @param nodeId     the identifier of the member, unique to its process, or {@code null} when an answer does not carry
+ *                   one, which a member reading it treats as not being a member of the cluster
  * @param loadFactor the relative share of command load the member asks for
  * @param commands   the {@link QualifiedName#name() names} of the commands the member subscribed to, sorted
  * @param queries    the {@link QualifiedName#name() names} of the queries the member subscribed to, sorted
  * @author Allard Buijze
  * @since 5.4.0
  */
-public record MemberCapabilitiesPayload(int loadFactor, List<String> commands, List<String> queries) {
+public record MemberCapabilitiesPayload(@Nullable String nodeId,
+                                        int loadFactor,
+                                        List<String> commands,
+                                        List<String> queries) {
 
     /**
      * Compact constructor defaulting {@code null} name lists to empty, so a payload from a member that omits a field
      * altogether still reads.
+     * @param nodeId     the identifier of the member, unique to its process, or {@code null} when an answer does not
+     *                   carry one
      * @param commands   the {@link QualifiedName#name() names} of the commands the member subscribed to, sorted
      * @param queries    the {@link QualifiedName#name() names} of the queries the member subscribed to, sorted
      * @param loadFactor the relative share of command load the member asks for
@@ -62,14 +70,17 @@ public record MemberCapabilitiesPayload(int loadFactor, List<String> commands, L
     }
 
     /**
-     * Converts the given {@code capabilities} into their wire representation.
+     * Converts the given {@code nodeId} and {@code capabilities} into their wire representation.
      *
+     * @param nodeId       the identifier of the member the capabilities belong to
      * @param capabilities the capabilities to represent on the wire
-     * @return the wire representation of the given {@code capabilities}
+     * @return the wire representation of the given {@code nodeId} and {@code capabilities}
      */
-    public static MemberCapabilitiesPayload from(MemberCapabilities capabilities) {
+    public static MemberCapabilitiesPayload from(String nodeId, MemberCapabilities capabilities) {
+        Objects.requireNonNull(nodeId, "The nodeId must not be null.");
         Objects.requireNonNull(capabilities, "The capabilities must not be null.");
-        return new MemberCapabilitiesPayload(capabilities.loadFactor(),
+        return new MemberCapabilitiesPayload(nodeId,
+                                             capabilities.loadFactor(),
                                              sortedNames(capabilities.commands()),
                                              sortedNames(capabilities.queries()));
     }
@@ -96,13 +107,17 @@ public record MemberCapabilitiesPayload(int loadFactor, List<String> commands, L
      * capabilities endpoint and the {@code If-None-Match} sent by a member polling it.
      * <p>
      * The tag is derived from the payload's own fields rather than from its serialized bytes, so it does not depend on
-     * how the surrounding web stack chooses to render the JSON. Because the name lists are sorted, two members
-     * reporting the same capabilities produce the same tag.
+     * how the surrounding web stack chooses to render the JSON. Because the name lists are sorted, the tag only changes
+     * when the capabilities do. The node id is part of the tag, so that an application restarted at the same address
+     * answers a member still holding the previous process's tag with its new node id, rather than with
+     * {@code 304 Not Modified}.
      *
      * @return an entity tag for this payload's content, without the surrounding quotes an {@code ETag} header needs
      */
     public String entityTag() {
-        return Digester.md5Hex(loadFactor + "|" + String.join(",", commands) + "|" + String.join(",", queries));
+        return Digester.md5Hex(
+                nodeId + "|" + loadFactor + "|" + String.join(",", commands) + "|" + String.join(",", queries)
+        );
     }
 
     /**

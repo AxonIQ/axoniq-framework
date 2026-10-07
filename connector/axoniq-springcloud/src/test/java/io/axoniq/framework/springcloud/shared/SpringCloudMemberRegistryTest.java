@@ -26,14 +26,20 @@ import io.axoniq.framework.springcloud.routing.MemberCapabilities;
 import io.axoniq.framework.springcloud.util.RecordingDiscoveryClient;
 import io.axoniq.framework.springcloud.util.TestServiceInstance;
 import org.axonframework.messaging.core.QualifiedName;
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.*;
 import org.springframework.cloud.client.discovery.event.HeartbeatEvent;
 import org.springframework.cloud.client.discovery.event.InstanceRegisteredEvent;
 
 import java.net.URI;
+import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -65,21 +71,26 @@ class SpringCloudMemberRegistryTest {
         remoteInstance = TestServiceInstance.instance("university", "node-b", 8080);
         discoveryClient = new RecordingDiscoveryClient().register("university", localInstance, remoteInstance);
         discoveryMode = new RecordingCapabilityDiscoveryMode()
-                .answering(localInstance, HANDLES_CREATE)
+                .answeringAsLocal(localInstance)
                 .answering(remoteInstance, HANDLES_CREATE);
-        testSubject = new SpringCloudMemberRegistry(discoveryClient, localInstance, discoveryMode);
+        testSubject = registry(SpringCloudMemberRegistry.DEFAULT_CAPABILITIES_REFRESH_INTERVAL);
+    }
+
+    /**
+     * Builds a registry over this test's discovery that runs its rounds on the calling thread, so a test observes a
+     * round's outcome as soon as it starts one.
+     */
+    private SpringCloudMemberRegistry registry(Duration capabilitiesRefreshInterval) {
+        return new SpringCloudMemberRegistry(discoveryClient,
+                                             discoveryMode,
+                                             instance -> true,
+                                             null,
+                                             capabilitiesRefreshInterval,
+                                             Runnable::run);
     }
 
     @Nested
     class BuildingTheRing {
-
-        @Test
-        void publishesEmptyLocalCapabilitiesOnConstruction() {
-            // then — the discovery mode must recognise this application's own instance from the first round, rather
-            // than asking it for its capabilities over HTTP
-            assertThat(discoveryMode.localInstance()).isEqualTo(localInstance);
-            assertThat(discoveryMode.localCapabilities()).isEqualTo(MemberCapabilities.INCAPABLE);
-        }
 
         @Test
         void includesEveryDiscoveredInstanceThatReportsCapabilities() {
@@ -166,18 +177,257 @@ class SpringCloudMemberRegistryTest {
         }
 
         @Test
-        void picksUpCapabilitiesAMemberGainedSinceTheLastRound() {
+        void asksOnlyInstancesItHasNoCurrentCapabilitiesForOnAMembershipRound() {
             // given
             testSubject.updateMemberships();
-            assertThat(testSubject.ring().memberFor("course-1", RENAME_COURSE)).isEmpty();
+            TestServiceInstance joining = TestServiceInstance.instance("university", "node-c", 8080);
+            discoveryClient.register("university", joining);
+            discoveryMode.answering(joining, HANDLES_CREATE);
+            int askedBefore = discoveryMode.asked().size();
+
+            // when
+            testSubject.updateMemberships();
+
+            // then — membership is what discovery signals, so only the new instance needed asking
+            assertThat(discoveryMode.asked().subList(askedBefore, discoveryMode.asked().size()))
+                    .containsExactly(ServiceInstanceKey.of(joining));
+            assertThat(testSubject.ring().members()).hasSize(3);
+        }
+
+        @Test
+        void asksEveryInstanceOnEveryMembershipRoundWithoutARefreshInterval() {
+            // given
+            SpringCloudMemberRegistry alwaysAsking = registry(Duration.ZERO);
+            alwaysAsking.updateMemberships();
 
             // when
             discoveryMode.answering(remoteInstance,
                                     new MemberCapabilities(100, Set.of(CREATE_COURSE, RENAME_COURSE), Set.of()));
+            alwaysAsking.updateMemberships();
+
+            // then
+            assertThat(alwaysAsking.ring().memberFor("course-1", RENAME_COURSE)).isPresent();
+        }
+
+        @Test
+        void startsARoundOnAHeartbeatOnItsExecutorRatherThanOnTheHeartbeatThread() {
+            // given
+            List<Runnable> handedOff = new ArrayList<>();
+            SpringCloudMemberRegistry registry = new SpringCloudMemberRegistry(
+                    discoveryClient, discoveryMode, instance -> true, null, Duration.ofSeconds(30), handedOff::add
+            );
+
+            // when
+            registry.onHeartbeat(new HeartbeatEvent(this, "first"));
+
+            // then — the heartbeat thread does not wait on the requests the round makes
+            assertThat(handedOff).hasSize(1);
+            assertThat(registry.ring().members()).isEmpty();
+        }
+    }
+
+    @Nested
+    class RefreshingCapabilities {
+
+        @Test
+        void leavesInstancesWithCurrentCapabilitiesAlone() {
+            // given
+            testSubject.updateMemberships();
+            int askedBefore = discoveryMode.asked().size();
+
+            // when
+            testSubject.refreshCapabilities();
+
+            // then
+            assertThat(discoveryMode.asked()).hasSize(askedBefore);
+        }
+
+        @Test
+        void picksUpCapabilitiesAMemberGainedOnceTheyAreStale() {
+            // given
+            SpringCloudMemberRegistry refreshing = registry(Duration.ZERO);
+            refreshing.updateMemberships();
+            discoveryMode.answering(remoteInstance,
+                                    new MemberCapabilities(100, Set.of(CREATE_COURSE, RENAME_COURSE), Set.of()));
+
+            // when — without discovery signalling anything, as with Spring Cloud Kubernetes
+            refreshing.refreshCapabilities();
+
+            // then
+            assertThat(refreshing.ring().memberFor("course-1", RENAME_COURSE)).isPresent();
+        }
+
+        @Test
+        void leavesWhoIsInTheClusterToDiscovery() {
+            // given
+            SpringCloudMemberRegistry refreshing = registry(Duration.ZERO);
+            refreshing.updateMemberships();
+            TestServiceInstance joining = TestServiceInstance.instance("university", "node-c", 8080);
+            discoveryClient.register("university", joining);
+            discoveryMode.answering(joining, HANDLES_CREATE);
+
+            // when
+            refreshing.refreshCapabilities();
+
+            // then — the new instance waits for the membership round discovery's next signal starts
+            assertThat(refreshing.ring().members()).hasSize(2);
+        }
+
+        @Test
+        void asksAnInstanceThatHasNotAnsweredYetAgain() {
+            // given — an instance that is still starting up
+            discoveryMode.reportingUnknown(remoteInstance);
+            testSubject.updateMemberships();
+            assertThat(testSubject.ring().members()).hasSize(1);
+
+            // when
+            discoveryMode.answering(remoteInstance, HANDLES_CREATE);
+            testSubject.refreshCapabilities();
+
+            // then — it joins without waiting for its capabilities to go stale, as it has none
+            assertThat(testSubject.ring().members()).hasSize(2);
+        }
+
+        @Test
+        void refreshesOnTheGivenSchedule() {
+            // given
+            ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+            try {
+                SpringCloudMemberRegistry refreshing = registry(Duration.ofMillis(100));
+                refreshing.updateMemberships();
+                refreshing.scheduleCapabilityRefresh(scheduler);
+
+                // when
+                discoveryMode.answering(remoteInstance,
+                                        new MemberCapabilities(100, Set.of(CREATE_COURSE, RENAME_COURSE), Set.of()));
+
+                // then
+                Awaitility.await()
+                          .atMost(Duration.ofSeconds(5))
+                          .until(() -> refreshing.ring().memberFor("course-1", RENAME_COURSE).isPresent());
+            } finally {
+                scheduler.shutdownNow();
+            }
+        }
+
+        @Test
+        void schedulesNothingWithoutARefreshInterval() {
+            // given
+            ScheduledThreadPoolExecutor scheduler = new ScheduledThreadPoolExecutor(1);
+            try {
+                // when
+                registry(Duration.ZERO).scheduleCapabilityRefresh(scheduler);
+
+                // then
+                assertThat(scheduler.getQueue()).isEmpty();
+            } finally {
+                scheduler.shutdownNow();
+            }
+        }
+    }
+
+    @Nested
+    class IdentifyingMembers {
+
+        @Test
+        void identifiesThisApplicationByTheNodeIdOfItsDiscoveryMode() {
+            // when
+            Member local = testSubject.localMember();
+
+            // then
+            assertThat(local.name()).isEqualTo(RecordingCapabilityDiscoveryMode.LOCAL_NODE_ID);
+            assertThat(local.local()).isTrue();
+            assertThat(local.endpoint()).isNull();
+        }
+
+        @Test
+        void namesEveryOtherMemberByTheNodeIdItAnswersWith() {
+            // given
+            discoveryMode.answeringAs(remoteInstance, "node-b-process", HANDLES_CREATE);
+
+            // when
             testSubject.updateMemberships();
 
             // then
-            assertThat(testSubject.ring().memberFor("course-1", RENAME_COURSE)).isPresent();
+            assertThat(testSubject.ring().members())
+                    .extracting(Member::name)
+                    .containsExactlyInAnyOrder(RecordingCapabilityDiscoveryMode.LOCAL_NODE_ID, "node-b-process");
+        }
+
+        @Test
+        void recognizesThisApplicationWhicheverServiceDiscoveryReportsItUnder() {
+            // given — discovery reports this application under a service id it does not know itself by, as Spring
+            // Cloud Kubernetes does with the name of the Service selecting the pod
+            TestServiceInstance underAnotherService = TestServiceInstance.instance("courses-svc", "node-a", 8080);
+            discoveryClient.deregisterAll().register("courses-svc", underAnotherService, remoteInstance);
+            discoveryMode.answeringAsLocal(underAnotherService);
+
+            // when
+            testSubject.updateMemberships();
+
+            // then
+            assertThat(testSubject.ring().members()).filteredOn(Member::local)
+                                                    .containsExactly(testSubject.localMember());
+        }
+
+        @Test
+        void countsAnApplicationDiscoveryReportsTwiceAsOneMember() {
+            // given — one application selected by two services, so discovery reports it once for each
+            TestServiceInstance asCourses = TestServiceInstance.instance("courses", "node-b", 8080);
+            TestServiceInstance asCatalog = TestServiceInstance.instance("catalog", "node-b", 8081);
+            discoveryClient.deregisterAll()
+                           .register("courses", asCourses)
+                           .register("catalog", asCatalog);
+            discoveryMode.answeringAs(asCourses, "node-b-process", HANDLES_CREATE)
+                         .answeringAs(asCatalog, "node-b-process", HANDLES_CREATE);
+
+            // when
+            testSubject.updateMemberships();
+
+            // then — reached at the instance discovery reported first, so every member picks the same one
+            assertThat(testSubject.ring().members())
+                    .singleElement()
+                    .satisfies(member -> assertThat(member.endpoint()).hasToString("http://node-b:8080"));
+        }
+
+        @Test
+        void keepsThisApplicationOnTheRingOnceWhenItsOwnHandlersChange() {
+            // given
+            testSubject.updateMemberships();
+
+            // when
+            testSubject.publishLocalCommands(100, Set.of(CREATE_COURSE, RENAME_COURSE));
+
+            // then — publishing updates the member discovery placed, rather than adding a second one
+            assertThat(testSubject.ring().members()).hasSize(2);
+            assertThat(testSubject.ring().memberFor("course-1", RENAME_COURSE)).contains(testSubject.localMember());
+        }
+
+        @Test
+        void leavesThisApplicationOutWhileDiscoveryDoesNotReportIt() {
+            // given — handlers subscribed, but discovery does not report this application yet
+            testSubject.publishLocalCommands(100, Set.of(RENAME_COURSE));
+            discoveryClient.deregister("university", localInstance);
+
+            // when
+            testSubject.updateMemberships();
+
+            // then — the other members do not route to this application either, so neither does it
+            assertThat(testSubject.ring().members()).doesNotContain(testSubject.localMember());
+        }
+
+        @Test
+        void appliesThisApplicationsCurrentCapabilitiesRatherThanWhatItsInstanceAnswered() {
+            // given
+            testSubject.publishLocalCommands(100, Set.of(RENAME_COURSE));
+
+            // when
+            testSubject.updateMemberships();
+
+            // then
+            assertThat(testSubject.ring().capabilitiesOf(testSubject.localMember()))
+                    .hasValueSatisfying(capabilities -> assertThat(capabilities.commands())
+                            .containsExactly(RENAME_COURSE));
         }
     }
 
@@ -209,8 +459,8 @@ class SpringCloudMemberRegistryTest {
         @Test
         void rotatesOverEveryMemberHandlingTheQuery() {
             // given two members both handling the query
-            MemberCapabilities handlesFind = new MemberCapabilities(100, Set.of(), Set.of(FIND_COURSE));
-            discoveryMode.answering(localInstance, handlesFind).answering(remoteInstance, handlesFind);
+            testSubject.publishLocalQueries(Set.of(FIND_COURSE));
+            discoveryMode.answering(remoteInstance, new MemberCapabilities(100, Set.of(), Set.of(FIND_COURSE)));
             testSubject.updateMemberships();
 
             // when the same query name is routed as many times as there are members
@@ -333,51 +583,25 @@ class SpringCloudMemberRegistryTest {
     }
 
     @Nested
-    class Registration {
-
-        @Test
-        void namesThisApplicationProvisionallyUntilItHasRegistered() {
-            // given — several discovery implementations throw when asked for a URI before registration completes
-            TestServiceInstance unregistered = TestServiceInstance.withoutUri("university");
-            SpringCloudMemberRegistry beforeRegistration = new SpringCloudMemberRegistry(
-                    new RecordingDiscoveryClient(), unregistered, new RecordingCapabilityDiscoveryMode()
-            );
-
-            // when
-            Member local = beforeRegistration.localMember();
-
-            // then
-            assertThat(local.local()).isTrue();
-            assertThat(local.endpoint()).isNull();
-            assertThat(local.name()).isEqualTo("UNIVERSITY[LOCAL]");
-        }
-
-        @Test
-        void namesThisApplicationByItsUriOnceItHasRegistered() {
-            // when
-            testSubject.onInstanceRegistered(new InstanceRegisteredEvent<>(this, localInstance));
-
-            // then
-            Member local = testSubject.localMember();
-            assertThat(local.name()).isEqualTo("UNIVERSITY[http://node-a:8080]");
-            assertThat(local.endpoint()).hasToString("http://node-a:8080");
-        }
+    class ReachingMembers {
 
         @Test
         void survivesADiscoveryRoundWhileAnInstanceHasNoUriYet() {
             // given
             TestServiceInstance unregistered = TestServiceInstance.withoutUri("university");
             RecordingCapabilityDiscoveryMode mode = new RecordingCapabilityDiscoveryMode()
+                    .answering(unregistered, HANDLES_RENAME)
                     .answering(remoteInstance, HANDLES_CREATE);
             SpringCloudMemberRegistry registry = new SpringCloudMemberRegistry(
-                    new RecordingDiscoveryClient().register("university", remoteInstance), unregistered, mode
+                    new RecordingDiscoveryClient().register("university", unregistered, remoteInstance), mode
             );
 
             // when
             registry.updateMemberships();
 
-            // then — the round completes, with the reachable member on the ring
+            // then — the round completes, with the reachable member on the ring and the other left out
             assertThat(registry.ring().memberFor("course-1", CREATE_COURSE)).isPresent();
+            assertThat(registry.ring().memberFor("course-1", RENAME_COURSE)).isEmpty();
         }
 
         @Test
@@ -387,7 +611,6 @@ class SpringCloudMemberRegistryTest {
                                                                       .withMetadata("contextRoot", "/university");
             SpringCloudMemberRegistry registry = new SpringCloudMemberRegistry(
                     new RecordingDiscoveryClient().register("university", behindContextRoot),
-                    localInstance,
                     new RecordingCapabilityDiscoveryMode().answering(behindContextRoot, HANDLES_CREATE),
                     instance -> true,
                     "contextRoot"
@@ -408,7 +631,6 @@ class SpringCloudMemberRegistryTest {
             // given
             SpringCloudMemberRegistry registry = new SpringCloudMemberRegistry(
                     new RecordingDiscoveryClient().register("university", remoteInstance),
-                    localInstance,
                     new RecordingCapabilityDiscoveryMode().answering(remoteInstance, HANDLES_CREATE),
                     instance -> true,
                     "contextRoot"
@@ -462,14 +684,31 @@ class SpringCloudMemberRegistryTest {
         }
 
         @Test
+        void keepsTheMemberOutUntilItAnswersAgain() {
+            // given
+            testSubject.updateMemberships();
+            Member unreachable = testSubject.ring().members().stream()
+                                            .filter(member -> !member.local())
+                                            .findFirst()
+                                            .orElseThrow();
+            testSubject.markUnreachable(unreachable);
+
+            // when — the next round rebuilds the ring, but the member does not answer
+            discoveryMode.reportingUnknown(remoteInstance);
+            testSubject.updateMemberships();
+
+            // then — what it answered before does not bring it back
+            assertThat(testSubject.ring().members()).doesNotContain(unreachable);
+        }
+
+        @Test
         void ignoresAMemberThatIsNotOnTheRing() {
             // given
             testSubject.updateMemberships();
             int versionBefore = testSubject.ring().version();
 
             // when
-            testSubject.markUnreachable(new Member("UNKNOWN[http://node-z:8080]",
-                                          URI.create("http://node-z:8080"), false));
+            testSubject.markUnreachable(new Member("unknown-node", URI.create("http://node-z:8080"), false));
 
             // then
             assertThat(testSubject.ring().version()).isEqualTo(versionBefore);
@@ -482,11 +721,9 @@ class SpringCloudMemberRegistryTest {
         @Test
         void rejectsNullCollaborators() {
             // when / then
-            assertThatThrownBy(() -> new SpringCloudMemberRegistry(null, localInstance, discoveryMode))
+            assertThatThrownBy(() -> new SpringCloudMemberRegistry(null, discoveryMode))
                     .isInstanceOf(NullPointerException.class);
-            assertThatThrownBy(() -> new SpringCloudMemberRegistry(discoveryClient, null, discoveryMode))
-                    .isInstanceOf(NullPointerException.class);
-            assertThatThrownBy(() -> new SpringCloudMemberRegistry(discoveryClient, localInstance, null))
+            assertThatThrownBy(() -> new SpringCloudMemberRegistry(discoveryClient, null))
                     .isInstanceOf(NullPointerException.class);
         }
     }

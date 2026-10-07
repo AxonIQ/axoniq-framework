@@ -2,12 +2,6 @@
 = Workflows
 :navtitle: Workflows
 
-[IMPORTANT]
-====
-Workflows are in *Preview*. APIs and behavior may change without notice, and it is not intended for production use.
-====
-
-
 This reference covers every primitive, configuration option, and pattern available in the Axon Workflow Engine.
 
 == Status and compatibility

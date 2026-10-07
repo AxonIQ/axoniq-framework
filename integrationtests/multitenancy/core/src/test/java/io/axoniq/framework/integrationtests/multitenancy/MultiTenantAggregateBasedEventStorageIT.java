@@ -72,7 +72,6 @@ class MultiTenantAggregateBasedEventStorageIT {
 
         INFRASTRUCTURE.start();
         contextManager = INFRASTRUCTURE.getContextManager();
-        contextManager.deleteAllCustomContexts();
         contextManager.createContext(tenantA, false);
         contextManager.createContext(tenantB, false);
 
@@ -101,7 +100,7 @@ class MultiTenantAggregateBasedEventStorageIT {
         if (application != null) {
             application.shutdown();
         }
-        contextManager.deleteAllCustomContexts();
+        contextManager.deleteContexts(tenantA, tenantB);
         INFRASTRUCTURE.stop();
     }
 
