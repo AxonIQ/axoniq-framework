@@ -36,6 +36,7 @@ import org.axonframework.messaging.core.Metadata;
 import org.jspecify.annotations.Nullable;
 
 import java.io.InputStream;
+import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.util.HashMap;
 import java.util.Map;
@@ -161,12 +162,7 @@ public class XStreamConverter implements Converter {
         if (sourceType.equals(targetType)) {
             return (T) input;
         }
-        if (!(targetType instanceof Class<?> targetClass)) {
-            throw new ConversionException(
-                    "The targetType [" + targetType + "] is not a Class, while XStreamConverter can only convert to "
-                            + "a Class."
-            );
-        }
+        Class<?> targetClass = rawClassOf(targetType);
 
         boolean sourceIsXmlCarrier = isXmlCarrierType(sourceType);
         boolean targetIsXmlCarrier = isXmlCarrierType(targetClass);
@@ -195,8 +191,29 @@ public class XStreamConverter implements Converter {
         }
     }
 
-    private static boolean isXmlCarrierType(Class<?> type) {
-        return type.equals(byte[].class) || type.equals(String.class) || InputStream.class.isAssignableFrom(type);
+    private static Class<?> rawClassOf(Type targetType) {
+        if (targetType instanceof Class<?> targetClass) {
+            return targetClass;
+        }
+        if (targetType instanceof ParameterizedType parameterizedType
+                && parameterizedType.getRawType() instanceof Class<?> rawType) {
+            return rawType;
+        }
+        throw new ConversionException(
+                "The targetType [" + targetType + "] is not a Class or a ParameterizedType, while XStreamConverter "
+                        + "can only resolve a raw Class to convert to."
+        );
+    }
+
+    private Object convertFromXml(String xml, Class<?> targetClass) {
+        Object result = xStream.fromXML(xml);
+        if (result != null && !targetClass.isInstance(result)) {
+            throw new ConversionException(
+                    "XStream read an object of type [" + result.getClass().getName() + "], which is not a ["
+                            + targetClass.getName() + "]."
+            );
+        }
+        return result;
     }
 
     @Override
