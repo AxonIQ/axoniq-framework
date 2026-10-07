@@ -62,13 +62,13 @@ In some cases, applications benefit from caching saga instances. In that case, t
 
 The `JpaSagaStore` uses JPA to store the state and association values of sagas. Sagas themselves do not need any JPA annotations; Axon will serialize the sagas using a `Converter` (similar to event conversion, you can choose between different converter implementations like `JacksonConverter`, which can be set by configuring the default `Converter` in your application. For more details, see xref:ROOT:conversion.adoc[Converters].
 
-The `JpaSagaStore` is configured with an `EntityManagerProvider`, which provides access to an `EntityManager` instance to use. This abstraction allows for the use of both application managed and container managed `EntityManager`s. Optionally, you can define the serializer to serialize the Saga instances with. Axon defaults to the `XStreamSerializer`.
+The `JpaSagaStore` is configured with an `EntityManagerProvider`, which provides access to an `EntityManager` instance to use. This abstraction allows for the use of both application managed and container managed `EntityManager`s. It also needs the `Converter` to convert the saga instances with.
 
 [[JdbcSagaStore]]
 === `JdbcSagaStore`
 
 The `JdbcSagaStore` uses plain JDBC to store stage instances and their association values.
-Similar to the `JpaSagaStore`, saga instances do not need to be aware of how they are stored. The store serializes the saga instances using a serializer.
+Similar to the `JpaSagaStore`, saga instances do not need to be aware of how they are stored. The store converts the saga instances using a `Converter`.
 
 You should configure the `JdbcSagaStore` with either a `DataSource` or a `ConnectionProvider`.
 While not required, when initializing with a `ConnectionProvider`, it is recommended to wrap the implementation in a `UnitOfWorkAwareConnectionProviderWrapper`.
@@ -102,7 +102,22 @@ The `MongoSagaStore` stores the saga instances and their associations in a Mongo
 
 The `MongoSagaStore` also ensures that at any time, only a single Saga instance exists for any unique Saga in a single JVM. This ensures that no state changes are lost due to concurrency issues.
 
-The `MongoSagaStore` is initialized using a `MongoTemplate` and optionally a `Serializer`. The `MongoTemplate` provides a reference to the collection to store the sagas in. Axon provides the `DefaultMongoTemplate`, which takes a `MongoClient` instance as well as the database name and name of the collection to store the sagas in. The database name and collection name may be omitted. In that case, they default to `&quot;axonframework&quot;` and `&quot;sagas&quot;`, respectively.
+The `MongoSagaStore` is initialized using a `MongoTemplate` and a `Converter`. The `MongoTemplate` provides a reference to the collection to store the sagas in. Axon provides the `DefaultMongoTemplate`, which takes a `MongoClient` instance as well as the database name and name of the collection to store the sagas in. The database name and collection name may be omitted. In that case, they default to `&quot;axonframework&quot;` and `&quot;sagas&quot;`, respectively.
+
+[#saga_state_stored_with_xstream]
+=== Saga state stored with XStream
+
+Axon Framework 4's saga stores serialized saga state with its `XStreamSerializer` unless the application configured another serializer, and so did its Spring Boot auto-configuration unless `axon.serializer.general` was set.
+Such saga state is XStream XML, which a JSON-based converter such as the `JacksonConverter` cannot read: loading the saga fails.
+To keep handling these sagas, and to let Axon Framework 4 nodes handle them too during a rolling upgrade, give the saga store an `XStreamConverter`.
+It reads the stored state and writes it back in the same form.
+See xref:ROOT:conversion.adoc#xstream_converter[XStreamConverter] for its dependencies, an example, and for allowing your saga classes on the `XStream` instance.
+
+Spring Boot does not configure the `XStreamConverter` for you.
+Define your own `SagaStore` bean with it instead, and the auto-configured saga store backs off.
+
+A saga class with an XStream alias (`xStream.alias("orderSaga", OrderSaga.class)`) was stored under that alias in the saga type column, which the saga stores match against the class name.
+Rewrite that column to the class name before using the table or collection, also when your `XStream` instance defines the alias.
 
 == Caching
 
