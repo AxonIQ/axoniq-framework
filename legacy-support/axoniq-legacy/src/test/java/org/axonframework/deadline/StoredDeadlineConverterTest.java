@@ -19,7 +19,10 @@
 
 package org.axonframework.deadline;
 
+import com.thoughtworks.xstream.XStream;
+import org.axonframework.conversion.ChainingContentTypeConverter;
 import org.axonframework.conversion.jackson.JacksonConverter;
+import org.axonframework.conversion.xstream.XStreamConverter;
 import org.axonframework.messaging.ScopeDescriptor;
 import org.axonframework.messaging.core.Metadata;
 import org.axonframework.modelling.command.AggregateScopeDescriptor;
@@ -98,6 +101,62 @@ class StoredDeadlineConverterTest {
                                                       .name());
             assertThat(StoredDeadlineConverter.messageTypeOf(new UnknownDeadlinePayload("type", null, null)).name())
                     .contains(UnknownDeadlinePayload.class.getSimpleName());
+        }
+    }
+
+    @Nested
+    class StringAndBytesPayloads {
+
+        @Test
+        void aStringPayloadIsStoredAsAJsonStringWithAJsonConverter() {
+            // when
+            String stored = testSubject.payloadToStored("say \"hi\"", String.class);
+
+            // then
+            assertThat(stored).isEqualTo("\"say \\\"hi\\\"\"");
+            assertThat(testSubject.payload(String.class.getName(), null, stored)).isEqualTo("say \"hi\"");
+        }
+
+        @Test
+        void aBytesPayloadIsStoredAsABase64JsonStringWithAJsonConverter() {
+            // when
+            byte[] stored = testSubject.payloadToStored(new byte[]{1, 2, 3}, byte[].class);
+
+            // then
+            assertThat(new String(stored, StandardCharsets.UTF_8)).isEqualTo("\"AQID\"");
+            assertThat(testSubject.payload(byte[].class.getName(), null, stored)).isEqualTo(new byte[]{1, 2, 3});
+        }
+
+        @Test
+        @SuppressWarnings("removal")
+        void aStringPayloadIsStoredAsAnXStreamElementWithAnXStreamConverter() {
+            // given
+            StoredDeadlineConverter xStreamSubject = new StoredDeadlineConverter(new XStreamConverter(new XStream()));
+
+            // when
+            String stored = xStreamSubject.payloadToStored("a < b & c", String.class);
+
+            // then
+            assertThat(stored).isEqualTo("<string>a &lt; b &amp; c</string>");
+            assertThat(xStreamSubject.payload("string", null, stored)).isEqualTo("a < b & c");
+        }
+
+        @Test
+        void storingAStringPayloadFailsWithAConverterWritingNeitherJsonNorXStreamXml() {
+            // given
+            StoredDeadlineConverter unknownFormat = new StoredDeadlineConverter(new ChainingContentTypeConverter());
+
+            // when / then
+            assertThatThrownBy(() -> unknownFormat.payloadToStored("text", String.class))
+                    .isInstanceOf(DeadlineException.class)
+                    .hasMessageContaining(String.class.getName());
+        }
+
+        @Test
+        void readingAStringPayloadStoredAsIsFails() {
+            // when / then
+            assertThatThrownBy(() -> testSubject.payload(String.class.getName(), null, bytes("text")))
+                    .isInstanceOf(DeadlineException.class);
         }
     }
 
