@@ -502,14 +502,8 @@ public class SpringCloudQueryBusConnector implements QueryBusConnector {
                                                                  List<Member> members,
                                                                  Member answering,
                                                                  int updateBufferSize) {
-        // Two activities, in this order. Every member's update stream is opened first, and the initial result waits
-        // until all of them are. Not only the answering member's: the initial result reflects state every member
-        // advertising the query changes, as when the segments of one event processor are spread over the members and
-        // all write the read model it reads. An update a member emits before it registered the subscription reaches
-        // nobody, so asking any sooner lets one fall between the initial result and the updates. The streams are
-        // opened concurrently, so this waits for the slowest member rather than for all of them in turn. A member
-        // reporting the subscription over ends the wait early: nothing can be emitted after that, so there is no
-        // update left for the initial result to be asked ahead of.
+        // Every member's update stream is opened before the initial result is asked for, so no update falls between
+        // the two. A member reporting the subscription over ends that wait early.
         CompletableFuture<Void> everyMemberOpen = new CompletableFuture<>();
         AtomicInteger unopened = new AtomicInteger(members.size());
         SubscriptionUpdates updates =
