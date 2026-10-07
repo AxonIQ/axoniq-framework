@@ -8,14 +8,15 @@ The engine records each execution as durable events, giving you crash recovery a
 ====
 The Java DSL has a shared `WorkflowContext` contract and two layers:
 
-- `BaseWorkflowContext` is the canonical primitive DSL layer. It implements the definition-based `WorkflowContext` operations and adds named `execute(...)` and `awaitExecute(...)` overloads; its blocking methods return a payload map, and customization happens through `UnaryOperator<ExecuteStepDefinition>`.
+- `BaseWorkflowContext` is the canonical primitive DSL layer.
+It implements the definition-based `WorkflowContext` operations and adds named `execute(...)` and `awaitExecute(...)` overloads; its blocking methods return a payload map, and customization happens through `UnaryOperator<ExecuteStepDefinition>`.
 - `SimpleWorkflowContext` adds convenience helpers on top, such as execute overloads without extra input payload, typed `awaitExecute(...)` for single-value actions, typed `awaitEvent(...)`, `sleep(...)`, and `setPayload(...)`.
 ====
 
 There are two variants:
 
-* *`awaitExecute`*—blocks until the action finishes and returns either the resulting payload map or, via the convenience overload, a single typed value
-* *`execute`*—starts the action without waiting and returns a `WorkflowStepResult`
+* *`awaitExecute`*: blocks until the action finishes and returns either the resulting payload map or, via the convenience overload, a single typed value
+* *`execute`*: starts the action without waiting and returns a `WorkflowStepResult`
 
 [[awaitexecute]]
 == `awaitExecute` (blocking)
@@ -29,8 +30,7 @@ For a single-value action, `SimpleWorkflowContext` offers a typed convenience ov
 
 [source,java]
 ----
-var reserved = ctx.awaitExecute("reserveStock", Boolean.class,
-                                 InventoryService::reserveStock);
+include::example$workflows/executesteps/ExecuteStepsExamples.java[tag=awaitexecute-typed,indent=0]
 ----
 
 Internally this convenience stores the value under the synthetic payload key `"__" + stepName + "Result"`, then unwraps it for the caller.
@@ -40,12 +40,11 @@ The canonical form takes a step name, a local payload map, and a processor:
 
 [source,java]
 ----
-var reservation = ctx.awaitExecute("reserveStock",
-        Map.of(),
-        (pc, input) -> Map.of("reserved", InventoryService.reserveStock()));
+include::example$workflows/executesteps/ExecuteStepsExamples.java[tag=awaitexecute-canonical,indent=0]
 ----
 
-That's it—one line of business logic, and the engine gives you event sourcing, crash recovery, and an audit trail.
+That's it.
+One line of business logic, and the engine gives you event sourcing, crash recovery, and an audit trail.
 
 === With payload
 
@@ -53,16 +52,7 @@ Pass data into the step and use the result for control flow:
 
 [source,java]
 ----
-var customerId = ctx.workflowPayload().get("customerId");
-var amount = ctx.workflowPayload().get("amount");
-
-var reservation = ctx.awaitExecute("reserveStock",
-        payload("customerId", customerId, "amount", amount).getValues(),
-        (pc, input) -> Map.of("reserved", InventoryService.reserveStock(input))); // <1>
-if (!Boolean.TRUE.equals(reservation.get("reserved"))) {
-    ctx.fail(new RuntimeException("Stock unavailable")); // <2>
-    return;
-}
+include::example$workflows/executesteps/ExecuteStepsExamples.java[tag=awaitexecute-with-payload,indent=0]
 ----
 
 <.> The params (payload) passed to the step (`customerId`, `amount`) are recorded in the STARTED event, and the returned payload map is recorded in the COMPLETED event.
@@ -88,11 +78,7 @@ The full form adds an explicit timeout and event name customizer:
 
 [source,java]
 ----
-ctx.awaitExecute("initiatePayment",
-                 payload("customerId", customerId, "amount", amount).getValues(),
-                 PaymentService::initiatePayment,
-                 step -> step.timeout(Duration.ofSeconds(30))
-                             .eventNameCustomizer(baseName("InitiatingPaymentForCustomer"))); // <1>
+include::example$workflows/executesteps/ExecuteStepsExamples.java[tag=awaitexecute-timeout-customizer,indent=0]
 ----
 
 <.> `baseName(...)` replaces the step name in the event name—its events will appear as `InitiatingPaymentForCustomerStarted` instead of `InitiatePaymentStarted`.
@@ -141,9 +127,7 @@ Use this when you want to run multiple steps concurrently, or when you need to c
 
 [source,java]
 ----
-var shipping = ctx.execute("shipOrder", ctx.workflowPayload(),
-        ShippingService::shipOrder,
-        step -> step.timeout(Duration.ofMinutes(5)));
+include::example$workflows/executesteps/ExecuteStepsExamples.java[tag=execute-non-blocking,indent=0]
 ----
 
 See xref:step-orchestration.adoc[] for combining multiple `execute` and `waitForEvent` results with `allMatch`, `anyMatch`, and `noneMatch`.
@@ -186,10 +170,11 @@ fun Kontext.fulfillOrder() {
 
 If you want to pass step-local data with a named Kotlin argument, use `inputPayload = ...`.
 
-The typed Kotlin convenience uses the same synthetic payload key pattern `"__" + stepName + "Result"` internally. The low-level definition API is still available when you want to construct `ExecuteStepDefinition` explicitly, but most workflows can stay on the overloads with Kotlin default parameters.
+The typed Kotlin convenience uses the same synthetic payload key pattern `"__" + stepName + "Result"` internally.
+The low-level definition API is still available when you want to construct `ExecuteStepDefinition` explicitly, but most workflows can stay on the overloads with Kotlin default parameters.
 
 == What's next
 
-For cross-cutting configuration that applies to all step types—timeouts, payload reducers, error handling, event naming, and execution semantics—see xref:understanding-steps.adoc[].
+For cross-cutting configuration that applies to all step types, like timeouts, payload reducers, error handling, event naming, and execution semantics, see xref:understanding-steps.adoc[].
 
 For waiting on external events, see xref:waiting-for-events.adoc[].
