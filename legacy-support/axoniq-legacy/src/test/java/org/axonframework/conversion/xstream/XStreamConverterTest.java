@@ -20,6 +20,7 @@
 package org.axonframework.conversion.xstream;
 
 import com.thoughtworks.xstream.XStream;
+import org.axonframework.common.TypeReference;
 import org.axonframework.conversion.ConversionException;
 import org.axonframework.conversion.Converter;
 import org.axonframework.messaging.core.Metadata;
@@ -27,7 +28,10 @@ import org.axonframework.modelling.saga.repository.StubSaga;
 import org.junit.jupiter.api.*;
 
 import java.io.InputStream;
+import java.lang.reflect.Type;
 import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.*;
 
@@ -117,6 +121,22 @@ class XStreamConverterTest {
             // then
             assertThat(result).isEqualTo(saga);
         }
+
+        @Test
+        void convertingToAParameterizedTypeResolvesItsRawClass() {
+            // given a TypeReference, the way StoredDeadlineConverter resolves metadata read back from storage
+            Map<String, Object> map = new HashMap<>();
+            map.put("traceId", "abc-123");
+            String xml = testSubject.convert(map, String.class);
+            Type mapType = new TypeReference<Map<String, Object>>() {
+            }.getType();
+
+            // when
+            Map<String, Object> result = testSubject.convert(xml, mapType);
+
+            // then
+            assertThat(result).containsExactlyEntriesOf(map);
+        }
     }
 
     @Nested
@@ -196,6 +216,18 @@ class XStreamConverterTest {
             // when / then
             assertThatThrownBy(() -> testSubject.convert(saga, Metadata.class))
                     .isInstanceOf(ConversionException.class);
+        }
+
+        @Test
+        void readingXmlOfTheWrongTypeResultsInAConversionExceptionRatherThanAClassCastException() {
+            // given XML holding a Metadata, not a StubSaga
+            String xml = testSubject.convert(Metadata.with("traceId", "abc-123"), String.class);
+
+            // when / then
+            assertThatThrownBy(() -> testSubject.convert(xml, StubSaga.class))
+                    .isInstanceOf(ConversionException.class)
+                    .hasMessageContaining(Metadata.class.getName())
+                    .hasMessageContaining(StubSaga.class.getName());
         }
     }
 }
