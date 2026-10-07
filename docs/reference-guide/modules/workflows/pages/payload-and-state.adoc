@@ -1,7 +1,8 @@
 = Payload and State
 :navtitle: Payload & State
 
-Every workflow instance carries a _payload_—a `Map<String, Object>` that persists durably across all steps.
+Every workflow instance carries a _payload_.
+The payload is a `Map<String, Object>` that persists durably across all steps.
 The triggering event's fields become the initial payload, and you can read, modify, and pass it to steps throughout the workflow.
 
 == Reading payload
@@ -10,9 +11,7 @@ When the `OrderPlaced` event triggers our workflow, its fields (`orderId`, `cust
 
 [source,java]
 ----
-var payload = ctx.workflowPayload(); // <1>
-var orderId = payload.get("orderId");
-var email = payload.get("email");
+include::example$workflows/payloadandstate/PayloadAndStateExamples.java[tag=read-payload,indent=0]
 ----
 
 <.> Returns the current workflow payload as a `Map<String, Object>`.
@@ -24,13 +23,7 @@ After receiving the payment confirmation, we want to store the transaction detai
 
 [source,java]
 ----
-var confirmation = ctx.awaitEvent("awaitPayment",
-        PaymentConfirmed.class,
-        associate(payloadProperty("orderId"),
-                  equalsTo(ctx.workflowPayload().get("orderId"))),
-        step -> step.timeout(Duration.ofMinutes(15)));
-
-ctx.setPayload("storePaymentDetails", confirmation); // <1>
+include::example$workflows/payloadandstate/PayloadAndStateExamples.java[tag=set-payload,indent=0]
 ----
 
 <.> Merges the `PaymentConfirmed` fields (`orderId`, `transactionId`) into the workflow payload.
@@ -45,10 +38,7 @@ You can pass the workflow payload as input to any step:
 
 [source,java]
 ----
-ctx.awaitExecute("shipOrder",
-                 ctx.workflowPayload(), // <1>
-                 ShippingService::shipOrder,
-                 step -> step.timeout(Duration.ofMinutes(5)));
+include::example$workflows/payloadandstate/PayloadAndStateExamples.java[tag=pass-payload,indent=0]
 ----
 
 <.> The shipping service receives the full payload—including the `transactionId` we stored in the previous step.
@@ -59,9 +49,7 @@ The `Payload` class wraps the raw map with convenient accessor methods:
 
 [source,java]
 ----
-import static io.axoniq.framework.workflow.dsl.api.Payload.payload;
-
-var email = payload(ctx.workflowPayload()).get("email"); // <1>
+include::example$workflows/payloadandstate/PayloadAndStateExamples.java[tag=payload-helper,indent=0]
 ----
 
 <.> `payload(...)` wraps a `Map<String, Object>` and provides type-safe `get` methods.
