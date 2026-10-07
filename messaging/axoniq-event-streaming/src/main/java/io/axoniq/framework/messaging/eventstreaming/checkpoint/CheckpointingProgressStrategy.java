@@ -33,6 +33,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.lang.invoke.MethodHandles;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -132,7 +133,7 @@ public final class CheckpointingProgressStrategy implements SegmentProgressStrat
         TrackingToken consumed = context.lastConsumedToken();
         // The auto component(s) are durable to the batch-end token within this transaction: cover at least there.
         TrackingToken requested = autoCheckpointing
-                ? (pending == null || consumed == null ? consumed : pending.upperBound(consumed))
+                ? (consumed == null ? null : furthest(pending, consumed))
                 : pending;
         if (requested == null) {
             return emptyCompletedFuture();
@@ -181,7 +182,7 @@ public final class CheckpointingProgressStrategy implements SegmentProgressStrat
                     logger.warn("Could not reconcile the release checkpoint for {} across components; "
                                         + "storing the lowest reported safe token.",
                                 segment, error);
-                    return TrackingTokenUtils.lowerBound(reported.values());
+                    return earliest(reported.values());
                 })), processingContext)
                 // The claim must be released regardless of whether a final token could be stored: if a component's
                 // release future failed (so no safe token could even be determined) or the store itself failed, leave
@@ -214,12 +215,7 @@ public final class CheckpointingProgressStrategy implements SegmentProgressStrat
             // segment released, or nothing handled yet: a late async ack has no safe point to record, so ignore it
             return;
         }
-        // The accumulator's `next` parameter is always `resolved`, but is typed by the reference's @Nullable element
-        // type; using the null-checked `resolved` keeps the non-null contract of TrackingToken#upperBound intact.
-        requestedCheckpoint.accumulateAndGet(resolved,
-                                             (current, next) -> current == null
-                                                     ? resolved
-                                                     : current.upperBound(resolved));
+        requestedCheckpoint.accumulateAndGet(resolved, CheckpointingProgressStrategy::furthest);
         context.scheduleWorker();
     }
 
@@ -242,7 +238,7 @@ public final class CheckpointingProgressStrategy implements SegmentProgressStrat
      * @return the single position every participant has durably reached (or {@code null} if none reported one)
      */
     private CompletableFuture<@Nullable TrackingToken> reconcile(Map<Checkpointing, @Nullable TrackingToken> reported) {
-        TrackingToken agreed = TrackingTokenUtils.upperBound(reported.values());
+        TrackingToken agreed = reported.values().stream().reduce(null, CheckpointingProgressStrategy::furthest);
         if (agreed == null || reported.size() == 1) {
             // Nothing reported, or a single participant that trivially agrees with itself: no reconciliation needed.
             return CompletableFuture.completedFuture(agreed);
@@ -250,7 +246,8 @@ public final class CheckpointingProgressStrategy implements SegmentProgressStrat
         List<Checkpointing> laggards =
                 reported.entrySet()
                         .stream()
-                        .filter(entry -> entry.getValue() == null || !entry.getValue().covers(agreed))
+                        .filter(entry -> entry.getValue() == null
+                                || !TrackingTokenUtils.coversWhenUnwrapped(entry.getValue(), agreed))
                         .map(Map.Entry::getKey)
                         .toList();
         if (laggards.isEmpty()) {
@@ -282,7 +279,7 @@ public final class CheckpointingProgressStrategy implements SegmentProgressStrat
     private TrackingToken validateCovers(Checkpointing participant,
                                          @Nullable TrackingToken actual,
                                          TrackingToken requested) {
-        if (actual == null || !actual.covers(requested)) {
+        if (actual == null || !TrackingTokenUtils.coversWhenUnwrapped(actual, requested)) {
             throw new IllegalStateException(
                     "Checkpointing component [" + participant + "] returned checkpoint token [" + actual
                             + "] that does not cover the requested position [" + requested + "]."
@@ -298,6 +295,34 @@ public final class CheckpointingProgressStrategy implements SegmentProgressStrat
         } catch (Exception e) {
             return CompletableFuture.failedFuture(e);
         }
+    }
+
+    private static @Nullable TrackingToken furthest(@Nullable TrackingToken first, @Nullable TrackingToken second) {
+        if (first == null) {
+            return second;
+        }
+        if (second == null || TrackingTokenUtils.coversWhenUnwrapped(first, second)) {
+            return first;
+        }
+        if (TrackingTokenUtils.coversWhenUnwrapped(second, first)) {
+            return second;
+        }
+        return first.upperBound(second);
+    }
+
+    private static @Nullable TrackingToken earliest(Collection<@Nullable TrackingToken> tokens) {
+        TrackingToken earliest = null;
+        for (TrackingToken token : tokens) {
+            if (token == null) {
+                return null;
+            }
+            if (earliest == null || TrackingTokenUtils.coversWhenUnwrapped(earliest, token)) {
+                earliest = token;
+            } else if (!TrackingTokenUtils.coversWhenUnwrapped(token, earliest)) {
+                earliest = earliest.lowerBound(token);
+            }
+        }
+        return earliest;
     }
 
     /**

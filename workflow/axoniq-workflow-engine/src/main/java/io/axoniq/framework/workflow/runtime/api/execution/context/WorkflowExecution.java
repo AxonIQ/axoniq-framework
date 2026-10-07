@@ -26,6 +26,7 @@ import org.axonframework.eventsourcing.eventstore.ConsistencyMarker;
 import org.axonframework.messaging.core.Context;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
+import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.jspecify.annotations.Nullable;
 
 import java.util.concurrent.CompletableFuture;
@@ -140,6 +141,10 @@ public interface WorkflowExecution extends DescribableComponent {
      * @return {@code true} if checkpoint advancement is unsafe, {@code false} otherwise
      */
     boolean hasUnsafeCheckpointWork();
+
+    boolean holdsCheckpoint();
+
+    boolean holdsCheckpoint(TrackingToken requested);
 
     /**
      * Registers a listener for transitions of checkpoint-relevant work.

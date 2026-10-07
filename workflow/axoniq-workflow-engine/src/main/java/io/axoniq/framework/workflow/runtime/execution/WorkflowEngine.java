@@ -285,7 +285,15 @@ public class WorkflowEngine implements
 
     @Override
     public boolean holdsCheckpoint(Segment segment) {
-        return unsafeExecutionsOf(segment).anyMatch(execution -> !execution.isRunning());
+        return unsafeExecutionsOf(segment).anyMatch(execution -> !execution.isRunning() || execution.holdsCheckpoint());
+    }
+
+    @Override
+    public boolean holdsCheckpoint(Segment segment, TrackingToken requested) {
+        // A running execution that holds never drains to safe, so it fails at every position rather than being awaited.
+        return unsafeExecutionsOf(segment).anyMatch(execution -> execution.isRunning()
+                ? execution.holdsCheckpoint()
+                : execution.holdsCheckpoint(requested));
     }
 
     /**
@@ -399,6 +407,7 @@ public class WorkflowEngine implements
      * @return a future completed after this engine has requested every released execution to stop
      */
     public CompletableFuture<Void> releaseWorkflowsFor(Segment segment) {
+        catchUpSupport.release(segment);
         var released = workflowExecutionRepository.findAll(ownedBy(segment));
         if (released.isEmpty()) {
             return CompletableFuture.completedFuture(null);
@@ -408,7 +417,6 @@ public class WorkflowEngine implements
         released.forEach(WorkflowExecution::stopForShutdown);
         // An execution stopped for recovery skips the termination handler, so the release does its cleanup.
         released.forEach(execution -> removeExecution(execution.workflowId()));
-        catchUpSupport.release(segment);
         return CompletableFuture.completedFuture(null);
     }
 
@@ -419,6 +427,28 @@ public class WorkflowEngine implements
     private static boolean isUnrecognizedDefinition(Throwable failure) {
         return failure instanceof UnrecognizedWorkflowDefinitionException
                 || failure.getCause() instanceof UnrecognizedWorkflowDefinitionException;
+    }
+
+    /**
+     * Records the position a claimed segment has reached in the event stream and starts the segment's restored workflow
+     * executions once that position covers the head seen at {@link #start(TrackingToken)}.
+     * <p>
+     * The position also advances over events the processor skips for the segment, so a segment that receives no events
+     * still catches up. A position only counts when no event was delivered to the segment since the previous call:
+     * a segment that receives events catches up on delivery instead.
+     *
+     * @param segment  the claimed segment
+     * @param position the position the segment has reached, or {@code null} when unknown
+     * @return {@code true} when the segment needs no further positions, because it caught up or none of its workflow
+     * executions waits to start
+     */
+    public boolean recordSegmentPosition(Segment segment, @Nullable TrackingToken position) {
+        if (catchUpSupport.recordPosition(segment, position)) {
+            removeTerminalAndStartRestoredWorkflowExecutions(segment, "after catch-up");
+        }
+        return isSegmentCaughtUp(segment)
+                || workflowExecutionRepository.findAll(ownedBy(segment).and(execution -> !execution.isRunning()))
+                                              .isEmpty();
     }
 
     private void logFailedRestore(Segment segment, @Nullable Throwable failure) {

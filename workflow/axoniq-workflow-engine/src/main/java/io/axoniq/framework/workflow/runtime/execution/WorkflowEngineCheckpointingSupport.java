@@ -30,6 +30,7 @@ import org.jspecify.annotations.Nullable;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static java.util.Objects.requireNonNull;
 
@@ -82,13 +83,19 @@ public class WorkflowEngineCheckpointingSupport implements Checkpointing {
     public CompletableFuture<TrackingToken> onCheckpointAdvanced(Segment segment,
                                                                  TrackingToken requested) {
         CompletableFuture<TrackingToken> result = new CompletableFuture<>();
+        if (checkpointLatchCoordinator.holdsCheckpoint(segment, requested)) {
+            result.completeExceptionally(new IllegalStateException(
+                    "Segment " + segment.getSegmentId() + " holds workflow work that is not durable yet"));
+            return result;
+        }
         if (!checkpointLatchCoordinator.hasUnsafeCheckpointWork(segment)) {
             result.complete(requested);
             return result;
         }
 
+        var rechecked = new AtomicBoolean();
         checkpointLatchCoordinator.addCheckpointLatch(segment, () -> {
-            if (result.isDone()) {
+            if (result.isDone() || !rechecked.compareAndSet(false, true)) {
                 return;
             }
             onCheckpointAdvanced(segment, requested).whenComplete((token, cause) -> {
@@ -105,7 +112,7 @@ public class WorkflowEngineCheckpointingSupport implements Checkpointing {
     @Override
     public CompletableFuture<TrackingToken> onSegmentReleased(Segment segment,
                                                               TrackingToken requested) {
-        var released = checkpointLatchCoordinator.holdsCheckpoint(segment)
+        var released = checkpointLatchCoordinator.holdsCheckpoint(segment, requested)
                 ? CompletableFuture.<TrackingToken>failedFuture(new IllegalStateException(
                         "Segment " + segment.getSegmentId() + " holds workflow work that is not durable yet"))
                 : onCheckpointAdvanced(segment, requested);
@@ -168,6 +175,10 @@ public class WorkflowEngineCheckpointingSupport implements Checkpointing {
         boolean hasUnsafeCheckpointWork(Segment segment);
 
         boolean holdsCheckpoint(Segment segment);
+
+        default boolean holdsCheckpoint(Segment segment, TrackingToken requested) {
+            return holdsCheckpoint(segment);
+        }
 
         /**
          * Adds a checkpoint latch across the current set of {@link WorkflowExecution WorkflowExecutions} owned by the

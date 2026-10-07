@@ -494,9 +494,10 @@ public class EventSourcedWorkflowState implements WorkflowState {
             boolean notifyStatusListeners,
             ProcessingContext processingContext
     ) {
+        var previousStatus = this.status;
         this.status = workflowStatus;
         this.terminationCause = terminationCause;
-        if (notifyStatusListeners) {
+        if (notifyStatusListeners && previousStatus != workflowStatus) {
             this.listenerSupport.notify(workflowStatus, processingContext);
         }
     }

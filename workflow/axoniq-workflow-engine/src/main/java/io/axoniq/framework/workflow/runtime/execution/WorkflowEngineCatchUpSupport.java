@@ -23,8 +23,9 @@ import org.axonframework.messaging.eventhandling.processing.streaming.segmenting
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.jspecify.annotations.Nullable;
 
-import java.util.Set;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Tracks whether claimed workflow-engine segments have consumed the startup backlog.
@@ -34,7 +35,7 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 @Internal final class WorkflowEngineCatchUpSupport {
 
-    private final Set<Integer> caughtUpSegments = ConcurrentHashMap.newKeySet();
+    private final Map<Integer, Claim> claims = new ConcurrentHashMap<>();
     @Nullable
     private volatile TrackingToken startupHead;
 
@@ -43,25 +44,49 @@ import java.util.concurrent.ConcurrentHashMap;
     }
 
     boolean isCaughtUp(@Nullable Segment segment) {
-        return startupHead == null || segment == null || caughtUpSegments.contains(segment.getSegmentId());
+        if (startupHead == null || segment == null) {
+            return true;
+        }
+        var claim = claims.get(segment.getSegmentId());
+        return claim != null && claim.caughtUp.get();
     }
 
     boolean startsAfterClaim(Segment segment, @Nullable TrackingToken claimedFrom) {
+        var claim = new Claim();
+        claims.put(segment.getSegmentId(), claim);
         var head = startupHead;
-        if (head != null && claimedFrom != null && !claimedFrom.covers(head)
-                && !caughtUpSegments.contains(segment.getSegmentId())) {
+        if (head != null && claimedFrom != null && !claimedFrom.covers(head)) {
             return false;
         }
-        return caughtUpSegments.add(segment.getSegmentId());
+        return claim.caughtUp.compareAndSet(false, true);
     }
 
     boolean recordDelivery(@Nullable Segment segment, @Nullable TrackingToken deliveredToken) {
+        if (segment == null) {
+            return false;
+        }
+        var claim = claims.computeIfAbsent(segment.getSegmentId(), segmentId -> new Claim());
+        claim.delivered.set(true);
         var head = startupHead;
-        return segment != null && deliveredToken != null && (head == null || deliveredToken.covers(head))
-                && caughtUpSegments.add(segment.getSegmentId());
+        return deliveredToken != null && (head == null || deliveredToken.covers(head))
+                && claim.caughtUp.compareAndSet(false, true);
+    }
+
+    boolean recordPosition(Segment segment, @Nullable TrackingToken position) {
+        var claim = claims.get(segment.getSegmentId());
+        var head = startupHead;
+        return claim != null && !claim.delivered.getAndSet(false)
+                && position != null && (head == null || position.covers(head))
+                && claim.caughtUp.compareAndSet(false, true);
     }
 
     void release(Segment segment) {
-        caughtUpSegments.remove(segment.getSegmentId());
+        claims.remove(segment.getSegmentId());
+    }
+
+    private static final class Claim {
+
+        private final AtomicBoolean caughtUp = new AtomicBoolean();
+        private final AtomicBoolean delivered = new AtomicBoolean();
     }
 }

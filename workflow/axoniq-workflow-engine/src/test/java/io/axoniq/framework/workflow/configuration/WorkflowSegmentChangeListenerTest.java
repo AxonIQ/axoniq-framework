@@ -45,7 +45,8 @@ class WorkflowSegmentChangeListenerTest {
     private final WorkflowSegmentChangeListener listener = new WorkflowSegmentChangeListener(
             "Workflow",
             new SimpleUnitOfWorkFactory(new StubApplicationContext()),
-            () -> workflowEngine
+            () -> workflowEngine,
+            segment -> null
     );
 
     @Test
@@ -53,6 +54,7 @@ class WorkflowSegmentChangeListenerTest {
         var from = new GlobalSequenceTrackingToken(7);
         when(workflowEngine.restoreWorkflowsFor(any(), any(), any(), any()))
                 .thenReturn(CompletableFuture.completedFuture(null));
+        when(workflowEngine.recordSegmentPosition(any(), any())).thenReturn(true);
 
         listener.onSegmentClaimed(SEGMENT, from).join();
 
