@@ -23,15 +23,27 @@ import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecut
 import io.axoniq.framework.workflow.runtime.util.MetadataUtils;
 import org.axonframework.common.configuration.ComponentNotFoundException;
 import org.axonframework.messaging.core.ApplicationContext;
+import org.axonframework.messaging.core.MessageType;
+import org.axonframework.messaging.core.QualifiedName;
+import org.axonframework.messaging.core.VersionedType;
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.SimpleUnitOfWorkFactory;
 import org.axonframework.messaging.core.unitofwork.StubProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
+import org.axonframework.messaging.eventhandling.GenericEventMessage;
+import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
+import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.junit.jupiter.api.*;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 
 import static io.axoniq.framework.workflow.runtime.execution.SegmentTestFixtures.idOnAnotherSegmentThan;
 import static io.axoniq.framework.workflow.runtime.execution.SegmentTestFixtures.owningSegment;
+import static io.axoniq.framework.workflow.runtime.execution.SegmentTestFixtures.token;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
@@ -44,6 +56,7 @@ class WorkflowEngineSegmentFailoverTest {
 
     private static final String OWNED_ID = "sharded-0";
 
+    private WorkflowConfigurationRegistry<?> configurationRegistry;
     private WorkflowExecutionRepository repository;
     private WorkflowStore workflowStore;
     private WorkflowEngine workflowEngine;
@@ -69,10 +82,11 @@ class WorkflowEngineSegmentFailoverTest {
 
     @BeforeEach
     void setUp() {
+        configurationRegistry = mock(WorkflowConfigurationRegistry.class);
         repository = new InMemoryWorkflowExecutionRepository();
         workflowStore = mock(WorkflowStore.class);
         workflowEngine = new WorkflowEngine(
-                mock(WorkflowConfigurationRegistry.class),
+                configurationRegistry,
                 repository,
                 mock(WorkflowCancellationService.class),
                 workflowStore,
@@ -115,5 +129,80 @@ class WorkflowEngineSegmentFailoverTest {
         verify(owned).stopForShutdown();
         verify(foreign, never()).stopForShutdown();
         assertThat(repository.findAll()).containsExactly(foreign);
+    }
+
+    @Nested
+    class ClaimAfterARelease {
+
+        private static final VersionedType DEFINITION_ID =
+                VersionedType.of(new QualifiedName("ShardedWorkflow"), "1.0.0");
+
+        private final Segment owner = owningSegment(OWNED_ID);
+        private final EventSourcedRunningWorkflows runningWorkflows = new EventSourcedRunningWorkflows();
+        private final List<String> bodyStarts = new ArrayList<>();
+
+        @BeforeEach
+        void startEngine() {
+            when(workflowStore.loadRunningWorkflows(any()))
+                    .thenReturn(CompletableFuture.completedFuture(runningWorkflows));
+            workflowEngine.start(token(10));
+        }
+
+        @Test
+        void restoredExecutionStartsOnceItsSegmentCatchesUpAfterAReleaseWithoutExecutions() {
+            // given
+            claim(token(10));
+            workflowEngine.releaseWorkflowsFor(owner);
+            storeRunningInstance();
+
+            // when
+            claim(token(5));
+            var startsBeforeCatchUp = List.copyOf(bodyStarts);
+            workflowEngine.handle(new GenericEventMessage(new MessageType("unrelated"), Map.of()), delivery(token(10)));
+
+            // then
+            assertThat(startsBeforeCatchUp).isEmpty();
+            assertThat(bodyStarts).containsExactly(OWNED_ID);
+        }
+
+        @Test
+        void positionRecordedAfterAReleaseLeavesTheNextClaimGatedUntilItCatchesUp() {
+            // given
+            storeRunningInstance();
+            claim(token(5));
+            workflowEngine.releaseWorkflowsFor(owner);
+
+            // when
+            workflowEngine.recordSegmentPosition(owner, token(10));
+            claim(token(5));
+            var startsBeforeCatchUp = List.copyOf(bodyStarts);
+            workflowEngine.recordSegmentPosition(owner, token(10));
+
+            // then
+            assertThat(startsBeforeCatchUp).isEmpty();
+            assertThat(bodyStarts).containsExactly(OWNED_ID);
+        }
+
+        private void claim(TrackingToken from) {
+            workflowEngine.restoreWorkflowsFor(owner, from, new StubProcessingContext(), new StubProcessingContext())
+                          .join();
+        }
+
+        private ProcessingContext delivery(TrackingToken position) {
+            var context = new StubProcessingContext();
+            context.putResource(Segment.RESOURCE_KEY, owner);
+            context.putResource(TrackingToken.RESOURCE_KEY, position);
+            return context;
+        }
+
+        private void storeRunningInstance() {
+            var state = new EventSourcedWorkflowState(OWNED_ID, Map.of(), DEFINITION_ID);
+            runningWorkflows.evolve(MetadataUtils.create(OWNED_ID, WorkflowStatus.STARTED));
+            when(workflowStore.loadWorkflow(eq(OWNED_ID), any())).thenReturn(CompletableFuture.completedFuture(state));
+            var execution = WorkflowExecutionFixture.mockExecution(OWNED_ID, state, false);
+            WorkflowExecutionFixture.recordBodyStartOn(execution, bodyStarts::add, OWNED_ID);
+            var configuration = WorkflowExecutionFixture.mockConfiguration(OWNED_ID, execution);
+            when(configurationRegistry.getWorkflowConfiguration(DEFINITION_ID)).thenReturn(Optional.of(configuration));
+        }
     }
 }

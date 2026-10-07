@@ -20,6 +20,7 @@ package io.axoniq.framework.workflow.runtime.execution;
 
 import io.axoniq.framework.workflow.dsl.api.StepFailedException;
 import io.axoniq.framework.workflow.dsl.api.StepInterruptedException;
+import io.axoniq.framework.workflow.dsl.api.StepStatus;
 import io.axoniq.framework.workflow.dsl.api.WorkflowCancelledException;
 import io.axoniq.framework.workflow.dsl.api.WorkflowContext;
 import io.axoniq.framework.workflow.dsl.api.WorkflowFailedException;
@@ -43,16 +44,19 @@ import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.VersionedType;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
+import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
@@ -93,7 +97,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
                     new ExecutionTaskQueue() {
                         @Override
                         public boolean isRunning() {
-                            return running;
+                            return running.get();
                         }
 
                         @Override
@@ -115,9 +119,10 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
     private final SequencedAppender appender = new SequencedAppender();
     private final WorkflowEventPublisher workflowEventPublisher;
     // Runtime
-    private boolean running = false;
+    private final AtomicBoolean running = new AtomicBoolean();
     private boolean stoppedForRecovery = false;
     private volatile Thread workflowThread;
+    private volatile boolean shuttingDown = false;
     // State variables
     private volatile EventSourcedWorkflowState workflowState;
 
@@ -211,8 +216,10 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
      */
     @Override
     public CompletableFuture<Void> execute(Consumer<WorkflowExecution> terminationHandler) {
+        if (shuttingDown || !running.compareAndSet(false, true)) {
+            return CompletableFuture.completedFuture(null);
+        }
         this.stoppedForRecovery = false;
-        this.running = true;
         checkpointingSupport.refreshCheckpointWorkState();
         // run in a separate thread to avoid blocking the replay status change handler thread ( = WorkPackage)
 
@@ -284,6 +291,9 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
                                            workflowState.workflowDefinitionId(), eventNameCustomizer), ctx);
             try {
                 awaitStateChange(s -> s.workflowStatus() == WorkflowStatus.STARTED);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new StepInterruptedException("Interrupted while awaiting the start of the workflow", e);
             } catch (Exception e) {
                 logger.error("Error waiting for start of workflow instance {}", workflowId, e);
             }
@@ -463,6 +473,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
      * @param terminationHandler termination handler to call.
      */
     private void finishWorkflow(Consumer<WorkflowExecution> terminationHandler) {
+        checkpointingSupport.releaseCheckpointWork();
         stopRuntime(null);
         terminationHandler.accept(this);
     }
@@ -489,7 +500,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
      * state.
      */
     private void stopRuntime(@Nullable Throwable stepCancellationCause) {
-        this.running = false;
+        this.running.set(false);
         this.taskQueue.clear();
         // Queue cleanup removes checkpoint barriers too. Release their callbacks because no workflow driver remains to
         // consume them; otherwise a fully deferred processor checkpoint would wait forever.
@@ -504,7 +515,9 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
         runningSteps.cancelAll(new StepInterruptedException("Workflow reached terminal state"), cancelled -> {
         });
         // Keep checkpoint barriers until finishWorkflow can release their callbacks after the terminal event is durable.
-        this.taskQueue.removeIf(task -> !checkpointingSupport.isCheckpointLatch(task));
+        var discarded = new ArrayList<Consumer<WorkflowExecution>>();
+        this.taskQueue.removeIf(task -> !checkpointingSupport.isCheckpointLatch(task) && discarded.add(task));
+        checkpointingSupport.discardTasks(discarded);
         terminalEventPublication.run();
         try {
             awaitStateChange(s -> s.workflowStatus().isTerminal());
@@ -528,19 +541,21 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
         // An event another instance published through the publish primitive is broadcast to every owned execution.
         // It carries that instance's step metadata, so it may wake a wait here but never evolves this state.
         boolean ownState = !isForeignStep(eventMessage);
-        if (running) {
+        var position = TrackingToken.fromContext(processingContext).orElse(null);
+        if (running.get()) {
             // live mode
-            appendTask(i -> {
+            appendDeliveryTask(i -> {
                 eventWaitConditions.evaluateAndApply(eventMessage, processingContext, contextDelegate::eventReceived);
                 if (ownState) {
                     workflowState.evolve(eventMessage, processingContext);
                 }
-            });
+            }, position);
         } else if (stoppedForRecovery) {
             // Keep the projected state in sync with durable events, but queue no work: no driver runs until restart.
             if (ownState) {
                 workflowState.evolve(eventMessage, processingContext, false);
             }
+            checkpointingSupport.holdCheckpoint(position);
         } else {
             // replay mode
             if (ownState) {
@@ -548,15 +563,33 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
             }
             // The wake must not be discarded with them: an event that produced no engine event before the crash is not
             // in the durable state, so evolving alone leaves the instance waiting for something already gone past.
-            appendTask(i -> eventWaitConditions.evaluateAndApply(eventMessage,
-                                                                 processingContext,
-                                                                 contextDelegate::eventReceived));
+            if (needsWakeEvaluation(eventMessage)) {
+                appendDeliveryTask(i -> eventWaitConditions.evaluateAndApply(eventMessage,
+                                                                     processingContext,
+                                                                     contextDelegate::eventReceived), position);
+            }
         }
+    }
+
+    private boolean needsWakeEvaluation(EventMessage eventMessage) {
+        var state = workflowState;
+        if (state.workflowStatus() != WorkflowStatus.STARTED) {
+            return true;
+        }
+        var eventName = eventMessage.type().qualifiedName().toString();
+        return state.workflowStepNames()
+                    .stream()
+                    .map(state::getStep)
+                    .filter(step -> step.status() == StepStatus.STARTED)
+                    .anyMatch(step -> !(step.result() instanceof Map<?, ?> parameters)
+                            || !parameters.containsKey("eventName")
+                            || eventName.equals(parameters.get("eventName")));
     }
 
 
     @Override
     public void stopForShutdown() {
+        shuttingDown = true;
         runningSteps.cancelAll(new StepInterruptedException("Workflow engine shutdown"), s -> {
         });
         // Unblock the workflow driver thread parked on taskQueue.take() inside the current step's await() loop.
@@ -584,6 +617,16 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
     }
 
     @Override
+    public boolean holdsCheckpoint() {
+        return checkpointingSupport.holdsCheckpoint();
+    }
+
+    @Override
+    public boolean holdsCheckpoint(TrackingToken requested) {
+        return checkpointingSupport.holdsCheckpoint(requested);
+    }
+
+    @Override
     public void registerCheckpointWorkStateListener(CheckpointWorkStateListener listener) {
         checkpointingSupport.registerListener(listener);
     }
@@ -600,6 +643,10 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
         checkpointingSupport.appendTask(task);
     }
 
+    private void appendDeliveryTask(Consumer<WorkflowExecution> task, @Nullable TrackingToken position) {
+        checkpointingSupport.appendDeliveryTask(task, position);
+    }
+
     @Override
     public boolean hasTasks() {
         return !this.taskQueue.isEmpty();
@@ -613,7 +660,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
 
     @Override
     public boolean isRunning() {
-        return running;
+        return running.get();
     }
 
     @Override
@@ -710,7 +757,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
     @Override
     public void describeTo(ComponentDescriptor descriptor) {
         descriptor.describeProperty("delegate", contextDelegate);
-        descriptor.describeProperty("running", running);
+        descriptor.describeProperty("running", running.get());
         descriptor.describeProperty("state", state());
         eventWaitConditions.describeTo(descriptor);
         runningSteps.describeTo(descriptor);

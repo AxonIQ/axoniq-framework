@@ -25,6 +25,7 @@ import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowConfig
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContextFactory;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionFactory;
+import io.axoniq.framework.workflow.runtime.execution.WorkflowConfigurationRegistry.PredicatedWorkflowConfiguration;
 import io.axoniq.framework.workflow.runtime.execution.payload.GlobalOnlyPayloadReducer;
 import io.axoniq.framework.workflow.runtime.util.MetadataUtils;
 import org.axonframework.common.TypeReference;
@@ -41,6 +42,7 @@ import org.axonframework.messaging.core.unitofwork.StubProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
+import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.junit.jupiter.api.*;
 
 import java.time.Clock;
@@ -53,7 +55,9 @@ import java.util.function.Consumer;
 
 import static io.axoniq.framework.workflow.configuration.WorkflowConfigurationDefaults.WORKFLOW_ENGINE_EXECUTOR;
 import static io.axoniq.framework.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.defaults;
+import static io.axoniq.framework.workflow.runtime.execution.SegmentTestFixtures.idOnAnotherSegmentThan;
 import static io.axoniq.framework.workflow.runtime.execution.SegmentTestFixtures.owningSegment;
+import static io.axoniq.framework.workflow.runtime.execution.SegmentTestFixtures.token;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
@@ -190,6 +194,86 @@ class WorkflowEngineClaimGapWakeTest {
         assertThat(waitStep.isCancelled())
                 .as("the ordinary live ordering - condition first, event second - must keep waking the instance")
                 .isTrue();
+    }
+
+    @Nested
+    class NewWorkflowStartedWhileItsSegmentCatchesUp {
+
+        private static final QualifiedName START_EVENT = new QualifiedName("io.axoniq.test", "OrderPlaced");
+        private static final TrackingToken START_POSITION = token(5);
+
+        private final String workflowId = idOnAnotherSegmentThan(RESIDENT_ID);
+        private final Segment owner = owningSegment(workflowId);
+
+        @BeforeEach
+        void startTheWorkflowWhileItsSegmentCatchesUp() {
+            registerStartableWorkflow();
+            // The node started with the head at 10 and claims the segment at 1, so the segment catches up and the
+            // workflow its start event creates at 5 waits with that event queued.
+            workflowEngine.start(token(10));
+            workflowEngine.restoreWorkflowsFor(owner, token(1), sourcingContext(), new StubProcessingContext()).join();
+            workflowEngine.handle(startEvent(), deliveryAt(START_POSITION));
+        }
+
+        @Test
+        void checkpointBeforeTheStartEventCompletesAtTheRequestedPosition() {
+            // given
+            assertThat(workflowEngine.workflowExecutions()).extracting(WorkflowExecution::isRunning)
+                                                            .containsExactly(false);
+            var beforeTheStartEvent = token(3);
+
+            // when
+            var advanced = checkpointingSupport.onCheckpointAdvanced(owner, beforeTheStartEvent);
+
+            // then
+            assertThat(advanced).isCompletedWithValue(beforeTheStartEvent);
+        }
+
+        @Test
+        void checkpointAtTheStartEventFails() {
+            // when
+            var advanced = checkpointingSupport.onCheckpointAdvanced(owner, START_POSITION);
+
+            // then
+            assertThat(advanced).isCompletedExceptionally();
+        }
+
+        @SuppressWarnings("unchecked")
+        private void registerStartableWorkflow() {
+            WorkflowConfiguration<WorkflowContext> configuration = mock(WorkflowConfiguration.class);
+            when(configuration.workflowName()).thenReturn("NewWorkflow");
+            when(configuration.workflowVersion()).thenReturn("1.0.0");
+            when(configuration.eventNameCustomizer()).thenReturn(defaults());
+            when(configuration.workflowStatusChangeListeners()).thenReturn(Map.of());
+            when(configuration.workflowIdProvider()).thenReturn(event -> workflowId);
+
+            var workflowContext = mock(WorkflowContext.class);
+            WorkflowContextFactory<WorkflowContext> contextFactory = mock(WorkflowContextFactory.class);
+            WorkflowExecutionFactory executionFactory = mock(WorkflowExecutionFactory.class);
+            when(configuration.workflowContextFactory()).thenReturn(contextFactory);
+            when(configuration.workflowExecutionFactory()).thenReturn(executionFactory);
+            when(contextFactory.createContext(anyMap(), eq(workflowId), any(), eq(configuration)))
+                    .thenReturn(workflowContext);
+            when(executionFactory.create(workflowContext)).thenAnswer(invocation -> new SimpleWorkflowExecution(
+                    workflowId, Map.of("orderId", workflowId), bodyContext(), configuration, workflowContext
+            ));
+            when(configurationRegistry.getHighestVersionConfigurations(new MessageType(START_EVENT)))
+                    .thenReturn(List.of(new PredicatedWorkflowConfiguration((e, pc) -> true, configuration)));
+        }
+
+        private EventMessage startEvent() {
+            var eventMessage = mock(EventMessage.class);
+            when(eventMessage.metadata()).thenReturn(Metadata.emptyInstance());
+            when(eventMessage.type()).thenReturn(new MessageType(START_EVENT));
+            when(eventMessage.payloadAs(any(TypeReference.class))).thenReturn(Map.of("orderId", workflowId));
+            return eventMessage;
+        }
+
+        private ProcessingContext deliveryAt(TrackingToken position) {
+            var context = deliveryContext(owner);
+            context.putResource(TrackingToken.RESOURCE_KEY, position);
+            return context;
+        }
     }
 
     /**

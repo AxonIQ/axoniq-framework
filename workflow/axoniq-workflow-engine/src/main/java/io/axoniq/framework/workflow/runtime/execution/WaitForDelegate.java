@@ -22,7 +22,6 @@ import io.axoniq.framework.workflow.dsl.api.EventCondition;
 import io.axoniq.framework.workflow.dsl.api.EventNameCustomizer;
 import io.axoniq.framework.workflow.dsl.api.StepStatus;
 import io.axoniq.framework.workflow.dsl.api.WorkflowStepResult;
-import io.axoniq.framework.workflow.runtime.api.execution.FutureResolutionTimeoutException;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WaitForPrimitive;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations;
@@ -159,23 +158,13 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
         // Cancel the timeout future since the awaited event has arrived
         runningSteps.cancelAndRemove(awaited.stepName(), false);
         var payload = eventMessagePayload(awaited.eventMessage());
-        workflowExecution.appendTask(state -> {
-            try {
-                FutureResolver.resolve(
-                        workflowExecution.processingContext(),
-                        completedWaitForEvent(awaited.stepName(),
-                                              payload,
-                                              awaited.payloadReducer().name(),
-                                              awaited.eventNameCustomizer())
-                );
-            } catch (FutureResolutionTimeoutException timeout) {
-                throw timeout;
-            } catch (Exception e) {
-                logger.warn("Failed to publish completed event for step '{}': {}",
-                            awaited.stepName(),
-                            e.getMessage());
-            }
-        });
+        workflowExecution.appendTask(state -> FutureResolver.resolve(
+                workflowExecution.processingContext(),
+                completedWaitForEvent(awaited.stepName(),
+                                      payload,
+                                      awaited.payloadReducer().name(),
+                                      awaited.eventNameCustomizer())
+        ));
     }
 
     private Map<String, @Nullable Object> startedPayload(EventCondition eventCondition,

@@ -163,10 +163,19 @@ class SimpleWorkflowExecutionTest {
 
     @Test
     void anEventPublishedByAnotherInstanceFeedsWaitConditionsButDoesNotEvolveState() {
-        // given: a started execution, and a business event another workflow published through the publish primitive
-        // (it carries that publisher's step metadata: workflowId, stepName, stepType=COMPLETED, stepPrimitive=PUBLISH)
+        // given: a started execution waiting for OrderApproved, and a business event another workflow published through
+        // the publish primitive (it carries that publisher's step metadata: workflowId, stepName, stepType=COMPLETED,
+        // stepPrimitive=PUBLISH)
         var execution = execution();
         markStarted(execution);
+        execution.onEvent(
+                new GenericEventMessage(
+                        new MessageType("io.acme.AwaitApprovalStarted"),
+                        Map.of("eventName", "io.acme.OrderApproved"),
+                        MetadataUtils.create(execution.workflowId(), "awaitApproval", StepStatus.STARTED)
+                ).withConverter(TestEventConverter.INSTANCE),
+                execution.processingContext()
+        );
         var foreignPublish = new GenericEventMessage(
                 new MessageType("io.acme.OrderApproved"),
                 Map.of("orderId", "o-1"),
@@ -286,7 +295,7 @@ class SimpleWorkflowExecutionTest {
         markStarted(execution);
 
         assertThat(execution.hasTasks()).isFalse();
-        assertThat(execution.hasUnsafeCheckpointWork()).isFalse();
+        assertThat(execution.hasUnsafeCheckpointWork()).isTrue();
     }
 
     @Test
@@ -705,6 +714,102 @@ class SimpleWorkflowExecutionTest {
                 Thread.sleep(10);
             }
             assertThat(execution.isRunning()).isTrue();
+        }
+    }
+
+    @Nested
+    class BodyStart {
+
+        @Test
+        void startingARunningExecutionAgainDoesNotRunItsBodyASecondTime() {
+            // given
+            var bodyRuns = new AtomicInteger();
+            var target = new AtomicReference<SimpleWorkflowExecution>();
+            var execution = execution(echoingEventStore(target), new DirectExecutorService(), ignored -> {
+                if (bodyRuns.incrementAndGet() == 1) {
+                    target.get().execute(finished -> {
+                    });
+                }
+            });
+            target.set(execution);
+            markStarted(execution);
+
+            // when
+            execution.execute(finished -> {
+            }).join();
+
+            // then
+            assertThat(bodyRuns).hasValue(1);
+        }
+
+        @Test
+        void startingAPausedExecutionAgainRunsItsBodyAgain() {
+            // given
+            var bodyRuns = new AtomicInteger();
+            var execution = execution(eventStore(), new DirectExecutorService(), ignored -> {
+                bodyRuns.incrementAndGet();
+                throw new RuntimeException(new IOException("backend did not answer"));
+            });
+            markStarted(execution);
+            execution.execute(finished -> {
+            }).join();
+
+            // when
+            execution.execute(finished -> {
+            }).join();
+
+            // then
+            assertThat(bodyRuns).hasValue(2);
+        }
+
+        @Test
+        void startingAnExecutionStoppedForShutdownDoesNotRunItsBody() {
+            // given
+            var bodyRuns = new AtomicInteger();
+            var execution = execution(eventStore(), new DirectExecutorService(), ignored -> bodyRuns.incrementAndGet());
+            markStarted(execution);
+            execution.stopForShutdown();
+
+            // when
+            execution.execute(finished -> {
+            }).join();
+
+            // then
+            assertThat(bodyRuns).hasValue(0);
+        }
+
+        @Test
+        void stoppingAnExecutionThatWaitsForItsStartEndsItsDriverWithoutRunningItsBody() throws Exception {
+            // given
+            var bodyRuns = new AtomicInteger();
+            var startAppended = new CountDownLatch(1);
+            var eventStore = eventStore();
+            when(eventStore.publish(any(ProcessingContext.class), any(EventMessage.class))).thenAnswer(invocation -> {
+                startAppended.countDown();
+                return CompletableFuture.completedFuture(null);
+            });
+            var executor = Executors.newVirtualThreadPerTaskExecutor();
+            executorServices.add(executor);
+            var target = new AtomicReference<SimpleWorkflowExecution>();
+            var execution = execution(eventStore, executor, ignored -> {
+                bodyRuns.incrementAndGet();
+                try {
+                    target.get().awaitStateChange(state -> false);
+                } catch (InterruptedException e) {
+                    sneakyThrow(e);
+                }
+            });
+            target.set(execution);
+            var body = execution.execute(finished -> {
+            });
+            assertThat(startAppended.await(5, TimeUnit.SECONDS)).isTrue();
+
+            // when
+            execution.stopForShutdown();
+
+            // then
+            assertThat(body).succeedsWithin(5, TimeUnit.SECONDS);
+            assertThat(bodyRuns).hasValue(0);
         }
     }
 }
