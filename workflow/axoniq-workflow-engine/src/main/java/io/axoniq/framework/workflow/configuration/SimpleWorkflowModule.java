@@ -50,9 +50,12 @@ import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventHandlingComponent;
 import org.axonframework.messaging.eventhandling.configuration.EventProcessorModule;
+import org.axonframework.messaging.eventhandling.processing.streaming.StreamingEventProcessor;
 import org.axonframework.messaging.eventhandling.processing.streaming.pooled.PooledStreamingEventProcessorConfiguration;
 import org.axonframework.messaging.eventhandling.processing.streaming.pooled.PooledStreamingEventProcessorModule;
+import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.SequenceOverridingEventHandlingComponent;
+import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.store.TokenStore;
 import org.axonframework.messaging.eventstreaming.EventCriteria;
 import org.axonframework.messaging.eventstreaming.StreamableEventSource;
@@ -343,8 +346,18 @@ class SimpleWorkflowModule<C extends WorkflowContext>
                                   .withBuilder(c -> new WorkflowSegmentChangeListener(
                                           name,
                                           c.getComponent(UnitOfWorkFactory.class),
-                                          () -> c.getComponent(WorkflowEngine.class, engineName())
+                                          () -> c.getComponent(WorkflowEngine.class, engineName()),
+                                          segment -> segmentPosition(c, segment)
                                   ));
+    }
+
+    private @Nullable TrackingToken segmentPosition(Configuration config, Segment segment) {
+        var processor = config.getComponents(StreamingEventProcessor.class).get(name);
+        if (processor == null) {
+            return null;
+        }
+        var status = processor.processingStatus().get(segment.getSegmentId());
+        return status != null ? status.getTrackingToken() : null;
     }
 
     private String segmentChangeListenerName() {

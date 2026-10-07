@@ -21,10 +21,13 @@ package io.axoniq.framework.workflow.runtime.execution;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution.CheckpointWorkStateListener;
 import org.axonframework.common.annotation.Internal;
+import org.jspecify.annotations.Nullable;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
+import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingTokenUtils;
 
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.function.Consumer;
 
 import static java.util.Objects.requireNonNull;
@@ -103,7 +106,11 @@ import static java.util.Objects.requireNonNull;
     };
 
     private final ExecutionTaskQueue executionTaskQueue;
-    private final AtomicBoolean taskActive = new AtomicBoolean(false);
+    private int pendingTasks;
+    private boolean holding;
+    // Position of the first delivery whose work is pending or held since this execution was last clean.
+    private @Nullable TrackingToken heldFrom;
+    private volatile @Nullable Thread countedTaskThread;
     private boolean latchQueued;
     private Runnable latchCallback = NO_OP;
 
@@ -147,7 +154,7 @@ import static java.util.Objects.requireNonNull;
         requireNonNull(latch, "The when-complete runnable must not be null");
         boolean idle;
         synchronized (this) {
-            idle = !executionTaskQueue.isRunning() && !unsafe();
+            idle = !executionTaskQueue.isRunning() && !unsafe() && !executionTaskQueue.hasQueuedTasks();
         }
         if (idle) {
             latch.run();
@@ -155,11 +162,7 @@ import static java.util.Objects.requireNonNull;
         }
 
         synchronized (this) {
-            Runnable previous = latchCallback;
-            latchCallback = previous == NO_OP ? latch : () -> {
-                previous.run();
-                latch.run();
-            };
+            latchCallback = LatchCallbacks.append(latchCallback, latch);
             if (latchQueued) {
                 return;
             }
@@ -208,7 +211,7 @@ import static java.util.Objects.requireNonNull;
      * whose effect is still sitting in that queue.
      */
     private boolean unsafe() {
-        return taskActive.get() || executionTaskQueue.hasQueuedTasks() || latchQueued;
+        return pendingTasks > 0 || holding || latchQueued;
     }
 
     /**
@@ -232,15 +235,62 @@ import static java.util.Objects.requireNonNull;
     }
 
     void appendTask(Consumer<WorkflowExecution> task) {
+        appendTask(task, Thread.currentThread() == countedTaskThread, null);
+    }
+
+    void appendDeliveryTask(Consumer<WorkflowExecution> task, @Nullable TrackingToken position) {
+        appendTask(task, true, position);
+    }
+
+    private void appendTask(Consumer<WorkflowExecution> task, boolean counted, @Nullable TrackingToken position) {
         synchronized (this) {
-            reportCheckpointWorkUnsafe();
+            if (counted) {
+                markHeldFrom(position);
+                pendingTasks++;
+            }
+            reportCheckpointWorkState();
             try {
-                executionTaskQueue.appendTask(task);
+                executionTaskQueue.appendTask(counted ? new CountedTask(task) : task);
             } catch (RuntimeException e) {
+                if (counted) {
+                    pendingTasks--;
+                }
                 reportCheckpointWorkState();
                 throw e;
             }
         }
+    }
+
+    synchronized void holdCheckpoint(@Nullable TrackingToken position) {
+        markHeldFrom(position);
+        holding = true;
+        reportCheckpointWorkUnsafe();
+    }
+
+    synchronized boolean holdsCheckpoint() {
+        return holding;
+    }
+
+    synchronized boolean holdsCheckpoint(TrackingToken requested) {
+        return (pendingTasks > 0 || holding)
+                && (heldFrom == null || TrackingTokenUtils.coversWhenUnwrapped(requested, heldFrom));
+    }
+
+    private void markHeldFrom(@Nullable TrackingToken position) {
+        if (pendingTasks == 0 && !holding) {
+            heldFrom = position;
+        }
+    }
+
+    synchronized void discardTasks(List<Consumer<WorkflowExecution>> tasks) {
+        pendingTasks -= (int) tasks.stream().filter(CountedTask.class::isInstance).count();
+        reportCheckpointWorkState();
+    }
+
+    synchronized void releaseCheckpointWork() {
+        pendingTasks = 0;
+        holding = false;
+        reportCheckpointWorkState();
     }
 
     private void reportCheckpointWorkUnsafe() {
@@ -267,16 +317,29 @@ import static java.util.Objects.requireNonNull;
     void runTask(Consumer<WorkflowExecution> task,
                  WorkflowExecution execution) {
         Runnable afterTask;
-        taskActive.set(true);
-        synchronized (this) {
-            reportCheckpointWorkUnsafe();
+        boolean succeeded = false;
+        Thread previousCountedTaskThread = countedTaskThread;
+        if (task instanceof CountedTask) {
+            countedTaskThread = Thread.currentThread();
         }
         try {
-            task.accept(execution);
+            if (task instanceof CountedTask countedTask) {
+                countedTask.task().accept(execution);
+            } else {
+                task.accept(execution);
+            }
+            succeeded = true;
             afterTask = task instanceof CheckpointLatch checkpointLatch ? checkpointLatch.whenComplete() : null;
         } finally {
-            taskActive.set(false);
+            countedTaskThread = previousCountedTaskThread;
             synchronized (this) {
+                if (task instanceof CountedTask) {
+                    if (succeeded) {
+                        pendingTasks--;
+                    } else {
+                        holding = true;
+                    }
+                }
                 reportCheckpointWorkState();
             }
         }
@@ -373,6 +436,14 @@ import static java.util.Objects.requireNonNull;
      * the currently accumulated latch callback attached through {@link #addCheckpointLatch} so that the callback can be
      * invoked after the task completes.
      */
+    private record CountedTask(Consumer<WorkflowExecution> task) implements Consumer<WorkflowExecution> {
+
+        @Override
+        public void accept(WorkflowExecution execution) {
+            task.accept(execution);
+        }
+    }
+
     private final class CheckpointLatch implements Consumer<WorkflowExecution> {
 
         private Runnable whenComplete = NO_OP;
@@ -402,6 +473,30 @@ import static java.util.Objects.requireNonNull;
          */
         private Runnable whenComplete() {
             return whenComplete;
+        }
+    }
+
+    private static final class LatchCallbacks implements Runnable {
+
+        private final List<Runnable> callbacks = new ArrayList<>();
+
+        private static Runnable append(Runnable current, Runnable next) {
+            if (current == NO_OP) {
+                return next;
+            }
+            if (current instanceof LatchCallbacks composite) {
+                composite.callbacks.add(next);
+                return composite;
+            }
+            var composite = new LatchCallbacks();
+            composite.callbacks.add(current);
+            composite.callbacks.add(next);
+            return composite;
+        }
+
+        @Override
+        public void run() {
+            callbacks.forEach(Runnable::run);
         }
     }
 }
