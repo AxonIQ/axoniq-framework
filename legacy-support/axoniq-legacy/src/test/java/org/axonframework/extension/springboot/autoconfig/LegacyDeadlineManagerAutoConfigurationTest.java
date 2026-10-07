@@ -22,12 +22,18 @@ package org.axonframework.extension.springboot.autoconfig;
 import com.github.kagkarlsson.scheduler.Scheduler;
 import com.github.kagkarlsson.scheduler.SchedulerBuilder;
 import com.github.kagkarlsson.scheduler.task.Task;
+import com.thoughtworks.xstream.XStream;
 import org.axonframework.conversion.jackson.JacksonConverter;
+import org.axonframework.conversion.xstream.XStreamConverter;
 import org.axonframework.deadline.DeadlineManager;
 import org.axonframework.deadline.SimpleDeadlineManager;
 import org.axonframework.deadline.dbscheduler.DbSchedulerDeadlineManager;
 import org.axonframework.deadline.jobrunr.JobRunrDeadlineManager;
+import org.axonframework.messaging.ScopeAware;
 import org.axonframework.messaging.ScopeAwareProvider;
+import org.axonframework.messaging.ScopeDescriptor;
+import org.axonframework.messaging.core.Message;
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkTestUtils;
 import org.axonframework.messaging.eventhandling.conversion.DelegatingEventConverter;
 import org.axonframework.messaging.eventhandling.conversion.EventConverter;
@@ -54,6 +60,8 @@ import java.util.stream.Stream;
 import javax.sql.DataSource;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
+import static org.axonframework.common.util.DbSchedulerTestUtil.reCreateTable;
 
 /**
  * Test class validating the {@link LegacyJobRunrDeadlineManagerAutoConfiguration} and the
@@ -136,6 +144,30 @@ class LegacyDeadlineManagerAutoConfigurationTest {
                        .run(context -> assertThat(context).doesNotHaveBean(DeadlineManager.class));
         }
 
+        /**
+         * An application that stored its deadlines with Axon Framework 4's {@code XStreamSerializer} defines its own
+         * manager with the {@link XStreamConverter}, as there is no auto-configuration for that converter.
+         */
+        @Test
+        void theTaskFiresTheDeadlinesOfAnApplicationDefinedManagerWithTheXStreamConverter() {
+            testContext.withUserConfiguration(XStreamDbSchedulerContext.class)
+                       .run(context -> {
+                           // given
+                           assertThat(context).hasSingleBean(DeadlineManager.class).hasBean("deadlineDetailsTask");
+                           context.getBean(Scheduler.class).start();
+
+                           // when
+                           context.getBean(DeadlineManager.class).schedule(
+                                   Duration.ofMillis(10), "deadline", "payload", new SagaScopeDescriptor("Saga", "id")
+                           );
+
+                           // then
+                           RecordingScopeAware scopeAware = context.getBean(RecordingScopeAware.class);
+                           await().atMost(Duration.ofSeconds(10))
+                                  .untilAsserted(() -> assertThat(scopeAware.payloads).containsExactly("payload"));
+                       });
+        }
+
         @Test
         void aDeadlineManagerOfTheApplicationWins() {
             testContext.withUserConfiguration(DbSchedulerContext.class,
@@ -176,6 +208,57 @@ class LegacyDeadlineManagerAutoConfigurationTest {
         @Bean
         public Scheduler scheduler(DataSource dataSource, List<Task<?>> tasks) {
             return new SchedulerBuilder(dataSource, tasks).build();
+        }
+    }
+
+    @Configuration
+    static class XStreamDbSchedulerContext {
+
+        @Bean(destroyMethod = "stop")
+        public Scheduler scheduler(DataSource dataSource, List<Task<?>> tasks) {
+            reCreateTable(dataSource);
+            return new SchedulerBuilder(dataSource, tasks).pollingInterval(Duration.ofMillis(50)).build();
+        }
+
+        @Bean
+        public RecordingScopeAware scopeAware() {
+            return new RecordingScopeAware();
+        }
+
+        @Bean
+        public ScopeAwareProvider scopeAwareProvider(RecordingScopeAware scopeAware) {
+            return scope -> Stream.of(scopeAware);
+        }
+
+        @Bean
+        @SuppressWarnings("removal")
+        public DbSchedulerDeadlineManager deadlineManager(Scheduler scheduler, ScopeAwareProvider scopeAwareProvider) {
+            return DbSchedulerDeadlineManager.builder()
+                                             .scheduler(scheduler)
+                                             .scopeAwareProvider(scopeAwareProvider)
+                                             .unitOfWorkFactory(UnitOfWorkTestUtils.SIMPLE_FACTORY)
+                                             .converter(new XStreamConverter(new XStream()))
+                                             .startScheduler(false)
+                                             .stopScheduler(false)
+                                             .build();
+        }
+    }
+
+    /**
+     * A {@link ScopeAware} resolving every scope, recording the payload of each deadline delivered to it.
+     */
+    static class RecordingScopeAware implements ScopeAware {
+
+        private final List<Object> payloads = new CopyOnWriteArrayList<>();
+
+        @Override
+        public void send(Message message, ProcessingContext context, ScopeDescriptor scopeDescription) {
+            payloads.add(message.payload());
+        }
+
+        @Override
+        public boolean canResolve(ScopeDescriptor scopeDescription) {
+            return true;
         }
     }
 
