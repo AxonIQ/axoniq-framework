@@ -19,6 +19,7 @@
 
 package io.axoniq.framework.messaging.eventhandling.deadletter.jdbc;
 
+import io.axoniq.framework.messaging.deadletter.Cause;
 import org.axonframework.common.AxonConfigurationException;
 import org.axonframework.common.DateTimeUtils;
 import org.axonframework.conversion.Converter;
@@ -27,7 +28,6 @@ import org.axonframework.messaging.core.Context;
 import org.axonframework.messaging.core.LegacyResources;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.Metadata;
-import io.axoniq.framework.messaging.deadletter.Cause;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
 import org.axonframework.messaging.eventhandling.conversion.DelegatingEventConverter;
@@ -35,14 +35,18 @@ import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.GlobalSequenceTrackingToken;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.junit.jupiter.api.*;
+import tools.jackson.databind.json.JsonMapper;
+import tools.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
+import java.util.Collections;
 import java.util.Optional;
 import java.util.UUID;
 
-import static org.assertj.core.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.*;
 
 /**
@@ -220,6 +224,63 @@ class DefaultDeadLetterJdbcConverterTest {
         }
 
         return mock;
+    }
+
+    @Nested
+    class WithDefaultTypingConverter {
+
+        // Mirrors the setup needed to stay wire-compatible with an Axon Framework 4 event store written by
+        // JacksonSerializer/Jackson3Serializer with default typing.
+        private final Converter defaultTypingGenericConverter = new JacksonConverter(
+                JsonMapper.builder()
+                          .polymorphicTypeValidator(BasicPolymorphicTypeValidator.builder()
+                                                                                 .allowIfSubType("java.util.")
+                                                                                 .allowIfSubType("org.axonframework.")
+                                                                                 .build())
+                          .activateDefaultTyping(BasicPolymorphicTypeValidator.builder()
+                                                                              .allowIfSubType("java.util.")
+                                                                              .allowIfSubType("org.axonframework.")
+                                                                              .build())
+                          .build()
+        );
+        private final EventConverter defaultTypingEventConverter =
+                new DelegatingEventConverter(defaultTypingGenericConverter);
+
+        @Test
+        void restoresMetadataAndDiagnosticsWhenConverterUsesDefaultTyping() throws SQLException {
+            Metadata metadata = Metadata.from(Collections.singletonMap("traceId", "abc"));
+            byte[] serializedMetadata = defaultTypingEventConverter.convert(metadata, byte[].class);
+
+            ResultSet resultSet = mock(ResultSet.class);
+            String timestamp = DateTimeUtils.formatInstant(Instant.now());
+            when(resultSet.getBytes(schema.payloadColumn())).thenReturn(
+                    defaultTypingEventConverter.convert("some-payload", byte[].class));
+            when(resultSet.getBytes(schema.metadataColumn())).thenReturn(serializedMetadata);
+            when(resultSet.getBytes(schema.diagnosticsColumn())).thenReturn(serializedMetadata);
+            when(resultSet.getString(schema.eventIdentifierColumn())).thenReturn(UUID.randomUUID().toString());
+            when(resultSet.getString(schema.typeColumn())).thenReturn(new MessageType("event").toString());
+            when(resultSet.getString(schema.timestampColumn())).thenReturn(timestamp);
+            when(resultSet.getString(schema.tokenTypeColumn())).thenReturn(null);
+            when(resultSet.getString(schema.aggregateIdentifierColumn())).thenReturn(null);
+            when(resultSet.getString(schema.deadLetterIdentifierColumn())).thenReturn(UUID.randomUUID().toString());
+            when(resultSet.getLong(schema.sequenceIndexColumn())).thenReturn(1337L);
+            when(resultSet.getString(schema.sequenceIdentifierColumn())).thenReturn(UUID.randomUUID().toString());
+            when(resultSet.getString(schema.enqueuedAtColumn())).thenReturn(timestamp);
+            when(resultSet.getString(schema.lastTouchedColumn())).thenReturn(timestamp);
+            when(resultSet.getString(schema.causeTypeColumn())).thenReturn(null);
+
+            DefaultDeadLetterJdbcConverter<?> defaultTypingTestSubject =
+                    DefaultDeadLetterJdbcConverter.builder()
+                                                  .schema(schema)
+                                                  .genericConverter(defaultTypingGenericConverter)
+                                                  .eventConverter(defaultTypingEventConverter)
+                                                  .build();
+
+            JdbcDeadLetter<?> result = defaultTypingTestSubject.convertToLetter(resultSet);
+
+            assertThat(result.message().metadata()).isEqualTo(metadata);
+            assertThat(result.diagnostics()).isEqualTo(metadata);
+        }
     }
 
     @Nested

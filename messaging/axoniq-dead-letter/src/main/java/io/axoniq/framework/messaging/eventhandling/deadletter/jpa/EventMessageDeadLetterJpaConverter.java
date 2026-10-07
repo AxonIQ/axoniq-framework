@@ -35,6 +35,7 @@ import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -50,7 +51,8 @@ import java.util.Map;
  */
 public class EventMessageDeadLetterJpaConverter implements DeadLetterJpaConverter<EventMessage> {
 
-    private static final TypeReference<Map<String, String>> METADATA_MAP_TYPE_REF = new TypeReference<>() {
+    // Uses concrete HashMap i.o. Map to ensure default-typing Converters can deal with this ref accordingly
+    private static final TypeReference<HashMap<String, String>> METADATA_MAP_TYPE_REF = new TypeReference<>() {
     };
 
     @Override

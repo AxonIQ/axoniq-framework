@@ -38,12 +38,14 @@ import org.axonframework.messaging.eventhandling.processing.streaming.token.GapA
 import org.axonframework.messaging.eventhandling.processing.streaming.token.GlobalSequenceTrackingToken;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.junit.jupiter.api.*;
+import tools.jackson.databind.json.JsonMapper;
+import tools.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
 
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Objects;
 
-import static org.assertj.core.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Tests for {@link EventMessageDeadLetterJpaConverter}.
@@ -291,6 +293,44 @@ class EventMessageDeadLetterJpaConverterTest {
             // then
             assertThat(acEntry.message().payloadType()).isEqualTo(byte[].class);
             assertThat(acEntry.message().payloadAs(ConverterTestEvent.class)).isEqualTo(event);
+        }
+    }
+
+    @Nested
+    class WithDefaultTypingConverter {
+
+        // Mirrors the setup needed to stay wire-compatible with an Axon Framework 4 event store written by
+        // JacksonSerializer/Jackson3Serializer with default typing.
+        private final JacksonConverter defaultTypingJacksonConverter = new JacksonConverter(
+                JsonMapper.builder()
+                          .polymorphicTypeValidator(BasicPolymorphicTypeValidator.builder()
+                                                                                 .allowIfSubType("java.util.")
+                                                                                 .allowIfSubType("org.axonframework.")
+                                                                                 .build())
+                          .activateDefaultTyping(BasicPolymorphicTypeValidator.builder()
+                                                                              .allowIfSubType("java.util.")
+                                                                              .allowIfSubType("org.axonframework.")
+                                                                              .build())
+                          .build()
+        );
+        private final EventConverter defaultTypingEventConverter =
+                new DelegatingEventConverter(defaultTypingJacksonConverter);
+
+        @Test
+        void roundTripConversionRestoresMetadataWhenConverterUsesDefaultTyping() {
+            // given
+            EventMessage message = EventTestUtils.asEventMessage(event).andMetadata(metadata);
+
+            // when
+            DeadLetterEventEntry entry = converter.convert(message,
+                                                           null,
+                                                           defaultTypingEventConverter,
+                                                           defaultTypingJacksonConverter);
+            MessageStream.Entry<EventMessage> restoredEntry =
+                    converter.convert(entry, defaultTypingEventConverter, defaultTypingJacksonConverter);
+
+            // then
+            assertThat(restoredEntry.message().metadata()).isEqualTo(message.metadata());
         }
     }
 
