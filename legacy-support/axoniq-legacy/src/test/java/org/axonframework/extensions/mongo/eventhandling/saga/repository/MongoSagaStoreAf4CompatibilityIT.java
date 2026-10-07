@@ -88,7 +88,7 @@ class MongoSagaStoreAf4CompatibilityIT {
     }
 
     @BeforeEach
-    void setUp() throws Exception {
+    void setUp() {
         mongoTemplate = DefaultMongoTemplate.builder()
                                             .mongoDatabase(mongoClient)
                                             .build();
@@ -101,13 +101,12 @@ class MongoSagaStoreAf4CompatibilityIT {
         String sagaType = StubSaga.class.getName();
         insertAf4Saga(SAGA_1, sagaType, "{\"handledEvents\":[\"OrderPlaced\"]}", ORDER_1);
         insertAf4Saga(SAGA_2, sagaType, "{\"handledEvents\":[\"OrderPlaced\",\"OrderPaid\"]}", ORDER_2);
-
-        StubSaga xStreamSaga = new StubSaga();
-        xStreamSaga.handled("OrderPlaced");
-        String xStreamSerializedSaga = Af4XStreamSupport.withAf4ClassLoader(
-                classLoader -> Af4XStreamSupport.af4XStream(classLoader).toXML(xStreamSaga)
-        );
-        insertAf4Saga(SAGA_WITH_XSTREAM_SERIALIZATION, sagaType, xStreamSerializedSaga, ORDER_XSTREAM);
+        insertAf4Saga(SAGA_WITH_XSTREAM_SERIALIZATION, sagaType, """
+                <org.axonframework.modelling.saga.repository.StubSaga>
+                    <handledEvents>
+                        <string>OrderPlaced</string>
+                    </handledEvents>
+                </org.axonframework.modelling.saga.repository.StubSaga>""", ORDER_XSTREAM);
     }
 
     /**
