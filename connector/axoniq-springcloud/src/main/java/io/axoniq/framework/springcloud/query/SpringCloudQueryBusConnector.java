@@ -195,11 +195,10 @@ public class SpringCloudQueryBusConnector implements QueryBusConnector {
      * members -- an update belongs to whichever member's state changed -- so they are drained as they arrive rather
      * than interleaved by any rule.
      * <p>
-     * Only a member reporting the subscription over ends it cleanly, and that ends it for every member. Any other end
-     * of a member's stream fails the whole subscription: the member failing, going silent, losing its connection, or
-     * closing its stream because it shut down. The subscriber cannot tell such a member apart from one that is still
-     * emitting updates it no longer receives, so carrying on with the rest would leave it receiving some of the
-     * updates and believing it received all of them.
+     * A member failing fails the whole subscription. Carrying on with the rest would leave the subscriber receiving
+     * some of the updates and believing it received all of them. A member leaving the cluster cleanly ends only its own
+     * part, as it has said it stopped emitting updates; once the last member has left, though, nothing is left to emit
+     * them, and the subscription fails so that the subscriber establishes it again with the members there are by then.
      */
     private static final class SubscriptionUpdates {
 
@@ -209,11 +208,14 @@ public class SpringCloudQueryBusConnector implements QueryBusConnector {
         // Failed alongside the merged updates, so that a subscription one of whose members could not be reached
         // does not leave the initial result waiting on an opening that will never come.
         private final CompletableFuture<Void> everyMemberOpen;
+        private final AtomicInteger openSources;
 
         private SubscriptionUpdates(QueryMessage query,
                                     int updateBufferSize,
+                                    int memberCount,
                                     CompletableFuture<Void> everyMemberOpen) {
             this.query = query;
+            this.openSources = new AtomicInteger(memberCount);
             this.everyMemberOpen = everyMemberOpen;
             this.merged = new QueueMessageStream<>(new ArrayBlockingQueue<>(updateBufferSize));
         }
@@ -252,9 +254,10 @@ public class SpringCloudQueryBusConnector implements QueryBusConnector {
                         }
                     }
                     if (!source.stream.hasNextAvailable() && source.stream.isCompleted()) {
-                        // A member reporting the subscription over has already ended the merged updates, so the
-                        // failure only reaches a subscription whose member stopped answering without saying so.
-                        end(source, () -> fail(source.stream.error().orElseGet(() -> stoppedAnswering(source))));
+                        // A stream that ends without a failure is one whose member said it is leaving: the
+                        // dispatcher fails a stream that ends without saying why. A member reporting the subscription
+                        // over has already ended the merged updates, so counting it changes nothing.
+                        end(source, () -> source.stream.error().ifPresentOrElse(this::fail, this::sourceCompleted));
                     }
                 } catch (Exception e) {
                     logger.debug("Failed to read the updates member [{}] produced for query [{}].",
@@ -294,12 +297,22 @@ public class SpringCloudQueryBusConnector implements QueryBusConnector {
             everyMemberOpen.complete(null);
         }
 
-        private QueryDispatchException stoppedAnswering(Source source) {
-            return new QueryDispatchException(
-                    ("Member [%s] stopped answering subscription query [%s] without reporting it over, so updates it "
-                            + "emits may no longer arrive. Establish the subscription query again to receive a "
-                            + "complete stream.").formatted(source.member.name(), query.type())
-            );
+        /**
+         * Accounts for a member having left the subscription cleanly, failing it once no member is left.
+         * <p>
+         * Failing rather than completing, because no member said the subscription has run its course: it only has
+         * nobody left to emit its updates. A member that starts handling the query later is not subscribed to, so
+         * the subscriber would wait on updates that never arrive. When a member did complete the subscription, the
+         * merged updates are already sealed and failing them changes nothing.
+         */
+        private void sourceCompleted() {
+            if (openSources.decrementAndGet() == 0) {
+                fail(new SubscriptionQueryMembersChangedException(
+                        ("Every member answering subscription query [%s] has left. Establish the subscription query "
+                                + "again to receive updates from the members handling it now.")
+                                .formatted(query.type())
+                ));
+            }
         }
 
         /**
@@ -419,14 +432,17 @@ public class SpringCloudQueryBusConnector implements QueryBusConnector {
     }
 
     /**
-     * Stops advertising the queries this member handles, and ends the subscriptions it is still answering.
+     * Stops advertising the queries this member handles, and tells the subscribers it is still answering that it is
+     * leaving.
      * <p>
      * Performed in the {@link Phase#INBOUND_QUERY_CONNECTOR} phase, before dispatching is shut down, so that other
      * members learn this member is leaving while it can still answer what is already in flight.
      * <p>
-     * Ending the open subscriptions here is safe because shutdown reaches {@link Phase#INBOUND_EVENT_CONNECTORS},
-     * where event processors are stopped, before it reaches this phase. Nothing is left that could emit an update
-     * onto a subscription by the time they are ended, so no side effect is cut short.
+     * Announcing it here is safe because shutdown reaches {@link Phase#INBOUND_EVENT_CONNECTORS}, where event
+     * processors are stopped, before it reaches this phase. Nothing is left that could emit an update onto a
+     * subscription by the time they are ended, so no subscriber misses one. Where a web server would cut the
+     * subscriptions' streams before this phase, as Spring Boot's does, the announcement has to be made earlier; it is
+     * only made once, so the announcement here then finds nothing left to end.
      *
      * @return a future that completes once this member no longer advertises any query, and answers no subscription
      */
@@ -434,9 +450,9 @@ public class SpringCloudQueryBusConnector implements QueryBusConnector {
         logger.debug("Disconnecting the SpringCloudQueryBusConnector.");
         subscriptions.clear();
         registry.publishLocalQueries(Set.of());
-        // Safe to end here: event processors are stopped in the INBOUND_EVENT_CONNECTORS phase, which shutdown
+        // Safe to leave here: event processors are stopped in the INBOUND_EVENT_CONNECTORS phase, which shutdown
         // reaches before this one, so nothing is left that could still emit an update onto these subscriptions.
-        invoker.endOpenSubscriptions();
+        invoker.leave();
         return FutureUtils.emptyCompletedFuture();
     }
 
@@ -513,7 +529,7 @@ public class SpringCloudQueryBusConnector implements QueryBusConnector {
         CompletableFuture<Void> everyMemberOpen = new CompletableFuture<>();
         AtomicInteger unopened = new AtomicInteger(members.size());
         SubscriptionUpdates updates =
-                new SubscriptionUpdates(query, updateBufferSize, everyMemberOpen);
+                new SubscriptionUpdates(query, updateBufferSize, members.size(), everyMemberOpen);
         for (Member member : members) {
             AtomicBoolean opened = new AtomicBoolean();
             SubscriptionListener listener = new SubscriptionListener() {

@@ -734,37 +734,21 @@ class SpringCloudQueryBusConnectorTest {
         }
 
         @Test
-        void failsWhenAMemberStopsAnsweringWithoutEndingTheSubscription() {
+        void keepsTheSubscriptionOpenWhileAnyMemberStillHoldsIt() {
             // given a subscription across two members
             twoRemoteMembersHandleTheQuery();
             MessageStream<QueryResponseMessage> responses = testSubject.subscriptionQuery(query(), null, 16);
             drain(responses);
 
-            // when one of them ends its stream without reporting the subscription over, as a member does that shut
-            // down, or whose connection a proxy closed
-            dispatcher.stopAnswering(remoteMember());
+            // when one of them leaves the cluster
+            dispatcher.leave(remoteMember());
             drain(responses);
 
-            // then nothing tells that member apart from one still emitting updates this subscriber no longer
-            // receives, so carrying on with the other would leave it believing it has all of them
-            assertThat(responses.error()).isPresent();
-            assertThat(responses.error().orElseThrow()).isInstanceOf(QueryDispatchException.class)
-                                                       .hasMessageContaining(remoteMember().name());
-        }
-
-        @Test
-        void releasesTheOtherMembersSubscriptionsWhenOneStopsAnswering() {
-            // given a subscription across two members
-            twoRemoteMembersHandleTheQuery();
-            MessageStream<QueryResponseMessage> responses = testSubject.subscriptionQuery(query(), null, 16);
-            drain(responses);
-
-            // when
-            dispatcher.stopAnswering(remoteMember());
-            drain(responses);
-
-            // then the member still answering is not left emitting into a subscription that has already failed
-            assertThat(dispatcher.subscriptions()).allMatch(RecordingRemoteQueryDispatcher.Subscription::released);
+            // then the other still has updates to give
+            assertThat(responses.isCompleted()).isFalse();
+            dispatcher.emit(otherRemoteMember(), response("update-from-c"));
+            assertThat(drain(responses)).extracting(QueryResponseMessage::identifier)
+                                        .containsExactly("update-from-c");
         }
 
         @Test
@@ -781,6 +765,22 @@ class SpringCloudQueryBusConnectorTest {
             // then waiting on the other members would be waiting for updates that are never coming
             assertThat(responses.isCompleted()).isTrue();
             assertThat(responses.error()).isEmpty();
+        }
+
+        @Test
+        void failsOnceEveryMemberHasLeft() {
+            // given
+            twoRemoteMembersHandleTheQuery();
+            MessageStream<QueryResponseMessage> responses = testSubject.subscriptionQuery(query(), null, 16);
+            drain(responses);
+
+            // when
+            dispatcher.leave(remoteMember());
+            dispatcher.leave(otherRemoteMember());
+            drain(responses);
+
+            // then nobody said the subscription is over; it only has nobody left to emit its updates
+            assertThat(responses.error()).get().isInstanceOf(SubscriptionQueryMembersChangedException.class);
         }
 
         @Test
@@ -914,7 +914,7 @@ class SpringCloudQueryBusConnectorTest {
         }
 
         @Test
-        void endsTheSubscriptionsThisMemberIsStillAnswering() {
+        void announcesLeavingOnTheSubscriptionsThisMemberIsStillAnswering() {
             // given a subscription another member opened on this one, which this member is answering
             RecordingQueryResponseSink sink = new RecordingQueryResponseSink();
             invoker.handleSubscription(
@@ -927,9 +927,10 @@ class SpringCloudQueryBusConnectorTest {
             // when
             testSubject.disconnect();
 
-            // then the subscriber is told to establish it again, rather than left on a stream nothing will write to
-            assertThat(sink.error()).isNotNull();
-            assertThat(sink.error().errorMessage()).contains("shutting down");
+            // then the subscriber carries on with the members that remain, rather than waiting on a stream nothing
+            // will write to
+            assertThat(sink.leaving()).containsExactly("query-1");
+            assertThat(sink.error()).isNull();
         }
 
         @Test

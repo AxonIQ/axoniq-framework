@@ -352,37 +352,24 @@ class IncomingQueryInvokerTest {
     }
 
     @Nested
-    class WhenThisMemberStops {
+    class WhenThisMemberLeaves {
 
         private static SubscriptionQueryRequest subscription(String identifier) {
             return new SubscriptionQueryRequest(identifier, FIND_COURSE_TYPE.toString(), PAYLOAD, Map.of(), null, 16);
         }
 
         @Test
-        void failsAnOpenSubscriptionRatherThanLeavingItHanging() {
+        void announcesLeavingOnAnOpenSubscriptionRatherThanFailingOrCompletingIt() {
             // given
             testSubject.handleSubscription(subscription("query-1"), sink);
 
             // when
-            testSubject.endOpenSubscriptions();
+            testSubject.leave();
 
-            // then — a failure, not a completion: a completed subscription reads as "nothing more to send", which
-            // would let the subscriber conclude it has the whole story
-            assertThat(sink.error()).isNotNull();
-            assertThat(sink.error().errorMessage()).contains("shutting down");
+            // then only this member's part ends: the subscriber carries on with the members that remain
+            assertThat(sink.leaving()).containsExactly("query-1");
+            assertThat(sink.error()).isNull();
             assertThat(sink.subscriptionCompletedFor()).isNull();
-        }
-
-        @Test
-        void addressesTheFailureToTheSubscriptionItEnds() {
-            // given
-            testSubject.handleSubscription(subscription("query-1"), sink);
-
-            // when
-            testSubject.endOpenSubscriptions();
-
-            // then the subscribing member can tell which of its subscriptions ended
-            assertThat(sink.error().requestIdentifier()).isEqualTo("query-1");
         }
 
         @Test
@@ -391,7 +378,7 @@ class IncomingQueryInvokerTest {
             testSubject.handleSubscription(subscription("query-1"), sink);
 
             // when
-            testSubject.endOpenSubscriptions();
+            testSubject.leave();
             handler.emit(update("update-1"));
 
             // then
@@ -399,18 +386,45 @@ class IncomingQueryInvokerTest {
         }
 
         @Test
-        void endsEverySubscriptionThisMemberAnswers() {
+        void announcesLeavingOnEverySubscriptionThisMemberAnswers() {
             // given
             RecordingQueryResponseSink other = new RecordingQueryResponseSink();
             testSubject.handleSubscription(subscription("query-1"), sink);
             testSubject.handleSubscription(subscription("query-2"), other);
 
             // when
-            testSubject.endOpenSubscriptions();
+            testSubject.leave();
 
             // then
-            assertThat(sink.error()).isNotNull();
-            assertThat(other.error()).isNotNull();
+            assertThat(sink.leaving()).containsExactly("query-1");
+            assertThat(other.leaving()).containsExactly("query-2");
+        }
+
+        @Test
+        void announcesLeavingStraightAwayOnASubscriptionArrivingAfterwards() {
+            // given
+            testSubject.leave();
+
+            // when a subscription arrives while this member is still advertising the query
+            testSubject.handleSubscription(subscription("query-1"), sink);
+            handler.emit(update("update-1"));
+
+            // then it is not registered, as nothing on this member emits updates anymore
+            assertThat(sink.leaving()).containsExactly("query-1");
+            assertThat(sink.updates()).isEmpty();
+        }
+
+        @Test
+        void announcesLeavingOnlyOnceWhenLeavingTwice() {
+            // given
+            testSubject.handleSubscription(subscription("query-1"), sink);
+            testSubject.leave();
+
+            // when
+            testSubject.leave();
+
+            // then
+            assertThat(sink.leaving()).containsExactly("query-1");
         }
 
         @Test
@@ -420,17 +434,17 @@ class IncomingQueryInvokerTest {
             sink.becomeUnavailable();
 
             // when
-            testSubject.endOpenSubscriptions();
+            testSubject.leave();
 
             // then nothing is reported to a stream nobody is reading
-            assertThat(sink.error()).isNull();
+            assertThat(sink.leaving()).isEmpty();
         }
 
         @Test
         void isHarmlessWhenNoSubscriptionIsOpen() {
             // when / then
-            testSubject.endOpenSubscriptions();
-            assertThat(sink.error()).isNull();
+            testSubject.leave();
+            assertThat(sink.leaving()).isEmpty();
         }
     }
 

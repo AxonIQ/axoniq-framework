@@ -38,6 +38,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 
@@ -69,6 +70,7 @@ public class IncomingQueryInvoker {
     // The subscriptions this member is currently answering, so that they can be ended when it stops. Keyed by the
     // identifier of the request that opened each, which is what a reply is addressed by.
     private final Map<String, OpenSubscription> openSubscriptions = new ConcurrentHashMap<>();
+    private final AtomicBoolean leaving = new AtomicBoolean();
 
     /**
      * Constructs an {@code IncomingQueryInvoker} reporting failures as originating from the member the given
@@ -171,6 +173,12 @@ public class IncomingQueryInvoker {
         Objects.requireNonNull(request, "The request must not be null.");
         Objects.requireNonNull(sink, "The sink must not be null.");
 
+        if (leaving.get()) {
+            // This member no longer emits updates, so a subscription registered now would look alive while carrying
+            // nothing. Saying so straight away lets the subscriber carry on with the members that remain.
+            sink.leaving(request.identifier());
+            return;
+        }
         Handler boundHandler = handler.get();
         if (boundHandler == null) {
             logger.info("Received subscription query [{}] before a handler was registered on this member. Reporting "
@@ -216,21 +224,27 @@ public class IncomingQueryInvoker {
             openSubscriptions.remove(requestIdentifier);
             registration.cancel();
         });
+        if (leaving.get()) {
+            // This member started leaving while the subscription was being registered, possibly after leave() had
+            // already gone over the open subscriptions. Ending it twice is harmless, as only one removal succeeds.
+            endSubscription(requestIdentifier);
+        }
     }
 
     /**
-     * Ends every subscription this member is still answering, telling each subscriber to establish it again.
+     * Tells every subscriber this member is still answering that it is leaving, and ends each of those subscriptions.
+     * Subscriptions received from then on are answered the same way straight away.
      * <p>
-     * Called when this member stops. Leaving the streams open instead would strand every subscriber on a member that
-     * is going away: no further update is coming, yet nothing says so, so the subscription looks alive until the
-     * connection itself fails. Failing them is also what releases the response streams the web container would
-     * otherwise wait on while shutting down.
+     * Called when this member stops, once nothing on it emits updates anymore. Each subscriber then ends only this
+     * member's part in its subscription and carries on with the members that remain, which is what sets a clean
+     * departure apart from a lost connection: after a lost connection the subscriber cannot know which updates it
+     * missed, and fails the subscription. Ending the streams is also what releases them, so the web container does
+     * not wait on them while shutting down.
      * <p>
-     * Reported as a failure rather than a completion on purpose. A completed subscription reads as "there is nothing
-     * more to send", which would let a subscriber conclude it has the whole story; a failed one tells it to subscribe
-     * again, which is what gets it a complete stream from a member that is still there.
+     * Calling this more than once is harmless: a subscription is only ended once.
      */
-    public void endOpenSubscriptions() {
+    public void leave() {
+        leaving.set(true);
         openSubscriptions.keySet().forEach(this::endSubscription);
     }
 
@@ -242,16 +256,10 @@ public class IncomingQueryInvoker {
         }
         subscription.registration().cancel();
         try {
-            subscription.sink().error(QueryConverter.convertErrorResult(
-                    new QueryDispatchException(
-                            "The member answering this subscription query is shutting down. Establish the "
-                                    + "subscription query again to continue receiving updates."
-                    ),
-                    requestIdentifier, memberName.get(), converter
-            ));
+            subscription.sink().leaving(requestIdentifier);
         } catch (Exception e) {
             // The subscriber is already gone, which is the outcome this was aiming for anyway.
-            logger.debug("Could not report this member stopping to subscription query [{}].", requestIdentifier, e);
+            logger.debug("Could not report this member leaving to subscription query [{}].", requestIdentifier, e);
         }
     }
 

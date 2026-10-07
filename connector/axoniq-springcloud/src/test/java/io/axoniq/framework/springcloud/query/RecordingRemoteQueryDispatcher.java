@@ -151,10 +151,10 @@ class RecordingRemoteQueryDispatcher implements RemoteQueryDispatcher {
     }
 
     /**
-     * Ends the stream opened for the given {@code member} without a failure and without reporting the subscription
-     * over, as the stream of a member that shut down, or whose connection was closed, ends.
+     * Ends the stream opened for the given {@code member} without a failure, as a member announcing it leaves the
+     * cluster does. Says nothing about the subscription itself.
      */
-    public void stopAnswering(Member member) {
+    public void leave(Member member) {
         subscriptionOn(member).updates.seal();
     }
 

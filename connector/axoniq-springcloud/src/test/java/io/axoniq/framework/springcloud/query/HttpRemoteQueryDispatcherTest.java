@@ -419,14 +419,15 @@ class HttpRemoteQueryDispatcherTest {
         }
 
         @Test
-        void saysNothingAboutTheSubscriptionWhenTheMemberJustStopsAnswering() throws IOException {
+        void endsOnlyThisMembersPartWhenTheMemberSaysItIsLeaving() throws IOException {
             // given
             AtomicBoolean completed = new AtomicBoolean();
             MessageStream<QueryResponseMessage> updates = dispatcher(1024)
                     .openSubscriptionQueryUpdateStream(MEMBER, query(), 16,
                                                        listening(new AtomicBoolean(), completed));
 
-            // when the member closes the stream without reporting the subscription over, as one shutting down does
+            // when the member announces it is leaving, as one shutting down cleanly does
+            body.write("event: " + QueryConverter.LEAVING_EVENT + "\ndata: query-1\n\n");
             body.end();
 
             // then this member's part is over, and nothing claims the subscription itself is
@@ -434,6 +435,28 @@ class HttpRemoteQueryDispatcherTest {
                 drainInto(updates, new ArrayList<>());
                 return updates.isCompleted();
             });
+            assertThat(updates.error()).isEmpty();
+            assertThat(completed).isFalse();
+        }
+
+        @Test
+        void failsTheSubscriptionWhenTheMemberEndsItWithoutSayingWhy() throws IOException {
+            // given
+            AtomicBoolean completed = new AtomicBoolean();
+            MessageStream<QueryResponseMessage> updates = dispatcher(1024)
+                    .openSubscriptionQueryUpdateStream(MEMBER, query(), 16,
+                                                       listening(new AtomicBoolean(), completed));
+
+            // when the stream ends without the member completing the subscription or announcing it is leaving
+            body.end();
+
+            // then the stream may have been cut short, so whatever the member emitted in the meantime may be lost
+            awaitUntil(() -> {
+                drainInto(updates, new ArrayList<>());
+                return updates.error().isPresent();
+            });
+            assertThat(updates.error().orElseThrow()).isInstanceOf(QueryDispatchException.class)
+                                                     .hasMessageContaining("Lost the subscription");
             assertThat(completed).isFalse();
         }
 

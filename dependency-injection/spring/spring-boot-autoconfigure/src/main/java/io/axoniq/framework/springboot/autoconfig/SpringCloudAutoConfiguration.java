@@ -36,6 +36,7 @@ import io.axoniq.framework.springcloud.query.RemoteQueryDispatcher;
 import io.axoniq.framework.springcloud.query.SpringCloudQueryController;
 import io.axoniq.framework.springcloud.query.SpringCloudQueryControllerConfiguration;
 import io.axoniq.framework.springcloud.shared.SpringCloudMemberRegistry;
+import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.axonframework.messaging.core.conversion.MessageConverter;
@@ -52,6 +53,7 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.cloud.client.ServiceInstance;
 import org.springframework.cloud.client.discovery.DiscoveryClient;
 import org.springframework.cloud.client.serviceregistry.Registration;
+import org.springframework.context.SmartLifecycle;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.client.ClientHttpRequestFactory;
@@ -529,6 +531,20 @@ public class SpringCloudAutoConfiguration {
          * @param properties the connector's properties
          * @return the dispatcher sending queries to other members
          */
+        /**
+         * Announces this member leaving on the subscription queries it answers, before the web server stops serving
+         * their streams.
+         *
+         * @param configuration provides the configuration holding the streaming event processors to stop first
+         * @param invoker       the invoker answering the subscriptions to announce this member leaving on
+         * @return the lifecycle announcing this member leaving on shutdown
+         */
+        @Bean
+        public SmartLifecycle axoniqSpringCloudShutdownLifecycle(ObjectProvider<AxonConfiguration> configuration,
+                                                                  IncomingQueryInvoker invoker) {
+            return new SpringCloudShutdownLifecycle(configuration, invoker);
+        }
+
         @Bean
         @ConditionalOnMissingBean
         public RemoteQueryDispatcher axoniqSpringCloudRemoteQueryDispatcher(

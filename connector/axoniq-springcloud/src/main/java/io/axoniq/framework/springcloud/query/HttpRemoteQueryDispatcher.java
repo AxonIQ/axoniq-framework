@@ -354,6 +354,7 @@ public class HttpRemoteQueryDispatcher implements RemoteQueryDispatcher {
                                   ScheduledFuture<?> silence,
                                   SubscriptionListener listener) {
         logger.debug("Opening the update stream of query [{}] on [{}]", query.type(), destination);
+        AtomicBoolean ended = new AtomicBoolean();
         try {
             restClient.post()
                       .uri(destination)
@@ -376,12 +377,21 @@ public class HttpRemoteQueryDispatcher implements RemoteQueryDispatcher {
                           if (!released.get()) {
                               ServerSentEventReader.read(
                                       stream,
-                                      event -> onUpdate(event, updates, request.updateBufferSize(), listener)
+                                      event -> onUpdate(event, updates, request.updateBufferSize(), listener, ended)
                               );
                           }
                           return null;
                       });
-            updates.seal();
+            if (released.get() || ended.get()) {
+                updates.seal();
+            } else {
+                // The member closed the stream without saying it completed the subscription or is leaving, which is
+                // what a connection cut short looks like. Whatever it emitted in the meantime may be lost.
+                updates.sealExceptionally(new QueryDispatchException(
+                        "Lost the subscription for query [" + query.type() + "] on [" + destination
+                                + "], which ended without the member saying why."
+                ));
+            }
         } catch (Exception e) {
             if (released.get()) {
                 // The subscriber released it, so the read ending is the intended outcome rather than a failure.
@@ -432,7 +442,8 @@ public class HttpRemoteQueryDispatcher implements RemoteQueryDispatcher {
     private void onUpdate(ServerSentEvent event,
                           QueueMessageStream<QueryResponseMessage> updates,
                           int updateBufferSize,
-                          SubscriptionListener listener) {
+                          SubscriptionListener listener,
+                          AtomicBoolean ended) {
         switch (event.event()) {
             case QueryConverter.UPDATE_EVENT -> {
                 QueryDispatchResponse update = parse(event.data(), QueryDispatchResponse.class);
@@ -447,12 +458,21 @@ public class HttpRemoteQueryDispatcher implements RemoteQueryDispatcher {
             case QueryConverter.COMPLETE_EVENT -> {
                 // The member says the subscription has run its course, which is more than this member's part in it
                 // ending. Reported before sealing, so the subscriber stops waiting on every other member too.
+                ended.set(true);
                 listener.completed();
                 updates.seal();
             }
-            case QueryConverter.ERROR_EVENT ->
-                    updates.sealExceptionally(QueryConverter.convertError(parse(event.data(),
-                                                                               QueryDispatchFailure.class)));
+            case QueryConverter.LEAVING_EVENT -> {
+                // The member stopped emitting updates and is leaving the cluster. That ends only its own part, so the
+                // subscriber carries on with the members that remain.
+                ended.set(true);
+                updates.seal();
+            }
+            case QueryConverter.ERROR_EVENT -> {
+                ended.set(true);
+                updates.sealExceptionally(QueryConverter.convertError(parse(event.data(),
+                                                                            QueryDispatchFailure.class)));
+            }
             default -> logger.debug("Ignoring event of unrecognised type [{}].", event.event());
         }
     }
