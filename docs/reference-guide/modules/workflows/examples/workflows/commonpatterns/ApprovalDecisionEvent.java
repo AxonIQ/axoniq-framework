@@ -19,21 +19,6 @@
 
 package workflows.commonpatterns;
 
-import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+public record ApprovalDecisionEvent(String requestId, String approver) {
 
-import java.util.Map;
-
-public class PaymentService {
-
-    public static Map<String, Object> validate(ProcessingContext context, Map<String, Object> payload) {
-        return payload;
-    }
-
-    public static Map<String, Object> charge(ProcessingContext context, Map<String, Object> payload) {
-        return payload;
-    }
-
-    public static Map<String, Object> refund(ProcessingContext context, Map<String, Object> payload) {
-        return payload;
-    }
 }

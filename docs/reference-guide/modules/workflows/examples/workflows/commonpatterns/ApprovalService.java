@@ -23,17 +23,13 @@ import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 
 import java.util.Map;
 
-public class PaymentService {
+public class ApprovalService {
 
-    public static Map<String, Object> validate(ProcessingContext context, Map<String, Object> payload) {
+    public static Map<String, Object> sendRequest(ProcessingContext context, Map<String, Object> payload) {
         return payload;
     }
 
-    public static Map<String, Object> charge(ProcessingContext context, Map<String, Object> payload) {
-        return payload;
-    }
-
-    public static Map<String, Object> refund(ProcessingContext context, Map<String, Object> payload) {
+    public static Map<String, Object> escalate(ProcessingContext context, Map<String, Object> payload) {
         return payload;
     }
 }
