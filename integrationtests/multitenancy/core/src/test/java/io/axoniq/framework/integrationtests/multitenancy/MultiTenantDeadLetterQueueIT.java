@@ -255,7 +255,7 @@ class MultiTenantDeadLetterQueueIT {
             application.shutdown();
             application = null;
         }
-        contextManager.deleteAllCustomContexts();
+        contextManager.deleteContexts(TENANT_A, TENANT_B);
         INFRASTRUCTURE.stop();
     }
 
@@ -301,7 +301,7 @@ class MultiTenantDeadLetterQueueIT {
 
         return EventSourcingConfigurer.create()
                                       .componentRegistry(INFRASTRUCTURE::configureInfrastructure)
-                                      .componentRegistry(TenantFixture::connectOnlyCustomTenantsPredicate)
+                                      .componentRegistry(registry -> TenantFixture.connectOnlyCustomTenantsPredicate(registry, "dlq-tenant-"))
                                       // The application's tenant-scoped datasource provider owns the physical storage
                                       .componentRegistry(Fixture.registerTenantDataSourceProvider(
                                               databaseDirectory, tenantDataSources

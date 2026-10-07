@@ -67,8 +67,8 @@ import static org.awaitility.Awaitility.await;
  */
 final class TenantDataProtectionFixture {
 
-    static final String TENANT_A = "tenant-A";
-    static final String TENANT_B = "tenant-B";
+    static final String TENANT_A = "dataprotection-tenant-a";
+    static final String TENANT_B = "dataprotection-tenant-b";
     static final String CUSTOMER_ID = "customer-1";
 
     private static final QualifiedName CUSTOMER_SNAPSHOT = new QualifiedName("test", "CustomerSnapshot");
@@ -93,7 +93,7 @@ final class TenantDataProtectionFixture {
 
         EventSourcingConfigurer configurer = EventSourcingConfigurer.create()
                                                                   .componentRegistry(INFRASTRUCTURE::configureInfrastructure)
-                                                                  .componentRegistry(TenantFixture::connectOnlyCustomTenantsPredicate)
+                                                                  .componentRegistry(registry -> TenantFixture.connectOnlyCustomTenantsPredicate(registry, "dataprotection-tenant-"))
                                                                   .componentRegistry(registry -> registry.registerComponent(
                                                                           TenantComponentProvider.class,
                                                                           configuration -> TenantComponentProvider.withFactory(
@@ -122,7 +122,7 @@ final class TenantDataProtectionFixture {
         if (application != null) {
             application.shutdown();
         }
-        contextManager.deleteAllCustomContexts();
+        contextManager.deleteContexts(TENANT_A, TENANT_B);
         INFRASTRUCTURE.stop();
     }
 
