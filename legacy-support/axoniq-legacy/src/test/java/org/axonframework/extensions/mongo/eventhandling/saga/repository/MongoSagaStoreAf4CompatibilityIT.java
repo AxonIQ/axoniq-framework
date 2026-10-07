@@ -29,7 +29,7 @@ import org.axonframework.extensions.mongo.DefaultMongoTemplate;
 import org.axonframework.extensions.mongo.MongoTemplate;
 import org.axonframework.modelling.saga.AssociationValue;
 import org.axonframework.modelling.saga.AssociationValuesImpl;
-import org.axonframework.modelling.saga.repository.Af4XStreamSupport;
+import org.axonframework.modelling.saga.repository.Af4ClassLoaderSupport;
 import org.axonframework.modelling.saga.repository.SagaStore;
 import org.axonframework.modelling.saga.repository.StubSaga;
 import org.bson.Document;
@@ -201,6 +201,30 @@ class MongoSagaStoreAf4CompatibilityIT {
             // then
             assertThat(entry).isNotNull();
             assertThat(entry.saga().getHandledEvents()).containsExactly("OrderPlaced");
+        }
+
+        @Test
+        void aSagaUpdatedThroughXStreamConverterIsStillReadableByAxonFramework4XStreamSerializer() throws Exception {
+            // given a saga this store updates through the XStreamConverter, as an Axon Framework 5 node would while
+            // an Axon Framework 4 node still runs alongside it during a rolling upgrade
+            StubSaga updated = new StubSaga();
+            updated.handled("OrderShipped");
+
+            // when
+            xStreamStore.updateSaga(StubSaga.class,
+                                    SAGA_WITH_XSTREAM_SERIALIZATION,
+                                    updated,
+                                    new AssociationValuesImpl(singleton(ORDER_XSTREAM)));
+
+            // then an Axon Framework 4 node's own XStreamSerializer must still be able to read what was written
+            byte[] serializedSaga =
+                    ((Binary) documentOf(SAGA_WITH_XSTREAM_SERIALIZATION).get("serializedSaga")).getData();
+            StubSaga fromAf4 = Af4ClassLoaderSupport.withAf4ClassLoader(
+                    classLoader -> (StubSaga) Af4ClassLoaderSupport.af4XStream(classLoader)
+                                                                    .fromXML(new String(serializedSaga,
+                                                                                         StandardCharsets.UTF_8))
+            );
+            assertThat(fromAf4.getHandledEvents()).containsExactly("OrderShipped");
         }
     }
 

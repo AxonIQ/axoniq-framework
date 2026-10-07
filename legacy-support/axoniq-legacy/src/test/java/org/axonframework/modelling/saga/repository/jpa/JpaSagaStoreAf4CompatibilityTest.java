@@ -19,20 +19,20 @@
 
 package org.axonframework.modelling.saga.repository.jpa;
 
-import com.thoughtworks.xstream.XStream;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityManagerFactory;
 import jakarta.persistence.Persistence;
 import org.axonframework.common.jpa.SimpleEntityManagerProvider;
+import org.axonframework.conversion.Converter;
 import org.axonframework.conversion.jackson.JacksonConverter;
-import org.axonframework.conversion.xstream.XStreamConverter;
 import org.axonframework.modelling.saga.AssociationValue;
 import org.axonframework.modelling.saga.repository.Af4CompatibilityTestSuite;
 import org.axonframework.modelling.saga.repository.SagaStore;
-import org.axonframework.modelling.saga.repository.StubSaga;
 import org.junit.jupiter.api.*;
 
 import java.nio.charset.StandardCharsets;
+import java.sql.Blob;
+import java.sql.SQLException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -120,29 +120,30 @@ class JpaSagaStoreAf4CompatibilityTest extends Af4CompatibilityTestSuite {
         return value == null ? null : value.toString();
     }
 
-    @Nested
-    class XStreamConverterReading {
-
-        private JpaSagaStore xStreamStore;
-
-        @BeforeEach
-        void setUp() {
-            XStream xStream = new XStream();
-            xStreamStore = JpaSagaStore.builder()
-                                      .entityManagerProvider(new SimpleEntityManagerProvider(entityManager))
-                                      .converter(new XStreamConverter(xStream))
-                                      .build();
+    @Override
+    protected byte[] serializedSagaOf(String sagaId) {
+        entityManager.clear();
+        Object value = entityManager.createNativeQuery(
+                                            "SELECT serializedSaga FROM SagaEntry WHERE sagaId = ?")
+                                    .setParameter(1, sagaId)
+                                    .getSingleResult();
+        if (value instanceof byte[] bytes) {
+            return bytes;
         }
-
-        @Test
-        void aSagaWrittenByAxonFramework4WithXStreamIsReadBackThroughXStreamConverter() {
-            // given the row seeded by seedAf4Rows() holding real Axon Framework 4 XStreamSerializer XML / when
-            SagaStore.Entry<StubSaga> entry =
-                    xStreamStore.loadSaga(StubSaga.class, SAGA_WITH_XSTREAM_SERIALIZATION);
-
-            // then
-            assertThat(entry).isNotNull();
-            assertThat(entry.saga().getHandledEvents()).containsExactly("OrderPlaced");
+        // The @Lob column surfaces as a lazily-loaded Blob proxy rather than a byte[] through a native query.
+        try {
+            Blob blob = (Blob) value;
+            return blob.getBytes(1, (int) blob.length());
+        } catch (SQLException e) {
+            throw new IllegalStateException("Failed to read serializedSaga for " + sagaId, e);
         }
+    }
+
+    @Override
+    protected SagaStore<Object> storeWith(Converter converter) {
+        return JpaSagaStore.builder()
+                           .entityManagerProvider(new SimpleEntityManagerProvider(entityManager))
+                           .converter(converter)
+                           .build();
     }
 }
