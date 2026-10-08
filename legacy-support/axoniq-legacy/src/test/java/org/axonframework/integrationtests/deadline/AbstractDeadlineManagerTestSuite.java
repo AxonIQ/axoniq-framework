@@ -50,6 +50,7 @@ import java.util.function.Consumer;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatNoException;
 import static org.assertj.core.api.Assumptions.assumeThat;
 import static org.awaitility.Awaitility.await;
 
@@ -344,6 +345,23 @@ public abstract class AbstractDeadlineManagerTestSuite {
             // then
             awaitSingleDelivery();
             assertThat(invocations).isEmpty();
+        }
+    }
+
+    @Nested
+    class Shutdown {
+
+        /**
+         * The configuration shuts a deadline manager down, and Spring may do so again through the destroy method it
+         * infers for a {@code @Bean}.
+         */
+        @Test
+        void aRepeatedShutdownHasNoEffect() {
+            // given
+            deadlineManager.shutdown();
+
+            // when / then
+            assertThatNoException().isThrownBy(deadlineManager::shutdown);
         }
     }
 

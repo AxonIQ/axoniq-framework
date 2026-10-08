@@ -43,6 +43,7 @@ import org.slf4j.Logger;
 import java.time.Instant;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.axonframework.common.BuilderUtils.assertNonNull;
 import static org.axonframework.deadline.jobrunr.LabelUtils.getCombinedLabel;
@@ -98,6 +99,7 @@ public class JobRunrDeadlineManager extends AbstractDeadlineManager {
     private final JobScheduler jobScheduler;
     private final StoredDeadlineConverter converter;
     private final DeadlineDelivery delivery;
+    private final AtomicBoolean isShutdown = new AtomicBoolean(false);
 
     /**
      * Instantiate a Builder to be able to create a {@code JobRunrDeadlineManager}.
@@ -241,9 +243,17 @@ public class JobRunrDeadlineManager extends AbstractDeadlineManager {
         }
     }
 
+    /**
+     * {@inheritDoc}
+     * <p>
+     * Shuts down the {@link JobScheduler} once. As that shuts down JobRunr as a whole, every further call has no
+     * effect.
+     */
     @Override
     public void shutdown() {
-        jobScheduler.shutdown();
+        if (isShutdown.compareAndSet(false, true)) {
+            jobScheduler.shutdown();
+        }
     }
 
     /**

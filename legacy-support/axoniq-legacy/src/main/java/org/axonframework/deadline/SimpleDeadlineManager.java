@@ -162,6 +162,11 @@ public class SimpleDeadlineManager extends AbstractDeadlineManager {
         }
     }
 
+    /**
+     * {@inheritDoc}
+     * <p>
+     * Shuts down the {@link ScheduledExecutorService}, which ignores every further call.
+     */
     @Override
     public void shutdown() {
         scheduledExecutorService.shutdown();

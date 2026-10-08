@@ -31,7 +31,8 @@ import java.util.concurrent.CopyOnWriteArrayList;
  * follows the Axon Framework 4 {@code SimpleDeadlineManager}: whatever the caller needs back is computed right away,
  * everything else runs through {@code runOnPrepareCommitOrNow(...)}. A scheduled deadline passes the registered
  * dispatch interceptors within that call, with the context the call runs for, as it would before reaching a backend.
- * The cancel calls use the Axon Framework 4 {@link Runnable} variant, so that both variants are exercised.
+ * The cancel calls use the Axon Framework 4 {@link Runnable} variant, so that both variants are exercised. A shutdown
+ * is recorded right away.
  */
 final class RecordingDeadlineManager extends AbstractDeadlineManager {
 
@@ -87,6 +88,11 @@ final class RecordingDeadlineManager extends AbstractDeadlineManager {
         runOnPrepareCommitOrNow(context -> timeline.add(
                 name + ":cancelAllWithinScope " + deadlineName + "@" + scope.scopeDescription()
         ));
+    }
+
+    @Override
+    public void shutdown() {
+        timeline.add(name + ":shutdown");
     }
 
     /**

@@ -48,6 +48,7 @@ import org.slf4j.LoggerFactory;
 import java.time.Instant;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Predicate;
 
 import static java.util.Date.from;
@@ -96,6 +97,7 @@ public class QuartzDeadlineManager extends AbstractDeadlineManager {
     private final StoredDeadlineConverter storedDeadlineConverter;
     private final DeadlineDelivery delivery;
     private final Predicate<Throwable> refireImmediatelyPolicy;
+    private final AtomicBoolean isShutdown = new AtomicBoolean(false);
 
     /**
      * Instantiate a Builder to be able to create a {@code QuartzDeadlineManager}.
@@ -240,8 +242,17 @@ public class QuartzDeadlineManager extends AbstractDeadlineManager {
                              .build();
     }
 
+    /**
+     * {@inheritDoc}
+     * <p>
+     * Shuts down the {@link Scheduler} once, waiting for running jobs to complete. Every further call has no effect, as
+     * not every {@code Scheduler} implementation allows a repeated shutdown.
+     */
     @Override
     public void shutdown() {
+        if (!isShutdown.compareAndSet(false, true)) {
+            return;
+        }
         try {
             scheduler.shutdown(true);
         } catch (SchedulerException e) {

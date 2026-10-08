@@ -62,6 +62,7 @@ import javax.sql.DataSource;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 import static org.axonframework.common.util.DbSchedulerTestUtil.reCreateTable;
+import static org.mockito.Mockito.*;
 
 /**
  * Test class validating the {@link LegacyJobRunrDeadlineManagerAutoConfiguration} and the
@@ -178,6 +179,30 @@ class LegacyDeadlineManagerAutoConfigurationTest {
         }
     }
 
+    @Nested
+    class Shutdown {
+
+        /**
+         * Shutting down the {@link JobScheduler} shuts down JobRunr as a whole, so the manager does so only once,
+         * however often it is shut down along with the application.
+         */
+        @Test
+        void theAutoConfiguredDeadlineManagerShutsDownTheJobSchedulerOnce() {
+            testContext.withUserConfiguration(SpiedJobSchedulerContext.class, ScopeAwareProviderContext.class)
+                       .run(context -> {
+                           // given
+                           assertThat(context).hasSingleBean(JobRunrDeadlineManager.class);
+                           JobScheduler jobScheduler = context.getBean(JobScheduler.class);
+
+                           // when
+                           context.close();
+
+                           // then
+                           verify(jobScheduler, times(1)).shutdown();
+                       });
+        }
+    }
+
     @Configuration
     @EnableAutoConfiguration(exclude = {HibernateJpaAutoConfiguration.class, JpaRepositoriesAutoConfiguration.class})
     static class BaseContext {
@@ -199,6 +224,21 @@ class LegacyDeadlineManagerAutoConfigurationTest {
             InMemoryStorageProvider storageProvider = new InMemoryStorageProvider();
             storageProvider.setJobMapper(new JobMapper(new Jackson3JsonMapper()));
             return new JobScheduler(storageProvider);
+        }
+    }
+
+    /**
+     * Provides a spied {@link JobScheduler} whose shutdown does not shut down JobRunr, and which Spring does not shut
+     * down itself, so that only the deadline manager's shutdown reaches it.
+     */
+    @Configuration
+    static class SpiedJobSchedulerContext {
+
+        @Bean(destroyMethod = "")
+        public JobScheduler jobScheduler() {
+            JobScheduler jobScheduler = spy(new JobScheduler(new InMemoryStorageProvider()));
+            doNothing().when(jobScheduler).shutdown();
+            return jobScheduler;
         }
     }
 
