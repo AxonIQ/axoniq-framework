@@ -226,6 +226,7 @@ public class XStreamConverter implements Converter {
     @Override
     public void describeTo(ComponentDescriptor descriptor) {
         descriptor.describeProperty("xStream", xStream);
+        descriptor.describeProperty("chaining-content-type-converter", converter);
     }
 
     /**
