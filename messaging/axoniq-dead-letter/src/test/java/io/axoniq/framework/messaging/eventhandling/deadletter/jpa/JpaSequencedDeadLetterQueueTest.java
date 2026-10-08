@@ -48,6 +48,9 @@ import org.axonframework.messaging.eventhandling.processing.streaming.token.Trac
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.*;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
+import tools.jackson.databind.DefaultTyping;
 import tools.jackson.databind.json.JsonMapper;
 import tools.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
 
@@ -346,24 +349,27 @@ class JpaSequencedDeadLetterQueueTest extends SequencedDeadLetterQueueTest<Event
 
         // Mirrors the setup needed to stay wire-compatible with an Axon Framework 4 event store written by
         // JacksonSerializer/Jackson3Serializer with default typing.
-        private final JacksonConverter defaultTypingJacksonConverter = new JacksonConverter(
-                JsonMapper.builder()
-                          .polymorphicTypeValidator(BasicPolymorphicTypeValidator.builder()
-                                                                                 .allowIfSubType("java.util.")
-                                                                                 .allowIfSubType("org.axonframework.")
-                                                                                 .build())
-                          .activateDefaultTyping(BasicPolymorphicTypeValidator.builder()
-                                                                              .allowIfSubType("java.util.")
-                                                                              .allowIfSubType("org.axonframework.")
-                                                                              .build())
-                          .build()
-        );
-        private final DelegatingEventConverter defaultTypingEventConverter =
-                new DelegatingEventConverter(defaultTypingJacksonConverter);
+        private static JacksonConverter defaultTypingConverter(DefaultTyping defaultTyping) {
+            BasicPolymorphicTypeValidator ptv = BasicPolymorphicTypeValidator.builder()
+                                                                             .allowIfSubType("java.util.")
+                                                                             .allowIfSubType("org.axonframework.")
+                                                                             .build();
+            return new JacksonConverter(
+                    JsonMapper.builder()
+                              .polymorphicTypeValidator(ptv)
+                              .activateDefaultTyping(ptv, defaultTyping)
+                              .build()
+            );
+        }
 
-        @Test
-        void readsBackDiagnosticsThroughDeadLettersWhenConverterUsesDefaultTyping() {
+        @ParameterizedTest
+        @EnumSource(value = DefaultTyping.class,
+                    names = {"OBJECT_AND_NON_CONCRETE", "NON_CONCRETE_AND_ARRAYS", "NON_FINAL"})
+        void readsBackDiagnosticsThroughDeadLettersWhenConverterUsesDefaultTyping(DefaultTyping defaultTyping) {
             // given
+            JacksonConverter defaultTypingJacksonConverter = defaultTypingConverter(defaultTyping);
+            DelegatingEventConverter defaultTypingEventConverter =
+                    new DelegatingEventConverter(defaultTypingJacksonConverter);
             SequencedDeadLetterQueue<EventMessage> queue = JpaSequencedDeadLetterQueue
                     .<EventMessage>builder()
                     .transactionalExecutorProvider(testTransactionalExecutorProvider())

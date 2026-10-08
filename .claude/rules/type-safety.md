@@ -19,6 +19,10 @@ When a Jackson `Converter` reads the result back with default typing enabled, us
 non-concrete target type expects a type id in the payload, and writing a concretely-typed source object (e.g.
 `Metadata`) never adds one.
 
+The write side must match: convert `new HashMap<>(metadata)` instead of the `Metadata` instance itself. Under
+`DefaultTyping.NON_FINAL`, writing a non-final source type (like `Metadata`) adds a type id to the payload, which
+then fails to deserialize into the concrete `HashMap` target used on the read side.
+
 ```java
 // WRONG - loses generic info, produces unchecked cast warning
 @SuppressWarnings("unchecked")
@@ -34,5 +38,6 @@ Map<String, String> result = converter.convert(data, Map.class);
 
 ### Existing Examples in Codebase
 
-- `AggregateBasedJpaEventStorageEngine`: `METADATA_MAP_TYPE_REF` for `Map<String, String>`
 - `JpaSequencedDeadLetterQueue`: `DIAGNOSTICS_MAP_TYPE_REF` for `HashMap<String, String>`
+- `AggregateBasedJpaEventStorageEngine` (upstream Axon Framework, not this repo): `METADATA_MAP_TYPE_REF` still uses
+  `Map<String, String>` — this is the pattern to avoid, not an example to follow
