@@ -55,6 +55,14 @@
             <version>${axon-framework.version}</version>
         </dependency>
 
+        <!-- XStreamConverter: draining Axon Framework 4 XStream-serialized sagas, deadlines and scheduled events -->
+        <dependency>
+            <groupId>com.thoughtworks.xstream</groupId>
+            <artifactId>xstream</artifactId>
+            <version>1.4.21</version>
+            <optional>true</optional>
+        </dependency>
+
         <!-- JPA saga store -->
         <dependency>
             <groupId>jakarta.persistence</groupId>
@@ -222,6 +230,12 @@
                                     <artifactId>axon-messaging</artifactId>
                                     <version>${axon4.serializer.version}</version>
                                     <destFileName>axon-messaging-af4.jar</destFileName>
+                                </artifactItem>
+                                <artifactItem>
+                                    <groupId>org.axonframework</groupId>
+                                    <artifactId>axon-modelling</artifactId>
+                                    <version>${axon4.serializer.version}</version>
+                                    <destFileName>axon-modelling-af4.jar</destFileName>
                                 </artifactItem>
                             </artifactItems>
                         </configuration>

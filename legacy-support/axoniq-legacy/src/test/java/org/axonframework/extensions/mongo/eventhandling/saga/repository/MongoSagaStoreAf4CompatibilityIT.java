@@ -21,20 +21,20 @@ package org.axonframework.extensions.mongo.eventhandling.saga.repository;
 
 import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoClients;
+import com.thoughtworks.xstream.XStream;
+import org.axonframework.conversion.ConversionException;
 import org.axonframework.conversion.jackson.JacksonConverter;
+import org.axonframework.conversion.xstream.XStreamConverter;
 import org.axonframework.extensions.mongo.DefaultMongoTemplate;
 import org.axonframework.extensions.mongo.MongoTemplate;
 import org.axonframework.modelling.saga.AssociationValue;
 import org.axonframework.modelling.saga.AssociationValuesImpl;
+import org.axonframework.modelling.saga.repository.Af4ClassLoaderSupport;
 import org.axonframework.modelling.saga.repository.SagaStore;
 import org.axonframework.modelling.saga.repository.StubSaga;
 import org.bson.Document;
 import org.bson.types.Binary;
-import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Nested;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.mongodb.MongoDBContainer;
@@ -44,6 +44,7 @@ import java.util.List;
 
 import static java.util.Collections.singleton;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Verifies that {@link MongoSagaStore} reads and writes a sagas collection written by Axon Framework 4.
@@ -62,9 +63,11 @@ class MongoSagaStoreAf4CompatibilityIT {
 
     private static final AssociationValue ORDER_1 = new AssociationValue("orderId", "order-1");
     private static final AssociationValue ORDER_2 = new AssociationValue("orderId", "order-2");
+    private static final AssociationValue ORDER_XSTREAM = new AssociationValue("orderId", "order-xstream");
 
     private static final String SAGA_1 = "saga-1";
     private static final String SAGA_2 = "saga-2";
+    private static final String SAGA_WITH_XSTREAM_SERIALIZATION = "saga-xstream-serialized";
 
     @Container
     private static final MongoDBContainer MONGO_CONTAINER = new MongoDBContainer("mongo:8.0");
@@ -98,6 +101,12 @@ class MongoSagaStoreAf4CompatibilityIT {
         String sagaType = StubSaga.class.getName();
         insertAf4Saga(SAGA_1, sagaType, "{\"handledEvents\":[\"OrderPlaced\"]}", ORDER_1);
         insertAf4Saga(SAGA_2, sagaType, "{\"handledEvents\":[\"OrderPlaced\",\"OrderPaid\"]}", ORDER_2);
+        insertAf4Saga(SAGA_WITH_XSTREAM_SERIALIZATION, sagaType, """
+                <org.axonframework.modelling.saga.repository.StubSaga>
+                    <handledEvents>
+                        <string>OrderPlaced</string>
+                    </handledEvents>
+                </org.axonframework.modelling.saga.repository.StubSaga>""", ORDER_XSTREAM);
     }
 
     /**
@@ -157,6 +166,65 @@ class MongoSagaStoreAf4CompatibilityIT {
             assertThat(entry).isNotNull();
             assertThat(entry.saga().getHandledEvents()).containsExactly("OrderPlaced");
             assertThat(entry.associationValues()).containsExactly(ORDER_1);
+        }
+
+        @Test
+        void xStreamSerializedSagaFailsWhenXStreamConverterIsNotUsed() {
+            // given the document seeded by setUp() whose serializedSaga field is XML, written by an Axon Framework 4
+            // node whose Serializer defaulted to XStream, read here by a store without an XStreamConverter / when / then
+            assertThatThrownBy(() -> testSubject.loadSaga(StubSaga.class, SAGA_WITH_XSTREAM_SERIALIZATION))
+                    .isInstanceOf(ConversionException.class)
+                    .hasMessageContaining(StubSaga.class.getName());
+        }
+    }
+
+    @Nested
+    class XStreamConverterReading {
+
+        private MongoSagaStore xStreamStore;
+
+        @BeforeEach
+        void setUp() {
+            XStream xStream = new XStream();
+            xStreamStore = MongoSagaStore.builder()
+                                         .mongoTemplate(mongoTemplate)
+                                         .converter(new XStreamConverter(xStream))
+                                         .build();
+        }
+
+        @Test
+        void aSagaWrittenByAxonFramework4WithXStreamIsReadBackThroughXStreamConverter() {
+            // given the document seeded by the enclosing setUp() holding real Axon Framework 4 XStreamSerializer
+            // XML / when
+            SagaStore.Entry<StubSaga> entry = xStreamStore.loadSaga(StubSaga.class, SAGA_WITH_XSTREAM_SERIALIZATION);
+
+            // then
+            assertThat(entry).isNotNull();
+            assertThat(entry.saga().getHandledEvents()).containsExactly("OrderPlaced");
+        }
+
+        @Test
+        void aSagaUpdatedThroughXStreamConverterIsStillReadableByAxonFramework4XStreamSerializer() throws Exception {
+            // given a saga this store updates through the XStreamConverter, as an Axon Framework 5 node would while
+            // an Axon Framework 4 node still runs alongside it during a rolling upgrade
+            StubSaga updated = new StubSaga();
+            updated.handled("OrderShipped");
+
+            // when
+            xStreamStore.updateSaga(StubSaga.class,
+                                    SAGA_WITH_XSTREAM_SERIALIZATION,
+                                    updated,
+                                    new AssociationValuesImpl(singleton(ORDER_XSTREAM)));
+
+            // then an Axon Framework 4 node's own XStreamSerializer must still be able to read what was written
+            byte[] serializedSaga =
+                    ((Binary) documentOf(SAGA_WITH_XSTREAM_SERIALIZATION).get("serializedSaga")).getData();
+            StubSaga fromAf4 = Af4ClassLoaderSupport.withAf4ClassLoader(
+                    classLoader -> (StubSaga) Af4ClassLoaderSupport.af4XStream(classLoader)
+                                                                    .fromXML(new String(serializedSaga,
+                                                                                         StandardCharsets.UTF_8))
+            );
+            assertThat(fromAf4.getHandledEvents()).containsExactly("OrderShipped");
         }
     }
 

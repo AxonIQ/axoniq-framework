@@ -756,9 +756,9 @@ If you depended strongly on any of the removed features, be sure to reach out.
 | Conversion - XStream integration
 | **X**
 | —
-| **X**
-| —
-| Deprecated and removed as of Axon Framework 5 due to incompatibility with new JDK versions
+| Partial
+| 5.4.0
+| Removed as a general-purpose `Converter` due to incompatibility with new JDK versions. Axoniq Framework's `axoniq-legacy` module ships a deprecated, opt-in `XStreamConverter` to read and write data an Axon Framework 4 node serialized with XStream, so it is not a full replacement
 
 6+h| Snapshotting
 

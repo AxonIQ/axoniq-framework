@@ -17,23 +17,11 @@
  *  https://www.axoniq.io/pricing
  */
 
-package org.axonframework.messaging;
-
-import java.io.Serializable;
-
 /**
- * Denotes the description of a {@link Scope}. This can be used to figure out in what scope a given message should be
- * handled.
- *
- * @author Steven van Beelen
- * @since 3.3
+ * An Axon Framework 4 {@code XStreamSerializer}-compatible {@link org.axonframework.conversion.Converter}, kept only to
+ * drain saga state, deadlines and scheduled events that an Axon Framework 4 node serialized with XStream.
  */
-public interface ScopeDescriptor extends Serializable {
+@NullMarked
+package org.axonframework.conversion.xstream;
 
-    /**
-     * Retrieve a {@link String} description of a {@link Scope} object.
-     *
-     * @return a {@link String} description of a {@link Scope} object
-     */
-    String scopeDescription();
-}
+import org.jspecify.annotations.NullMarked;
