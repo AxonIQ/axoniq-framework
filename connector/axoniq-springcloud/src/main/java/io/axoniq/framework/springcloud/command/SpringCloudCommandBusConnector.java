@@ -22,7 +22,7 @@ package io.axoniq.framework.springcloud.command;
 import io.axoniq.framework.messaging.commandhandling.distributed.CommandBusConnector;
 import io.axoniq.framework.springcloud.routing.Member;
 import io.axoniq.framework.springcloud.shared.SpringCloudAxoniqAddon;
-import io.axoniq.framework.springcloud.shared.SpringCloudMemberRegistry;
+import io.axoniq.framework.springcloud.shared.SpringCloudMemberDiscovery;
 import io.axoniq.license.entitlement.EntitlementManager;
 import io.axoniq.license.entitlement.EntitlementMessageType;
 import org.axonframework.common.FutureUtils;
@@ -56,7 +56,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * A {@link CommandBusConnector} distributing commands across the nodes discovered through Spring Cloud Discovery.
  * <p>
  * With no server to route for it, this connector routes itself. Every dispatch resolves a {@link Member} from the
- * {@link SpringCloudMemberRegistry}'s consistent-hash ring, using the command's routing key and name, and then either
+ * {@link SpringCloudMemberDiscovery}'s consistent-hash ring, using the command's routing key and name, and then either
  * hands the command to this application's own handler or sends it to the resolved member over HTTP. That is the shape
  * of the Axon Framework 5 contract: {@code DistributedCommandBus} passes a dispatch straight through, so routing is
  * the connector's job.
@@ -83,7 +83,7 @@ public class SpringCloudCommandBusConnector implements CommandBusConnector {
 
     private static final Logger logger = LoggerFactory.getLogger(SpringCloudCommandBusConnector.class);
 
-    private final SpringCloudMemberRegistry registry;
+    private final SpringCloudMemberDiscovery discovery;
     private final IncomingCommandInvoker invoker;
     private final RemoteCommandDispatcher dispatcher;
     private final @Nullable MessageConverter converter;
@@ -95,20 +95,20 @@ public class SpringCloudCommandBusConnector implements CommandBusConnector {
     private volatile @Nullable Handler incomingHandler;
 
     /**
-     * Constructs a {@code SpringCloudCommandBusConnector} routing with the given {@code registry}.
+     * Constructs a {@code SpringCloudCommandBusConnector} routing with the given {@code discovery}.
      *
-     * @param registry   the registry holding the consistent-hash ring commands are routed with
+     * @param discovery  the discovery holding the consistent-hash ring commands are routed with
      * @param invoker    the component invoking the local handler for commands from other members
      * @param dispatcher the dispatcher sending commands to other members
      * @param converter  the converter attached to commands routed to this application, so that a locally routed
      *                   command carries the same conversion capability as one that travelled over the wire, or
      *                   {@code null} when none is available
      */
-    public SpringCloudCommandBusConnector(SpringCloudMemberRegistry registry,
+    public SpringCloudCommandBusConnector(SpringCloudMemberDiscovery discovery,
                                           IncomingCommandInvoker invoker,
                                           RemoteCommandDispatcher dispatcher,
                                           @Nullable MessageConverter converter) {
-        this(registry, invoker, dispatcher, converter, EntitlementManager.INSTANCE);
+        this(discovery, invoker, dispatcher, converter, EntitlementManager.INSTANCE);
         EntitlementManager.INSTANCE.registerAddon(SpringCloudAxoniqAddon.class);
     }
 
@@ -116,11 +116,11 @@ public class SpringCloudCommandBusConnector implements CommandBusConnector {
      * Package-private constructor allowing an alternative {@link EntitlementManager} to be injected.
      * <p>
      * Marked {@link Internal} because production code must use
-     * {@link #SpringCloudCommandBusConnector(SpringCloudMemberRegistry, IncomingCommandInvoker,
+     * {@link #SpringCloudCommandBusConnector(SpringCloudMemberDiscovery, IncomingCommandInvoker,
      * RemoteCommandDispatcher, MessageConverter)}, which registers the addon and claims against
      * {@link EntitlementManager#INSTANCE}. This constructor exists so tests need not touch that singleton.
      *
-     * @param registry           the registry holding the consistent-hash ring commands are routed with
+     * @param discovery          the discovery holding the consistent-hash ring commands are routed with
      * @param invoker            the component invoking the local handler for commands from other members
      * @param dispatcher         the dispatcher sending commands to other members
      * @param converter          the converter attached to commands routed to this application, or {@code null} when
@@ -128,12 +128,12 @@ public class SpringCloudCommandBusConnector implements CommandBusConnector {
      * @param entitlementManager the entitlement manager dispatched commands are claimed against
      */
     @Internal
-    SpringCloudCommandBusConnector(SpringCloudMemberRegistry registry,
+    SpringCloudCommandBusConnector(SpringCloudMemberDiscovery discovery,
                                    IncomingCommandInvoker invoker,
                                    RemoteCommandDispatcher dispatcher,
                                    @Nullable MessageConverter converter,
                                    EntitlementManager entitlementManager) {
-        this.registry = Objects.requireNonNull(registry, "The registry must not be null.");
+        this.discovery = Objects.requireNonNull(discovery, "The discovery must not be null.");
         this.invoker = Objects.requireNonNull(invoker, "The invoker must not be null.");
         this.dispatcher = Objects.requireNonNull(dispatcher, "The dispatcher must not be null.");
         this.converter = converter;
@@ -162,7 +162,7 @@ public class SpringCloudCommandBusConnector implements CommandBusConnector {
         // member, which is the correct behaviour for a command that declared no entity to be routed by.
         String routingKey = command.routingKey().orElseGet(command::identifier);
 
-        Optional<Member> destination = registry.findCommandDestination(routingKey, commandName);
+        Optional<Member> destination = discovery.findCommandDestination(routingKey, commandName);
         if (destination.isEmpty()) {
             return CompletableFuture.failedFuture(new NoHandlerForCommandException(command));
         }
@@ -211,7 +211,7 @@ public class SpringCloudCommandBusConnector implements CommandBusConnector {
         return dispatcher.dispatch(member, command)
                          .whenComplete((result, cause) -> {
                              if (cause != null && isUnreachable(cause)) {
-                                 registry.markUnreachable(member);
+                                 discovery.markUnreachable(member);
                              }
                          });
     }
@@ -299,7 +299,7 @@ public class SpringCloudCommandBusConnector implements CommandBusConnector {
     private void publishCapabilities() {
         Set<QualifiedName> commands = Set.copyOf(subscriptions.keySet());
         int loadFactor = subscriptions.values().stream().max(Comparator.naturalOrder()).orElse(0);
-        registry.publishLocalCommands(loadFactor, commands);
+        discovery.publishLocalCommands(loadFactor, commands);
     }
 
     @Override
@@ -340,7 +340,7 @@ public class SpringCloudCommandBusConnector implements CommandBusConnector {
 
     @Override
     public void describeTo(ComponentDescriptor descriptor) {
-        descriptor.describeProperty("registry", registry);
+        descriptor.describeProperty("discovery", discovery);
         descriptor.describeProperty("dispatcher", dispatcher);
         descriptor.describeProperty("subscriptions", subscriptions.keySet().stream()
                                                                  .map(QualifiedName::toString)

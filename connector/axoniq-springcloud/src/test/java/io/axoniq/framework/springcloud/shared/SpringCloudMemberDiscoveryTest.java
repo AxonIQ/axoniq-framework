@@ -28,14 +28,11 @@ import io.axoniq.framework.springcloud.util.TestServiceInstance;
 import org.axonframework.messaging.core.QualifiedName;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.*;
-import org.springframework.cloud.client.discovery.event.HeartbeatEvent;
-import org.springframework.cloud.client.discovery.event.InstanceRegisteredEvent;
 
 import java.net.URI;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -45,11 +42,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * Tests how {@link SpringCloudMemberRegistry} builds and maintains the routing ring from what discovery reports.
+ * Tests how {@link SpringCloudMemberDiscovery} keeps its routing ring in line with what discovery reports, and with
+ * this application's own capabilities.
  *
  * @author Allard Buijze
  */
-class SpringCloudMemberRegistryTest {
+class SpringCloudMemberDiscoveryTest {
 
     private static final QualifiedName CREATE_COURSE = new QualifiedName("university.CreateCourse");
     private static final QualifiedName RENAME_COURSE = new QualifiedName("university.RenameCourse");
@@ -63,7 +61,7 @@ class SpringCloudMemberRegistryTest {
     private TestServiceInstance remoteInstance;
     private RecordingDiscoveryClient discoveryClient;
     private RecordingCapabilityDiscoveryMode discoveryMode;
-    private SpringCloudMemberRegistry testSubject;
+    private SpringCloudMemberDiscovery testSubject;
 
     @BeforeEach
     void setUp() {
@@ -73,20 +71,20 @@ class SpringCloudMemberRegistryTest {
         discoveryMode = new RecordingCapabilityDiscoveryMode()
                 .answeringAsLocal(localInstance)
                 .answering(remoteInstance, HANDLES_CREATE);
-        testSubject = registry(SpringCloudMemberRegistry.DEFAULT_CAPABILITIES_REFRESH_INTERVAL);
+        testSubject = discovery(SpringCloudMemberDiscovery.DEFAULT_CAPABILITIES_REFRESH_INTERVAL);
     }
 
     /**
-     * Builds a registry over this test's discovery that runs its rounds on the calling thread, so a test observes a
-     * round's outcome as soon as it starts one.
+     * Builds a discovery over this test's discovery client and mode that runs its rounds on the calling thread, so a
+     * test observes a round's outcome as soon as it starts one.
      */
-    private SpringCloudMemberRegistry registry(Duration capabilitiesRefreshInterval) {
-        return new SpringCloudMemberRegistry(discoveryClient,
-                                             discoveryMode,
-                                             instance -> true,
-                                             null,
-                                             capabilitiesRefreshInterval,
-                                             Runnable::run);
+    private SpringCloudMemberDiscovery discovery(Duration capabilitiesRefreshInterval) {
+        return new SpringCloudMemberDiscovery(discoveryClient,
+                                              discoveryMode,
+                                              instance -> true,
+                                              null,
+                                              capabilitiesRefreshInterval,
+                                              Runnable::run);
     }
 
     @Nested
@@ -98,16 +96,16 @@ class SpringCloudMemberRegistryTest {
             testSubject.updateMemberships();
 
             // then
-            assertThat(testSubject.ring().members()).hasSize(2);
+            assertThat(testSubject.members()).hasSize(2);
         }
 
         @Test
         void marksThisApplicationsOwnInstanceAsLocal() {
             // given
-            testSubject.onInstanceRegistered(new InstanceRegisteredEvent<>(this, localInstance));
+            testSubject.startMembershipRound();
 
             // when
-            Set<Member> members = testSubject.ring().members();
+            Set<Member> members = testSubject.members();
 
             // then — the local flag is what decides whether a command is handled here or sent over HTTP
             assertThat(members).filteredOn(Member::local).hasSize(1);
@@ -123,7 +121,7 @@ class SpringCloudMemberRegistryTest {
             testSubject.updateMemberships();
 
             // then
-            assertThat(testSubject.ring().members()).hasSize(1);
+            assertThat(testSubject.members()).hasSize(1);
         }
 
         @Test
@@ -135,7 +133,7 @@ class SpringCloudMemberRegistryTest {
             testSubject.updateMemberships();
 
             // then — the round must not be abandoned because one instance threw
-            assertThat(testSubject.ring().members()).hasSize(1);
+            assertThat(testSubject.members()).hasSize(1);
         }
 
         @Test
@@ -163,17 +161,17 @@ class SpringCloudMemberRegistryTest {
         }
 
         @Test
-        void rebuildsTheRingOnEachHeartbeat() {
+        void rebuildsTheRingOnEachMembershipRound() {
             // given
-            testSubject.onHeartbeat(new HeartbeatEvent(this, "first"));
-            assertThat(testSubject.ring().members()).hasSize(2);
+            testSubject.startMembershipRound();
+            assertThat(testSubject.members()).hasSize(2);
 
             // when — a member leaves
             discoveryClient.deregister("university", remoteInstance);
-            testSubject.onHeartbeat(new HeartbeatEvent(this, "second"));
+            testSubject.startMembershipRound();
 
             // then — rebuilding means a departed member simply does not reappear
-            assertThat(testSubject.ring().members()).hasSize(1);
+            assertThat(testSubject.members()).hasSize(1);
         }
 
         @Test
@@ -191,13 +189,13 @@ class SpringCloudMemberRegistryTest {
             // then — membership is what discovery signals, so only the new instance needed asking
             assertThat(discoveryMode.asked().subList(askedBefore, discoveryMode.asked().size()))
                     .containsExactly(ServiceInstanceKey.of(joining));
-            assertThat(testSubject.ring().members()).hasSize(3);
+            assertThat(testSubject.members()).hasSize(3);
         }
 
         @Test
         void asksEveryInstanceOnEveryMembershipRoundWithoutARefreshInterval() {
             // given
-            SpringCloudMemberRegistry alwaysAsking = registry(Duration.ZERO);
+            SpringCloudMemberDiscovery alwaysAsking = discovery(Duration.ZERO);
             alwaysAsking.updateMemberships();
 
             // when
@@ -206,23 +204,23 @@ class SpringCloudMemberRegistryTest {
             alwaysAsking.updateMemberships();
 
             // then
-            assertThat(alwaysAsking.ring().memberFor("course-1", RENAME_COURSE)).isPresent();
+            assertThat(alwaysAsking.findCommandDestination("course-1", RENAME_COURSE)).isPresent();
         }
 
         @Test
-        void startsARoundOnAHeartbeatOnItsExecutorRatherThanOnTheHeartbeatThread() {
+        void startsAMembershipRoundOnItsExecutorRatherThanOnTheCallingThread() {
             // given
             List<Runnable> handedOff = new ArrayList<>();
-            SpringCloudMemberRegistry registry = new SpringCloudMemberRegistry(
+            SpringCloudMemberDiscovery discovery = new SpringCloudMemberDiscovery(
                     discoveryClient, discoveryMode, instance -> true, null, Duration.ofSeconds(30), handedOff::add
             );
 
             // when
-            registry.onHeartbeat(new HeartbeatEvent(this, "first"));
+            discovery.startMembershipRound();
 
-            // then — the heartbeat thread does not wait on the requests the round makes
+            // then — the thread signalling the change does not wait on the requests the round makes
             assertThat(handedOff).hasSize(1);
-            assertThat(registry.ring().members()).isEmpty();
+            assertThat(discovery.members()).isEmpty();
         }
     }
 
@@ -245,7 +243,7 @@ class SpringCloudMemberRegistryTest {
         @Test
         void picksUpCapabilitiesAMemberGainedOnceTheyAreStale() {
             // given
-            SpringCloudMemberRegistry refreshing = registry(Duration.ZERO);
+            SpringCloudMemberDiscovery refreshing = discovery(Duration.ZERO);
             refreshing.updateMemberships();
             discoveryMode.answering(remoteInstance,
                                     new MemberCapabilities(100, Set.of(CREATE_COURSE, RENAME_COURSE), Set.of()));
@@ -254,13 +252,13 @@ class SpringCloudMemberRegistryTest {
             refreshing.refreshCapabilities();
 
             // then
-            assertThat(refreshing.ring().memberFor("course-1", RENAME_COURSE)).isPresent();
+            assertThat(refreshing.findCommandDestination("course-1", RENAME_COURSE)).isPresent();
         }
 
         @Test
         void leavesWhoIsInTheClusterToDiscovery() {
             // given
-            SpringCloudMemberRegistry refreshing = registry(Duration.ZERO);
+            SpringCloudMemberDiscovery refreshing = discovery(Duration.ZERO);
             refreshing.updateMemberships();
             TestServiceInstance joining = TestServiceInstance.instance("university", "node-c", 8080);
             discoveryClient.register("university", joining);
@@ -270,7 +268,7 @@ class SpringCloudMemberRegistryTest {
             refreshing.refreshCapabilities();
 
             // then — the new instance waits for the membership round discovery's next signal starts
-            assertThat(refreshing.ring().members()).hasSize(2);
+            assertThat(refreshing.members()).hasSize(2);
         }
 
         @Test
@@ -278,14 +276,14 @@ class SpringCloudMemberRegistryTest {
             // given — an instance that is still starting up
             discoveryMode.reportingUnknown(remoteInstance);
             testSubject.updateMemberships();
-            assertThat(testSubject.ring().members()).hasSize(1);
+            assertThat(testSubject.members()).hasSize(1);
 
             // when
             discoveryMode.answering(remoteInstance, HANDLES_CREATE);
             testSubject.refreshCapabilities();
 
             // then — it joins without waiting for its capabilities to go stale, as it has none
-            assertThat(testSubject.ring().members()).hasSize(2);
+            assertThat(testSubject.members()).hasSize(2);
         }
 
         @Test
@@ -293,7 +291,7 @@ class SpringCloudMemberRegistryTest {
             // given
             ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
             try {
-                SpringCloudMemberRegistry refreshing = registry(Duration.ofMillis(100));
+                SpringCloudMemberDiscovery refreshing = discovery(Duration.ofMillis(100));
                 refreshing.updateMemberships();
                 refreshing.scheduleCapabilityRefresh(scheduler);
 
@@ -304,7 +302,7 @@ class SpringCloudMemberRegistryTest {
                 // then
                 Awaitility.await()
                           .atMost(Duration.ofSeconds(5))
-                          .until(() -> refreshing.ring().memberFor("course-1", RENAME_COURSE).isPresent());
+                          .until(() -> refreshing.findCommandDestination("course-1", RENAME_COURSE).isPresent());
             } finally {
                 scheduler.shutdownNow();
             }
@@ -316,7 +314,7 @@ class SpringCloudMemberRegistryTest {
             ScheduledThreadPoolExecutor scheduler = new ScheduledThreadPoolExecutor(1);
             try {
                 // when
-                registry(Duration.ZERO).scheduleCapabilityRefresh(scheduler);
+                discovery(Duration.ZERO).scheduleCapabilityRefresh(scheduler);
 
                 // then
                 assertThat(scheduler.getQueue()).isEmpty();
@@ -349,7 +347,7 @@ class SpringCloudMemberRegistryTest {
             testSubject.updateMemberships();
 
             // then
-            assertThat(testSubject.ring().members())
+            assertThat(testSubject.members())
                     .extracting(Member::name)
                     .containsExactlyInAnyOrder(RecordingCapabilityDiscoveryMode.LOCAL_NODE_ID, "node-b-process");
         }
@@ -366,7 +364,7 @@ class SpringCloudMemberRegistryTest {
             testSubject.updateMemberships();
 
             // then
-            assertThat(testSubject.ring().members()).filteredOn(Member::local)
+            assertThat(testSubject.members()).filteredOn(Member::local)
                                                     .containsExactly(testSubject.localMember());
         }
 
@@ -385,7 +383,7 @@ class SpringCloudMemberRegistryTest {
             testSubject.updateMemberships();
 
             // then — reached at the instance discovery reported first, so every member picks the same one
-            assertThat(testSubject.ring().members())
+            assertThat(testSubject.members())
                     .singleElement()
                     .satisfies(member -> assertThat(member.endpoint()).hasToString("http://node-b:8080"));
         }
@@ -399,8 +397,9 @@ class SpringCloudMemberRegistryTest {
             testSubject.publishLocalCommands(100, Set.of(CREATE_COURSE, RENAME_COURSE));
 
             // then — publishing updates the member discovery placed, rather than adding a second one
-            assertThat(testSubject.ring().members()).hasSize(2);
-            assertThat(testSubject.ring().memberFor("course-1", RENAME_COURSE)).contains(testSubject.localMember());
+            assertThat(testSubject.members()).hasSize(2);
+            assertThat(testSubject.findCommandDestination("course-1", RENAME_COURSE))
+                    .contains(testSubject.localMember());
         }
 
         @Test
@@ -413,7 +412,7 @@ class SpringCloudMemberRegistryTest {
             testSubject.updateMemberships();
 
             // then — the other members do not route to this application either, so neither does it
-            assertThat(testSubject.ring().members()).doesNotContain(testSubject.localMember());
+            assertThat(testSubject.members()).doesNotContain(testSubject.localMember());
         }
 
         @Test
@@ -425,94 +424,17 @@ class SpringCloudMemberRegistryTest {
             testSubject.updateMemberships();
 
             // then
-            assertThat(testSubject.ring().capabilitiesOf(testSubject.localMember()))
+            assertThat(testSubject.capabilitiesOf(testSubject.localMember()))
                     .hasValueSatisfying(capabilities -> assertThat(capabilities.commands())
                             .containsExactly(RENAME_COURSE));
         }
     }
 
     @Nested
-    class RoutingQueries {
+    class PublishingLocalCapabilities {
 
         @Test
-        void findsNoDestinationWhenNoMemberHandlesTheQuery() {
-            // given a cluster whose members handle commands only
-            testSubject.updateMemberships();
-
-            // when / then
-            assertThat(testSubject.findQueryDestination(FIND_COURSE)).isEmpty();
-        }
-
-        @Test
-        void routesToTheOnlyMemberHandlingTheQuery() {
-            // given
-            testSubject.publishLocalQueries(Set.of(FIND_COURSE));
-
-            // when
-            Optional<Member> destination = testSubject.findQueryDestination(FIND_COURSE);
-
-            // then
-            assertThat(destination).isPresent();
-            assertThat(destination.get().local()).isTrue();
-        }
-
-        @Test
-        void rotatesOverEveryMemberHandlingTheQuery() {
-            // given two members both handling the query
-            testSubject.publishLocalQueries(Set.of(FIND_COURSE));
-            discoveryMode.answering(remoteInstance, new MemberCapabilities(100, Set.of(), Set.of(FIND_COURSE)));
-            testSubject.updateMemberships();
-
-            // when the same query name is routed as many times as there are members
-            List<String> destinations = List.of(testSubject.findQueryDestination(FIND_COURSE).orElseThrow().name(),
-                                                testSubject.findQueryDestination(FIND_COURSE).orElseThrow().name());
-
-            // then the load is spread rather than always landing on the same member
-            assertThat(destinations).doesNotHaveDuplicates().hasSize(2);
-        }
-
-        @Test
-        void skipsMembersThatDoNotHandleTheQuery() {
-            // given only the remote member handling the query
-            discoveryMode.answering(remoteInstance, new MemberCapabilities(100, Set.of(), Set.of(FIND_COURSE)));
-            testSubject.updateMemberships();
-
-            // when routed repeatedly, so that a rotation would reach a non-handling member if it included one
-            List<Optional<Member>> destinations = List.of(testSubject.findQueryDestination(FIND_COURSE),
-                                                          testSubject.findQueryDestination(FIND_COURSE),
-                                                          testSubject.findQueryDestination(FIND_COURSE));
-
-            // then every query went to the one member advertising the name
-            assertThat(destinations).allSatisfy(destination -> {
-                assertThat(destination).isPresent();
-                assertThat(destination.get().local()).isFalse();
-            });
-        }
-
-        @Test
-        void rejectsANullQueryName() {
-            // when / then
-            assertThatThrownBy(() -> testSubject.findQueryDestination(null))
-                    .isInstanceOf(NullPointerException.class);
-        }
-    }
-
-    @Nested
-    class LocalCapabilities {
-
-        @Test
-        void makesThisApplicationRoutableImmediately() {
-            // when — a command may be dispatched right after its handler subscribed, before any heartbeat
-            testSubject.publishLocalCommands(100, Set.of(CREATE_COURSE));
-
-            // then
-            Optional<Member> destination = testSubject.findCommandDestination("course-1", CREATE_COURSE);
-            assertThat(destination).isPresent();
-            assertThat(destination.get().local()).isTrue();
-        }
-
-        @Test
-        void publishesThemToTheDiscoveryMode() {
+        void advertisesThemThroughTheDiscoveryMode() {
             // when
             testSubject.publishLocalCommands(100, Set.of(CREATE_COURSE));
 
@@ -521,36 +443,8 @@ class SpringCloudMemberRegistryTest {
         }
 
         @Test
-        void replacesWhatWasPublishedBefore() {
-            // given
-            testSubject.publishLocalCommands(100, Set.of(CREATE_COURSE));
-
-            // when
-            testSubject.publishLocalCommands(100, Set.of(RENAME_COURSE));
-
-            // then
-            assertThat(testSubject.findCommandDestination("course-1", CREATE_COURSE)).isEmpty();
-            assertThat(testSubject.findCommandDestination("course-1", RENAME_COURSE)).isPresent();
-        }
-
-        @Test
-        void rejectsNullCommands() {
-            // when / then
-            assertThatThrownBy(() -> testSubject.publishLocalCommands(100, null))
-                    .isInstanceOf(NullPointerException.class);
-        }
-
-        @Test
-        void rejectsANegativeLoadFactor() {
-            // when / then
-            assertThatThrownBy(() -> testSubject.publishLocalCommands(-1, Set.of(CREATE_COURSE)))
-                    .isInstanceOf(IllegalArgumentException.class)
-                    .hasMessageContaining("load factor");
-        }
-
-        @Test
-        void keepsPublishedQueriesWhenCommandsArePublished() {
-            // given a member handling both, as an application with a query handler and a command handler has
+        void advertisesCommandsAndQueriesTogether() {
+            // given an application with a query handler and a command handler
             testSubject.publishLocalQueries(Set.of(FIND_COURSE));
 
             // when
@@ -562,23 +456,13 @@ class SpringCloudMemberRegistryTest {
         }
 
         @Test
-        void keepsPublishedCommandsWhenQueriesArePublished() {
-            // given
+        void makesThisApplicationRoutableImmediately() {
+            // when — a command may be dispatched right after its handler subscribed, before any discovery round
             testSubject.publishLocalCommands(100, Set.of(CREATE_COURSE));
 
-            // when
-            testSubject.publishLocalQueries(Set.of(FIND_COURSE));
-
             // then
-            assertThat(discoveryMode.localCapabilities().commands()).containsExactly(CREATE_COURSE);
-            assertThat(discoveryMode.localCapabilities().queries()).containsExactly(FIND_COURSE);
-        }
-
-        @Test
-        void rejectsNullQueries() {
-            // when / then
-            assertThatThrownBy(() -> testSubject.publishLocalQueries(null))
-                    .isInstanceOf(NullPointerException.class);
+            assertThat(testSubject.findCommandDestination("course-1", CREATE_COURSE))
+                    .contains(testSubject.localMember());
         }
     }
 
@@ -592,16 +476,16 @@ class SpringCloudMemberRegistryTest {
             RecordingCapabilityDiscoveryMode mode = new RecordingCapabilityDiscoveryMode()
                     .answering(unregistered, HANDLES_RENAME)
                     .answering(remoteInstance, HANDLES_CREATE);
-            SpringCloudMemberRegistry registry = new SpringCloudMemberRegistry(
+            SpringCloudMemberDiscovery discovery = new SpringCloudMemberDiscovery(
                     new RecordingDiscoveryClient().register("university", unregistered, remoteInstance), mode
             );
 
             // when
-            registry.updateMemberships();
+            discovery.updateMemberships();
 
             // then — the round completes, with the reachable member on the ring and the other left out
-            assertThat(registry.ring().memberFor("course-1", CREATE_COURSE)).isPresent();
-            assertThat(registry.ring().memberFor("course-1", RENAME_COURSE)).isEmpty();
+            assertThat(discovery.findCommandDestination("course-1", CREATE_COURSE)).isPresent();
+            assertThat(discovery.findCommandDestination("course-1", RENAME_COURSE)).isEmpty();
         }
 
         @Test
@@ -609,18 +493,20 @@ class SpringCloudMemberRegistryTest {
             // given
             TestServiceInstance behindContextRoot = TestServiceInstance.instance("university", "node-c", 8080)
                                                                       .withMetadata("contextRoot", "/university");
-            SpringCloudMemberRegistry registry = new SpringCloudMemberRegistry(
+            SpringCloudMemberDiscovery discovery = new SpringCloudMemberDiscovery(
                     new RecordingDiscoveryClient().register("university", behindContextRoot),
                     new RecordingCapabilityDiscoveryMode().answering(behindContextRoot, HANDLES_CREATE),
                     instance -> true,
-                    "contextRoot"
+                    "contextRoot",
+                    SpringCloudMemberDiscovery.DEFAULT_CAPABILITIES_REFRESH_INTERVAL,
+                    Runnable::run
             );
 
             // when
-            registry.updateMemberships();
+            discovery.updateMemberships();
 
             // then
-            assertThat(registry.ring().members())
+            assertThat(discovery.members())
                     .extracting(Member::endpoint)
                     .extracting(Object::toString)
                     .containsExactly("http://node-c:8080/university");
@@ -629,18 +515,20 @@ class SpringCloudMemberRegistryTest {
         @Test
         void servesAnInstanceFromTheRootWhenItHasNoContextRootMetadata() {
             // given
-            SpringCloudMemberRegistry registry = new SpringCloudMemberRegistry(
+            SpringCloudMemberDiscovery discovery = new SpringCloudMemberDiscovery(
                     new RecordingDiscoveryClient().register("university", remoteInstance),
                     new RecordingCapabilityDiscoveryMode().answering(remoteInstance, HANDLES_CREATE),
                     instance -> true,
-                    "contextRoot"
+                    "contextRoot",
+                    SpringCloudMemberDiscovery.DEFAULT_CAPABILITIES_REFRESH_INTERVAL,
+                    Runnable::run
             );
 
             // when
-            registry.updateMemberships();
+            discovery.updateMemberships();
 
             // then
-            assertThat(registry.ring().members())
+            assertThat(discovery.members())
                     .extracting(Member::endpoint)
                     .extracting(Object::toString)
                     .containsExactly("http://node-b:8080");
@@ -654,7 +542,7 @@ class SpringCloudMemberRegistryTest {
         void takesAnUnreachableMemberOutOfTheRing() {
             // given
             testSubject.updateMemberships();
-            Member unreachable = testSubject.ring().members().stream()
+            Member unreachable = testSubject.members().stream()
                                             .filter(member -> !member.local())
                                             .findFirst()
                                             .orElseThrow();
@@ -663,14 +551,14 @@ class SpringCloudMemberRegistryTest {
             testSubject.markUnreachable(unreachable);
 
             // then
-            assertThat(testSubject.ring().members()).doesNotContain(unreachable);
+            assertThat(testSubject.members()).doesNotContain(unreachable);
         }
 
         @Test
         void bringsTheMemberBackOnTheNextDiscoveryRound() {
             // given
             testSubject.updateMemberships();
-            Member unreachable = testSubject.ring().members().stream()
+            Member unreachable = testSubject.members().stream()
                                             .filter(member -> !member.local())
                                             .findFirst()
                                             .orElseThrow();
@@ -680,14 +568,14 @@ class SpringCloudMemberRegistryTest {
             testSubject.updateMemberships();
 
             // then — suspecting only keeps commands away while a member is actually unreachable
-            assertThat(testSubject.ring().members()).contains(unreachable);
+            assertThat(testSubject.members()).contains(unreachable);
         }
 
         @Test
         void keepsTheMemberOutUntilItAnswersAgain() {
             // given
             testSubject.updateMemberships();
-            Member unreachable = testSubject.ring().members().stream()
+            Member unreachable = testSubject.members().stream()
                                             .filter(member -> !member.local())
                                             .findFirst()
                                             .orElseThrow();
@@ -698,20 +586,20 @@ class SpringCloudMemberRegistryTest {
             testSubject.updateMemberships();
 
             // then — what it answered before does not bring it back
-            assertThat(testSubject.ring().members()).doesNotContain(unreachable);
+            assertThat(testSubject.members()).doesNotContain(unreachable);
         }
 
         @Test
         void ignoresAMemberThatIsNotOnTheRing() {
             // given
             testSubject.updateMemberships();
-            int versionBefore = testSubject.ring().version();
+            Set<Member> membersBefore = testSubject.members();
 
             // when
             testSubject.markUnreachable(new Member("unknown-node", URI.create("http://node-z:8080"), false));
 
             // then
-            assertThat(testSubject.ring().version()).isEqualTo(versionBefore);
+            assertThat(testSubject.members()).isEqualTo(membersBefore);
         }
     }
 
@@ -721,9 +609,9 @@ class SpringCloudMemberRegistryTest {
         @Test
         void rejectsNullCollaborators() {
             // when / then
-            assertThatThrownBy(() -> new SpringCloudMemberRegistry(null, discoveryMode))
+            assertThatThrownBy(() -> new SpringCloudMemberDiscovery(null, discoveryMode))
                     .isInstanceOf(NullPointerException.class);
-            assertThatThrownBy(() -> new SpringCloudMemberRegistry(discoveryClient, null))
+            assertThatThrownBy(() -> new SpringCloudMemberDiscovery(discoveryClient, null))
                     .isInstanceOf(NullPointerException.class);
         }
     }

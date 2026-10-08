@@ -26,7 +26,7 @@ import io.axoniq.framework.springcloud.discovery.RestCapabilityDiscoveryMode;
 import io.axoniq.framework.springcloud.query.HttpRemoteQueryDispatcher;
 import io.axoniq.framework.springcloud.query.SpringCloudQueryController;
 import io.axoniq.framework.springcloud.query.SpringCloudQueryControllerConfiguration;
-import io.axoniq.framework.springcloud.shared.SpringCloudMemberRegistry;
+import io.axoniq.framework.springcloud.shared.SpringCloudMemberDiscovery;
 import org.jspecify.annotations.Nullable;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
@@ -174,9 +174,9 @@ public class SpringCloudProperties {
      * handles changes whenever it subscribes or unsubscribes a handler, which no discovery implementation signals, so
      * it is asked again once this interval has passed, at the latest one and a half intervals after it last answered.
      * A zero or negative interval asks every member on every discovery heartbeat instead. Defaults to
-     * {@link SpringCloudMemberRegistry#DEFAULT_CAPABILITIES_REFRESH_INTERVAL}.
+     * {@link SpringCloudMemberDiscovery#DEFAULT_CAPABILITIES_REFRESH_INTERVAL}.
      */
-    private Duration capabilitiesRefreshInterval = SpringCloudMemberRegistry.DEFAULT_CAPABILITIES_REFRESH_INTERVAL;
+    private Duration capabilitiesRefreshInterval = SpringCloudMemberDiscovery.DEFAULT_CAPABILITIES_REFRESH_INTERVAL;
 
     /**
      * Returns whether the Spring Cloud connector is enabled.

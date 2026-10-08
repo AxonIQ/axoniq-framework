@@ -27,7 +27,7 @@ import io.axoniq.framework.springcloud.discovery.MemberCapabilitiesPayload;
 import io.axoniq.framework.springcloud.discovery.RestCapabilityDiscoveryMode;
 import io.axoniq.framework.springcloud.query.SubscriptionQueryMembersChangedException;
 import io.axoniq.framework.springcloud.routing.Member;
-import io.axoniq.framework.springcloud.shared.SpringCloudMemberRegistry;
+import io.axoniq.framework.springcloud.shared.SpringCloudMemberDiscovery;
 import org.axonframework.messaging.commandhandling.gateway.CommandGateway;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
@@ -157,9 +157,9 @@ class SpringCloudMessageDistributionIT {
     }
 
     private static Set<Member> handlingMembersOf(ConfigurableApplicationContext node) {
-        SpringCloudMemberRegistry registry = node.getBean(SpringCloudMemberRegistry.class);
-        return registry.ring().members().stream()
-                       .filter(member -> registry.ring().capabilitiesOf(member)
+        SpringCloudMemberDiscovery discovery = node.getBean(SpringCloudMemberDiscovery.class);
+        return discovery.members().stream()
+                       .filter(member -> discovery.capabilitiesOf(member)
                                                  .filter(capabilities -> !capabilities.commands().isEmpty())
                                                  .isPresent())
                        .collect(Collectors.toCollection(LinkedHashSet::new));
