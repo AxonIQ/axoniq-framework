@@ -35,13 +35,16 @@ import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.GlobalSequenceTrackingToken;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.junit.jupiter.api.*;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
+import tools.jackson.databind.DefaultTyping;
 import tools.jackson.databind.json.JsonMapper;
 import tools.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
-import java.util.Collections;
+import java.util.HashMap;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -231,32 +234,40 @@ class DefaultDeadLetterJdbcConverterTest {
 
         // Mirrors the setup needed to stay wire-compatible with an Axon Framework 4 event store written by
         // JacksonSerializer/Jackson3Serializer with default typing.
-        private final Converter defaultTypingGenericConverter = new JacksonConverter(
-                JsonMapper.builder()
-                          .polymorphicTypeValidator(BasicPolymorphicTypeValidator.builder()
-                                                                                 .allowIfSubType("java.util.")
-                                                                                 .allowIfSubType("org.axonframework.")
-                                                                                 .build())
-                          .activateDefaultTyping(BasicPolymorphicTypeValidator.builder()
-                                                                              .allowIfSubType("java.util.")
-                                                                              .allowIfSubType("org.axonframework.")
-                                                                              .build())
-                          .build()
-        );
-        private final EventConverter defaultTypingEventConverter =
-                new DelegatingEventConverter(defaultTypingGenericConverter);
+        private static JacksonConverter defaultTypingConverter(DefaultTyping defaultTyping) {
+            BasicPolymorphicTypeValidator ptv = BasicPolymorphicTypeValidator.builder()
+                                                                             .allowIfSubType("java.util.")
+                                                                             .allowIfSubType("org.axonframework.")
+                                                                             .build();
+            return new JacksonConverter(
+                    JsonMapper.builder()
+                              .polymorphicTypeValidator(ptv)
+                              .activateDefaultTyping(ptv, defaultTyping)
+                              .build()
+            );
+        }
 
-        @Test
-        void restoresMetadataAndDiagnosticsWhenConverterUsesDefaultTyping() throws SQLException {
-            Metadata metadata = Metadata.from(Collections.singletonMap("traceId", "abc"));
-            byte[] serializedMetadata = defaultTypingEventConverter.convert(metadata, byte[].class);
+        @ParameterizedTest
+        @EnumSource(value = DefaultTyping.class,
+                    names = {"OBJECT_AND_NON_CONCRETE", "NON_CONCRETE_AND_ARRAYS", "NON_FINAL"})
+        void restoresMetadataAndDiagnosticsWhenConverterUsesDefaultTyping(DefaultTyping defaultTyping)
+                throws SQLException {
+            JacksonConverter defaultTypingGenericConverter = defaultTypingConverter(defaultTyping);
+            EventConverter defaultTypingEventConverter = new DelegatingEventConverter(defaultTypingGenericConverter);
+
+            Metadata metadata = Metadata.with("traceId", "abc");
+            Metadata diagnostics = Metadata.with("retries", "3");
+            byte[] serializedMetadata =
+                    defaultTypingEventConverter.convert(new HashMap<>(metadata), byte[].class);
+            byte[] serializedDiagnostics =
+                    defaultTypingEventConverter.convert(new HashMap<>(diagnostics), byte[].class);
 
             ResultSet resultSet = mock(ResultSet.class);
             String timestamp = DateTimeUtils.formatInstant(Instant.now());
             when(resultSet.getBytes(schema.payloadColumn())).thenReturn(
                     defaultTypingEventConverter.convert("some-payload", byte[].class));
             when(resultSet.getBytes(schema.metadataColumn())).thenReturn(serializedMetadata);
-            when(resultSet.getBytes(schema.diagnosticsColumn())).thenReturn(serializedMetadata);
+            when(resultSet.getBytes(schema.diagnosticsColumn())).thenReturn(serializedDiagnostics);
             when(resultSet.getString(schema.eventIdentifierColumn())).thenReturn(UUID.randomUUID().toString());
             when(resultSet.getString(schema.typeColumn())).thenReturn(new MessageType("event").toString());
             when(resultSet.getString(schema.timestampColumn())).thenReturn(timestamp);
@@ -279,7 +290,7 @@ class DefaultDeadLetterJdbcConverterTest {
             JdbcDeadLetter<?> result = defaultTypingTestSubject.convertToLetter(resultSet);
 
             assertThat(result.message().metadata()).isEqualTo(metadata);
-            assertThat(result.diagnostics()).isEqualTo(metadata);
+            assertThat(result.diagnostics()).isEqualTo(diagnostics);
         }
     }
 
