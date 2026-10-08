@@ -19,15 +19,24 @@
 
 package org.axonframework.modelling.saga.repository;
 
+import com.thoughtworks.xstream.XStream;
+import org.axonframework.conversion.ConversionException;
+import org.axonframework.conversion.Converter;
+import org.axonframework.conversion.xstream.XStreamConverter;
 import org.axonframework.messaging.core.annotation.Namespace;
 import org.axonframework.modelling.saga.AssociationValue;
 import org.axonframework.modelling.saga.AssociationValuesImpl;
 import org.axonframework.modelling.saga.repository.jpa.SagaEntry;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
+import java.nio.charset.StandardCharsets;
+import java.util.Collections;
+
 import static java.util.Collections.singleton;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Contract that a persistent {@link SagaStore} is expected to satisfy against a saga table written by Axon Framework 4.
@@ -61,6 +70,11 @@ public abstract class Af4CompatibilityTestSuite {
      * Identifier of the seeded saga whose {@code revision} column holds a value written by Axon Framework 4.
      */
     protected static final String SAGA_WITH_REVISION = "saga-with-revision";
+    /**
+     * Identifier of the seeded saga whose {@code serializedSaga} column holds XML an Axon Framework 4 node's
+     * XStream-based {@code Serializer} wrote, rather than JSON.
+     */
+    protected static final String SAGA_WITH_XSTREAM_SERIALIZATION = "saga-xstream-serialized";
 
     /**
      * Returns the {@link SagaStore} under test.
@@ -98,6 +112,24 @@ public abstract class Af4CompatibilityTestSuite {
     protected abstract String columnOf(String column, String sagaId);
 
     /**
+     * Reads the raw {@code serializedSaga} bytes for the given {@code sagaId} directly, bypassing the store's
+     * {@link Converter}.
+     *
+     * @param sagaId the identifier of the saga row to read
+     * @return the stored {@code serializedSaga} bytes
+     */
+    protected abstract byte[] serializedSagaOf(String sagaId);
+
+    /**
+     * Returns a {@link SagaStore} under test, backed by this suite's table or persistence context like
+     * {@link #testSubject()}, configured with the given {@code converter}.
+     *
+     * @param converter the {@link Converter} the returned store uses
+     * @return a store under test configured with {@code converter}
+     */
+    protected abstract SagaStore<Object> storeWith(Converter converter);
+
+    /**
      * Runs the given {@code operation} against the store. Overridden by subclasses that need the call to happen inside
      * a transaction; by default it simply runs.
      *
@@ -116,6 +148,12 @@ public abstract class Af4CompatibilityTestSuite {
         inTransaction(() -> {
             insertAf4Saga(SAGA_WITHOUT_REVISION, sagaType, null, "{\"handledEvents\":[\"OrderPlaced\"]}");
             insertAf4Saga(SAGA_WITH_REVISION, sagaType, "2", "{\"handledEvents\":[\"OrderPlaced\",\"OrderPaid\"]}");
+            insertAf4Saga(SAGA_WITH_XSTREAM_SERIALIZATION, sagaType, null, """
+                    <org.axonframework.modelling.saga.repository.StubSaga>
+                      <handledEvents>
+                        <string>OrderPlaced</string>
+                      </handledEvents>
+                    </org.axonframework.modelling.saga.repository.StubSaga>""");
             insertAf4Association(SAGA_WITHOUT_REVISION, sagaType, ORDER_1);
             insertAf4Association(SAGA_WITH_REVISION, sagaType, ORDER_2);
         });
@@ -176,6 +214,15 @@ public abstract class Af4CompatibilityTestSuite {
             SagaStore.Entry<StubSaga> entry = testSubject().loadSaga(StubSaga.class, "aliased-saga");
             assertThat(entry).isNotNull();
             assertThat(entry.associationValues()).isEmpty();
+        }
+
+        @Test
+        void xStreamSerializedSagaFailsWhenXStreamConverterIsNotUsed() {
+            // given a row whose serializedSaga column is XML, written by an Axon Framework 4 node whose Serializer
+            // defaulted to XStream, read here by a store without an XStreamConverter / when / then
+            assertThatThrownBy(() -> testSubject().loadSaga(StubSaga.class, SAGA_WITH_XSTREAM_SERIALIZATION))
+                    .isInstanceOf(ConversionException.class)
+                    .hasMessageContaining(StubSaga.class.getName());
         }
     }
 
@@ -246,6 +293,51 @@ public abstract class Af4CompatibilityTestSuite {
 
             // then @Namespace remains an event-processing and message-naming concern
             assertThat(columnOf("sagaType", "namespaced-saga")).isEqualTo(NamespacedSaga.class.getName());
+        }
+    }
+
+    @Nested
+    class XStreamConverterCompatibility {
+
+        private SagaStore<Object> xStreamStore;
+
+        @BeforeEach
+        void setUp() {
+            xStreamStore = storeWith(new XStreamConverter(new XStream()));
+        }
+
+        @Test
+        void aSagaWrittenByAxonFramework4WithXStreamIsReadBackThroughXStreamConverter() {
+            // given the row seeded by seedAf4Rows() holding real Axon Framework 4 XStreamSerializer XML / when
+            SagaStore.Entry<StubSaga> entry =
+                    xStreamStore.loadSaga(StubSaga.class, SAGA_WITH_XSTREAM_SERIALIZATION);
+
+            // then
+            assertThat(entry).isNotNull();
+            assertThat(entry.saga().getHandledEvents()).containsExactly("OrderPlaced");
+        }
+
+        @Test
+        void aSagaUpdatedThroughXStreamConverterIsStillReadableByAxonFramework4XStreamSerializer() throws Exception {
+            // given a saga this store updates through the XStreamConverter, as an Axon Framework 5 node would while
+            // an Axon Framework 4 node still runs alongside it during a rolling upgrade
+            StubSaga updated = new StubSaga();
+            updated.handled("OrderShipped");
+
+            // when
+            inTransaction(() -> xStreamStore.updateSaga(StubSaga.class,
+                                                         SAGA_WITH_XSTREAM_SERIALIZATION,
+                                                         updated,
+                                                         new AssociationValuesImpl(Collections.emptySet())));
+
+            // then an Axon Framework 4 node's own XStreamSerializer must still be able to read what was written
+            byte[] serializedSaga = serializedSagaOf(SAGA_WITH_XSTREAM_SERIALIZATION);
+            StubSaga fromAf4 = Af4ClassLoaderSupport.withAf4ClassLoader(
+                    classLoader -> (StubSaga) Af4ClassLoaderSupport.af4XStream(classLoader)
+                                                                    .fromXML(new String(serializedSaga,
+                                                                                         StandardCharsets.UTF_8))
+            );
+            assertThat(fromAf4.getHandledEvents()).containsExactly("OrderShipped");
         }
     }
 

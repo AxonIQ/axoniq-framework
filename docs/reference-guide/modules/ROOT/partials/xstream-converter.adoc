@@ -1,0 +1,70 @@
+[.axoniq-feature]
+[#xstream_converter]
+=== Legacy support - XStreamConverter
+
+The `XStreamConverter`, part of the `axoniq-legacy` module, wraps an application-supplied https://x-stream.github.io/[XStream] instance to read and write the same XML an Axon Framework 4 node's `XStreamSerializer` produced for that instance's configuration.
+
+It exists for exactly one purpose: giving an Axon Framework 5 application time to let deadlines and events that an Axon Framework 4 node scheduled, and sagas it started, run their course, instead of forcing every one of them to fire or complete before the switch to Axon Framework 5. Try to ensure this cross-over from Framework 4 to 5 is as short as possible.
+The formats the `XStreamConverter` and `XStreamSerializer` produce are interchangeable for most payloads, with two exceptions: a `String` or `byte[]` value is passed through as already-serialized content rather than run through XStream (see below), and a metadata value that is not itself a `String` is coerced to one on the way through, rather than kept as its original type.
+Many applications never configured a `Serializer` for their legacy saga stores, which then defaulted to XStream, so this is a common gap when adding Axon Framework 5 nodes to such an application.
+
+[WARNING]
+.What about the JacksonConverter with an XMLMapper?
+====
+A Jackson `XmlMapper` producing XML is not the same as reading XStream's XML.
+With enough custom `JsonDeserializer`
+implementations and a naming strategy for XStream's escaping, standing in for XStream's own aliases, a `JacksonConverter`
+can read simple, non-polymorphic object graphs an Axon Framework 4 `XStreamSerializer` wrote.
+It stops there: XStream's object references (shared or cyclic identity) and its generic `class`-attribute type resolution have no Jackson equivalent to configure, so anything beyond the simplest graphs needs a deserializer hand-written per concrete type, and even that is not safe against silent data loss rather than a clear failure.
+The other direction fails outright:
+`XStreamSerializer` cannot read what `JacksonConverter` writes, regardless of configuration. `XStreamConverter` exists for exactly this gap.
+====
+
+Note that the `XStreamConverter` is deprecated from the moment it is introduced.
+It is **not** a general-purpose converter, and Axon Framework never registers it by default.
+Remove it from your configuration once the data it reads has been drained or rewritten in your application's regular converter format.
+
+Nothing stops users from configuring `XStreamConverter` as the general or event `Converter`, to read an event store an Axon Framework 4 node's `XStreamSerializer` wrote.
+Events are not like sagas, deadlines, or scheduled events, though:
+nothing drains them.
+An event store is replayed indefinitely, so events left in XStream format stay dependent on XStream.
+Hence, we strongly recommend you migrate XStream-serialized events to (for example) JSON.
+
+`XStreamConverter` allows `"org.axonframework.**"` on the `XStream` instance you give it, the same baseline `XStreamSerializer` added by default, so its own ported types (scope descriptors, metadata) resolve.
+XStream deserializes by instantiating arbitrary classes named in the XML it reads, which is unsafe against untrusted input unless the set of types it may instantiate is restricted; note that this baseline allows every class in every Axon Framework jar on the classpath, not only `axoniq-legacy`'s own ported types.
+Unlike `XStreamSerializer`'s `disableAxonTypeSecurity()`, `XStreamConverter` applies this baseline unconditionally: there is no opt-out, so even an otherwise fully locked-down `XStream` instance gets it widened.
+You remain responsible for allowing your own saga, deadline, and event payload classes, typically with `XStream#allowTypesByWildcard(String[])` or `XStream#allowTypes(Class[])`.
+
+Running on Java 9 or later with reflective access restricted to named modules, XStream may need `--add-opens` JVM arguments to reflect on types in `java.base` or other platform modules; see https://x-stream.github.io/faq.html#Compatibility_cannot_access_from_unnamed_module[XStream's FAQ].
+
+To use it, add the `axoniq-legacy` module and XStream to your dependencies:
+
+[source,xml]
+----
+<dependency>
+    <groupId>io.axoniq.framework</groupId>
+    <artifactId>axoniq-legacy</artifactId>
+</dependency>
+<dependency>
+    <groupId>com.thoughtworks.xstream</groupId>
+    <artifactId>xstream</artifactId>
+</dependency>
+----
+
+Then construct it with your own `XStream` instance and pass it to the `converter(...)` builder method of a legacy `SagaStore` or `DeadlineManager`, for example.
+For Axon Framework 4' and Spring Boot users, note that Axon's auto-configuration a pre-configured a `XStream` instance. This was done to be compatible with the pre-JDK17 usage of the `XStreamSerializer`. This automated instance does not exist in this legacy module, as it exposes classes too much to reflection. Hence, it is strongly recommended to declare the `XStream` object yourself *including* the allow-list for your own saga, deadline, and event payload classes.
+
+[source,java,role=pseudocode]
+----
+XStream xStream = new XStream();
+xStream.allowTypesByWildcard(new String[]{"com.example.myapp.**"});
+Converter xStreamConverter = new XStreamConverter(xStream);
+
+JpaSagaStore sagaStore = JpaSagaStore.builder()
+                                     .entityManagerProvider(entityManagerProvider)
+                                     .converter(xStreamConverter)
+                                     .build();
+----
+
+NOTE: A saga store matches the saga type column against the saga class name.
+If an Axon Framework 4 application mapped its saga classes to some other type name, an XStream alias being the usual way, rewrite that column to the class name before using it with a legacy saga store; see the `JpaSagaStore`/`JdbcSagaStore`/`MongoSagaStore` class Javadoc for details.
