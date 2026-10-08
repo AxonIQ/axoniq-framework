@@ -19,18 +19,26 @@
 
 package org.axonframework.deadline;
 
+import com.github.kagkarlsson.scheduler.Scheduler;
 import org.axonframework.common.configuration.AxonConfiguration;
+import org.axonframework.conversion.jackson.JacksonConverter;
+import org.axonframework.deadline.dbscheduler.DbSchedulerDeadlineManager;
 import org.axonframework.messaging.core.configuration.MessagingConfigurer;
+import org.axonframework.messaging.core.unitofwork.UnitOfWorkTestUtils;
+import org.hsqldb.jdbc.JDBCDataSource;
 import org.junit.jupiter.api.*;
 
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.axonframework.common.util.DbSchedulerTestUtil.getScheduler;
+import static org.axonframework.common.util.DbSchedulerTestUtil.reCreateTable;
 
 /**
- * Test class validating that the {@link DeadlineManagerLifecycleConfigurationEnhancer} shuts down the deadline managers
- * of a configuration with the application.
+ * Test class validating that the {@link DeadlineManagerLifecycleConfigurationEnhancer} starts and shuts down the
+ * deadline managers of a configuration with the application.
  *
  * @author Jakob Hatzl
  */
@@ -89,5 +97,68 @@ class DeadlineManagerLifecycleConfigurationEnhancerTest {
 
         // then
         assertThat(timeline).isEmpty();
+    }
+
+    @Nested
+    class DbScheduler {
+
+        private Scheduler scheduler;
+
+        @BeforeEach
+        void setUp() {
+            JDBCDataSource dataSource = new JDBCDataSource();
+            dataSource.setUrl("jdbc:hsqldb:mem:lifecycleEnhancerTest");
+            dataSource.setUser("sa");
+            reCreateTable(dataSource);
+            scheduler = getScheduler(dataSource, DbSchedulerDeadlineManager.binaryTask(() -> null));
+        }
+
+        @AfterEach
+        void tearDown() {
+            scheduler.stop();
+        }
+
+        @Test
+        void theSchedulerStartsWithTheApplication() {
+            // given
+            DbSchedulerDeadlineManager deadlineManager = builder().build();
+
+            // when
+            AxonConfiguration configuration = start(deadlineManager);
+
+            // then
+            assertThat(scheduler.getSchedulerState().isStarted()).isTrue();
+            configuration.shutdown();
+        }
+
+        @Test
+        void theSchedulerIsLeftToTheApplicationWithoutStartScheduler() {
+            // given
+            DbSchedulerDeadlineManager deadlineManager = builder().startScheduler(false)
+                                                                  .stopScheduler(false)
+                                                                  .build();
+
+            // when
+            AxonConfiguration configuration = start(deadlineManager);
+
+            // then
+            assertThat(scheduler.getSchedulerState().isStarted()).isFalse();
+            configuration.shutdown();
+        }
+
+        private DbSchedulerDeadlineManager.Builder builder() {
+            return DbSchedulerDeadlineManager.builder()
+                                             .scheduler(scheduler)
+                                             .scopeAwareProvider(scope -> Stream.empty())
+                                             .unitOfWorkFactory(UnitOfWorkTestUtils.SIMPLE_FACTORY)
+                                             .converter(new JacksonConverter());
+        }
+
+        private static AxonConfiguration start(DeadlineManager deadlineManager) {
+            return MessagingConfigurer.create()
+                                      .componentRegistry(cr -> cr.registerComponent(DeadlineManager.class,
+                                                                                    c -> deadlineManager))
+                                      .start();
+        }
     }
 }

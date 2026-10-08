@@ -72,10 +72,11 @@ import static org.slf4j.LoggerFactory.getLogger;
  * interceptors around its delivery to the {@link org.axonframework.messaging.ScopeAware} components of the
  * {@link ScopeAwareProvider}. A failing delivery fails the task, which db-scheduler then retries.
  * <p>
- * Call {@link #start()} once the application is ready to handle deadlines, unless the
- * {@link Builder#startScheduler(boolean) startScheduler} setting leaves starting the scheduler to the application. The
- * configuration calls {@link #shutdown()} when the application stops, which stops the scheduler unless the
- * {@link Builder#stopScheduler(boolean) stopScheduler} setting leaves that to the application.
+ * The configuration calls {@link #start()} when the application starts, which starts the scheduler unless the
+ * {@link Builder#startScheduler(boolean) startScheduler} setting leaves that to the application. It calls
+ * {@link #shutdown()} when the application stops, which stops the scheduler unless the
+ * {@link Builder#stopScheduler(boolean) stopScheduler} setting leaves that to the application. A manager that is not
+ * part of the configuration is started and shut down by the application.
  * <pre>{@code
  * DbSchedulerDeadlineManager deadlineManager =
  *         DbSchedulerDeadlineManager.builder()
