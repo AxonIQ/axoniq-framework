@@ -97,7 +97,7 @@ class QuartzDeadlineAf4CompatibilityTest {
         assertThat(result.payload()).isEqualTo(PAYLOAD);
         assertThat(result.metadata()).containsExactlyInAnyOrderEntriesOf(
                 Map.of("text", "value", "count", "3", "flag", "true", "id", METADATA_ID.toString(),
-                       "nested", "{\"key\":\"value\"}")
+                       "nested", flavor.nestedMetadataValue())
         );
         assertThat(resultScope).isEqualTo(scope.axonFramework5());
     }

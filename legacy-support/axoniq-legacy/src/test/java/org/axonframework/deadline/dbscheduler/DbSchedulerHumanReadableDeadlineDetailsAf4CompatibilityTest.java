@@ -96,7 +96,8 @@ class DbSchedulerHumanReadableDeadlineDetailsAf4CompatibilityTest {
         assertThat(result.getDeadlineName()).isEqualTo(DEADLINE_NAME);
         assertThat(resultMessage.payload()).isEqualTo(PAYLOAD);
         assertThat(resultMessage.metadata()).containsExactlyInAnyOrderEntriesOf(
-                Map.of("text", "value", "count", "3", "id", METADATA_ID.toString(), "nested", "{\"key\":\"value\"}")
+                Map.of("text", "value", "count", "3", "id", METADATA_ID.toString(),
+                       "nested", flavor.nestedMetadataValue())
         );
         assertThat(result.getDeserializedScopeDescriptor(converter)).isEqualTo(scope.axonFramework5());
     }

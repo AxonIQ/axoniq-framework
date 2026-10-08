@@ -438,6 +438,11 @@ public final class AxonFramework4 implements AutoCloseable {
             public Converter axonFramework5Converter() {
                 return new XStreamConverter(new XStream());
             }
+
+            @Override
+            public String nestedMetadataValue() {
+                return "{key=value}";
+            }
         };
 
         /**
@@ -454,6 +459,18 @@ public final class AxonFramework4 implements AutoCloseable {
          * @return the Axon Framework 5 converter
          */
         public abstract Converter axonFramework5Converter();
+
+        /**
+         * Returns the value Axon Framework 5 reads for the Axon Framework 4 metadata value {@code {"key": "value"}}, a
+         * nested map. The Jackson flavors read it as a map, which is rendered as JSON. The {@link XStreamConverter}
+         * turns every metadata value into its {@code String.valueOf} form, so the XStream flavor reads the map's
+         * {@code toString()}.
+         *
+         * @return the value Axon Framework 5 reads for the nested map
+         */
+        public String nestedMetadataValue() {
+            return "{\"key\":\"value\"}";
+        }
     }
 
     /**

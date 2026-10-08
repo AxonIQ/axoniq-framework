@@ -80,10 +80,11 @@ typing still writes `true`, since a `Boolean` carries no type information.
   - Writing: the managers already pass Axon Framework 5's `Metadata` to the converter, which writes it as Axon
     Framework 4's `<meta-data>`. Axon Framework 4's JobRunr and db-scheduler details assign the metadata they read to a
     `MetaData` field, so any other root element would fail on an Axon Framework 4 node.
-  - Reading: XStream restores each value as its class. The managers turn every value that is not a string, map or
-    list into `String.valueOf(value)` (ADR 005), so a `UUID` or an `Instant` arrives in its usual text form. An
-    application class arrives as its `toString()`, where the Jackson path renders it as JSON. Complex objects in
-    metadata are not expected.
+  - Reading: the `XStreamConverter` turns every metadata value into its `String.valueOf(value)` form, so a `UUID` or
+    an `Instant` arrives in its usual text form. A nested map or list, and an application class, arrive as their
+    `toString()`, such as `{key=value}`, where the Jackson path renders maps and lists as JSON (ADR 005). The
+    `XStreamConverter` serves Saga and deadline payloads, whose metadata holds plain values, so nested metadata is
+    not expected.
 - **Axon Framework 3.3 Quartz layout: not supported.** A Quartz job with the `serializedDeadlineMessage` key keeps
   failing with the `DeadlineException` of ADR 005. The converter has no alias for the whole message either.
 - **XStream aliases: no lookup of stored type names.** The application's `XStream` instance applies its aliases to the
@@ -121,7 +122,7 @@ on `QuartzDeadlineManager`'s `XStreamSerializer` default can now read the jobs t
     - jobs fire in both directions;
     - stored scopes match for cancelling;
     - covered cases: a Saga and an aggregate scope, metadata with a string, number, boolean, `UUID` and nested map
-      value, no payload, a nested payload class, a `String` and a `byte[]` payload.
+      value (arriving as its `toString()`), no payload, a nested payload class, a `String` and a `byte[]` payload.
   - **Sagas, per store** (JPA, JDBC, Mongo): Axon Framework 4 reads a saga that was updated or inserted through the
     `XStreamConverter`.
 - The compatibility tests run every case for Axon Framework 4's `JacksonSerializer`, its `Jackson3Serializer` with and

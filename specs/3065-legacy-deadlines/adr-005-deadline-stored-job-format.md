@@ -101,14 +101,19 @@ Option B.
   `MessageConverter`, and the event serializer to the `EventConverter`. Spring Boot JobRunr and db-scheduler
   applications therefore pass the `EventConverter`, since Axon Framework 4 auto-configured those managers with the event
   serializer.
-- **Metadata:** read untyped with the configured `Converter`, into a `Map<String, Object>`. That yields only strings,
-  numbers, booleans, maps and lists, whatever the storage format (JSON, XML or a binary Jackson format). Each value then
-  becomes a `String`:
+- **Metadata:** read untyped with the configured `Converter`, into a `Map<String, Object>`. With a Jackson-based
+  converter, that yields only strings, numbers, booleans, maps and lists, whether it stores JSON or a binary Jackson
+  format. Each value then becomes a `String`:
     - strings stay unchanged;
     - numbers and booleans become `String.valueOf(...)` (`"3"`, `"true"`);
     - maps and lists are rendered as JSON by a fixed, framework-internal JSON writer, not by the configured converter,
-      so the form is the same whatever the storage format, and a binary converter, which has no text form, is not
+      so the form is the same for every Jackson-based format, and a binary converter, which has no text form, is not
       needed.
+
+  The `XStreamConverter` (ADR 008) is the exception: it already turns every metadata value into its
+  `String.valueOf(...)` form, so a nested map stored with XStream arrives as its `toString()`, such as `{key=value}`,
+  not as JSON. That converter serves Saga and deadline payloads, whose metadata holds plain values; nested metadata is
+  not expected with it.
 
   Axon Framework 4 metadata could hold any object, and Axon Framework 4's `JacksonSerializer` read a nested value back
   as an untyped `LinkedHashMap` (checked against 4.13.2), so an Axon Framework 4 node fires such a deadline. Failing the
@@ -297,8 +302,9 @@ Option B.
 - XML read untyped loses some shape: it does not distinguish a one-element list from a single value, and attributes
   become fields. The rendered JSON can then differ in structure from the original. Out of the box this does not arise,
   since XStream-written jobs are not supported. An XStream-backed converter
-  ([#592](https://github.com/AxonIQ/axoniq-framework/issues/592)) does not read untyped: it restores each value as its
-  class (a `UUID`, an `Instant`, an application class), which the rules above do not cover. Axon Framework 4 also reads
+  ([#592](https://github.com/AxonIQ/axoniq-framework/issues/592)) does not read untyped: it turns each value into its
+  `String.valueOf(...)` form, so a `UUID` or an `Instant` arrives as its usual text, and a nested map as its
+  `toString()` rather than as JSON (see the Metadata decision above). Axon Framework 4 also reads
   stored metadata by XStream's root element, `<meta-data>`, which a plain map does not produce. How metadata is
   written for and read from such a converter is left to the decision on #595, and changes no stored format for
   Jackson-based converters.

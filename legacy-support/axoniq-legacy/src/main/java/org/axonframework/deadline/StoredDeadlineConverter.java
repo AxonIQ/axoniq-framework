@@ -68,7 +68,10 @@ import java.util.Optional;
  * Metadata is read untyped, into a {@code Map<String, Object>}, and each value is turned into a {@code String}: Axon
  * Framework 4 metadata could hold any value, while Axon Framework 5 metadata holds strings only. Strings stay as they
  * are, numbers and booleans become their {@link String#valueOf(Object) string value}, and maps and lists are rendered
- * as JSON by Jackson's streaming JSON writer, so the form does not depend on the converter's storage format.
+ * as JSON by Jackson's streaming JSON writer, the same for every converter that reads them as maps and lists. The
+ * {@link org.axonframework.conversion.xstream.XStreamConverter} already turns every metadata value into its string
+ * value, so a nested value stored with XStream arrives as its {@code toString()}. Nested metadata is not expected
+ * there, as that converter serves Saga and deadline payloads with plain metadata values.
  * <p>
  * This class is internal, as it only serves the deadline managers of this module, which share the stored layout.
  *
@@ -258,7 +261,9 @@ public final class StoredDeadlineConverter {
 
     /**
      * Converts the given stored metadata into {@link Metadata}. Each value becomes a {@code String}: strings stay as
-     * they are, numbers and booleans become their string value, and maps and lists are rendered as JSON.
+     * they are, numbers and booleans become their string value, and maps and lists are rendered as JSON. A nested
+     * value read through an {@link org.axonframework.conversion.xstream.XStreamConverter} arrives as its
+     * {@code toString()}, as that converter already turns every metadata value into a string.
      *
      * @param data the stored metadata, or {@code null} if none was stored
      * @return the converted metadata, empty if none was stored
