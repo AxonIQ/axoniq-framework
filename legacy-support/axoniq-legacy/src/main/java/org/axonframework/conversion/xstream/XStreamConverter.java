@@ -49,24 +49,27 @@ import java.util.UUID;
  * <p>
  * This {@code Converter} exists for exactly one purpose: giving an Axon Framework 5 application time to let deadlines
  * and events that an Axon Framework 4 node scheduled, and sagas it started, run their course, instead of forcing every
- * one of them to fire or complete before the switch to Axon Framework 5. Scheduled deadlines and events only need to be
- * read back in this format: once one fires, there is nothing left to write. A saga is different, since it keeps
- * handling events until it ends, so its state is both read and written back in XStream for as long as it stays active.
- * In practice that is Axon Framework 4 saga state (the legacy saga stores default to {@code XStreamSerializer} when
- * built without one), deadlines scheduled through a {@code DeadlineManager}, and events scheduled through an
+ * one of them to fire or complete before the switch to Axon Framework 5. During a rolling upgrade, an Axon Framework 4
+ * node may still pick up and fire a deadline or event an Axon Framework 5 node scheduled, so this {@code Converter}
+ * must write XStream XML an Axon Framework 4 node can read, not only read it. A saga is no different here, since it
+ * keeps handling events until it ends, so its state is both read and written back in XStream for as long as it stays
+ * active. In practice that is Axon Framework 4 saga state (the legacy saga stores default to {@code XStreamSerializer}
+ * when built without one), deadlines scheduled through a {@code DeadlineManager}, and events scheduled through an
  * {@code EventScheduler}.
  * <p>
- * Note this {@code Converter} implementation  is <b>not</b> meant to be used for anything new. It is never registered
- * by default, and it should be removed from an application's configuration as soon as all data it was reading has been
+ * Note this {@code Converter} implementation is <b>not</b> meant to be used for anything new. It is never registered by
+ * default, and it should be removed from an application's configuration as soon as all data it was reading has been
  * drained or rewritten in the application's regular {@link Converter} format.
  * <p>
  * Construction allows {@code "org.axonframework.**"} on the given {@link XStream} instance, the same baseline Axon
  * Framework 4's {@code XStreamSerializer} added by default. XStream deserializes by instantiating arbitrary classes
  * named in the XML it reads, which is unsafe against untrusted input unless the set of types it may instantiate is
- * restricted. This baseline allows every class in every Axon Framework jar on the classpath. Callers remain responsible
- * for allowing their <b>own</b> saga, deadline, and event payload classes themselves, typically with
- * {@link XStream#allowTypesByWildcard(String[])} or {@link XStream#allowTypes(Class[])}, before handing the
- * {@code XStream} instance to this constructor.
+ * restricted. This baseline allows every class in every Axon Framework jar on the classpath, unconditionally: unlike
+ * Axon Framework 4's {@code XStreamSerializer}, this constructor offers no {@code disableAxonTypeSecurity()}-style
+ * opt-out, so a caller handing in an otherwise fully locked-down {@code XStream} instance still gets this baseline
+ * widened. Callers remain responsible for allowing their <b>own</b> saga, deadline, and event payload classes
+ * themselves, typically with {@link XStream#allowTypesByWildcard(String[])} or {@link XStream#allowTypes(Class[])},
+ * before handing the {@code XStream} instance to this constructor.
  * <p>
  * This {@code Converter} only ever converts a single payload, metadata map, or scope descriptor at a time; it never
  * sees a whole message envelope. Construction aliases {@link Metadata} to the same {@code <meta-data>} element Axon
@@ -76,18 +79,22 @@ import java.util.UUID;
  * Framework 4 package and class name in this module, so no further aliasing is required for those to resolve against
  * Axon Framework 4-written XML.
  * <p>
- * A {@code byte[]}, {@link String}, or {@link InputStream} value is treated as already-serialized content on either
- * side of a conversion, unlike Axon Framework 4's {@code XStreamSerializer}, which always ran a payload through XStream
- * regardless of its Java type. Converting between two of these carrier types is therefore a plain content type
- * conversion around the XML, not a new XStream marshalling pass.
+ * Any source type the configured {@link ChainingContentTypeConverter} can convert directly to the target type -
+ * {@code byte[]}, {@link String}, and {@link InputStream} by default - is treated as already-serialized content and
+ * skips XStream entirely, unlike Axon Framework 4's {@code XStreamSerializer}, which always ran a payload through
+ * XStream regardless of its Java type. Converting between two such types is therefore a plain content type conversion
+ * around the XML, not a new XStream marshalling pass.
  * <p>
  * Running on Java 9 or later with reflective access restricted to named modules, XStream may need {@code --add-opens}
  * JVM arguments to reflect on types in {@code java.base} or other platform modules; see
  * <a href="https://x-stream.github.io/faq.html#Compatibility_cannot_access_from_unnamed_module">XStream's FAQ</a>.
  * <p>
- * Construct this {@code Converter} with a pre-configured {@link XStream} instance, for example the one an application
- * already uses with Axon Framework 4 (Spring Boot applications typically expose this as the {@code defaultAxonXStream}
- * bean), and pass it to the {@code converter(...)} builder method of a legacy saga store or deadline manager:
+ * Construct this {@code Converter} with a pre-configured {@link XStream} instance. Note that previous installments of
+ * Axon Framework used to expose one that automatically aligned with pre-JDK17 reflection support. Given the current JDK
+ * version for this project and the JDK's restrictive nature on reflection, this {@code XStream} instance is no longer
+ * provided out of the box. Hence, it is strongly recommended to declare the {@code XStream} instance yourself,
+ * including a full allow-list for your own application types. After that, this {@code Converter} can be passed to
+ * builder methods of a legacy {@code SagaStore} or {@code DeadlineManager}, for example:
  * <pre>{@code
  * XStream xStream = new XStream();
  * xStream.allowTypesByWildcard(new String[]{"com.example.myapp.**"});
