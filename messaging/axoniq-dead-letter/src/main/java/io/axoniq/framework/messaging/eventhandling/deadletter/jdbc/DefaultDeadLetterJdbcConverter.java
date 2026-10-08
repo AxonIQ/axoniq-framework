@@ -62,7 +62,8 @@ import static org.axonframework.common.BuilderUtils.assertNonNull;
 public class DefaultDeadLetterJdbcConverter<E extends EventMessage>
         implements DeadLetterJdbcConverter<E, JdbcDeadLetter<E>> {
 
-    // Uses concrete HashMap i.o. Map to ensure default-typing Converters can deal with these refs accordingly
+    // Concrete HashMap i.o. Map: with Jackson default typing, a non-concrete target type expects a type id,
+    // which writing a concrete Metadata never adds.
     private static final TypeReference<HashMap<String, String>> METADATA_MAP_TYPE_REF = new TypeReference<>() {
     };
     private static final TypeReference<HashMap<String, String>> DIAGNOSTICS_MAP_TYPE_REF = new TypeReference<>() {

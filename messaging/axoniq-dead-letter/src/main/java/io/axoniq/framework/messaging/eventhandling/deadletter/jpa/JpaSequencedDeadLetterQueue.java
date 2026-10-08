@@ -89,7 +89,8 @@ public class JpaSequencedDeadLetterQueue<M extends EventMessage> implements Sequ
 
     private static final String PROCESSING_GROUP_PARAM = "processingGroup";
     private static final String SEQUENCE_ID_PARAM = "sequenceIdentifier";
-    // Uses concrete HashMap i.o. Map to ensure default-typing Converters can deal with this ref accordingly
+    // Concrete HashMap i.o. Map: with Jackson default typing, a non-concrete target type expects a type id,
+    // which writing a concrete Metadata never adds.
     private static final TypeReference<HashMap<String, String>> DIAGNOSTICS_MAP_TYPE_REF = new TypeReference<>() {
     };
 

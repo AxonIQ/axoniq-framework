@@ -51,7 +51,8 @@ import java.util.Map;
  */
 public class EventMessageDeadLetterJpaConverter implements DeadLetterJpaConverter<EventMessage> {
 
-    // Uses concrete HashMap i.o. Map to ensure default-typing Converters can deal with this ref accordingly
+    // Concrete HashMap i.o. Map: with Jackson default typing, a non-concrete target type expects a type id,
+    // which writing a concrete Metadata never adds.
     private static final TypeReference<HashMap<String, String>> METADATA_MAP_TYPE_REF = new TypeReference<>() {
     };
 
