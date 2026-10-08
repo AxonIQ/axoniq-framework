@@ -35,6 +35,7 @@ import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -50,7 +51,9 @@ import java.util.Map;
  */
 public class EventMessageDeadLetterJpaConverter implements DeadLetterJpaConverter<EventMessage> {
 
-    private static final TypeReference<Map<String, String>> METADATA_MAP_TYPE_REF = new TypeReference<>() {
+    // Concrete HashMap i.o. Map: with Jackson default typing, a non-concrete target type expects a type id,
+    // which writing a concrete Metadata never adds.
+    private static final TypeReference<HashMap<String, String>> METADATA_MAP_TYPE_REF = new TypeReference<>() {
     };
 
     @Override
@@ -66,7 +69,7 @@ public class EventMessageDeadLetterJpaConverter implements DeadLetterJpaConverte
                 message.identifier(),
                 message.timestamp().toString(),
                 eventConverter.convert(message.payload(), byte[].class),
-                eventConverter.convert(message.metadata(), byte[].class),
+                eventConverter.convert(new HashMap<>(message.metadata()), byte[].class),
                 effectiveContext.getResource(LegacyResources.AGGREGATE_TYPE_KEY),
                 effectiveContext.getResource(LegacyResources.AGGREGATE_IDENTIFIER_KEY),
                 effectiveContext.getResource(LegacyResources.AGGREGATE_SEQUENCE_NUMBER_KEY),

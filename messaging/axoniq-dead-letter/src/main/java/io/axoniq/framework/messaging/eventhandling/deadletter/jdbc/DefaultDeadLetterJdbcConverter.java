@@ -39,6 +39,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.Map;
 
 import static org.axonframework.common.BuilderUtils.assertNonNull;
@@ -61,9 +62,11 @@ import static org.axonframework.common.BuilderUtils.assertNonNull;
 public class DefaultDeadLetterJdbcConverter<E extends EventMessage>
         implements DeadLetterJdbcConverter<E, JdbcDeadLetter<E>> {
 
-    private static final TypeReference<Map<String, String>> METADATA_MAP_TYPE_REF = new TypeReference<>() {
+    // Concrete HashMap i.o. Map: with Jackson default typing, a non-concrete target type expects a type id,
+    // which writing a concrete Metadata never adds.
+    private static final TypeReference<HashMap<String, String>> METADATA_MAP_TYPE_REF = new TypeReference<>() {
     };
-    private static final TypeReference<Map<String, String>> DIAGNOSTICS_MAP_TYPE_REF = new TypeReference<>() {
+    private static final TypeReference<HashMap<String, String>> DIAGNOSTICS_MAP_TYPE_REF = new TypeReference<>() {
     };
 
     private final DeadLetterSchema schema;
