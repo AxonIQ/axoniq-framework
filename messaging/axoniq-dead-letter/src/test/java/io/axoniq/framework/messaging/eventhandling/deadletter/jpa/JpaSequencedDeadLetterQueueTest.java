@@ -48,6 +48,8 @@ import org.axonframework.messaging.eventhandling.processing.streaming.token.Trac
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.*;
+import tools.jackson.databind.json.JsonMapper;
+import tools.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -337,5 +339,58 @@ class JpaSequencedDeadLetterQueueTest extends SequencedDeadLetterQueueTest<Event
     @Test
     void canNotSetNullConverter() {
         assertThatThrownBy(() -> JpaSequencedDeadLetterQueue.builder().converter(null)).isInstanceOf(AxonConfigurationException.class);
+    }
+
+    @Nested
+    class WithDefaultTypingConverter {
+
+        // Mirrors the setup needed to stay wire-compatible with an Axon Framework 4 event store written by
+        // JacksonSerializer/Jackson3Serializer with default typing.
+        private final JacksonConverter defaultTypingJacksonConverter = new JacksonConverter(
+                JsonMapper.builder()
+                          .polymorphicTypeValidator(BasicPolymorphicTypeValidator.builder()
+                                                                                 .allowIfSubType("java.util.")
+                                                                                 .allowIfSubType("org.axonframework.")
+                                                                                 .build())
+                          .activateDefaultTyping(BasicPolymorphicTypeValidator.builder()
+                                                                              .allowIfSubType("java.util.")
+                                                                              .allowIfSubType("org.axonframework.")
+                                                                              .build())
+                          .build()
+        );
+        private final DelegatingEventConverter defaultTypingEventConverter =
+                new DelegatingEventConverter(defaultTypingJacksonConverter);
+
+        @Test
+        void readsBackDiagnosticsThroughDeadLettersWhenConverterUsesDefaultTyping() {
+            // given
+            SequencedDeadLetterQueue<EventMessage> queue = JpaSequencedDeadLetterQueue
+                    .<EventMessage>builder()
+                    .transactionalExecutorProvider(testTransactionalExecutorProvider())
+                    .maxSequences(MAX_SEQUENCES_AND_SEQUENCE_SIZE)
+                    .maxSequenceSize(MAX_SEQUENCES_AND_SEQUENCE_SIZE)
+                    .processingGroup("default_typing_processing_group")
+                    .eventConverter(defaultTypingEventConverter)
+                    .genericConverter(defaultTypingJacksonConverter)
+                    .build();
+            Object sequenceId = generateId();
+            Metadata diagnostics = Metadata.with("retries", "3");
+            Context context = buildTestContext();
+            DeadLetter<EventMessage> letter = new GenericDeadLetter<>(
+                    "sequenceIdentifier", generateEvent(), generateThrowable(), context
+            ).withDiagnostics(diagnostics);
+
+            // when
+            queue.enqueue(sequenceId, letter, toProcessingContext(context)).join();
+            Iterator<Iterable<DeadLetter<? extends EventMessage>>> sequences =
+                    queue.deadLetters(null).join().iterator();
+
+            // then
+            assertThat(sequences.hasNext()).isTrue();
+            Iterator<DeadLetter<? extends EventMessage>> sequence = sequences.next().iterator();
+            assertThat(sequence.hasNext()).isTrue();
+            DeadLetter<? extends EventMessage> retrieved = sequence.next();
+            assertThat(retrieved.diagnostics()).isEqualTo(diagnostics);
+        }
     }
 }
