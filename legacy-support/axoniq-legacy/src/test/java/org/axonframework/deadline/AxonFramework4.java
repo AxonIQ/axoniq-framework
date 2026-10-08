@@ -20,6 +20,7 @@
 package org.axonframework.deadline;
 
 import com.thoughtworks.xstream.XStream;
+import org.axonframework.common.util.Af4ClassLoaderSupport;
 import org.axonframework.conversion.Converter;
 import org.axonframework.conversion.jackson.JacksonConverter;
 import org.axonframework.conversion.xstream.XStreamConverter;
@@ -41,9 +42,7 @@ import java.io.ObjectOutputStream;
 import java.io.ObjectStreamClass;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.net.URL;
 import java.net.URLClassLoader;
-import java.nio.file.Path;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.Map;
@@ -73,8 +72,6 @@ public final class AxonFramework4 implements AutoCloseable {
      */
     public static final byte[] BINARY_PAYLOAD = {(byte) 0xff, 0x00, 'a', (byte) 0xc3};
 
-    private static final Path AF4_JARS = Path.of("target", "af4-serializer");
-
     private final URLClassLoader classLoader;
 
     /**
@@ -83,13 +80,7 @@ public final class AxonFramework4 implements AutoCloseable {
      * @throws IOException if the jars cannot be found
      */
     public AxonFramework4() throws IOException {
-        Path messaging = AF4_JARS.resolve("axon-messaging-af4.jar");
-        Path modelling = AF4_JARS.resolve("axon-modelling-af4.jar");
-        assertThat(messaging).isRegularFile();
-        assertThat(modelling).isRegularFile();
-        this.classLoader = new ChildFirstClassLoader(
-                new URL[]{messaging.toUri().toURL(), modelling.toUri().toURL()}
-        );
+        this.classLoader = Af4ClassLoaderSupport.newAf4ClassLoader();
     }
 
     /**
@@ -666,34 +657,6 @@ public final class AxonFramework4 implements AutoCloseable {
         @Override
         protected Class<?> resolveClass(ObjectStreamClass description) throws IOException, ClassNotFoundException {
             return Class.forName(description.getName(), false, classLoader);
-        }
-    }
-
-    private static final class ChildFirstClassLoader extends URLClassLoader {
-
-        private ChildFirstClassLoader(URL[] jars) {
-            super(jars, AxonFramework4.class.getClassLoader());
-        }
-
-        @Override
-        protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
-            synchronized (getClassLoadingLock(name)) {
-                Class<?> loadedClass = findLoadedClass(name);
-                if (loadedClass == null && name.startsWith("org.axonframework.")) {
-                    try {
-                        loadedClass = findClass(name);
-                    } catch (ClassNotFoundException ignored) {
-                        // Test classes, such as payloads, are shared through the parent class loader.
-                    }
-                }
-                if (loadedClass == null) {
-                    loadedClass = super.loadClass(name, false);
-                }
-                if (resolve) {
-                    resolveClass(loadedClass);
-                }
-                return loadedClass;
-            }
         }
     }
 }

@@ -17,11 +17,12 @@
  *  https://www.axoniq.io/pricing
  */
 
-package org.axonframework.modelling.saga.repository;
+package org.axonframework.common.util;
 
 import com.thoughtworks.xstream.XStream;
 import org.assertj.core.api.Assertions;
 
+import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.file.Path;
@@ -30,7 +31,8 @@ import java.nio.file.Path;
  * Runs reflective actions through the child-first class loader that keeps the Axon Framework 4 jars' classes out of
  * the reactor's Axon Framework 5 classes, and builds a {@link XStream} instance configured exactly as Axon
  * Framework 4's {@code XStreamSerializer} would inside it. Shared by tests that compare Axon Framework 4-produced
- * serialized forms against their Axon Framework 5 {@code Converter} counterparts.
+ * serialized forms against their Axon Framework 5 {@code Converter} counterparts, such as the saga store and deadline
+ * manager compatibility tests.
  *
  * @author Steven van Beelen
  */
@@ -53,13 +55,23 @@ public final class Af4ClassLoaderSupport {
      * @throws Exception whatever reflective or I/O exception {@code action} throws
      */
     public static <T> T withAf4ClassLoader(Af4Action<T> action) throws Exception {
-        Assertions.assertThat(AF4_MESSAGING_JAR).isRegularFile();
-        Assertions.assertThat(AF4_MODELLING_JAR).isRegularFile();
-        URL messagingJar = AF4_MESSAGING_JAR.toUri().toURL();
-        URL modellingJar = AF4_MODELLING_JAR.toUri().toURL();
-        try (AxonFramework4ClassLoader classLoader = new AxonFramework4ClassLoader(messagingJar, modellingJar)) {
+        try (URLClassLoader classLoader = newAf4ClassLoader()) {
             return action.run(classLoader);
         }
+    }
+
+    /**
+     * Opens a class loader that resolves Axon Framework 4 classes from the jars copied by this module's
+     * {@code copy-af4-serializer} build step, for a test that keeps it open across several actions. The caller closes
+     * it.
+     *
+     * @return the Axon Framework 4 class loader
+     * @throws MalformedURLException if the jars' paths cannot be turned into URLs
+     */
+    public static URLClassLoader newAf4ClassLoader() throws MalformedURLException {
+        Assertions.assertThat(AF4_MESSAGING_JAR).isRegularFile();
+        Assertions.assertThat(AF4_MODELLING_JAR).isRegularFile();
+        return new AxonFramework4ClassLoader(AF4_MESSAGING_JAR.toUri().toURL(), AF4_MODELLING_JAR.toUri().toURL());
     }
 
     /**
