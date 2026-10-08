@@ -182,6 +182,24 @@ class XStreamConverterTest {
         }
 
         @Test
+        void metadataWithANonStringValueIsCoercedToStringRatherThanThrowing() {
+            // given XML the way an Axon Framework 4 XStreamSerializer writes a non-String metadata value
+            String xml = """
+                    <meta-data>
+                      <entry>
+                        <string>retries</string>
+                        <int>3</int>
+                      </entry>
+                    </meta-data>""";
+
+            // when
+            Metadata result = testSubject.convert(xml, Metadata.class);
+
+            // then
+            assertThat(result).containsEntry("retries", "3");
+        }
+
+        @Test
         void emptyMetadataRoundTrips() {
             // given
             Metadata metadata = Metadata.emptyInstance();

@@ -258,10 +258,15 @@ public class XStreamConverter implements Converter {
             if (!reader.hasMoreChildren()) {
                 return Metadata.emptyInstance();
             }
-            Map<String, String> contents = new HashMap<>();
+            Map<Object, Object> rawContents = new HashMap<>();
             //noinspection unchecked
-            populateMap(reader, context, contents);
-            return contents.isEmpty() ? Metadata.emptyInstance() : Metadata.from(contents);
+            populateMap(reader, context, rawContents);
+            if (rawContents.isEmpty()) {
+                return Metadata.emptyInstance();
+            }
+            Map<String, String> contents = new HashMap<>();
+            rawContents.forEach((key, value) -> contents.put(String.valueOf(key), String.valueOf(value)));
+            return Metadata.from(contents);
         }
     }
 }
