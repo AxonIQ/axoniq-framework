@@ -19,6 +19,8 @@
 
 package org.axonframework.deadline;
 
+import io.axoniq.framework.legacy.LegacySupportAxoniqAddon;
+import io.axoniq.license.entitlement.EntitlementManager;
 import org.axonframework.common.FutureUtils;
 import org.axonframework.common.ObjectUtils;
 import org.axonframework.common.Registration;
@@ -86,6 +88,14 @@ public abstract class AbstractDeadlineManager implements DeadlineManager {
             new CopyOnWriteArrayList<>();
     private final Context.ResourceKey<DeferredCalls> deferredCallsKey =
             Context.ResourceKey.withLabel("deferredDeadlineCalls");
+
+    /**
+     * Instantiate an {@link AbstractDeadlineManager}, registering the {@link LegacySupportAxoniqAddon} with the
+     * license entitlement system.
+     */
+    protected AbstractDeadlineManager() {
+        EntitlementManager.INSTANCE.registerAddon(LegacySupportAxoniqAddon.class);
+    }
 
     /**
      * Run a given {@code deadlineCall} immediately, or defer it to a phase of the {@link ProcessingContext} carried by

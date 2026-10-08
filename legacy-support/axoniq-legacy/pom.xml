@@ -44,6 +44,12 @@
     </properties>
 
     <dependencies>
+        <!-- Axoniq Entitlement -->
+        <dependency>
+            <groupId>io.axoniq.license</groupId>
+            <artifactId>entitlement-manager</artifactId>
+        </dependency>
+
         <dependency>
             <groupId>org.axonframework</groupId>
             <artifactId>axon-messaging</artifactId>
