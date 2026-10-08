@@ -134,7 +134,7 @@ An application that leaves both enabled distributes commands through Axon Server
 Command throughput is claimed against your Axoniq license.
 Without Axon Server there to supply it, the license comes from Axoniq Platform, or from a license file the application instances read themselves.
 Whether a throughput limit applies is a property of the license itself rather than of where it comes from, and not every license carries one.
-See xref:framework-comparison:index.adoc#enforcing_subscription[Feature entitlement and message throughput] for how a limit is enforced when a license carries one.
+See the xref:axoniq-platform-reference:ROOT:licensing/index.adoc[Axoniq Platform licensing reference] for how a limit is enforced when a license carries one.
 
 ==== Reaching the other members
 

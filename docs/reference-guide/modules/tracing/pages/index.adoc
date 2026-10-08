@@ -9,6 +9,8 @@ Tracing decorators wrap framework components by composition.
 `SpanFactory` is the public abstraction for span creation.
 Registering a `SpanFactory`, or the Micrometer `Tracer` and `Propagator` used to create one, enables the decorators discovered through `ConfigurationEnhancer` services.
 
+Note that the distributed tracing functionality is part of Axoniq Framework and requires a xref:axoniq-platform-reference:ROOT:licensing/index.adoc[license] for production use.
+
 A *trace* is a collection of related *spans*.
 Each span records one timed operation and its relationship to other operations.
 The following capture shows an HTTP request that dispatches a command through Axon Server and continues through command handling, event publication, event processing, a subscription-query update, and a follow-up command:

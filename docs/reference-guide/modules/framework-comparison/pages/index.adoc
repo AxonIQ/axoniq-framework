@@ -8,7 +8,7 @@ It provides the core messaging infrastructure (commands, events, and queries), m
 
 Axoniq Framework builds on top of Axon Framework and adds advanced modules.
 These modules cover scenarios that go beyond the open-source baseline, such as PostgreSQL-optimized event storage, distributed messaging, sequenced dead-letter queue support, data protection, and connectivity to Axon Server.
-Axoniq Framework modules are commercial offerings under the link:https://www.axoniq.io/legal/terms-of-service[Axoniq Terms of Service], and require an active xref:how-to-use[subscription] for production use.
+Axoniq Framework modules are commercial offerings under the link:https://www.axoniq.io/legal/terms-of-service[Axoniq Terms of Service], and require an active xref:how-to-use[license] for production use.
 
 For an overview of the features in Axon Framework and Axoniq Framework, be sure to check the xref:feature_comparison[Feature comparison] table.
 However, you do not have to jump to this table to understand what is in Axon or in Axoniq Framework.
@@ -26,108 +26,10 @@ So, in short:
 Just as any library or framework, to use Axon and Axoniq Framework, you can simply depend on either.
 Axon Framework modules are marked with `org.axonframework`, whereas Axoniq Framework modules are marked with `io.axoniq.framework`. For a full list of all the modules, be sure to check out xref:ROOT:modules.adoc[this page].
 
-However, there's a licensing difference between both.
 Axon Framework being Apache 2.0 means you can use it whenever, wherever.
-However, Axoniq Framework falls under the link:https://www.axoniq.io/legal/terms-of-service[Axoniq Terms of Service].
-To that end, access to Axoniq Framework features is governed through a subscription.
-On start-up of an application using Axoniq Framework features, these features will validate if the application is entitled to use them.
+Axoniq Framework modules, however, validate a license at startup and fall under the link:https://www.axoniq.io/legal/terms-of-service[Axoniq Terms of Service].
 
-You can retrieve a subscription through link:https://platform.axoniq.io[Axoniq Platform] as a self-service means.
-A self-service subscription is associated with an environment and grants credentials (an environment identifier and an access token) that the application presents at runtime.
-As such, this flow will expect an active connection with Axoniq Platform to ensure the subscription entitles your application to the features you're using.
-
-If you are unable to form an active connection with Axoniq Platform or otherwise require a different feature set, be sure to check out our link:https://www.axoniq.io/pricing[pricing page].
-Be sure to link:https://www.axoniq.io/contact[contact us] when more information or help is required.
-
-When no active subscription is found, we assume you are xref:evaluating[evaluating] Axoniq Framework.
-Evaluating Axoniq Framework in a live system is allowed for a limited period of time.
-Do note that anybody can use the xref:individual_plan[individual plan] free of charge.
-This will entitle your application to run past the evaluation time window for non-production use.
-
-For details on xref:configuring_credentials[configuring], how we xref:enforcing_subscription[enforce a subscription], and xref:runtime_subscription_changes[runtime subscription changes], be sure to check out their respective sections.
-
-[#evaluating]
-=== Evaluating Axoniq Framework
-
-During evaluation, Axoniq Framework modules start without credentials, logging a warning as a result.
-This evaluation mode is intended for development, prototyping, testing, and proof-of-concept work.
-Continued use for development, testing, or production without a valid subscription is not permitted under the link:https://www.axoniq.io/legal/terms-of-service[Axoniq Terms of Service].
-As such, once the evaluation period ends, your application will be forcefully shutdown as a result.
-
-Note that smaller organizations may qualify for complimentary access to Axoniq Framework modules.
-Contact a link:https://www.axoniq.io/contact[Axoniq representative] to discuss your eligibility.
-
-[#individual_plan]
-=== Testing Axoniq Framework - individual plan
-
-Every Axoniq Platform account includes our free **Individual** plan.
-The Individual plan is intended for learning, prototyping, and local development, and provides credentials that unlock the full set of Axoniq Framework modules at reduced throughput.
-
-The Individual plan is free of charge and does not expire.
-It allows you to try out Axoniq Framework end-to-end, including modules that are otherwise blocked without credentials, before committing to a paid subscription.
-When going to production, the Workspace can be upgraded to a paid plan.
-
-[#configuring_credentials]
-=== Configuring credentials
-
-Credentials are provided to the application through the standard Axoniq Platform configuration.
-For Spring Boot applications, this is typically a single property:
-
-[source,properties]
-----
-axoniq.platform.credentials=<environment-id>:<access-token>
-----
-
-For plain Java applications, credentials are registered through an `AxoniqPlatformConfiguration` component.
-The same credentials are used by every Axoniq Framework module the application depends on.
-
-For a thorough explanation on how to set this up, we refer to the Axoniq Platform link:https://docs.axoniq.io/axoniq-platform-reference/connectors/axon-framework/#installation[installation page].
-
-[#enforcing_subscription]
-=== Feature entitlement and message throughput
-
-Axoniq Framework features validate their entitlement at runtime based on the configured credentials.
-Most subscription link:https://www.axoniq.io/pricing[tiers] require a connection to Axoniq Platform to validate the credentials.
-If you are not able to have an active connection to Axoniq Platform, you will need a "license" file in your environment to be entitled.
-Be sure to link:https://www.axoniq.io/contact[contact us] if this is a requirement for you.
-
-Assuming you are able to connect to Axoniq Platform, the runtime behavior for feature entitlement differs depending on the scenario you're in:
-
-*No credentials configured*::
-The application is treated as xref:evaluating[evaluating] Axoniq Framework.
-All Axoniq Framework features operate for a 15-minute evaluation window, regardless of which features are in use.
-This includes features such as Data Protection.
-Once the evaluation window closes, the application is forcefully shut down.
-
-*Credentials configured, without an active connection to Axoniq Platform*::
-The application continues to operate for 24-hour grace period without an active connection.
-This window allows transient connectivity issues to be resolved without an immediate outage.
-If the connection is not restored within the window, the application is forcefully shut down.
-
-*Credentials configured, with an active connection to Axoniq Platform*::
-The Axoniq Framework modules included in the subscription operate normally.
-This is where so-called "feature entitlement" kicks in: if the application depends on an Axoniq Framework feature that is not part of the subscription, the application is shut down immediately.
-The Data Protection feature is an example: if it is used by the application but not covered by the subscription, the application will not continue to run.
-
-Beyond entitlement, Axoniq Framework features apply message throughput control to their operations based on the link:https://www.axoniq.io/pricing[tier] of the subscription.
-When a throughput limit is reached, the module logs a warning and throttles further operations until the rate window resets or higher-tier credentials are provided.
-
-[#runtime_subscription_changes]
-=== Runtime subscription changes
-
-Once an application has validated its entitlement, two scenarios can change that entitlement while the application is running.
-The application will respond differently to each.
-
-*Connection to Axoniq Platform is lost*::
-When the application can no longer reach Axoniq Platform, it enters a 24-hour grace period and continues to operate as if the connection were still established.
-This gives operators time to resolve transient connectivity issues without an immediate outage.
-During the grace period the modules log warnings to make the situation visible.
-Once the grace period ends, the application is forcefully shut down.
-
-*Subscription is cancelled or payment lapses*::
-The license is updated immediately to a non-Production license, and the application falls out of compliance for production use.
-If the application depends on an Axoniq Framework feature that requires a subscription regardless of whether it is development or production use (like the Data Protection feature), the application is shut down immediately.
-Other features continue to operate under the non-Production license, with warnings logged to indicate the changed situation, until new credentials are provided or the application is stopped.
+For everything on obtaining a license, configuring credentials, evaluating for free, feature entitlement, message throughput limits, and what happens when a subscription changes or lapses, see the xref:axoniq-platform-reference:ROOT:licensing/index.adoc[Axoniq Platform licensing reference].
 
 [#feature_comparison]
 == Feature comparison
@@ -576,8 +478,8 @@ If you depended strongly on any of the removed features, be sure to reach out.
 | **X**
 | —
 | **✓**
-| TBD
-| Aim for 5.4.0 of Axoniq Framework, potential overflow to 5.5.0
+| 5.5.0
+|
 
 | Persistent Stream integration
 | **X**
@@ -618,10 +520,17 @@ If you depended strongly on any of the removed features, be sure to reach out.
 | **X**
 | —
 | **✓**
-| TBD
+| 5.5.0
 |
 
 6+h| Process Management
+
+| Workflows
+| **X**
+| —
+| **✓**
+| 5.1.0
+| Follows the "Durable Execution" paradigm, fully replacing Saga support from previous versions, as well as supporting many other process management styles
 
 | Saga pattern integration
 | **X**
@@ -630,12 +539,12 @@ If you depended strongly on any of the removed features, be sure to reach out.
 | —
 | Replaced fully with the Workflow integration
 
-| Workflows
+| Saga - Legacy support
 | **X**
 | —
 | **✓**
-| 5.1.0
-| Follows the "Durable Execution" paradigm, fully replacing Saga support from previous versions, as well as supporting many other process management styles
+| **5.4.0**
+| Part of `axoniq-legacy`, used to drain Saga instances that started in Axon Framework 4 to allow an easy upgrade to Axon Framework 5. Supports all previous `SagaStore` implementations.
 
 6+h| Message Interceptors
 
@@ -779,67 +688,32 @@ If you depended strongly on any of the removed features, be sure to reach out.
 6+h| Event Scheduling and Deadline Management
 
 | Event Scheduling API
-| **TBD**
+| **X**
 | —
-| **TBD**
+| **X**
 | —
-| To-be-decided given the ease to have a custom integration
+| Deprecated and removed as of Axon Framework 5 due to ease for custom implementation. In short, select a scheduling tool and use the `EventGateway`, and you're done.
 
-| Event Scheduling - Axon Server integration
-| **TBD**
+| Event Scheduling - Legacy support
+| **X**
 | —
-| **TBD**
-| —
-|
-
-| Event Scheduling - Quartz integration
-| **TBD**
-| —
-| **TBD**
-| —
-|
-
-| Event Scheduling - JobRunr integration
-| **TBD**
-| —
-| **TBD**
-| —
-|
-
-| Event Scheduling - db-scheduler integration
-| **TBD**
-| —
-| **TBD**
-| —
-|
+| **✓**
+| **5.5.0**
+| Part of `axoniq-legacy`, used to drain already scheduled events in Axon Framework 4 to allow an easy upgrade to Axon Framework 5. Supports all previous `EventScheduler` implementations.
 
 | Deadline Manager API
-| **TBD**
+| **X**
 | —
-| **TBD**
+| **X**
 | —
-| To-be-decided given the **relative** ease to have a custom integration
+| Deprecated and removed as of Axon Framework 5 due to ease for custom implementation. In short, select a scheduling tool and use the `CommandGateway`, and you're done.
 
-| Deadline Manager - Quartz integration
-| **TBD**
+| Deadline Manager - Legacy support
+| **X**
 | —
-| **TBD**
-| —
-|
-
-| Deadline Manager - JobRunr integration
-| **TBD**
-| —
-| **TBD**
-| —
-|
-
-| Deadline Manager - db-scheduler integration
-| **TBD**
-| —
-| **TBD**
-| —
-|
+| **✓**
+| **5.4.0**
+| Part of `axoniq-legacy`, used to drain already scheduled deadlines in Axon Framework 4 to allow an easy upgrade to Axon Framework 5. Supports all previous `DeadlineManager` implementations.
 
 6+h| Test fixtures
 
