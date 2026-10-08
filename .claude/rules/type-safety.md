@@ -8,11 +8,16 @@ When using any API that accepts `Type`, **always use `TypeReference`** instead o
 
 ```java
 // CORRECT - preserves Map<String, String> generic info, no unchecked warning
-private static final TypeReference<Map<String, String>> METADATA_MAP_TYPE_REF = new TypeReference<>() {
+private static final TypeReference<HashMap<String, String>> METADATA_MAP_TYPE_REF = new TypeReference<>() {
 };
 
 Map<String, String> result = converter.convert(data, METADATA_MAP_TYPE_REF.getType());
 ```
+
+When a Jackson `Converter` reads the result back with default typing enabled, use a **concrete** type like
+`HashMap` for the `TypeReference`'s type argument instead of the `Map` interface: with default typing, a
+non-concrete target type expects a type id in the payload, and writing a concretely-typed source object (e.g.
+`Metadata`) never adds one.
 
 ```java
 // WRONG - loses generic info, produces unchecked cast warning
@@ -30,4 +35,4 @@ Map<String, String> result = converter.convert(data, Map.class);
 ### Existing Examples in Codebase
 
 - `AggregateBasedJpaEventStorageEngine`: `METADATA_MAP_TYPE_REF` for `Map<String, String>`
-- `JpaSequencedDeadLetterQueue`: `DIAGNOSTICS_MAP_TYPE_REF` for `Map<String, String>`
+- `JpaSequencedDeadLetterQueue`: `DIAGNOSTICS_MAP_TYPE_REF` for `HashMap<String, String>`
