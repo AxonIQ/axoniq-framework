@@ -19,6 +19,8 @@
 
 package org.axonframework.modelling.saga;
 
+import io.axoniq.framework.legacy.LegacySupportAxoniqAddon;
+import io.axoniq.license.entitlement.EntitlementManager;
 import org.axonframework.common.AxonConfigurationException;
 import org.axonframework.common.FutureUtils;
 import org.axonframework.common.IdentifierFactory;
@@ -75,6 +77,7 @@ public abstract class AbstractSagaManager<T> implements EventHandlingComponent, 
         this.sagaRepository = builder.sagaRepository;
         this.sagaType = builder.sagaType;
         this.sagaFactory = builder.sagaFactory;
+        EntitlementManager.INSTANCE.registerAddon(LegacySupportAxoniqAddon.class);
     }
 
     /**
