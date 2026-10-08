@@ -339,6 +339,25 @@ public abstract class Af4CompatibilityTestSuite {
             );
             assertThat(fromAf4.getHandledEvents()).containsExactly("OrderShipped");
         }
+
+        @Test
+        void aSagaInsertedThroughXStreamConverterIsReadableByAxonFramework4XStreamSerializer() throws Exception {
+            // given
+            StubSaga saga = new StubSaga();
+            saga.handled("OrderPlaced");
+
+            // when
+            inTransaction(() -> xStreamStore.insertSaga(StubSaga.class, "saga-new", saga, singleton(ORDER_1)));
+
+            // then
+            byte[] serializedSaga = serializedSagaOf("saga-new");
+            StubSaga fromAf4 = Af4ClassLoaderSupport.withAf4ClassLoader(
+                    classLoader -> (StubSaga) Af4ClassLoaderSupport.af4XStream(classLoader)
+                                                                    .fromXML(new String(serializedSaga,
+                                                                                         StandardCharsets.UTF_8))
+            );
+            assertThat(fromAf4.getHandledEvents()).containsExactly("OrderPlaced");
+        }
     }
 
     @Namespace("orders")

@@ -48,6 +48,13 @@ import static org.axonframework.common.BuilderUtils.assertNonNull;
  * its saga classes to some other type name, an XStream alias being the usual way, has documents this store cannot route
  * to and must rewrite that field to the class name first.
  * <p>
+ * The saga state itself is converted with the configured {@link Converter}. Axon Framework 4 defaulted to the
+ * {@code XStreamSerializer} unless the application configured another serializer, so the stored state of such an
+ * application is XStream XML, which a JSON-based converter cannot read: loading such a saga fails. Give this store an
+ * {@link org.axonframework.conversion.xstream.XStreamConverter} if you are migrating such a scenario to read that state
+ * and to write it back in the same form, which also lets Axon Framework 4 nodes keep handling the same sagas during a
+ * rolling upgrade.
+ * <p>
  * Note that {@code sagaType} records the class of the saga instance handed to
  * {@link #insertSaga(Class, String, Object, Set)}, which is not necessarily the {@code sagaType} argument. Loading, on
  * the other hand, matches on the identifier alone and ignores the type entirely.
