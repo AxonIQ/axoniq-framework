@@ -34,6 +34,7 @@ import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
 import org.axonframework.eventsourcing.eventstore.SourcingCondition;
 import org.axonframework.eventsourcing.eventstore.TaggedEventMessage;
 import org.axonframework.eventsourcing.eventstore.inmemory.InMemoryEventStorageEngine;
+import org.axonframework.messaging.core.Context;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.VersionedType;
@@ -68,6 +69,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class ClaimRestoreSelfFenceTest extends AbstractEventSourcedEntityRepositoryTestBase {
 
     private static final String MODULE = "claim-restore-self-fence";
+    private static final Context.ResourceKey<Boolean> RESTORE_CLAIM = Context.ResourceKey.withLabel("restore-claim");
     private static final VersionedType DEFINITION_ID =
             VersionedType.of(new QualifiedName(MODULE), Version.DEFAULT_VERSION);
 
@@ -152,9 +154,12 @@ class ClaimRestoreSelfFenceTest extends AbstractEventSourcedEntityRepositoryTest
     private void restoreSegment() {
         configuration.getComponent(UnitOfWorkFactory.class)
                      .create("segment-claim")
-                     .executeWithResult(claim -> getWorkflowEngine(MODULE)
-                             .restoreWorkflowsFor(Segment.ROOT_SEGMENT, null, claim, claim)
-                             .thenApply(ignored -> null))
+                     .executeWithResult(claim -> {
+                         var restoreClaim = claim.withResource(RESTORE_CLAIM, true);
+                         return getWorkflowEngine(MODULE)
+                             .restoreWorkflowsFor(Segment.ROOT_SEGMENT, null, restoreClaim, restoreClaim)
+                             .thenApply(ignored -> null);
+                     })
                      .join();
     }
 
@@ -228,7 +233,10 @@ class ClaimRestoreSelfFenceTest extends AbstractEventSourcedEntityRepositoryTest
         public MessageStream<EventMessage> source(SourcingCondition condition,
                                                   ProcessingContext processingContext) {
             var pending = write;
-            if (pending != null && sourcesArmedInstance(condition) && wrote.compareAndSet(false, true)) {
+            if (pending != null
+                    && processingContext.containsResource(RESTORE_CLAIM)
+                    && sourcesArmedInstance(condition)
+                    && wrote.compareAndSet(false, true)) {
                 pending.run();
             }
             return delegate.source(condition, processingContext);

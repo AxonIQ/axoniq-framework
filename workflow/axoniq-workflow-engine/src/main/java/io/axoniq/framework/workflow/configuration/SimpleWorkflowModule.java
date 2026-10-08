@@ -27,6 +27,7 @@ import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowConfig
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContextFactory;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowDefinition;
 import io.axoniq.framework.workflow.runtime.api.manager.WorkflowManager;
+import io.axoniq.framework.workflow.runtime.execution.CheckpointingEventHandlingComponentHandlingAny;
 import io.axoniq.framework.workflow.runtime.execution.EventHandlingComponentHandlingAny;
 import io.axoniq.framework.workflow.runtime.execution.InMemoryWorkflowExecutionRepository;
 import io.axoniq.framework.workflow.runtime.execution.SimpleWorkflowConfigurationRegistry;
@@ -378,7 +379,7 @@ class SimpleWorkflowModule<C extends WorkflowContext>
         WorkflowEngine workflowEngine = config.getComponent(WorkflowEngine.class, engineName());
         return new SequenceOverridingEventHandlingComponent(
                 workflowEngine.segmentedRouting(),
-                new EventHandlingComponentHandlingAny(
+                new CheckpointingEventHandlingComponentHandlingAny(
                         workflowEngine,
                         config.getComponent(WorkflowEngineCheckpointingSupport.class)
                 )
