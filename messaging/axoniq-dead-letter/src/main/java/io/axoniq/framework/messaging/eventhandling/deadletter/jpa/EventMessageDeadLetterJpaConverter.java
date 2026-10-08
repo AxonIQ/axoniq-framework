@@ -68,7 +68,7 @@ public class EventMessageDeadLetterJpaConverter implements DeadLetterJpaConverte
                 message.identifier(),
                 message.timestamp().toString(),
                 eventConverter.convert(message.payload(), byte[].class),
-                eventConverter.convert(message.metadata(), byte[].class),
+                eventConverter.convert(new HashMap<>(message.metadata()), byte[].class),
                 effectiveContext.getResource(LegacyResources.AGGREGATE_TYPE_KEY),
                 effectiveContext.getResource(LegacyResources.AGGREGATE_IDENTIFIER_KEY),
                 effectiveContext.getResource(LegacyResources.AGGREGATE_SEQUENCE_NUMBER_KEY),
