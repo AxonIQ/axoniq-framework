@@ -98,7 +98,7 @@ class AggregateDeadlineEntityIdResolverDefinitionTest {
         // given
         String customKey = "custom-entity-id";
         AggregateDeadlineEntityIdResolverDefinition testSubject = new AggregateDeadlineEntityIdResolverDefinition(
-                new MetadataEntityIdResolver<>(customKey, String.class, PassThroughConverter.INSTANCE)
+                MetadataEntityIdResolver.forKey(customKey, String.class, PassThroughConverter.INSTANCE)
         );
         record Payload(String effect) {
 
@@ -120,7 +120,7 @@ class AggregateDeadlineEntityIdResolverDefinitionTest {
     void doesNotFallBackToTheDefaultAggregateIdentifierMetadataKey() {
         // given
         AggregateDeadlineEntityIdResolverDefinition testSubject = new AggregateDeadlineEntityIdResolverDefinition(
-                new MetadataEntityIdResolver<>("custom-entity-id")
+                MetadataEntityIdResolver.forKey("custom-entity-id")
         );
         record Payload(String effect) {
 

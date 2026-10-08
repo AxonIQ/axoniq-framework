@@ -43,9 +43,10 @@ import java.util.Objects;
  * default. This ensures {@link String}-based aggregate identifiers are resolved out of the box.
  * <p>
  * An application whose entity identifier is a different type supplies its own {@link MetadataEntityIdResolver} through
- * {@link #AggregateDeadlineEntityIdResolverDefinition(MetadataEntityIdResolver)} instead. The constructor of the
- * {@code MetadataEntityIdResolver} allows to set the required identifier type and a
- * {@link org.axonframework.conversion.Converter} to correctly convert the metadata value to an entity identifier.
+ * {@link #AggregateDeadlineEntityIdResolverDefinition(MetadataEntityIdResolver)} instead. The
+ * {@link MetadataEntityIdResolver#forKey(String, Class, org.axonframework.conversion.Converter)} factory method
+ * allows to set the required identifier type and a {@link org.axonframework.conversion.Converter} to correctly
+ * convert the metadata value to an entity identifier.
  *
  * @author Steven van Beelen
  * @see AggregateDeadlineCommandTranslator
@@ -67,7 +68,7 @@ public class AggregateDeadlineEntityIdResolverDefinition implements EntityIdReso
      * identifier is not a {@link String}, or when the aggregate identifier is written under a different metadata key.
      */
     public AggregateDeadlineEntityIdResolverDefinition() {
-        this(new MetadataEntityIdResolver<>(AggregateDeadlineCommandTranslator.DESCRIPTOR_BASED_ID));
+        this(MetadataEntityIdResolver.forKey(AggregateDeadlineCommandTranslator.DESCRIPTOR_BASED_ID));
     }
 
     /**
