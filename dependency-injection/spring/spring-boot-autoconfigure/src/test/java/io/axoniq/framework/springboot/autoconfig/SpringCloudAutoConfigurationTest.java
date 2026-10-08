@@ -37,7 +37,7 @@ import io.axoniq.framework.springcloud.query.RemoteQueryDispatcher;
 import io.axoniq.framework.springcloud.query.RemoteQueryDispatcher.SubscriptionListener;
 import io.axoniq.framework.springcloud.query.SpringCloudQueryController;
 import io.axoniq.framework.springcloud.routing.Member;
-import io.axoniq.framework.springcloud.shared.SpringCloudMemberRegistry;
+import io.axoniq.framework.springcloud.shared.SpringCloudMemberDiscovery;
 import org.axonframework.conversion.jackson.JacksonConverter;
 import org.axonframework.messaging.core.GenericMessage;
 import org.axonframework.messaging.core.MessageStream;
@@ -185,7 +185,7 @@ class SpringCloudAutoConfigurationTest {
         void contributesTheConnectorsCollaborators() {
             contextRunner.run(context -> assertThat(context)
                     .hasSingleBean(CapabilityDiscoveryMode.class)
-                    .hasSingleBean(SpringCloudMemberRegistry.class)
+                    .hasSingleBean(SpringCloudMemberDiscovery.class)
                     .hasSingleBean(RemoteCommandDispatcher.class)
                     .hasSingleBean(IncomingCommandInvoker.class));
         }
@@ -249,7 +249,7 @@ class SpringCloudAutoConfigurationTest {
                     .run(context -> assertThat(context)
                             .hasNotFailed()
                             .doesNotHaveBean(Registration.class)
-                            .hasSingleBean(SpringCloudMemberRegistry.class));
+                            .hasSingleBean(SpringCloudMemberDiscovery.class));
         }
     }
 
@@ -260,7 +260,7 @@ class SpringCloudAutoConfigurationTest {
         void contributesNoneOfTheConnectorsBeans() {
             contextRunner.withPropertyValues("axon.springcloud.enabled=false")
                          .run(context -> assertThat(context)
-                                 .doesNotHaveBean(SpringCloudMemberRegistry.class)
+                                 .doesNotHaveBean(SpringCloudMemberDiscovery.class)
                                  .doesNotHaveBean(SpringCloudCommandController.class)
                                  .doesNotHaveBean(MemberCapabilitiesController.class));
         }
@@ -560,7 +560,7 @@ class SpringCloudAutoConfigurationTest {
                     .withPropertyValues("axon.springcloud.enabled=false")
                     .run(context -> assertThat(context)
                             .hasNotFailed()
-                            .doesNotHaveBean(SpringCloudMemberRegistry.class));
+                            .doesNotHaveBean(SpringCloudMemberDiscovery.class));
         }
     }
 

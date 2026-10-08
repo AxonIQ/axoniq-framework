@@ -29,7 +29,7 @@ import io.axoniq.framework.springcloud.command.SpringCloudCommandBusConnector;
 import io.axoniq.framework.springcloud.query.IncomingQueryInvoker;
 import io.axoniq.framework.springcloud.query.RemoteQueryDispatcher;
 import io.axoniq.framework.springcloud.query.SpringCloudQueryBusConnector;
-import io.axoniq.framework.springcloud.shared.SpringCloudMemberRegistry;
+import io.axoniq.framework.springcloud.shared.SpringCloudMemberDiscovery;
 import org.axonframework.common.configuration.ApplicationConfigurer;
 import org.axonframework.common.configuration.ComponentDecorator;
 import org.axonframework.common.configuration.ComponentDefinition;
@@ -52,7 +52,7 @@ import org.slf4j.LoggerFactory;
  * whatever {@code CommandBus} and {@code QueryBus} are configured into their distributed counterparts as soon as a
  * connector is present. No bus needs to be constructed here.
  * <p>
- * This enhancer does nothing unless a {@link SpringCloudMemberRegistry} is present, which the Spring Boot
+ * This enhancer does nothing unless a {@link SpringCloudMemberDiscovery} is present, which the Spring Boot
  * autoconfiguration provides once a Spring Cloud {@code DiscoveryClient} is on hand. The two connectors are registered
  * independently, so a configuration already carrying one of them still gains the other.
  * <p>
@@ -81,7 +81,7 @@ public class SpringCloudConfigurationEnhancer implements ConfigurationEnhancer {
 
     @Override
     public void enhance(ComponentRegistry registry) {
-        if (!registry.hasComponent(SpringCloudMemberRegistry.class, SearchScope.ALL)) {
+        if (!registry.hasComponent(SpringCloudMemberDiscovery.class, SearchScope.ALL)) {
             return;
         }
         // Commands and queries are registered independently: a configuration may already carry a connector for one
@@ -119,7 +119,7 @@ public class SpringCloudConfigurationEnhancer implements ConfigurationEnhancer {
     private static ComponentDefinition<QueryBusConnector> queryBusConnectorDefinition() {
         return ComponentDefinition.ofType(QueryBusConnector.class)
                                   .withBuilder(config -> new SpringCloudQueryBusConnector(
-                                          config.getComponent(SpringCloudMemberRegistry.class),
+                                          config.getComponent(SpringCloudMemberDiscovery.class),
                                           config.getComponent(IncomingQueryInvoker.class),
                                           config.getComponent(RemoteQueryDispatcher.class),
                                           config.getComponent(MessageConverter.class)
@@ -149,7 +149,7 @@ public class SpringCloudConfigurationEnhancer implements ConfigurationEnhancer {
     private static ComponentDefinition<CommandBusConnector> commandBusConnectorDefinition() {
         return ComponentDefinition.ofType(CommandBusConnector.class)
                                   .withBuilder(config -> new SpringCloudCommandBusConnector(
-                                          config.getComponent(SpringCloudMemberRegistry.class),
+                                          config.getComponent(SpringCloudMemberDiscovery.class),
                                           config.getComponent(IncomingCommandInvoker.class),
                                           config.getComponent(RemoteCommandDispatcher.class),
                                           config.getComponent(MessageConverter.class)
