@@ -27,7 +27,8 @@ import io.axoniq.license.entitlement.AxoniqAddon;
  * <p>
  * A single addon covers the entire module, which ports Axon Framework 4 solutions such as sagas and deadlines. It is
  * registered with the {@link io.axoniq.license.entitlement.EntitlementManager} whenever an
- * {@link org.axonframework.modelling.saga.AbstractSagaManager} is constructed.
+ * {@link org.axonframework.modelling.saga.AbstractSagaManager} or an
+ * {@link org.axonframework.deadline.AbstractDeadlineManager} is constructed.
  *
  * @author Mateusz Nowak
  * @since 5.4.0

@@ -22,6 +22,7 @@ package io.axoniq.framework.legacy;
 import io.axoniq.license.entitlement.AxoniqAddon;
 import org.junit.jupiter.api.*;
 
+import java.util.List;
 import java.util.ServiceLoader;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -43,7 +44,10 @@ class LegacySupportAxoniqAddonTest {
     @Test
     void addonIsDiscoverableThroughServiceLoader() {
         // when
-        var addons = ServiceLoader.load(AxoniqAddon.class).stream().map(ServiceLoader.Provider::type);
+        List<Class<?>> addons = ServiceLoader.load(AxoniqAddon.class)
+                                             .stream()
+                                             .<Class<?>>map(ServiceLoader.Provider::type)
+                                             .toList();
 
         // then
         assertThat(addons).contains(LegacySupportAxoniqAddon.class);
