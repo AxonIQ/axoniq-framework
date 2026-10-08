@@ -23,7 +23,6 @@ import io.axoniq.framework.workflow.runtime.api.execution.context.Version;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations;
 import io.axoniq.framework.workflow.runtime.execution.DefaultEventNameCustomizer;
-import io.axoniq.framework.workflow.runtime.execution.EventSourcedWorkflowState;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowEventTags;
 import io.axoniq.framework.workflow.runtime.util.EventMessageUtils;
 import org.axonframework.common.configuration.AxonConfiguration;
@@ -47,7 +46,6 @@ import org.axonframework.messaging.eventstreaming.StreamingCondition;
 import org.axonframework.messaging.eventstreaming.Tag;
 import org.junit.jupiter.api.*;
 
-import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -63,8 +61,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * of the claim is the lowest of its reads, so it can sit before an event the claim itself sourced; the restored
  * execution is then rejected by its own history, stops, and the instance makes no progress on any node.
  * <p>
- * The oracle is the durable log: a restored instance that can append records a terminal event, one that fences itself
- * records nothing further.
+ * The oracle is the restored execution's append: an instance that sourced the previous owner's write can append,
+ * while one that did not source it fences itself.
  */
 class ClaimRestoreSelfFenceTest extends AbstractEventSourcedEntityRepositoryTestBase {
 
@@ -98,9 +96,9 @@ class ClaimRestoreSelfFenceTest extends AbstractEventSourcedEntityRepositoryTest
                 .as("the previous owner's write must have landed during the claim, or this test proves nothing")
                 .isTrue();
 
-        assertThat(terminatedWithin("wf-a", Duration.ofSeconds(5)))
+        assertThat(appendFailure(runningExecution("wf-a"), step(instanceA, "shipOrder")))
                 .as("'wf-a' sourced that write while restoring, so its own appends are no conflict")
-                .isTrue();
+                .isNull();
     }
 
     @Test
@@ -122,29 +120,6 @@ class ClaimRestoreSelfFenceTest extends AbstractEventSourcedEntityRepositoryTest
         assertThat(failure)
                 .as("a previous owner writing after the restore read must fence the restored execution")
                 .hasRootCauseInstanceOf(AppendEventsTransactionRejectedException.class);
-    }
-
-    /**
-     * Returns whether the given instance recorded a terminal workflow event within the given {@code budget}.
-     */
-    private boolean terminatedWithin(String workflowId, Duration budget) {
-        var deadline = System.nanoTime() + budget.toNanos();
-        while (System.nanoTime() < deadline) {
-            if (isTerminal(workflowId)) {
-                return true;
-            }
-            Thread.onSpinWait();
-        }
-        return isTerminal(workflowId);
-    }
-
-    private boolean isTerminal(String workflowId) {
-        return configuration.getComponent(UnitOfWorkFactory.class)
-                            .create("read-" + workflowId)
-                            .executeWithResult(ctx -> repository(EventSourcedWorkflowState.class)
-                                    .loadOrCreate(workflowId, ctx)
-                                    .thenApply(managed -> managed.entity().workflowStatus().isTerminal()))
-                            .join();
     }
 
     /**
