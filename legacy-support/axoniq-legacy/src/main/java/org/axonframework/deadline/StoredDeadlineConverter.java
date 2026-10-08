@@ -28,10 +28,16 @@ import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.MessageTypeResolver;
 import org.axonframework.messaging.core.Metadata;
 import org.jspecify.annotations.Nullable;
+import tools.jackson.core.JacksonException;
+import tools.jackson.core.JsonGenerator;
+import tools.jackson.core.JsonParser;
+import tools.jackson.core.JsonToken;
+import tools.jackson.core.ObjectReadContext;
+import tools.jackson.core.ObjectWriteContext;
+import tools.jackson.core.json.JsonFactory;
 
+import java.io.StringWriter;
 import java.nio.charset.StandardCharsets;
-import java.util.Base64;
-import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -52,15 +58,17 @@ import java.util.Optional;
  * string, Base64-encoded for a {@code byte[]}, or as an XStream {@code <string>} or {@code <byte-array>} element. A
  * {@link Converter} treats a {@code String} or {@code byte[]} as content that is already in its stored form, so it
  * would store such a payload as is. Which of the two forms to write follows from the configured converter's format,
- * which is detected once, by converting a probe value. A converter that writes neither JSON nor XStream XML cannot
- * store such a payload, and scheduling one fails. Reading follows the stored form, and also accepts the type names
- * {@code string} and {@code byte-array}, under which Axon Framework 4's {@code XStreamSerializer} stored these
- * payloads.
+ * which is detected once, by converting a probe value. The JSON string is written and read with Jackson's streaming
+ * JSON writer and parser, and the XStream element with XStream itself, so that both match what Axon Framework 4
+ * wrote. A converter
+ * that writes neither JSON nor XStream XML cannot store such a payload, and scheduling one fails. Reading follows the
+ * stored form, and also accepts the type names {@code string} and {@code byte-array}, under which Axon Framework 4's
+ * {@code XStreamSerializer} stored these payloads.
  * <p>
  * Metadata is read untyped, into a {@code Map<String, Object>}, and each value is turned into a {@code String}: Axon
  * Framework 4 metadata could hold any value, while Axon Framework 5 metadata holds strings only. Strings stay as they
  * are, numbers and booleans become their {@link String#valueOf(Object) string value}, and maps and lists are rendered
- * as JSON by a fixed writer, so the form does not depend on the converter's storage format.
+ * as JSON by Jackson's streaming JSON writer, so the form does not depend on the converter's storage format.
  * <p>
  * This class is internal, as it only serves the deadline managers of this module, which share the stored layout.
  *
@@ -92,6 +100,15 @@ public final class StoredDeadlineConverter {
     private static final TypeReference<Map<String, Object>> XSTREAM_UNTYPED_MAP = new TypeReference<>() {
     };
     private static final MessageTypeResolver MESSAGE_TYPE_RESOLVER = new ClassBasedMessageTypeResolver();
+    /**
+     * Writes and reads the JSON strings of {@code String} and {@code byte[]} payloads, and renders maps and lists in
+     * metadata as JSON, independent of the configured converter, as neither form depends on a mapper's configuration.
+     * Only Jackson's streaming core is used, which has no dependencies of its own, so it cannot clash with the Jackson
+     * version an application's converter uses.
+     */
+    private static final JsonFactory JSON_FACTORY = JsonFactory.builder().build();
+    private static final String INVALID_JSON_STRING = "The stored payload is no valid JSON string";
+    private static final String XSTREAM_CLASS_NAME = "com.thoughtworks.xstream.XStream";
     /**
      * The type names Axon Framework 4's {@code XStreamSerializer} stored a {@code String} and a {@code byte[]} payload
      * under: XStream's built-in aliases of these types, instead of their class names.
@@ -269,10 +286,10 @@ public final class StoredDeadlineConverter {
         String trimmed = stored == null ? "" : stored.strip();
         Object value;
         if (trimmed.startsWith("\"")) {
-            String text = readJsonString(trimmed);
-            value = type == byte[].class ? Base64.getDecoder().decode(text) : text;
+            value = readJson(type, trimmed);
         } else if (trimmed.startsWith("<")) {
-            value = readXmlElement(type, trimmed);
+            requireXStream();
+            value = XStreamPayloadFormat.read(trimmed);
         } else {
             value = null;
         }
@@ -313,176 +330,74 @@ public final class StoredDeadlineConverter {
             return (String) value;
         }
         if (value instanceof Map<?, ?> || value instanceof List<?>) {
-            StringBuilder json = new StringBuilder();
-            writeJson(value, json);
-            return json.toString();
+            return writeJson(value);
         }
         return String.valueOf(value);
     }
 
-    private static void writeJson(@Nullable Object value, StringBuilder json) {
-        if (value == null) {
-            json.append("null");
-        } else if (value instanceof String string) {
-            writeJsonString(string, json);
-        } else if (value instanceof Number || value instanceof Boolean) {
-            json.append(value);
-        } else if (value instanceof Map<?, ?> map) {
-            json.append('{');
-            Iterator<? extends Map.Entry<?, ?>> entries = map.entrySet().iterator();
-            while (entries.hasNext()) {
-                Map.Entry<?, ?> entry = entries.next();
-                writeJsonString(String.valueOf(entry.getKey()), json);
-                json.append(':');
-                writeJson(entry.getValue(), json);
-                if (entries.hasNext()) {
-                    json.append(',');
+    private static String writeJson(Object value) {
+        StringWriter json = new StringWriter();
+        try (JsonGenerator generator = JSON_FACTORY.createGenerator(ObjectWriteContext.empty(), json)) {
+            writeJson(value, generator);
+        }
+        return json.toString();
+    }
+
+    private static void writeJson(@Nullable Object value, JsonGenerator generator) {
+        switch (value) {
+            case null -> generator.writeNull();
+            case String string -> generator.writeString(string);
+            case byte[] bytes -> generator.writeBinary(bytes);
+            case Boolean bool -> generator.writeBoolean(bool);
+            case Number number -> generator.writeNumber(number.toString());
+            case Map<?, ?> map -> {
+                generator.writeStartObject();
+                for (Map.Entry<?, ?> entry : map.entrySet()) {
+                    generator.writeName(String.valueOf(entry.getKey()));
+                    writeJson(entry.getValue(), generator);
                 }
+                generator.writeEndObject();
             }
-            json.append('}');
-        } else if (value instanceof List<?> list) {
-            json.append('[');
-            for (int i = 0; i < list.size(); i++) {
-                if (i > 0) {
-                    json.append(',');
+            case List<?> list -> {
+                generator.writeStartArray();
+                for (Object element : list) {
+                    writeJson(element, generator);
                 }
-                writeJson(list.get(i), json);
+                generator.writeEndArray();
             }
-            json.append(']');
-        } else {
-            writeJsonString(String.valueOf(value), json);
+            default -> generator.writeString(String.valueOf(value));
         }
     }
 
-    private static String readJsonString(String json) {
-        if (json.length() < 2 || !json.endsWith("\"")) {
-            throw new DeadlineException("The stored payload is no complete JSON string");
-        }
-        StringBuilder text = new StringBuilder(json.length());
-        for (int i = 1; i < json.length() - 1; i++) {
-            char c = json.charAt(i);
-            if (c != '\\') {
-                text.append(c);
-                continue;
-            }
-            char escaped = json.charAt(++i);
-            switch (escaped) {
-                case 'b' -> text.append('\b');
-                case 'f' -> text.append('\f');
-                case 'n' -> text.append('\n');
-                case 'r' -> text.append('\r');
-                case 't' -> text.append('\t');
-                case 'u' -> {
-                    text.append((char) Integer.parseInt(json.substring(i + 1, i + 5), 16));
-                    i += 4;
-                }
-                default -> text.append(escaped);
-            }
-        }
-        return text.toString();
-    }
-
-    private static void writeJsonString(String value, StringBuilder json) {
-        json.append('"');
-        for (int i = 0; i < value.length(); i++) {
-            char c = value.charAt(i);
-            switch (c) {
-                case '"' -> json.append("\\\"");
-                case '\\' -> json.append("\\\\");
-                case '\b' -> json.append("\\b");
-                case '\f' -> json.append("\\f");
-                case '\n' -> json.append("\\n");
-                case '\r' -> json.append("\\r");
-                case '\t' -> json.append("\\t");
-                default -> {
-                    if (c < 0x20) {
-                        json.append(String.format("\\u%04x", (int) c));
-                    } else {
-                        json.append(c);
-                    }
-                }
-            }
-        }
-        json.append('"');
-    }
     /**
-     * Reads the XStream {@code <string>} or {@code <byte-array>} element matching the given {@code type}: its text, or
-     * its Base64-decoded text for a {@code byte[]}. Returns {@code null} if the stored XML is no such element.
+     * Reads the given stored {@code json}, which has to be a single JSON string: the text, or the Base64-decoded text
+     * for a {@code byte[]}.
      */
-    private static @Nullable Object readXmlElement(Class<?> type, String xml) {
-        String element = type == byte[].class ? "byte-array" : "string";
-        String start = "<" + element + ">";
-        String end = "</" + element + ">";
-        String text;
-        if (xml.equals("<" + element + "/>")) {
-            text = "";
-        } else if (xml.length() >= start.length() + end.length() && xml.startsWith(start) && xml.endsWith(end)) {
-            text = readXmlText(xml.substring(start.length(), xml.length() - end.length()));
-        } else {
-            return null;
-        }
-        // The MIME decoder skips line breaks, which XStream's own Base64 encoding may insert.
-        return type == byte[].class ? Base64.getMimeDecoder().decode(text) : text;
-    }
-
-    private static String readXmlText(String xml) {
-        StringBuilder text = new StringBuilder(xml.length());
-        for (int i = 0; i < xml.length(); i++) {
-            char c = xml.charAt(i);
-            if (c != '&') {
-                text.append(c);
-                continue;
-            }
-            int end = xml.indexOf(';', i);
-            if (end < 0) {
-                throw new DeadlineException("The stored payload holds an incomplete XML entity");
-            }
-            String entity = xml.substring(i + 1, end);
-            switch (entity) {
-                case "amp" -> text.append('&');
-                case "lt" -> text.append('<');
-                case "gt" -> text.append('>');
-                case "quot" -> text.append('"');
-                case "apos" -> text.append('\'');
-                default -> text.appendCodePoint(characterReference(entity));
-            }
-            i = end;
-        }
-        return text.toString();
-    }
-
-    private static int characterReference(String entity) {
-        try {
-            if (entity.startsWith("#x")) {
-                return Integer.parseInt(entity.substring(2), 16);
-            }
-            if (entity.startsWith("#")) {
-                return Integer.parseInt(entity.substring(1));
-            }
-        } catch (NumberFormatException e) {
-            // Reported below, as for any other entity this class does not know.
-        }
-        throw new DeadlineException("The stored payload holds the unknown XML entity [&" + entity + ";]");
-    }
-
-    private static void writeXmlText(String value, StringBuilder xml) {
-        for (int i = 0; i < value.length(); i++) {
-            char c = value.charAt(i);
-            switch (c) {
-                case '&' -> xml.append("&amp;");
-                case '<' -> xml.append("&lt;");
-                case '>' -> xml.append("&gt;");
-                case '"' -> xml.append("&quot;");
-                case '\'' -> xml.append("&apos;");
-                case '\r' -> xml.append("&#xd;");
-                default -> {
-                    if (c < 0x20 && c != '\t' && c != '\n') {
-                        xml.append("&#x").append(Integer.toHexString(c)).append(';');
-                    } else {
-                        xml.append(c);
-                    }
+    private static Object readJson(Class<?> type, String json) {
+        try (JsonParser parser = JSON_FACTORY.createParser(ObjectReadContext.empty(), json)) {
+            if (parser.nextToken() == JsonToken.VALUE_STRING) {
+                Object value = type == byte[].class ? parser.getBinaryValue() : parser.getString();
+                if (parser.nextToken() == null) {
+                    return value;
                 }
             }
+        } catch (JacksonException e) {
+            throw new DeadlineException(INVALID_JSON_STRING, e);
+        }
+        throw new DeadlineException(INVALID_JSON_STRING);
+    }
+
+    /**
+     * Ensures XStream is available before {@link XStreamPayloadFormat} is loaded, so that a payload in the XStream
+     * format fails with a {@link DeadlineException} instead of a {@link NoClassDefFoundError} when XStream is absent.
+     */
+    private static void requireXStream() {
+        try {
+            Class.forName(XSTREAM_CLASS_NAME, false, StoredDeadlineConverter.class.getClassLoader());
+        } catch (ClassNotFoundException | LinkageError e) {
+            throw new DeadlineException(
+                    "The stored payload is XStream XML, which needs XStream on the classpath to be read or written", e
+            );
         }
     }
 
@@ -493,16 +408,13 @@ public final class StoredDeadlineConverter {
     private enum StoredFormat {
 
         /**
-         * JSON, as Axon Framework 4's {@code JacksonSerializer} and {@code Jackson3Serializer} wrote it.
+         * JSON, as Axon Framework 4's {@code JacksonSerializer} and {@code Jackson3Serializer} wrote it: a JSON string,
+         * Base64-encoded for a {@code byte[]}.
          */
         JSON {
             @Override
             String write(Object payload) {
-                StringBuilder json = new StringBuilder();
-                writeJsonString(payload instanceof byte[] bytes
-                                        ? Base64.getEncoder().encodeToString(bytes)
-                                        : (String) payload, json);
-                return json.toString();
+                return writeJson(payload);
             }
         },
         /**
@@ -511,12 +423,8 @@ public final class StoredDeadlineConverter {
         XSTREAM {
             @Override
             String write(Object payload) {
-                if (payload instanceof byte[] bytes) {
-                    return "<byte-array>" + Base64.getEncoder().encodeToString(bytes) + "</byte-array>";
-                }
-                StringBuilder xml = new StringBuilder("<string>");
-                writeXmlText((String) payload, xml);
-                return xml.append("</string>").toString();
+                requireXStream();
+                return XStreamPayloadFormat.write(payload);
             }
         },
         /**

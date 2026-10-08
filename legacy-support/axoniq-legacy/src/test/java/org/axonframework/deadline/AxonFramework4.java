@@ -71,6 +71,15 @@ public final class AxonFramework4 implements AutoCloseable {
      * A {@code byte[]} payload that is no valid UTF-8 on its own.
      */
     public static final byte[] BINARY_PAYLOAD = {(byte) 0xff, 0x00, 'a', (byte) 0xc3};
+    /**
+     * A {@code String} payload of control characters, which XML 1.0 does not allow as text, and which JSON and XStream
+     * write as escapes, including a carriage return an XML parser would otherwise turn into a line feed.
+     */
+    public static final String CONTROL_CHARACTER_PAYLOAD = "\u0000\u0001\u001f\r\u007f\u0085";
+    /**
+     * A {@code byte[]} payload long enough that its Base64 form spans more than one line of a line-wrapping encoder.
+     */
+    public static final byte[] LONG_BINARY_PAYLOAD = longBinaryPayload();
 
     private final URLClassLoader classLoader;
 
@@ -326,15 +335,26 @@ public final class AxonFramework4 implements AutoCloseable {
     }
 
     /**
-     * Returns each {@link Flavor} with {@link #TEXT_PAYLOAD} and with {@link #BINARY_PAYLOAD}, the payloads a
-     * {@link Converter} would store as is, as it takes them for content already in its stored form.
+     * Returns each {@link Flavor} with {@link #TEXT_PAYLOAD}, {@link #CONTROL_CHARACTER_PAYLOAD},
+     * {@link #BINARY_PAYLOAD} and {@link #LONG_BINARY_PAYLOAD}, the payloads a {@link Converter} would store as is, as
+     * it takes them for content already in its stored form.
      *
      * @return the combinations, as arguments of a parameterized test
      */
     public static Stream<Arguments> flavorsAndRawPayloads() {
         return Arrays.stream(Flavor.values())
                      .flatMap(flavor -> Stream.of(Arguments.of(flavor, TEXT_PAYLOAD),
-                                                  Arguments.of(flavor, BINARY_PAYLOAD)));
+                                                  Arguments.of(flavor, CONTROL_CHARACTER_PAYLOAD),
+                                                  Arguments.of(flavor, BINARY_PAYLOAD),
+                                                  Arguments.of(flavor, LONG_BINARY_PAYLOAD)));
+    }
+
+    private static byte[] longBinaryPayload() {
+        byte[] payload = new byte[256];
+        for (int i = 0; i < payload.length; i++) {
+            payload[i] = (byte) i;
+        }
+        return payload;
     }
 
     /**

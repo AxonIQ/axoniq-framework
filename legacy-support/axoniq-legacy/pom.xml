@@ -67,6 +67,13 @@
             <artifactId>axon-conversion</artifactId>
             <version>${axon-framework.version}</version>
         </dependency>
+        <!-- StoredDeadlineConverter: the JSON strings of String and byte[] deadline payloads, and metadata maps.
+             Jackson's streaming core only, which has no dependencies that could clash with an application's
+             Jackson 2. -->
+        <dependency>
+            <groupId>tools.jackson.core</groupId>
+            <artifactId>jackson-core</artifactId>
+        </dependency>
 
         <!-- XStreamConverter: draining Axon Framework 4 XStream-serialized sagas, deadlines and scheduled events -->
         <dependency>

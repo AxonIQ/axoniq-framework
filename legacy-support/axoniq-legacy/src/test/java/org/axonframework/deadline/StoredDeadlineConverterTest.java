@@ -153,6 +153,34 @@ class StoredDeadlineConverterTest {
         }
 
         @Test
+        @SuppressWarnings("removal")
+        void aBytesPayloadIsStoredAsAnXStreamElementWithAnXStreamConverter() {
+            // given
+            StoredDeadlineConverter xStreamSubject = new StoredDeadlineConverter(new XStreamConverter(new XStream()));
+
+            // when
+            String stored = xStreamSubject.payloadToStored(new byte[]{1, 2, 3}, String.class);
+
+            // then
+            assertThat(stored).isEqualTo("<byte-array>AQID</byte-array>");
+            assertThat(xStreamSubject.payload("byte-array", null, stored)).isEqualTo(new byte[]{1, 2, 3});
+        }
+
+        @Test
+        void readingAnIncompleteJsonStringFails() {
+            // when / then
+            assertThatThrownBy(() -> testSubject.payload(String.class.getName(), null, bytes("\"text\\\"")))
+                    .isInstanceOf(DeadlineException.class);
+        }
+
+        @Test
+        void readingAnXStreamElementOfAnotherTypeFails() {
+            // when / then
+            assertThatThrownBy(() -> testSubject.payload(String.class.getName(), null, bytes("<int>1</int>")))
+                    .isInstanceOf(DeadlineException.class);
+        }
+
+        @Test
         void readingAStringPayloadStoredAsIsFails() {
             // when / then
             assertThatThrownBy(() -> testSubject.payload(String.class.getName(), null, bytes("text")))
