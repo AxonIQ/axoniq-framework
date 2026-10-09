@@ -22,6 +22,10 @@ package org.axonframework.test.saga;
 import org.axonframework.deadline.DeadlineManager;
 import org.axonframework.deadline.annotation.DeadlineHandler;
 import org.axonframework.messaging.commandhandling.gateway.CommandDispatcher;
+import org.axonframework.messaging.core.MessageType;
+import org.axonframework.messaging.eventhandling.EventMessage;
+import org.axonframework.messaging.eventhandling.GenericEventMessage;
+import org.axonframework.messaging.eventhandling.annotation.Timestamp;
 import org.axonframework.modelling.saga.SagaEventHandler;
 import org.axonframework.modelling.saga.StartSaga;
 import org.axonframework.test.FixtureExecutionException;
@@ -29,6 +33,7 @@ import org.junit.jupiter.api.*;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -174,6 +179,43 @@ class SagaTestFixtureTimeTest {
         }
     }
 
+    @Nested
+    class EventTimestamps {
+
+        @Test
+        void aPublishedEventCarriesTheFixturesCurrentTime() {
+            // given / when / then
+            fixture.givenCurrentTime(START)
+                   .whenPublishingA(new TimestampRequested(ORDER_ID))
+                   .expectDispatchedCommands(new RecordTimestamp(START));
+        }
+
+        @Test
+        void anEventPublishedAfterTimeElapsedCarriesTheMovedTime() {
+            // given / when / then
+            fixture.givenCurrentTime(START)
+                   .andThenTimeElapses(Duration.ofMinutes(5))
+                   .whenAggregate(ORDER_ID)
+                   .publishes(new TimestampRequested(ORDER_ID))
+                   .expectDispatchedCommands(new RecordTimestamp(START.plus(Duration.ofMinutes(5))));
+        }
+
+        @Test
+        void anEventMessageCarriesTheFixturesCurrentTimeRatherThanItsOwn() {
+            // given
+            // Axon Framework 4 replaced the timestamp of an event message handed to the fixture too.
+            EventMessage message = new GenericEventMessage(
+                    "event-1", new MessageType(TimestampRequested.class), new TimestampRequested(ORDER_ID), Map.of(),
+                    Instant.EPOCH
+            );
+
+            // when / then
+            fixture.givenCurrentTime(START)
+                   .whenPublishingA(message)
+                   .expectDispatchedCommands(new RecordTimestamp(START));
+        }
+    }
+
     @Test
     void aDeadlineScheduledByAHandlerThatFailsAfterwardsStaysScheduled() {
         // Axon Framework 4 behaved this way too: its stub recorded a deadline the moment it was scheduled, rather than
@@ -196,6 +238,14 @@ class SagaTestFixtureTimeTest {
     }
 
     public record ReminderBroken(String orderId) {
+
+    }
+
+    public record TimestampRequested(String orderId) {
+
+    }
+
+    public record RecordTimestamp(Instant timestamp) {
 
     }
 
@@ -222,6 +272,12 @@ class SagaTestFixtureTimeTest {
         public void on(OrderPlacedThenFailed event, DeadlineManager deadlineManager) {
             deadlineManager.schedule(REMINDER_DELAY, "remind", new Reminder(event.orderId()));
             throw new IllegalStateException("Failed after scheduling the reminder");
+        }
+
+        @StartSaga
+        @SagaEventHandler(associationProperty = "orderId")
+        public void on(TimestampRequested event, @Timestamp Instant timestamp, CommandDispatcher dispatcher) {
+            dispatcher.send(new RecordTimestamp(timestamp));
         }
 
         @SagaEventHandler(associationProperty = "orderId")

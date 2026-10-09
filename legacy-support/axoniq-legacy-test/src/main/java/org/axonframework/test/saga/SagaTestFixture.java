@@ -30,6 +30,7 @@ import org.axonframework.messaging.ScopeDescriptor;
 import org.axonframework.messaging.commandhandling.CommandBus;
 import org.axonframework.messaging.core.MessageDispatchInterceptor;
 import org.axonframework.messaging.core.MessageHandlerInterceptor;
+import org.axonframework.messaging.core.MessageTypeResolver;
 import org.axonframework.messaging.core.annotation.HandlerDefinition;
 import org.axonframework.messaging.core.annotation.HandlerEnhancerDefinition;
 import org.axonframework.messaging.core.annotation.ParameterResolverFactory;
@@ -42,6 +43,7 @@ import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventBus;
 import org.axonframework.messaging.eventhandling.EventMessage;
+import org.axonframework.messaging.eventhandling.GenericEventMessage;
 import org.axonframework.messaging.eventhandling.configuration.EventHandlingComponentsConfigurer;
 import org.axonframework.modelling.saga.AbstractSagaManager;
 import org.axonframework.modelling.saga.repository.SagaStore;
@@ -273,7 +275,7 @@ public class SagaTestFixture<T> implements FixtureConfiguration, ContinuedGivenS
     public ContinuedGivenState givenAPublished(Object event, Map<String, String> metadata) {
         Given phase = given();
         try {
-            givenPhase = phase.event(event, metadata);
+            givenPhase = phase.event(timeCorrectedEventMessage(event), metadata);
         } catch (RuntimeException e) {
             if (!suppressExceptionInGivenPhase) {
                 throw e;
@@ -536,7 +538,22 @@ public class SagaTestFixture<T> implements FixtureConfiguration, ContinuedGivenS
     private FixtureExecutionResult publishInWhen(When phase,
                                                  Object event,
                                                  Map<String, String> metadata) {
-        return resultOf(phase.event(event, metadata));
+        return resultOf(phase.event(timeCorrectedEventMessage(event), metadata));
+    }
+
+    /**
+     * The given {@code event} as a message timestamped with the fixture's {@link #currentTime() current time}, as Axon
+     * Framework 4 did, so a handler's {@code @Timestamp} agrees with the time the deadlines are scheduled from. A given
+     * {@link EventMessage} keeps its identifier, type, payload and metadata, and only has its timestamp replaced.
+     */
+    private EventMessage timeCorrectedEventMessage(Object event) {
+        EventMessage message = event instanceof EventMessage eventMessage
+                ? eventMessage
+                : new GenericEventMessage(
+                        configuration().getComponent(MessageTypeResolver.class).resolveOrThrow(event), event
+                );
+        Instant timestamp = currentTime();
+        return new GenericEventMessage(message, () -> timestamp);
     }
 
     private FixtureExecutionResult resultOf(AxonTestPhase.When.Event event) {
