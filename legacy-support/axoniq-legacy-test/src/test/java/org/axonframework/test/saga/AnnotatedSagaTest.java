@@ -159,7 +159,7 @@ class AnnotatedSagaTest {
                .expectPublishedEvents();
     }
 
-//    TODO #5006
+//    TODO #3104
 //    @Test
 //    void fixtureApi_WhenEventIsPublishedToEventBus() {
 //        String aggregate1 = UUID.randomUUID().toString();
@@ -180,7 +180,7 @@ class AnnotatedSagaTest {
 //        validator.expectNoScheduledDeadlines();
 //    }
 //
-//    TODO #5006
+//    TODO #3104
 //    @Test
 //    void fixtureApi_ElapsedTimeBetweenEventsHasEffectOnScheduler() throws Exception {
 //        String aggregate1 = UUID.randomUUID().toString();
@@ -207,7 +207,7 @@ class AnnotatedSagaTest {
 //    }
 //
 //
-//    TODO #5006
+//    TODO #3104
 //    @Test
 //    void fixtureApi_givenCurrentTime() {
 //        String identifier = UUID.randomUUID().toString();
@@ -221,7 +221,7 @@ class AnnotatedSagaTest {
 //               .expectNoScheduledDeadlines();
 //    }
 //
-//    TODO #5006
+//    TODO #3104
 //    @Test
 //    void fixtureApi_WhenTimeElapses_UsingDefaults() {
 //        String identifier = UUID.randomUUID().toString();
@@ -241,7 +241,7 @@ class AnnotatedSagaTest {
 //               .expectPublishedEventsMatching(noEvents());
 //    }
 //
-//    TODO #5006
+//    TODO #3104
 //    @Test
 //    void fixtureApi_WhenTimeElapses_UsingCallbackBehavior() throws Exception {
 //        String identifier = UUID.randomUUID().toString();
@@ -265,7 +265,7 @@ class AnnotatedSagaTest {
 //        verify(commandHandler, times(2)).handle(isA(Object.class), eq(Metadata.emptyInstance()));
 //    }
 //
-//    TODO #5006
+//    TODO #3104
 //    @Test
 //    void fixtureApi_WhenTimeAdvances() {
 //        String identifier = UUID.randomUUID().toString();
@@ -329,7 +329,7 @@ class AnnotatedSagaTest {
                 .isInstanceOf(AxonAssertionError.class);
     }
 
-//    TODO #5006
+//    TODO #3104
 //    @Test
 //    void fixtureApi_WhenEventOccurs() {
 //        String aggregate1 = UUID.randomUUID().toString();
