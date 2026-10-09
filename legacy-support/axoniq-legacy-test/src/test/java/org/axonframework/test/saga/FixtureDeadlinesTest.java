@@ -20,7 +20,11 @@
 package org.axonframework.test.saga;
 
 import org.axonframework.deadline.DeadlineManager;
+import org.axonframework.deadline.DeadlineMessage;
+import org.axonframework.deadline.GenericDeadlineMessage;
 import org.axonframework.deadline.annotation.DeadlineHandler;
+import org.axonframework.messaging.core.GenericMessage;
+import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.eventhandling.annotation.Timestamp;
 import org.axonframework.modelling.saga.EndSaga;
 import org.axonframework.modelling.saga.SagaEventHandler;
@@ -262,11 +266,51 @@ class FixtureDeadlinesTest {
     }
 
     @Test
+    void deadlineDispatchInterceptor() {
+        fixture.registerDeadlineDispatchInterceptor(
+                       (message, context, chain) -> chain.proceed(
+                               asDeadlineMessage(message.getDeadlineName(), "fakeDeadlineDetails", message.timestamp()),
+                               context
+                       )
+               )
+               .givenAggregate(AGGREGATE_ID)
+               .published(START_SAGA_EVENT)
+               .whenTimeElapses(Duration.ofMinutes(TRIGGER_DURATION_MINUTES + 1))
+               .expectActiveSagas(1)
+               .expectTriggeredDeadlines("fakeDeadlineDetails");
+    }
+
+    @Test
+    void deadlineHandlerInterceptor() {
+        fixture.registerDeadlineHandlerInterceptor(
+                       (message, context, chain) -> chain.proceed(
+                               asDeadlineMessage(message.getDeadlineName(), "fakeDeadlineDetails", message.timestamp()),
+                               context
+                       )
+               )
+               .givenAggregate(AGGREGATE_ID)
+               .published(START_SAGA_EVENT)
+               .whenTimeElapses(Duration.ofMinutes(TRIGGER_DURATION_MINUTES + 1))
+               .expectActiveSagas(1)
+               .expectTriggeredDeadlines("fakeDeadlineDetails");
+    }
+
+    @Test
     void deadlineHandlerEndsSagaLifecycle() {
         fixture.givenAggregate(AGGREGATE_ID)
                .published(new TriggerSagaStartEvent(AGGREGATE_ID, "sagaEndingDeadline"))
                .whenTimeElapses(Duration.ofMinutes(TRIGGER_DURATION_MINUTES + 1))
                .expectActiveSagas(0);
+    }
+
+    /**
+     * Axon Framework 4 had {@code GenericDeadlineMessage.asDeadlineMessage(..)} for this, which Axon Framework 5 does
+     * not carry over.
+     */
+    private static DeadlineMessage asDeadlineMessage(String deadlineName, Object payload, Instant expiryTime) {
+        return new GenericDeadlineMessage(
+                deadlineName, new GenericMessage(new MessageType(payload.getClass()), payload), () -> expiryTime
+        );
     }
 
     private static class ResetAllTriggeredEvent {
