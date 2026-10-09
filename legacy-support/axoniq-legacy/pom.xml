@@ -38,12 +38,25 @@
     <packaging>jar</packaging>
 
     <properties>
-        <!-- Loaded in an isolated class loader by Af4SerializerCompatibilityTest. Keeping the AF4 artifact out of the
-             dependency graph prevents its org.axonframework classes from colliding with the reactor's AF5 classes. -->
+        <!-- Loaded in an isolated class loader by Af4SerializerCompatibilityTest and the deadline compatibility tests.
+             Keeping the AF4 artifacts out of the dependency graph prevents their org.axonframework classes from
+             colliding with the reactor's AF5 classes. -->
         <axon4.serializer.version>4.13.2</axon4.serializer.version>
+        <!-- The deadline managers' scheduler libraries. Only this module uses them, so it manages their versions. Axon
+             Framework 4 nodes share the libraries' stores during a rolling upgrade, so keep the major versions equal
+             to Axon Framework 4.13's. -->
+        <quartz.version>2.5.2</quartz.version>
+        <jobrunr.version>8.8.2</jobrunr.version>
+        <db-scheduler.version>16.12.0</db-scheduler.version>
     </properties>
 
     <dependencies>
+        <!-- Axoniq Entitlement -->
+        <dependency>
+            <groupId>io.axoniq.license</groupId>
+            <artifactId>entitlement-manager</artifactId>
+        </dependency>
+
         <dependency>
             <groupId>org.axonframework</groupId>
             <artifactId>axon-messaging</artifactId>
@@ -58,6 +71,13 @@
             <groupId>org.axonframework</groupId>
             <artifactId>axon-conversion</artifactId>
             <version>${axon-framework.version}</version>
+        </dependency>
+        <!-- StoredDeadlineConverter: the JSON strings of String and byte[] deadline payloads, and metadata maps.
+             Jackson's streaming core only, which has no dependencies that could clash with an application's
+             Jackson 2. -->
+        <dependency>
+            <groupId>tools.jackson.core</groupId>
+            <artifactId>jackson-core</artifactId>
         </dependency>
 
         <!-- XStreamConverter: draining Axon Framework 4 XStream-serialized sagas, deadlines and scheduled events -->
@@ -91,6 +111,26 @@
         <dependency>
             <groupId>org.ehcache</groupId>
             <artifactId>ehcache</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- Deadline manager backends -->
+        <dependency>
+            <groupId>org.quartz-scheduler</groupId>
+            <artifactId>quartz</artifactId>
+            <version>${quartz.version}</version>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>org.jobrunr</groupId>
+            <artifactId>jobrunr</artifactId>
+            <version>${jobrunr.version}</version>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>com.github.kagkarlsson</groupId>
+            <artifactId>db-scheduler</artifactId>
+            <version>${db-scheduler.version}</version>
             <optional>true</optional>
         </dependency>
 
@@ -139,6 +179,12 @@
             <artifactId>axon-messaging</artifactId>
             <version>${axon-framework.version}</version>
             <type>test-jar</type>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <!-- Exercises db-scheduler's Gson-based serializer with the deadline details. -->
+            <groupId>com.google.code.gson</groupId>
+            <artifactId>gson</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -235,6 +281,13 @@
                                     <artifactId>axon-messaging</artifactId>
                                     <version>${axon4.serializer.version}</version>
                                     <destFileName>axon-messaging-af4.jar</destFileName>
+                                </artifactItem>
+                                <!-- The Axon Framework 4 scope descriptors, for the deadline compatibility tests. -->
+                                <artifactItem>
+                                    <groupId>org.axonframework</groupId>
+                                    <artifactId>axon-modelling</artifactId>
+                                    <version>${axon4.serializer.version}</version>
+                                    <destFileName>axon-modelling-af4.jar</destFileName>
                                 </artifactItem>
                                 <artifactItem>
                                     <groupId>org.axonframework</groupId>

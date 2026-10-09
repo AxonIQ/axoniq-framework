@@ -25,12 +25,14 @@ import org.axonframework.messaging.core.QualifiedName;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import java.util.function.UnaryOperator;
 import java.util.stream.Collectors;
@@ -62,6 +64,9 @@ public final class ConsistentHash {
     private final SortedMap<String, RingMember> hashToMember;
     private final UnaryOperator<String> hashFunction;
     private final int version;
+    // Resolving a query's handlers means filtering and sorting every member, which is too much to repeat on every
+    // dispatch. Held by the ring itself, which never changes, so a cached answer can never go stale.
+    private final Map<QualifiedName, List<Member>> queryHandlers = new ConcurrentHashMap<>();
 
     /**
      * Constructs an empty {@code ConsistentHash} hashing routing keys and ring positions with an MD5 digest.
@@ -108,6 +113,9 @@ public final class ConsistentHash {
      * {@link #with(Member, MemberCapabilities)} would recompute every member's ring positions on each call, making a
      * rebuild quadratic in the number of members; this assigns the positions once.
      * <p>
+     * A member this ring already holds under the same capabilities keeps the positions it has, rather than having them
+     * computed again, which makes rebuilding a ring in which little changed cheap.
+     * <p>
      * Members this ring holds that are absent from {@code memberships} are not carried over — the result describes the
      * cluster as {@code memberships} describes it, which is what makes it a rebuild rather than an update.
      *
@@ -119,13 +127,19 @@ public final class ConsistentHash {
         Objects.requireNonNull(memberships, "The memberships must not be null.");
 
         Map<String, RingMember> rebuilt = new TreeMap<>();
-        memberships.forEach((member, capabilities) -> rebuilt.put(
-                member.name(), new RingMember(member, capabilities, hashFunction)
-        ));
+        memberships.forEach((member, capabilities) -> rebuilt.put(member.name(), ringMember(member, capabilities)));
         if (rebuilt.equals(members)) {
             return this;
         }
         return new ConsistentHash(rebuilt, hashFunction, version + 1);
+    }
+
+    private RingMember ringMember(Member member, MemberCapabilities capabilities) {
+        RingMember existing = members.get(member.name());
+        if (existing != null && existing.member().equals(member) && existing.capabilities().equals(capabilities)) {
+            return existing;
+        }
+        return new RingMember(member, capabilities, hashFunction);
     }
 
     /**
@@ -195,6 +209,28 @@ public final class ConsistentHash {
                          .filter(candidate -> candidate.capabilities().handlesCommand(commandName))
                          .map(RingMember::member)
                          .findFirst();
+    }
+
+    /**
+     * Returns every {@link Member} registered with this ring that {@link MemberCapabilities#handlesQuery(QualifiedName)
+     * handles} queries of the given {@code queryName}, ordered by {@link Member#name() name}.
+     * <p>
+     * The order is stable for as long as the memberships do not change, so that a caller rotating over the result
+     * rotates over the same sequence on every call. The result is computed once per query name and ring.
+     *
+     * @param queryName the {@link QualifiedName} of the query to resolve the handling members of
+     * @return every registered member handling the given {@code queryName}, empty when none does
+     */
+    public List<Member> queryHandlers(QualifiedName queryName) {
+        Objects.requireNonNull(queryName, "The queryName must not be null.");
+        // The members are held by name, so streaming them yields name order without sorting.
+        return queryHandlers.computeIfAbsent(
+                queryName,
+                name -> members.values().stream()
+                               .filter(candidate -> candidate.capabilities().handlesQuery(name))
+                               .map(RingMember::member)
+                               .toList()
+        );
     }
 
     /**

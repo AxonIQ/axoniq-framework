@@ -1,15 +1,15 @@
-# ADR 002: Deliver fired saga deadlines through `ScopeAware`, with an explicit-list `ScopeAwareProvider` (issue [#5047](https://github.com/AxonIQ/AxonFramework/issues/5047))
+# ADR 002: Deliver fired saga deadlines through `ScopeAware`, with an explicit-list `ScopeAwareProvider` (issue [#564](https://github.com/AxonIQ/axoniq-framework/issues/564))
 
 Date: 2026-09-11
-Status: proposed
-Related: [#3065](https://github.com/AxonIQ/AxonFramework/issues/3065) (parent), [#3728](https://github.com/AxonIQ/AxonFramework/issues/3728) (saga port, merged), [#5001](https://github.com/AxonIQ/AxonFramework/issues/5001) (scope-routing types), [#5005](https://github.com/AxonIQ/AxonFramework/issues/5005) (scheduler backends), [#5053](https://github.com/AxonIQ/AxonFramework/issues/5053) (wires autodiscovery into this provider once it lands), [ADR 001, aggregate deadline delivery](adr-001-aggregate-deadline-command-translation.md)
+Status: accepted; the explicit-list provider (Option B2) is superseded by [ADR 010](adr-010-saga-managers-register-with-the-scope-aware-provider.md), the delivery through `ScopeAware` stays
+Related: [#3065](https://github.com/AxonIQ/AxonFramework/issues/3065) (parent), [#3728](https://github.com/AxonIQ/AxonFramework/issues/3728) (saga port, merged), [#5001](https://github.com/AxonIQ/AxonFramework/issues/5001) (scope-routing types), [#5005](https://github.com/AxonIQ/AxonFramework/issues/5005) (scheduler backends), [#565](https://github.com/AxonIQ/axoniq-framework/issues/565) (wires autodiscovery into this provider once it lands), [ADR 001, aggregate deadline delivery](adr-001-aggregate-deadline-command-translation.md)
 
 ## Context
 
 Unlike an aggregate, a legacy `Saga` has no `@CommandHandler` migration path: it is an event-handling
 component, not a command handler, so [ADR 001](adr-001-aggregate-deadline-command-translation.md)'s
 translate-to-command approach does not apply here. `@DeadlineHandler` therefore stays supported for
-`Saga` classes, unchanged, for as long as `axon-legacy` exists.
+`Saga` classes, unchanged, for as long as `axoniq-legacy` exists.
 
 The saga port ([#3728](https://github.com/AxonIQ/AxonFramework/issues/3728)) landed on `main` before
 this design was settled, and already merged the delivery *target*: `AbstractSagaManager` implements
@@ -53,7 +53,7 @@ explicitly is not new friction, since building one by hand was already the norm.
 
 ## Consequences
 
-- `axon-legacy` ships a small, self-contained `ScopeAwareProvider` implementation with no registry or
+- `axoniq-legacy` ships a small, self-contained `ScopeAwareProvider` implementation with no registry or
   auto-discovery machinery. This keeps the saga-deadline delivery path decoupled from
   `Sagas.java`, `Configuration`, and `ComponentRegistry` entirely.
 - A user with multiple `Saga` types must list every corresponding saga manager explicitly when
@@ -70,7 +70,7 @@ explicitly is not new friction, since building one by hand was already the norm.
   collection of `ScopeAware` instances rather than something less flexible (e.g. fixed named fields),
   so both a hand-built list and an enhancer-assembled one can construct it the same way. Wiring
   autodiscovery into the provider once it lands is tracked as its own follow-up,
-  [#5053](https://github.com/AxonIQ/AxonFramework/issues/5053), rather than folded into this issue --
+  [#565](https://github.com/AxonIQ/axoniq-framework/issues/565), rather than folded into this issue --
   it is blocked on saga autodiscovery itself, which is not yet tracked as a GitHub issue.
 - No changes are made to `AbstractSagaManager`, `SagaScopeDescriptor`, or anything else merged by
   [#3728](https://github.com/AxonIQ/AxonFramework/issues/3728) — this decision only adds the missing

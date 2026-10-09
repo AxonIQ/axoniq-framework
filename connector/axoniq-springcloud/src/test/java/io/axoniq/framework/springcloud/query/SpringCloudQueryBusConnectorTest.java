@@ -24,7 +24,7 @@ import io.axoniq.framework.messaging.queryhandling.distributed.DistributedQueryB
 import io.axoniq.framework.springcloud.discovery.RecordingCapabilityDiscoveryMode;
 import io.axoniq.framework.springcloud.routing.Member;
 import io.axoniq.framework.springcloud.routing.MemberCapabilities;
-import io.axoniq.framework.springcloud.shared.SpringCloudMemberRegistry;
+import io.axoniq.framework.springcloud.shared.SpringCloudMemberDiscovery;
 import io.axoniq.framework.springcloud.util.RecordingDiscoveryClient;
 import io.axoniq.framework.springcloud.util.RecordingEntitlementManager;
 import io.axoniq.framework.springcloud.util.RecordingQueryHandler;
@@ -82,7 +82,7 @@ class SpringCloudQueryBusConnectorTest {
     private TestServiceInstance remoteInstance;
     private RecordingDiscoveryClient discoveryClient;
     private RecordingCapabilityDiscoveryMode discoveryMode;
-    private SpringCloudMemberRegistry registry;
+    private SpringCloudMemberDiscovery discovery;
     private RecordingQueryHandler handler;
     private RecordingRemoteQueryDispatcher dispatcher;
     private RecordingEntitlementManager entitlementManager;
@@ -95,12 +95,12 @@ class SpringCloudQueryBusConnectorTest {
         remoteInstance = TestServiceInstance.instance("university", "node-b", 8080);
         discoveryClient = new RecordingDiscoveryClient().register("university", localInstance);
         discoveryMode = new RecordingCapabilityDiscoveryMode().answeringAsLocal(localInstance);
-        registry = new SpringCloudMemberRegistry(discoveryClient, discoveryMode);
+        discovery = new SpringCloudMemberDiscovery(discoveryClient, discoveryMode);
         handler = new RecordingQueryHandler();
         dispatcher = new RecordingRemoteQueryDispatcher();
         entitlementManager = new RecordingEntitlementManager();
         invoker = new IncomingQueryInvoker(() -> "node-a", null);
-        testSubject = new SpringCloudQueryBusConnector(registry,
+        testSubject = new SpringCloudQueryBusConnector(discovery,
                                                        invoker,
                                                        dispatcher,
                                                        null,
@@ -133,7 +133,7 @@ class SpringCloudQueryBusConnectorTest {
     }
 
     private Member remoteMember() {
-        return registry.ring().members().stream()
+        return discovery.members().stream()
                        .filter(member -> !member.local())
                        .filter(member -> member.name().contains("node-b"))
                        .findFirst()
@@ -141,7 +141,7 @@ class SpringCloudQueryBusConnectorTest {
     }
 
     private Member otherRemoteMember() {
-        return registry.ring().members().stream()
+        return discovery.members().stream()
                        .filter(member -> !member.local())
                        .filter(member -> member.name().contains("node-c"))
                        .findFirst()
@@ -149,7 +149,7 @@ class SpringCloudQueryBusConnectorTest {
     }
 
     private Member localMember() {
-        return registry.ring().members().stream()
+        return discovery.members().stream()
                        .filter(Member::local)
                        .findFirst()
                        .orElseThrow();
@@ -163,7 +163,7 @@ class SpringCloudQueryBusConnectorTest {
     private void rotateSoThatTheNextInitialResultComesFrom(Member answering) {
         Member next;
         do {
-            next = registry.findQueryDestination(FIND_COURSE).orElseThrow();
+            next = discovery.findQueryDestination(FIND_COURSE).orElseThrow();
         } while (next.equals(answering));
     }
 
@@ -175,14 +175,14 @@ class SpringCloudQueryBusConnectorTest {
         discoveryClient.register("university", localInstance, remoteInstance, other);
         discoveryMode.answering(remoteInstance, new MemberCapabilities(0, Set.of(), Set.of(FIND_COURSE)));
         discoveryMode.answering(other, new MemberCapabilities(0, Set.of(), Set.of(FIND_COURSE)));
-        registry.updateMemberships();
+        discovery.updateMemberships();
     }
 
     /**
-     * A registry that lets a member join in the instant between the two reads opening a subscription makes: the one
+     * A discovery that lets a member join in the instant between the two reads opening a subscription makes: the one
      * resolving every member advertising the query, and the one resolving which of them answers the initial result.
      */
-    private static final class JoiningBetweenResolutions extends SpringCloudMemberRegistry {
+    private static final class JoiningBetweenResolutions extends SpringCloudMemberDiscovery {
 
         private final AtomicReference<@Nullable Runnable> pending = new AtomicReference<>();
 
@@ -215,7 +215,7 @@ class SpringCloudQueryBusConnectorTest {
     private void remoteMemberHandlesTheQuery() {
         discoveryClient.register("university", localInstance, remoteInstance);
         discoveryMode.answering(remoteInstance, new MemberCapabilities(0, Set.of(), Set.of(FIND_COURSE)));
-        registry.updateMemberships();
+        discovery.updateMemberships();
     }
 
     @Nested
@@ -287,7 +287,7 @@ class SpringCloudQueryBusConnectorTest {
         void reportsNoHandlerWhenTheConnectorHasNoneYet() {
             // given a member advertising the query before its handler was registered on the connector
             SpringCloudQueryBusConnector unbound = new SpringCloudQueryBusConnector(
-                    registry, new IncomingQueryInvoker(() -> "node-a", null), dispatcher, null, entitlementManager
+                    discovery, new IncomingQueryInvoker(() -> "node-a", null), dispatcher, null, entitlementManager
             );
             unbound.subscribe(FIND_COURSE);
 
@@ -619,7 +619,7 @@ class SpringCloudQueryBusConnectorTest {
             TestServiceInstance joining = TestServiceInstance.instance("university", "node-c", 8080);
             discoveryClient.register("university", localInstance, remoteInstance, joining);
             discoveryMode.answering(joining, new MemberCapabilities(0, Set.of(), Set.of(FIND_COURSE)));
-            registry.updateMemberships();
+            discovery.updateMemberships();
 
             // then the updates it emitted before being subscribed to are gone, so carrying on would be silently
             // incomplete
@@ -636,7 +636,7 @@ class SpringCloudQueryBusConnectorTest {
                 TestServiceInstance joining = TestServiceInstance.instance("university", "node-c", 8080);
                 discoveryClient.register("university", localInstance, remoteInstance, joining);
                 discoveryMode.answering(joining, new MemberCapabilities(0, Set.of(), Set.of(FIND_COURSE)));
-                registry.updateMemberships();
+                discovery.updateMemberships();
             });
 
             // when
@@ -649,10 +649,9 @@ class SpringCloudQueryBusConnectorTest {
 
         @Test
         void asksAMemberItOpenedASubscriptionOnForTheInitialResult() {
-            // given a registry whose ring changes in the instant between resolving every member advertising the query
+            // given a discovery whose ring changes in the instant between resolving every member advertising the query
             // and resolving the one to ask for the initial result
-            JoiningBetweenResolutions joining =
-                    new JoiningBetweenResolutions(discoveryClient, discoveryMode);
+            JoiningBetweenResolutions joining = new JoiningBetweenResolutions(discoveryClient, discoveryMode);
             SpringCloudQueryBusConnector connector = new SpringCloudQueryBusConnector(
                     joining, new IncomingQueryInvoker(() -> "node-a", null), dispatcher, null, entitlementManager
             );
@@ -693,7 +692,7 @@ class SpringCloudQueryBusConnectorTest {
             TestServiceInstance joining = TestServiceInstance.instance("university", "node-c", 8080);
             discoveryClient.register("university", localInstance, remoteInstance, joining);
             discoveryMode.answering(joining, new MemberCapabilities(0, Set.of(), Set.of(LIST_COURSES)));
-            registry.updateMemberships();
+            discovery.updateMemberships();
 
             // then it emits no updates for this query, so there is nothing to have missed
             drain(responses);
@@ -909,7 +908,7 @@ class SpringCloudQueryBusConnectorTest {
 
             // then other members stop routing queries here rather than discovering it went away by timing out
             assertThat(discoveryMode.localCapabilities().queries()).isEmpty();
-            assertThat(registry.findQueryDestination(FIND_COURSE)).isEmpty();
+            assertThat(discovery.findQueryDestination(FIND_COURSE)).isEmpty();
         }
 
         @Test

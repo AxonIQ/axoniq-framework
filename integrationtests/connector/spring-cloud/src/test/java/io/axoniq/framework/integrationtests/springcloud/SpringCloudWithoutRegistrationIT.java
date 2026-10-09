@@ -22,7 +22,7 @@ package io.axoniq.framework.integrationtests.springcloud;
 import io.axoniq.framework.integrationtests.springcloud.SpringCloudNodes.CreateCourse;
 import io.axoniq.framework.springcloud.discovery.CapabilityDiscoveryMode;
 import io.axoniq.framework.springcloud.routing.Member;
-import io.axoniq.framework.springcloud.shared.SpringCloudMemberRegistry;
+import io.axoniq.framework.springcloud.shared.SpringCloudMemberDiscovery;
 import org.axonframework.messaging.commandhandling.gateway.CommandGateway;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.*;
@@ -111,7 +111,7 @@ class SpringCloudWithoutRegistrationIT {
     void startsWithoutARegistration() {
         // then
         assertThat(nodeA.getBeansOfType(Registration.class)).isEmpty();
-        assertThat(nodeA.getBean(SpringCloudMemberRegistry.class).localMember().name())
+        assertThat(nodeA.getBean(SpringCloudMemberDiscovery.class).localMember().name())
                 .isEqualTo(nodeA.getBean(CapabilityDiscoveryMode.class).localNodeId());
     }
 
@@ -122,10 +122,10 @@ class SpringCloudWithoutRegistrationIT {
                   .atMost(Duration.ofSeconds(20))
                   .untilAsserted(() -> {
                       for (ConfigurableApplicationContext node : List.of(nodeA, nodeB)) {
-                          SpringCloudMemberRegistry registry = node.getBean(SpringCloudMemberRegistry.class);
-                          Set<Member> members = registry.ring().members();
+                          SpringCloudMemberDiscovery discovery = node.getBean(SpringCloudMemberDiscovery.class);
+                          Set<Member> members = discovery.members();
                           assertThat(members).hasSize(2);
-                          assertThat(members).filteredOn(Member::local).containsExactly(registry.localMember());
+                          assertThat(members).filteredOn(Member::local).containsExactly(discovery.localMember());
                       }
                   });
     }
@@ -158,8 +158,7 @@ class SpringCloudWithoutRegistrationIT {
     }
 
     private static Set<String> memberNamesOf(ConfigurableApplicationContext node) {
-        return node.getBean(SpringCloudMemberRegistry.class)
-                   .ring()
+        return node.getBean(SpringCloudMemberDiscovery.class)
                    .members()
                    .stream()
                    .map(Member::name)

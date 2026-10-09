@@ -22,6 +22,7 @@ package org.axonframework.extensions.mongo.eventhandling.saga.repository;
 import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoClients;
 import com.thoughtworks.xstream.XStream;
+import org.axonframework.common.util.Af4ClassLoaderSupport;
 import org.axonframework.conversion.ConversionException;
 import org.axonframework.conversion.jackson.JacksonConverter;
 import org.axonframework.conversion.xstream.XStreamConverter;
@@ -29,7 +30,6 @@ import org.axonframework.extensions.mongo.DefaultMongoTemplate;
 import org.axonframework.extensions.mongo.MongoTemplate;
 import org.axonframework.modelling.saga.AssociationValue;
 import org.axonframework.modelling.saga.AssociationValuesImpl;
-import org.axonframework.modelling.saga.repository.Af4ClassLoaderSupport;
 import org.axonframework.modelling.saga.repository.SagaStore;
 import org.axonframework.modelling.saga.repository.StubSaga;
 import org.bson.Document;
@@ -225,6 +225,25 @@ class MongoSagaStoreAf4CompatibilityIT {
                                                                                          StandardCharsets.UTF_8))
             );
             assertThat(fromAf4.getHandledEvents()).containsExactly("OrderShipped");
+        }
+
+        @Test
+        void aSagaInsertedThroughXStreamConverterIsReadableByAxonFramework4XStreamSerializer() throws Exception {
+            // given
+            StubSaga saga = new StubSaga();
+            saga.handled("OrderPlaced");
+
+            // when
+            xStreamStore.insertSaga(StubSaga.class, "saga-new", saga, singleton(ORDER_1));
+
+            // then
+            byte[] serializedSaga = ((Binary) documentOf("saga-new").get("serializedSaga")).getData();
+            StubSaga fromAf4 = Af4ClassLoaderSupport.withAf4ClassLoader(
+                    classLoader -> (StubSaga) Af4ClassLoaderSupport.af4XStream(classLoader)
+                                                                    .fromXML(new String(serializedSaga,
+                                                                                         StandardCharsets.UTF_8))
+            );
+            assertThat(fromAf4.getHandledEvents()).containsExactly("OrderPlaced");
         }
     }
 

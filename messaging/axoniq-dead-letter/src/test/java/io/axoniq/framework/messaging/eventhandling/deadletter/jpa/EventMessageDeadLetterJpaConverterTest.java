@@ -38,12 +38,17 @@ import org.axonframework.messaging.eventhandling.processing.streaming.token.GapA
 import org.axonframework.messaging.eventhandling.processing.streaming.token.GlobalSequenceTrackingToken;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.junit.jupiter.api.*;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
+import tools.jackson.databind.DefaultTyping;
+import tools.jackson.databind.json.JsonMapper;
+import tools.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
 
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Objects;
 
-import static org.assertj.core.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Tests for {@link EventMessageDeadLetterJpaConverter}.
@@ -291,6 +296,46 @@ class EventMessageDeadLetterJpaConverterTest {
             // then
             assertThat(acEntry.message().payloadType()).isEqualTo(byte[].class);
             assertThat(acEntry.message().payloadAs(ConverterTestEvent.class)).isEqualTo(event);
+        }
+    }
+
+    @Nested
+    class WithDefaultTypingConverter {
+
+        // Mirrors the setup needed to stay wire-compatible with an Axon Framework 4 event store written by
+        // JacksonSerializer/Jackson3Serializer with default typing.
+        private static JacksonConverter defaultTypingConverter(DefaultTyping defaultTyping) {
+            BasicPolymorphicTypeValidator ptv = BasicPolymorphicTypeValidator.builder()
+                                                                             .allowIfSubType("java.util.")
+                                                                             .allowIfSubType("org.axonframework.")
+                                                                             .build();
+            return new JacksonConverter(
+                    JsonMapper.builder()
+                              .polymorphicTypeValidator(ptv)
+                              .activateDefaultTyping(ptv, defaultTyping)
+                              .build()
+            );
+        }
+
+        @ParameterizedTest
+        @EnumSource(value = DefaultTyping.class,
+                    names = {"OBJECT_AND_NON_CONCRETE", "NON_CONCRETE_AND_ARRAYS", "NON_FINAL"})
+        void roundTripConversionRestoresMetadataWhenConverterUsesDefaultTyping(DefaultTyping defaultTyping) {
+            // given
+            JacksonConverter defaultTypingJacksonConverter = defaultTypingConverter(defaultTyping);
+            EventConverter defaultTypingEventConverter = new DelegatingEventConverter(defaultTypingJacksonConverter);
+            EventMessage message = EventTestUtils.asEventMessage(event).andMetadata(metadata);
+
+            // when
+            DeadLetterEventEntry entry = converter.convert(message,
+                                                           null,
+                                                           defaultTypingEventConverter,
+                                                           defaultTypingJacksonConverter);
+            MessageStream.Entry<EventMessage> restoredEntry =
+                    converter.convert(entry, defaultTypingEventConverter, defaultTypingJacksonConverter);
+
+            // then
+            assertThat(restoredEntry.message().metadata()).isEqualTo(message.metadata());
         }
     }
 

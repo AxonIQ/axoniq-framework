@@ -177,7 +177,7 @@ Which members there are comes from the discovery implementation, which signals a
 Eureka publishes one on every registry fetch, `eureka.client.registry-fetch-interval-seconds`, which is 30 seconds by default.
 Spring Cloud Kubernetes publishes one whenever the set of endpoints changes.
 On each heartbeat, the connector asks the members it has not heard from yet what they handle, and drops the ones discovery no longer reports.
-A deployment whose discovery implementation publishes no heartbeats at all drives this itself, by calling `updateMemberships()` on the `SpringCloudMemberRegistry` bean.
+A deployment whose discovery implementation publishes no heartbeats at all drives this itself, by calling `updateMemberships()` on the `SpringCloudMemberDiscovery` bean.
 
 What a member handles changes whenever it subscribes or unsubscribes a handler, which no discovery implementation signals.
 The connector therefore asks each member again once what it last answered is older than `axon.springcloud.capabilities-refresh-interval`, 30 seconds by default, and at the latest one and a half intervals after it answered.

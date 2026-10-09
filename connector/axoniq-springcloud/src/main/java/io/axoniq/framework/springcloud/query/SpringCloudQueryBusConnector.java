@@ -23,7 +23,7 @@ import io.axoniq.framework.messaging.queryhandling.distributed.QueryBusConnector
 import io.axoniq.framework.springcloud.query.RemoteQueryDispatcher.SubscriptionListener;
 import io.axoniq.framework.springcloud.routing.Member;
 import io.axoniq.framework.springcloud.shared.SpringCloudAxoniqAddon;
-import io.axoniq.framework.springcloud.shared.SpringCloudMemberRegistry;
+import io.axoniq.framework.springcloud.shared.SpringCloudMemberDiscovery;
 import io.axoniq.license.entitlement.EntitlementManager;
 import io.axoniq.license.entitlement.EntitlementMessageType;
 import org.axonframework.common.FutureUtils;
@@ -87,7 +87,7 @@ public class SpringCloudQueryBusConnector implements QueryBusConnector {
 
     private static final Logger logger = LoggerFactory.getLogger(SpringCloudQueryBusConnector.class);
 
-    private final SpringCloudMemberRegistry registry;
+    private final SpringCloudMemberDiscovery discovery;
     private final IncomingQueryInvoker invoker;
     private final RemoteQueryDispatcher dispatcher;
     private final @Nullable MessageConverter converter;
@@ -99,20 +99,20 @@ public class SpringCloudQueryBusConnector implements QueryBusConnector {
     private volatile @Nullable Handler incomingHandler;
 
     /**
-     * Constructs a {@code SpringCloudQueryBusConnector} routing with the given {@code registry}.
+     * Constructs a {@code SpringCloudQueryBusConnector} routing with the given {@code discovery}.
      *
-     * @param registry   the registry reporting which members handle which queries
+     * @param discovery  the discovery reporting which members handle which queries
      * @param invoker    the invoker queries arriving from other members are handled through
      * @param dispatcher the dispatcher sending queries to other members
      * @param converter  the converter attached to queries routed to this application, so that a locally routed query
      *                   carries the same conversion capability as one that travelled over the wire, or {@code null}
      *                   when none is available.
      */
-    public SpringCloudQueryBusConnector(SpringCloudMemberRegistry registry,
+    public SpringCloudQueryBusConnector(SpringCloudMemberDiscovery discovery,
                                         IncomingQueryInvoker invoker,
                                         RemoteQueryDispatcher dispatcher,
                                         @Nullable MessageConverter converter) {
-        this(registry, invoker, dispatcher, converter, EntitlementManager.INSTANCE);
+        this(discovery, invoker, dispatcher, converter, EntitlementManager.INSTANCE);
         EntitlementManager.INSTANCE.registerAddon(SpringCloudAxoniqAddon.class);
     }
 
@@ -120,11 +120,11 @@ public class SpringCloudQueryBusConnector implements QueryBusConnector {
      * Package-private constructor allowing an alternative {@link EntitlementManager} to be injected.
      * <p>
      * Marked {@link Internal} because production code must use
-     * {@link #SpringCloudQueryBusConnector(SpringCloudMemberRegistry, IncomingQueryInvoker, RemoteQueryDispatcher,
+     * {@link #SpringCloudQueryBusConnector(SpringCloudMemberDiscovery, IncomingQueryInvoker, RemoteQueryDispatcher,
      * MessageConverter)}, which registers the addon and claims against {@link EntitlementManager#INSTANCE}. This
      * constructor exists so tests need not touch that singleton.
      *
-     * @param registry           the registry reporting which members handle which queries
+     * @param discovery          the discovery reporting which members handle which queries
      * @param invoker            the invoker queries arriving from other members are handled through
      * @param dispatcher         the dispatcher sending queries to other members
      * @param converter          the converter attached to queries routed to this application, or {@code null} when
@@ -132,12 +132,12 @@ public class SpringCloudQueryBusConnector implements QueryBusConnector {
      * @param entitlementManager the manager each dispatched query is claimed against
      */
     @Internal
-    SpringCloudQueryBusConnector(SpringCloudMemberRegistry registry,
+    SpringCloudQueryBusConnector(SpringCloudMemberDiscovery discovery,
                                  IncomingQueryInvoker invoker,
                                  RemoteQueryDispatcher dispatcher,
                                  @Nullable MessageConverter converter,
                                  EntitlementManager entitlementManager) {
-        this.registry = Objects.requireNonNull(registry, "The registry must not be null.");
+        this.discovery = Objects.requireNonNull(discovery, "The discovery must not be null.");
         this.invoker = Objects.requireNonNull(invoker, "The invoker must not be null.");
         this.dispatcher = Objects.requireNonNull(dispatcher, "The dispatcher must not be null.");
         this.converter = converter;
@@ -156,7 +156,7 @@ public class SpringCloudQueryBusConnector implements QueryBusConnector {
         }
 
         QualifiedName queryName = query.type().qualifiedName();
-        Optional<Member> destination = registry.findQueryDestination(queryName);
+        Optional<Member> destination = discovery.findQueryDestination(queryName);
         if (destination.isEmpty()) {
             return MessageStream.failed(new NoHandlerForQueryException(
                     "No member of the cluster handles queries of type [" + query.type() + "]."
@@ -418,7 +418,7 @@ public class SpringCloudQueryBusConnector implements QueryBusConnector {
     private void suspectWhenUnreachable(Member member, MessageStream<QueryResponseMessage> responses) {
         responses.error()
                  .filter(cause -> cause instanceof QueryDispatchException)
-                 .ifPresent(cause -> registry.markUnreachable(member));
+                 .ifPresent(cause -> discovery.markUnreachable(member));
     }
 
     /**
@@ -451,7 +451,7 @@ public class SpringCloudQueryBusConnector implements QueryBusConnector {
     public CompletableFuture<Void> disconnect() {
         logger.debug("Disconnecting the SpringCloudQueryBusConnector.");
         subscriptions.clear();
-        registry.publishLocalQueries(Set.of());
+        discovery.publishLocalQueries(Set.of());
         // Safe to leave here: event processors are stopped in the INBOUND_EVENT_CONNECTORS phase, which shutdown
         // reaches before this one, so nothing is left that could still emit an update onto these subscriptions.
         invoker.leave();
@@ -489,16 +489,16 @@ public class SpringCloudQueryBusConnector implements QueryBusConnector {
         QualifiedName queryName = query.type().qualifiedName();
         // Every member advertising the name, not just the one a plain query would route to: an update is emitted on
         // whichever member's state changed, and only reaches subscriptions that member holds a registration for.
-        List<Member> members = registry.findAllQueryDestinations(queryName);
+        List<Member> members = discovery.findAllQueryDestinations(queryName);
         if (members.isEmpty()) {
             return MessageStream.failed(new NoHandlerForQueryException(
                     "No member of the cluster handles queries of type [" + query.type() + "]."
             ));
         }
-        // Resolved against the members already snapshotted, rather than taken as whatever the registry answers now.
+        // Resolved against the members already snapshotted, rather than taken as whatever the discovery answers now.
         // A ring change between the two reads would otherwise name a member no update stream is opened on, asking it
         // for an initial result while the updates it emits reach nobody.
-        Member answering = registry.findQueryDestination(queryName)
+        Member answering = discovery.findQueryDestination(queryName)
                                    .filter(members::contains)
                                    .orElseGet(members::getFirst);
 
@@ -612,7 +612,7 @@ public class SpringCloudQueryBusConnector implements QueryBusConnector {
                                          SubscriptionUpdates updates) {
         Set<Member> known = Set.copyOf(subscribedTo);
         Registration watch =
-                registry.onMembershipChanged(ring -> failWhenAMemberJoined(query, queryName, known, updates));
+                discovery.onMembershipChanged(ring -> failWhenAMemberJoined(query, queryName, known, updates));
         // Checked once more now that the watch is in place. Opening a subscription on every member takes as long as
         // reaching them all does, and a member that started advertising the query in that time changed the ring
         // before there was a listener to hear it -- so the watch alone would never report it.
@@ -630,7 +630,7 @@ public class SpringCloudQueryBusConnector implements QueryBusConnector {
                                        QualifiedName queryName,
                                        Set<Member> known,
                                        SubscriptionUpdates updates) {
-        List<Member> current = registry.findAllQueryDestinations(queryName);
+        List<Member> current = discovery.findAllQueryDestinations(queryName);
         for (Member member : current) {
             if (!known.contains(member)) {
                 logger.info("Member [{}] started handling query [{}] while a subscription for it was active; "
@@ -679,7 +679,7 @@ public class SpringCloudQueryBusConnector implements QueryBusConnector {
         Objects.requireNonNull(queryName, "The queryName must not be null.");
         logger.debug("Subscribing to query [{}].", queryName);
         subscriptions.add(queryName);
-        registry.publishLocalQueries(Set.copyOf(subscriptions));
+        discovery.publishLocalQueries(Set.copyOf(subscriptions));
         return FutureUtils.emptyCompletedFuture();
     }
 
@@ -690,7 +690,7 @@ public class SpringCloudQueryBusConnector implements QueryBusConnector {
             return false;
         }
         logger.debug("Unsubscribing from query [{}].", queryName);
-        registry.publishLocalQueries(Set.copyOf(subscriptions));
+        discovery.publishLocalQueries(Set.copyOf(subscriptions));
         return true;
     }
 
@@ -703,7 +703,7 @@ public class SpringCloudQueryBusConnector implements QueryBusConnector {
 
     @Override
     public void describeTo(ComponentDescriptor descriptor) {
-        descriptor.describeProperty("registry", registry);
+        descriptor.describeProperty("discovery", discovery);
         descriptor.describeProperty("dispatcher", dispatcher);
         descriptor.describeProperty("subscriptions",
                                     subscriptions.stream().map(QualifiedName::toString).sorted().toList());

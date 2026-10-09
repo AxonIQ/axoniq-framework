@@ -24,9 +24,8 @@ import io.axoniq.framework.springcloud.command.IncomingCommandInvoker;
 import io.axoniq.framework.springcloud.command.RecordingRemoteCommandDispatcher;
 import io.axoniq.framework.springcloud.command.RemoteCommandDispatcher;
 import io.axoniq.framework.springcloud.discovery.RecordingCapabilityDiscoveryMode;
-import io.axoniq.framework.springcloud.shared.SpringCloudMemberRegistry;
+import io.axoniq.framework.springcloud.shared.SpringCloudMemberDiscovery;
 import io.axoniq.framework.springcloud.util.RecordingDiscoveryClient;
-import io.axoniq.framework.springcloud.util.TestServiceInstance;
 import org.axonframework.common.configuration.ApplicationConfigurer;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.common.infra.ComponentDescriptor;
@@ -50,17 +49,14 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class SpringCloudConfigurationEnhancerTest {
 
-    private SpringCloudMemberRegistry registry;
+    private SpringCloudMemberDiscovery discovery;
     private IncomingCommandInvoker invoker;
     private RemoteCommandDispatcher dispatcher;
 
     @BeforeEach
     void setUp() {
-        TestServiceInstance localInstance = TestServiceInstance.instance("university", "node-a", 8080);
-        registry = new SpringCloudMemberRegistry(
-                new RecordingDiscoveryClient().register("university", localInstance),
-                new RecordingCapabilityDiscoveryMode().answeringAsLocal(localInstance)
-        );
+        discovery = new SpringCloudMemberDiscovery(new RecordingDiscoveryClient(),
+                                                   new RecordingCapabilityDiscoveryMode());
         invoker = new IncomingCommandInvoker(() -> "node-a", null);
         dispatcher = new RecordingRemoteCommandDispatcher();
     }
@@ -74,7 +70,7 @@ class SpringCloudConfigurationEnhancerTest {
                                   .componentRegistry(componentRegistry -> componentRegistry
                                           .disableEnhancerScanning()
                                           .registerEnhancer(new SpringCloudConfigurationEnhancer())
-                                          .registerComponent(SpringCloudMemberRegistry.class, c -> registry)
+                                          .registerComponent(SpringCloudMemberDiscovery.class, c -> discovery)
                                           .registerComponent(IncomingCommandInvoker.class, c -> invoker)
                                           .registerComponent(RemoteCommandDispatcher.class, c -> dispatcher));
     }
@@ -96,7 +92,7 @@ class SpringCloudConfigurationEnhancerTest {
     class WithoutTheCollaborators {
 
         @Test
-        void registersNothingWhenNoRegistryIsPresent() {
+        void registersNothingWhenNoDiscoveryIsPresent() {
             // given — an application that never added Spring Cloud messaging support
             Configuration configuration =
                     MessagingConfigurer.create()

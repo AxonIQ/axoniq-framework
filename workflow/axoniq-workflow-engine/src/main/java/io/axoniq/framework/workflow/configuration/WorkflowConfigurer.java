@@ -60,8 +60,8 @@ import static java.util.Objects.requireNonNull;
  *     defaulting to a virtual-thread-per-task executor</li>
  *     <li>{@link io.axoniq.framework.workflow.runtime.execution.WorkflowStore} - defaulting to an
  *     {@link io.axoniq.framework.workflow.runtime.execution.EventSourcedWorkflowStore}</li>
- *     <li>{@link io.axoniq.framework.workflow.runtime.execution.WorkflowStateParameterResolverFactory}, so handler
- *     methods can inject the current workflow state</li>
+ *     <li>{@link io.axoniq.framework.workflow.configuration.WorkflowMethodParameterResolverFactory}, so handler
+ *     methods can inject the current workflow context, status, and other helpful information</li>
  * </ul>
  * Every {@link io.axoniq.framework.workflow.runtime.execution.WorkflowConfigurationRegistry},
  * {@link io.axoniq.framework.workflow.runtime.execution.WorkflowExecutionRepository},

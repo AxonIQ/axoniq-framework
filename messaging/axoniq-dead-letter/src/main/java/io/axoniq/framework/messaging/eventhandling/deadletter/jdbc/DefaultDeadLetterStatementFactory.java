@@ -37,6 +37,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -139,7 +140,7 @@ public class DefaultDeadLetterStatementFactory<E extends EventMessage> implement
                                 AtomicInteger fieldIndex,
                                 E eventMessage) throws SQLException {
         byte[] serializedPayload = eventConverter.convert(eventMessage.payload(), byte[].class);
-        byte[] serializedMetadata = eventConverter.convert(eventMessage.metadata(), byte[].class);
+        byte[] serializedMetadata = eventConverter.convert(new HashMap<>(eventMessage.metadata()), byte[].class);
         statement.setString(fieldIndex.getAndIncrement(), eventMessage.getClass().getName());
         statement.setString(fieldIndex.getAndIncrement(), eventMessage.identifier());
         statement.setString(fieldIndex.getAndIncrement(), eventMessage.type().toString());
@@ -184,7 +185,7 @@ public class DefaultDeadLetterStatementFactory<E extends EventMessage> implement
         Optional<Cause> cause = letter.cause();
         statement.setString(fieldIndex.getAndIncrement(), cause.map(Cause::type).orElse(null));
         statement.setString(fieldIndex.getAndIncrement(), cause.map(Cause::message).orElse(null));
-        byte[] serializedDiagnostics = genericConverter.convert(letter.diagnostics(), byte[].class);
+        byte[] serializedDiagnostics = genericConverter.convert(new HashMap<>(letter.diagnostics()), byte[].class);
         statement.setBytes(fieldIndex.getAndIncrement(), serializedDiagnostics);
     }
 
@@ -230,7 +231,7 @@ public class DefaultDeadLetterStatementFactory<E extends EventMessage> implement
         statement.setString(1, getOrDefault(cause, Cause::type, null));
         statement.setString(2, getOrDefault(cause, Cause::message, null));
         statement.setString(3, DateTimeUtils.formatInstant(lastTouched));
-        byte[] serializedDiagnostics = genericConverter.convert(diagnostics, byte[].class);
+        byte[] serializedDiagnostics = genericConverter.convert(new HashMap<>(diagnostics), byte[].class);
         statement.setBytes(4, serializedDiagnostics);
         statement.setString(5, letterIdentifier);
         return statement;

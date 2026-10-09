@@ -19,6 +19,8 @@
 
 package org.axonframework.deadline;
 
+import io.axoniq.framework.legacy.LegacySupportAxoniqAddon;
+import io.axoniq.license.entitlement.EntitlementManager;
 import org.axonframework.common.FutureUtils;
 import org.axonframework.common.ObjectUtils;
 import org.axonframework.common.Registration;
@@ -44,11 +46,12 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.Consumer;
 
 /**
  * Abstract implementation of the {@link DeadlineManager} to be implemented by concrete solutions for the
  * DeadlineManager. Provides functionality to perform a call to the DeadlineManager when the {@link ProcessingContext}
- * of the current invocation prepares its commit. This {@link #runOnPrepareCommitOrNow(Runnable)} functionality is
+ * of the current invocation prepares its commit. This {@link #runOnPrepareCommitOrNow(Consumer)} functionality is
  * required, as the DeadlineManager schedules a Message which needs to happen in order with the other messages
  * published throughout the system.
  * <p>
@@ -62,7 +65,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 public abstract class AbstractDeadlineManager implements DeadlineManager {
 
     /**
-     * The {@link ProcessingLifecycle.Phase phase} in which calls deferred by {@link #runOnPrepareCommitOrNow(Runnable)}
+     * The {@link ProcessingLifecycle.Phase phase} in which calls deferred by {@link #runOnPrepareCommitOrNow(Consumer)}
      * run, ordered after {@link ProcessingLifecycle.DefaultPhases#PREPARE_COMMIT PREPARE_COMMIT} and the Saga write
      * ({@link AnnotatedSagaRepository#WRITE_SAGA}), and before {@link ProcessingLifecycle.DefaultPhases#COMMIT COMMIT}.
      * It is derived from the Saga write, so that moving the Saga write cannot reorder the deadline calls before it.
@@ -88,25 +91,39 @@ public abstract class AbstractDeadlineManager implements DeadlineManager {
             Context.ResourceKey.withLabel("deferredDeadlineCalls");
 
     /**
+     * Instantiate an {@link AbstractDeadlineManager}, registering the {@link LegacySupportAxoniqAddon} with the
+     * license entitlement system.
+     */
+    protected AbstractDeadlineManager() {
+        EntitlementManager.INSTANCE.registerAddon(LegacySupportAxoniqAddon.class);
+    }
+
+    /**
      * Run a given {@code deadlineCall} immediately, or defer it to a phase of the {@link ProcessingContext} carried by
      * the current {@link ContextAwareScope}, if one is active. That phase runs after the Saga write and before the
-     * context commits. This is required as
-     * the DeadlineManager schedules messages which we want to happen in order with other messages being handled.
+     * context commits. This is required as the DeadlineManager schedules messages which we want to happen in order
+     * with other messages being handled.
      * <p>
      * Deferred calls run in the order they were made, also across Sagas sharing the same {@link ProcessingContext}, as
      * they did in the prepare-commit phase of an Axon Framework 4 unit of work. They never run when the context rolls
      * back before reaching that phase.
+     * <p>
+     * The call is handed the {@link ProcessingContext} it was deferred to, or {@code null} when it runs immediately.
+     * Concrete deadline managers pass it on to {@link #processDispatchInterceptors(DeadlineMessage,
+     * ProcessingContext)}, so that the dispatch interceptors of a deadline scheduled by a Saga see the Saga's context.
+     * The call cannot look that context up itself: by the time a deferred call runs, the Saga's scope is no longer
+     * current.
      *
-     * @param deadlineCall a {@link Runnable} to be executed now, or when the {@link ProcessingContext} of the current
-     *                     scope prepares its commit
+     * @param deadlineCall the call to be executed now, or when the {@link ProcessingContext} of the current scope
+     *                     prepares its commit, receiving that context or {@code null}
      * @throws IllegalStateException if the calls deferred to the {@link ProcessingContext} of the current scope already
      *                               ran, as nothing would run the given {@code deadlineCall} anymore
      */
-    protected void runOnPrepareCommitOrNow(Runnable deadlineCall) {
+    protected void runOnPrepareCommitOrNow(Consumer<@Nullable ProcessingContext> deadlineCall) {
         Objects.requireNonNull(deadlineCall, "The deadline call may not be null.");
         Optional<ProcessingContext> context = ContextAwareScope.currentProcessingContext();
         if (context.isEmpty()) {
-            deadlineCall.run();
+            deadlineCall.accept(null);
             return;
         }
         if (!deferredCalls(context.get()).offer(deadlineCall)) {
@@ -127,7 +144,7 @@ public abstract class AbstractDeadlineManager implements DeadlineManager {
         return context.computeResourceIfAbsent(deferredCallsKey, () -> {
             DeferredCalls calls = new DeferredCalls();
             try {
-                context.runOn(RUN_DEADLINE_CALLS, phaseContext -> calls.drain().forEach(Runnable::run));
+                context.runOn(RUN_DEADLINE_CALLS, phaseContext -> calls.drain().forEach(call -> call.accept(context)));
             } catch (IllegalStateException e) {
                 throw new IllegalStateException(TOO_LATE_TO_DEFER, e);
             }
@@ -140,7 +157,8 @@ public abstract class AbstractDeadlineManager implements DeadlineManager {
      * scheduled.
      * <p>
      * Concrete deadline managers apply the registered interceptors through
-     * {@link #processDispatchInterceptors(DeadlineMessage)}, inside the deferred call when the call is deferred.
+     * {@link #processDispatchInterceptors(DeadlineMessage, ProcessingContext)}, inside the deferred call when the call
+     * is deferred.
      *
      * @param dispatchInterceptor the interceptor to apply to deadline messages before they are scheduled
      * @return a {@link Registration} that removes the given {@code dispatchInterceptor} again when cancelled
@@ -190,21 +208,26 @@ public abstract class AbstractDeadlineManager implements DeadlineManager {
     }
 
     /**
-     * Applies registered {@link MessageDispatchInterceptor}s to the given {@code message}.
+     * Applies registered {@link MessageDispatchInterceptor}s to the given {@code message}, handing them the given
+     * {@code context}.
      * <p>
-     * A failing interceptor fails this call with the interceptor's own exception. A deadline always needs a message to
-     * schedule, so an interceptor that ends the chain without one fails this call with an
-     * {@link IllegalStateException}, instead of scheduling a {@code null} message.
+     * The {@code context} is the one a deadline call was deferred to, as handed out by
+     * {@link #runOnPrepareCommitOrNow(Consumer)}, or {@code null} for a call that runs immediately, outside any
+     * {@link ProcessingContext}. A failing interceptor fails this call with the interceptor's own exception, and an
+     * interceptor that ends the chain without a message fails it with an {@link IllegalStateException}, instead of
+     * scheduling a {@code null} message.
      *
      * @param message the deadline message to be intercepted
+     * @param context the context the deadline call runs for, or {@code null} if it runs outside one
      * @return the intercepted message, never {@code null}
      * @throws IllegalStateException if an interceptor ended the chain without a message
      */
-    protected DeadlineMessage processDispatchInterceptors(DeadlineMessage message) {
+    protected DeadlineMessage processDispatchInterceptors(DeadlineMessage message,
+                                                          @Nullable ProcessingContext context) {
         Objects.requireNonNull(message, "The deadline message may not be null.");
         return FutureUtils.joinAndUnwrap(
                 new DefaultMessageDispatchInterceptorChain<>(dispatchInterceptors())
-                        .proceed(message, null)
+                        .proceed(message, context)
                         .first()
                         .<DeadlineMessage>cast()
                         .asCompletableFuture()
@@ -255,10 +278,10 @@ public abstract class AbstractDeadlineManager implements DeadlineManager {
      */
     private static final class DeferredCalls {
 
-        private final List<Runnable> calls = new ArrayList<>();
+        private final List<Consumer<@Nullable ProcessingContext>> calls = new ArrayList<>();
         private boolean drained;
 
-        private synchronized boolean offer(Runnable call) {
+        private synchronized boolean offer(Consumer<@Nullable ProcessingContext> call) {
             if (drained) {
                 return false;
             }
@@ -266,7 +289,7 @@ public abstract class AbstractDeadlineManager implements DeadlineManager {
             return true;
         }
 
-        private synchronized List<Runnable> drain() {
+        private synchronized List<Consumer<@Nullable ProcessingContext>> drain() {
             drained = true;
             return List.copyOf(calls);
         }

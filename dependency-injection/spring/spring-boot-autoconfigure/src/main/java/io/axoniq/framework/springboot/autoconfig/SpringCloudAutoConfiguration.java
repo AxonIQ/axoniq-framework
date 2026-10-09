@@ -35,7 +35,7 @@ import io.axoniq.framework.springcloud.query.IncomingQueryInvoker;
 import io.axoniq.framework.springcloud.query.RemoteQueryDispatcher;
 import io.axoniq.framework.springcloud.query.SpringCloudQueryController;
 import io.axoniq.framework.springcloud.query.SpringCloudQueryControllerConfiguration;
-import io.axoniq.framework.springcloud.shared.SpringCloudMemberRegistry;
+import io.axoniq.framework.springcloud.shared.SpringCloudMemberDiscovery;
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
@@ -52,6 +52,10 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplicat
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.cloud.client.ServiceInstance;
 import org.springframework.cloud.client.discovery.DiscoveryClient;
+import org.springframework.cloud.client.discovery.event.HeartbeatEvent;
+import org.springframework.cloud.client.discovery.event.InstanceRegisteredEvent;
+import org.springframework.context.ApplicationEvent;
+import org.springframework.context.ApplicationListener;
 import org.springframework.context.SmartLifecycle;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -76,9 +80,9 @@ import java.util.function.Predicate;
  * {@link SpringCloudConfigurationEnhancer} registers the connectors themselves and the framework decorates the
  * configured {@code CommandBus} and {@code QueryBus} into their distributed counterparts.
  * <p>
- * These beans live here rather than in the {@code ConfigurationEnhancer} because two of them only work as Spring beans.
- * {@link SpringCloudMemberRegistry} learns about the cluster through {@code @EventListener} methods, which Spring
- * invokes only on beans it manages, and the two controllers are only mapped as endpoints if Spring MVC knows about
+ * These beans live here rather than in the {@code ConfigurationEnhancer} because two concerns only work through Spring.
+ * {@link SpringCloudMemberDiscovery} learns about the cluster from the events Spring Cloud Discovery publishes, which
+ * only reach listeners Spring manages, and the two controllers are only mapped as endpoints if Spring MVC knows about
  * them. The rest follows those two.
  * <p>
  * Activates when a Spring Cloud {@link DiscoveryClient} is available — that is, when the application has chosen a
@@ -372,7 +376,8 @@ public class SpringCloudAutoConfiguration {
         }
 
         /**
-         * Bean creation method for the {@link SpringCloudMemberRegistry} maintaining the routing ring.
+         * Bean creation method for the {@link SpringCloudMemberDiscovery} maintaining the routing ring from what Spring
+         * Cloud Discovery reports.
          * <p>
          * An application can narrow which discovered instances are considered at all by contributing a
          * {@code Predicate<ServiceInstance>} bean. That is worth doing on a registry holding many services: instances
@@ -390,11 +395,11 @@ public class SpringCloudAutoConfiguration {
          * @param properties              the connector's properties
          * @param discoveryExecutor       the executor discovery rounds and their capability requests run on
          * @param scheduler               the scheduler deciding when capabilities are due a refresh
-         * @return the registry maintaining the routing ring
+         * @return the discovery maintaining the routing ring
          */
         @Bean
         @ConditionalOnMissingBean
-        public SpringCloudMemberRegistry axoniqSpringCloudMemberRegistry(
+        public SpringCloudMemberDiscovery axoniqSpringCloudMemberDiscovery(
                 ObjectProvider<DiscoveryClient> discoveryClientProvider,
                 CapabilityDiscoveryMode discoveryMode,
                 ObjectProvider<Predicate<ServiceInstance>> instanceFilterProvider,
@@ -402,7 +407,7 @@ public class SpringCloudAutoConfiguration {
                 @Qualifier(DISCOVERY_EXECUTOR_BEAN) ExecutorService discoveryExecutor,
                 @Qualifier(QUERY_SCHEDULER_BEAN) ScheduledExecutorService scheduler
         ) {
-            SpringCloudMemberRegistry registry = new SpringCloudMemberRegistry(
+            SpringCloudMemberDiscovery discovery = new SpringCloudMemberDiscovery(
                     required(discoveryClientProvider, DiscoveryClient.class),
                     discoveryMode,
                     instanceFilterProvider.getIfAvailable(() -> instance -> true),
@@ -411,8 +416,32 @@ public class SpringCloudAutoConfiguration {
                     discoveryExecutor
             );
             // Cancelled along with the scheduler, which is shut down when the application context closes.
-            registry.scheduleCapabilityRefresh(scheduler);
-            return registry;
+            discovery.scheduleCapabilityRefresh(scheduler);
+            return discovery;
+        }
+
+        /**
+         * Bean creation method for the {@link ApplicationListener} starting a membership round whenever Spring Cloud
+         * Discovery signals that the instances it reports may have changed.
+         * <p>
+         * That is on every {@link HeartbeatEvent}, which Eureka publishes on every registry fetch and Spring Cloud
+         * Kubernetes whenever the set of endpoints changes, and on the {@link InstanceRegisteredEvent} published by
+         * discovery implementations that register this application themselves, so that it does not wait for the next
+         * heartbeat to learn about the cluster. The round runs on the discovery executor, so the thread publishing the
+         * event does not wait on it.
+         *
+         * @param discovery the discovery maintaining the routing ring
+         * @return the listener starting a membership round on discovery's signals
+         */
+        @Bean
+        public ApplicationListener<ApplicationEvent> axoniqSpringCloudMembershipTrigger(
+                SpringCloudMemberDiscovery discovery
+        ) {
+            return event -> {
+                if (event instanceof HeartbeatEvent || event instanceof InstanceRegisteredEvent<?>) {
+                    discovery.startMembershipRound();
+                }
+            };
         }
 
         /**
@@ -509,17 +538,17 @@ public class SpringCloudAutoConfiguration {
         /**
          * Bean creation method for the {@link IncomingCommandInvoker} handling commands sent by other members.
          *
-         * @param registry          the registry naming this member in the failures the invoker reports
+         * @param discovery         the discovery naming this member in the failures the invoker reports
          * @param converterProvider provides the {@link MessageConverter}, if one is available
          * @return the invoker handling commands sent by other members
          */
         @Bean
         @ConditionalOnMissingBean
         public IncomingCommandInvoker axoniqSpringCloudIncomingCommandInvoker(
-                SpringCloudMemberRegistry registry,
+                SpringCloudMemberDiscovery discovery,
                 ObjectProvider<MessageConverter> converterProvider
         ) {
-            return new IncomingCommandInvoker(() -> registry.localMember().name(),
+            return new IncomingCommandInvoker(() -> discovery.localMember().name(),
                                               converterProvider.getIfAvailable());
         }
 
@@ -539,17 +568,17 @@ public class SpringCloudAutoConfiguration {
         /**
          * Bean creation method for the {@link IncomingQueryInvoker} answering queries sent by other members.
          *
-         * @param registry          the registry naming this member in the failures the invoker reports
+         * @param discovery         the discovery naming this member in the failures the invoker reports
          * @param converterProvider provides the {@link MessageConverter}, if one is available
          * @return the invoker answering queries sent by other members
          */
         @Bean
         @ConditionalOnMissingBean
         public IncomingQueryInvoker axoniqSpringCloudIncomingQueryInvoker(
-                SpringCloudMemberRegistry registry,
+                SpringCloudMemberDiscovery discovery,
                 ObjectProvider<MessageConverter> converterProvider
         ) {
-            return new IncomingQueryInvoker(() -> registry.localMember().name(),
+            return new IncomingQueryInvoker(() -> discovery.localMember().name(),
                                             converterProvider.getIfAvailable());
         }
 
