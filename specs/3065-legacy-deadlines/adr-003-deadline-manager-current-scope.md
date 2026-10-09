@@ -1,8 +1,8 @@
 # ADR 003: `DeadlineManager` finds its scope and `ProcessingContext` through the current `Scope` (issue [#5003](https://github.com/AxonIQ/AxonFramework/issues/5003))
 
 Date: 2026-09-30
-Status: proposed
-Related: [#3065](https://github.com/AxonIQ/AxonFramework/issues/3065) (parent), [#3728](https://github.com/AxonIQ/AxonFramework/issues/3728) (saga port, merged), [#5001](https://github.com/AxonIQ/AxonFramework/issues/5001) (scope-routing types, including `Scope`), [#5005](https://github.com/AxonIQ/AxonFramework/issues/5005) (scheduler backends), [#5047](https://github.com/AxonIQ/AxonFramework/issues/5047) (saga delivery), [#5048](https://github.com/AxonIQ/AxonFramework/issues/5048) (migration tooling)
+Status: accepted
+Related: [#3065](https://github.com/AxonIQ/AxonFramework/issues/3065) (parent), [#3728](https://github.com/AxonIQ/AxonFramework/issues/3728) (saga port, merged), [#5001](https://github.com/AxonIQ/AxonFramework/issues/5001) (scope-routing types, including `Scope`), [#5005](https://github.com/AxonIQ/AxonFramework/issues/5005) (scheduler backends), [#564](https://github.com/AxonIQ/axoniq-framework/issues/564) (saga delivery), [#5048](https://github.com/AxonIQ/AxonFramework/issues/5048) (migration tooling)
 
 ## Context
 

@@ -25,6 +25,10 @@ import org.axonframework.conversion.jackson2.Jackson2Converter;
 import org.axonframework.modelling.OnlyAcceptConstructorPropertiesAnnotation;
 import org.junit.jupiter.api.*;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -92,5 +96,31 @@ class AggregateScopeDescriptorSerializationTest {
         assertThat(firstAccess).isEqualTo(expectedIdentifier);
         assertThat(secondAccess).isEqualTo(expectedIdentifier);
         assertThat(supplierInvocations).hasValue(1);
+    }
+
+    /**
+     * A serializer relying on Java serialization semantics, such as XStream, writes the descriptor through its
+     * {@code writeObject} method, which has to resolve a lazily supplied identifier, as the supplier is not written.
+     */
+    @Test
+    void javaSerializationKeepsALazilySuppliedIdentifier() throws Exception {
+        // given
+        AggregateScopeDescriptor lazyDescriptor = new AggregateScopeDescriptor(expectedType, () -> expectedIdentifier);
+
+        // when
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        try (ObjectOutputStream out = new ObjectOutputStream(bytes)) {
+            out.writeObject(lazyDescriptor);
+        }
+        Object result;
+        try (ObjectInputStream in = new ObjectInputStream(new ByteArrayInputStream(bytes.toByteArray()))) {
+            result = in.readObject();
+        }
+
+        // then
+        assertThat(result).isInstanceOfSatisfying(AggregateScopeDescriptor.class, descriptor -> {
+            assertThat(descriptor.getType()).isEqualTo(expectedType);
+            assertThat(descriptor.getIdentifier()).isEqualTo(expectedIdentifier);
+        });
     }
 }

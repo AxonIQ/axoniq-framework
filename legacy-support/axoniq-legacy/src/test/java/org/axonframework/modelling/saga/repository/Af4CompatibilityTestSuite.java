@@ -20,6 +20,7 @@
 package org.axonframework.modelling.saga.repository;
 
 import com.thoughtworks.xstream.XStream;
+import org.axonframework.common.util.Af4ClassLoaderSupport;
 import org.axonframework.conversion.ConversionException;
 import org.axonframework.conversion.Converter;
 import org.axonframework.conversion.xstream.XStreamConverter;
