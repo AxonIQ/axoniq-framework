@@ -61,9 +61,9 @@ Axon Framework gains the missing building blocks (`org.axonframework.modelling`)
   `axoniq-legacy` does — sees different behavior, and only for entities left at the default.
 
 `AggregateDeadlineCommandTranslator.send(...)` writes the `AggregateScopeDescriptor`'s identifier into the dispatched
-command's metadata, under the public constant `AggregateDeadlineCommandTranslator.AGGREGATE_IDENTIFIER_METADATA_KEY`.
+command's metadata, under the public constant `AggregateDeadlineCommandTranslator.DESCRIPTOR_BASED_ID`.
 `axoniq-legacy` also gains `AggregateDeadlineEntityIdResolverDefinition`, composing
-`new FallbackEntityIdResolver<>(new AnnotationBasedEntityIdResolver<>(), new MetadataEntityIdResolver(AggregateDeadlineCommandTranslator.AGGREGATE_IDENTIFIER_METADATA_KEY))` —
+`new FallbackEntityIdResolver<>(new AnnotationBasedEntityIdResolver<>(), new MetadataEntityIdResolver(AggregateDeadlineCommandTranslator.DESCRIPTOR_BASED_ID))` —
 usable either named directly on a migrated entity's `@EventSourcedEntity(entityIdResolverDefinition = ...)` attribute,
 or registered as the `Configuration`-level default for every entity reached through a translated deadline that does
 not itself declare `@TargetEntityId`.
