@@ -32,8 +32,7 @@ import java.util.Objects;
 
 /**
  * An {@link EntityIdResolverDefinition} resolving an entity's identifier from a command's {@code @TargetEntityId}
- * payload field when present, falling back to the
- * {@link AggregateDeadlineCommandTranslator#DESCRIPTOR_BASED_ID} metadata entry
+ * payload field when present, falling back to the {@link #DESCRIPTOR_BASED_ID} metadata entry
  * {@link AggregateDeadlineCommandTranslator} writes onto every command it dispatches.
  * <p>
  * A migrated aggregate's deadline {@link Message#payload()} typically carries no usable identifier of its own, so an
@@ -57,18 +56,23 @@ import java.util.Objects;
  */
 public class AggregateDeadlineEntityIdResolverDefinition implements EntityIdResolverDefinition {
 
+    /**
+     * The key under which an aggregate's identifier is expected as a fallback entity identifier, as written by
+     * {@link AggregateDeadlineCommandTranslator} onto every command it dispatches.
+     */
+    public static final String DESCRIPTOR_BASED_ID = "scope-descriptor-based-entity-identifier";
+
     private final MetadataEntityIdResolver<?> metadataEntityIdResolver;
 
     /**
-     * Initializes the definition with a {@link MetadataEntityIdResolver} resolving
-     * {@link AggregateDeadlineCommandTranslator#DESCRIPTOR_BASED_ID} as a {@link String} identifier,
-     * unconverted.
+     * Initializes the definition with a {@link MetadataEntityIdResolver} resolving {@link #DESCRIPTOR_BASED_ID} as a
+     * {@link String} identifier, unconverted.
      * <p>
      * Use {@link #AggregateDeadlineEntityIdResolverDefinition(MetadataEntityIdResolver)} instead when the entity's
      * identifier is not a {@link String}, or when the aggregate identifier is written under a different metadata key.
      */
     public AggregateDeadlineEntityIdResolverDefinition() {
-        this(MetadataEntityIdResolver.forKey(AggregateDeadlineCommandTranslator.DESCRIPTOR_BASED_ID));
+        this(MetadataEntityIdResolver.forKey(DESCRIPTOR_BASED_ID));
     }
 
     /**

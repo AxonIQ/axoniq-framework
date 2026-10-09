@@ -38,6 +38,7 @@ import java.util.concurrent.CompletableFuture;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.axonframework.deadline.AggregateDeadlineEntityIdResolverDefinition.DESCRIPTOR_BASED_ID;
 
 /**
  * Test class validating the {@link AggregateDeadlineCommandTranslator}.
@@ -99,7 +100,7 @@ class AggregateDeadlineCommandTranslatorTest {
             assertThat(commandGateway.capturedContext).isSameAs(context);
             assertThat(commandGateway.capturedMetadata)
                     .containsEntry("key", "value")
-                    .containsEntry(AggregateDeadlineCommandTranslator.DESCRIPTOR_BASED_ID, "aggregateId");
+                    .containsEntry(DESCRIPTOR_BASED_ID, "aggregateId");
         }
 
         @Test
@@ -120,7 +121,7 @@ class AggregateDeadlineCommandTranslatorTest {
             assertThat(command.payload()).isEqualTo("paymentDue");
             assertThat(command.metadata())
                     .containsEntry("key", "value")
-                    .containsEntry(AggregateDeadlineCommandTranslator.DESCRIPTOR_BASED_ID, "aggregateId");
+                    .containsEntry(DESCRIPTOR_BASED_ID, "aggregateId");
             assertThat(commandGateway.capturedContext).isSameAs(context);
         }
 

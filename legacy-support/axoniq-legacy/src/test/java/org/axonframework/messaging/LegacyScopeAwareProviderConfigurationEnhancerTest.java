@@ -70,7 +70,7 @@ class LegacyScopeAwareProviderConfigurationEnhancerTest {
         provider.register(component);
 
         // then
-        assertThat(provider.provideScopeAwareStream(NoScopeDescriptor.INSTANCE)).containsExactly(component);
+        assertThat(provider.provideScopeAwareStream(NoScopeDescriptor.INSTANCE)).contains(component);
     }
 
     @Test

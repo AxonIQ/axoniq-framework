@@ -33,6 +33,7 @@ import org.junit.jupiter.api.*;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.axonframework.deadline.AggregateDeadlineEntityIdResolverDefinition.DESCRIPTOR_BASED_ID;
 
 /**
  * Test class validating the {@link AggregateDeadlineEntityIdResolverDefinition}.
@@ -58,7 +59,7 @@ class AggregateDeadlineEntityIdResolverDefinitionTest {
         EntityIdResolver<Object> resolver = testSubject.createIdResolver(Payload.class, Object.class, null, null);
         Message message = new GenericCommandMessage(
                 new MessageType(Payload.class), new Payload("x"),
-                Metadata.with(AggregateDeadlineCommandTranslator.DESCRIPTOR_BASED_ID, "entity-1")
+                Metadata.with(DESCRIPTOR_BASED_ID, "entity-1")
         );
 
         // when
@@ -128,7 +129,7 @@ class AggregateDeadlineEntityIdResolverDefinitionTest {
         EntityIdResolver<Object> resolver = testSubject.createIdResolver(Payload.class, Object.class, null, null);
         Message message = new GenericCommandMessage(
                 new MessageType(Payload.class), new Payload("x"),
-                Metadata.with(AggregateDeadlineCommandTranslator.DESCRIPTOR_BASED_ID, "entity-1")
+                Metadata.with(DESCRIPTOR_BASED_ID, "entity-1")
         );
 
         // when / then

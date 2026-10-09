@@ -43,38 +43,25 @@ import java.util.Objects;
  * Implements {@link ScopeAware} so it can be reached through a {@code ScopeAwareProvider} the same way a Saga manager
  * is. Its {@link #send(Message, ProcessingContext, ScopeDescriptor)} dispatches the deadline's payload and metadata as
  * a command, and writes the {@link AggregateScopeDescriptor}'s identifier into the dispatched command's metadata under
- * {@value #DESCRIPTOR_BASED_ID}. {@link AggregateDeadlineEntityIdResolverConfigurationEnhancer} registers the resolver
- * that reads this metadata entry as the application-wide default, used whenever the command's payload carries no
- * {@code @TargetEntityId}.
+ * {@value AggregateDeadlineEntityIdResolverDefinition#DESCRIPTOR_BASED_ID}.
+ * {@link AggregateDeadlineEntityIdResolverConfigurationEnhancer} registers the resolver that reads this metadata entry
+ * as the application-wide default, used whenever the command's payload carries no {@code @TargetEntityId}.
  * <p>
  * A deadline scheduled without a payload carries {@code null} as its {@link Message#payload()}. Since a {@code null}
  * payload cannot name the command to dispatch, this translator falls back to the deadline's
  * {@link DeadlineMessage#getDeadlineName()} in that case, dispatched as both the command's name and its payload, so the
  * migrated handler becomes {@code @CommandHandler(commandName = "<deadlineName>") void handle(String command, ...)}.
  * <p>
- * An application wires this translator into its {@code ScopeAwareProvider}, next to its Saga managers:
- * <pre>{@code
- * CommandGateway commandGateway = ...;
- * ScopeAwareProvider provider = new LegacyScopeAwareProvider(
- *         new AggregateDeadlineCommandTranslator(commandGateway),
- *         sagaManager1,
- *         sagaManager2
- * );
- * }</pre>
+ * Constructed and registered by the {@link AggregateDeadlineCommandTranslatorConfigurationEnhancer}.
  *
  * @author Steven van Beelen
+ * @see AggregateDeadlineCommandTranslatorConfigurationEnhancer
  * @see AggregateDeadlineEntityIdResolverConfigurationEnhancer
  * @see AggregateDeadlineEntityIdResolverDefinition
  * @since 5.4.0
  */
 @Internal
 public class AggregateDeadlineCommandTranslator implements ScopeAware {
-
-    /**
-     * The key under which the {@link AggregateScopeDescriptor}'s identifier is written on every command
-     * {@link #send(Message, ProcessingContext, ScopeDescriptor) dispatched} by this translator.
-     */
-    public static final String DESCRIPTOR_BASED_ID = "scope-descriptor-based-entity-identifier";
 
     private static final Logger logger = LoggerFactory.getLogger(AggregateDeadlineCommandTranslator.class);
 
@@ -119,7 +106,8 @@ public class AggregateDeadlineCommandTranslator implements ScopeAware {
      * to derive a command name from.
      * <p>
      * The dispatched command's metadata always carries the {@code scopeDescription}'s identifier under
-     * {@value #DESCRIPTOR_BASED_ID}, so the target entity can be resolved from it instead of from the payload.
+     * {@value AggregateDeadlineEntityIdResolverDefinition#DESCRIPTOR_BASED_ID}, so the target entity can be resolved
+     * from it instead of from the payload.
      *
      * @throws IllegalArgumentException if the given {@code message} is not a {@link DeadlineMessage}, or if the given
      *                                  {@code scopeDescription} is not an {@link AggregateScopeDescriptor}
@@ -154,7 +142,8 @@ public class AggregateDeadlineCommandTranslator implements ScopeAware {
         }
 
         Metadata metadata = deadlineMessage.metadata().and(
-                DESCRIPTOR_BASED_ID, String.valueOf(aggregateScope.getIdentifier())
+                AggregateDeadlineEntityIdResolverDefinition.DESCRIPTOR_BASED_ID,
+                String.valueOf(aggregateScope.getIdentifier())
         );
         if (payload == null) {
             String deadlineName = deadlineMessage.getDeadlineName();
