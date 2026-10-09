@@ -1,17 +1,20 @@
 /*
- * Copyright (c) 2010-2026. Axon Framework
+ * Copyright (c) 2010-2026. AxonIQ B.V.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * Licensed under the AXONIQ TERMS OF SERVICE,
+ * Version 29 April 2026 (the "License");
  *
- *    http://www.apache.org/licenses/LICENSE-2.0
+ * The software is available for evaluation use without registration.
+ * Continued use beyond the evaluation period requires registration
+ * and a commercial license. See the License for the specific language
+ * governing permissions and limitations under the License.
+ * You may not use this file except in compliance with the License.
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * You may obtain a copy of the License at:
+ *  https://www.axoniq.io/legal/terms-of-service
+ *
+ * For licensing information and to register, visit:
+ *  https://www.axoniq.io/pricing
  */
 
 package org.axonframework.test.deadline;
@@ -50,8 +53,8 @@ public class DeadlineManagerValidator {
      * Instantiates this validator with {@code deadlineManager} which is used for validation purposes and {@code
      * fieldFilter}.
      *
-     * @param deadlineManager Stub implementation of deadline manager which keeps track of scheduled and met deadlines
-     * @param fieldFilter     Indicates whether any given Field should be accepted for processing or not
+     * @param deadlineManager stub implementation of deadline manager which keeps track of scheduled and met deadlines
+     * @param fieldFilter     indicates whether any given Field should be accepted for processing or not
      */
     public DeadlineManagerValidator(StubDeadlineManager deadlineManager,
                                     FieldFilter fieldFilter) {
@@ -123,6 +126,17 @@ public class DeadlineManagerValidator {
     }
 
     /**
+     * Asserts that deadlines have been met (which have passed in time) match the given {@code matcher}.
+     *
+     * @param matcher the matcher that will validate the actual deadlines
+     * @deprecated in favor of {@link #assertTriggeredDeadlinesMatching(Matcher)}
+     */
+    @Deprecated
+    public void assertDeadlinesMetMatching(Matcher<? extends Iterable<?>> matcher) {
+        assertTriggeredDeadlinesMatching(matcher);
+    }
+
+    /**
      * Asserts that the triggered deadlines match the given {@code matcher}.
      *
      * @param matcher the matcher that will validate the actual deadlines
@@ -143,6 +157,17 @@ public class DeadlineManagerValidator {
                     expected, actual
             ));
         }
+    }
+
+    /**
+     * Asserts that the given {@code expected} deadlines have been met (which have passed in time).
+     *
+     * @param expected the deadlines that must have been met
+     * @deprecated in favor of {@link #assertTriggeredDeadlines(Object...)}
+     */
+    @Deprecated
+    public void assertDeadlinesMet(Object... expected) {
+        assertTriggeredDeadlines(expected);
     }
 
     /**

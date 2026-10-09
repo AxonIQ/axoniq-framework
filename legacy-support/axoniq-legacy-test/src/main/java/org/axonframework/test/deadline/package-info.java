@@ -1,21 +1,29 @@
 /*
- * Copyright (c) 2010-2026. Axon Framework
+ * Copyright (c) 2010-2026. AxonIQ B.V.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * Licensed under the AXONIQ TERMS OF SERVICE,
+ * Version 29 April 2026 (the "License");
  *
- *    http://www.apache.org/licenses/LICENSE-2.0
+ * The software is available for evaluation use without registration.
+ * Continued use beyond the evaluation period requires registration
+ * and a commercial license. See the License for the specific language
+ * governing permissions and limitations under the License.
+ * You may not use this file except in compliance with the License.
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * You may obtain a copy of the License at:
+ *  https://www.axoniq.io/legal/terms-of-service
+ *
+ * For licensing information and to register, visit:
+ *  https://www.axoniq.io/pricing
  */
 
 /**
- * This is part of a stashed module that is not actively maintained and just kept for reference.
+ * Test support for the deadlines carried by {@code axoniq-legacy}.
+ * <p>
+ * The package name matches Axon Framework 4, so a migrating test suite keeps its imports. The
+ * {@link org.axonframework.test.deadline.StubDeadlineManager} records what is scheduled and fires deadlines when a
+ * test advances its time, and the {@link org.axonframework.test.deadline.DeadlineManagerValidator} asserts on what it
+ * recorded. The {@link org.axonframework.test.saga.SagaTestFixture} uses both for its deadline assertions.
  */
 @NullMarked
 package org.axonframework.test.deadline;
