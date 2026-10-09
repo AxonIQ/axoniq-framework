@@ -1,0 +1,129 @@
+= Deadline Migration
+:navtitle: Deadlines
+:reftext: Deadline migration
+
+Axon Framework 5 has no built-in deadline scheduling.
+We have decided against this, as it is rather straightforward to schedule messages yourself.
+You can schedule a command or an event yourself by picking your desired scheduling library and invoke the `CommandGateway` or `EventGateway` to dispatch the message at your desired time.
+For more on how we envision message scheduling going forward, be sure to check out our Message Scheduling guide link:https://docs.axoniq.io/message-scheduling-guide/development/[here].
+
+However, we are aware you have perhaps already scheduled deadlines and want to move those to Axon Framework 5. To that end, we added `axoniq-legacy` that allows migrating already-scheduled deadlines, the same way it allows migrating running sagas.
+The deadline support has moved over into `axoniq-legacy`, and takes a slightly different turn whether the deadline was scheduled in a <<saga-deadlines,saga>> or in an <<aggregate-deadlines,aggregate>>.
+Please check the respective sections for details on either.
+
+But first, let's take a look at the general approach to migrate your deadlines into Axon Framework 5:
+
+. *Add draining support*.
+To allow you to drain your Axon Framework 4 deadlines into For Axon Framework 5, add the `axoniq-legacy` dependency.
+This will give you all of the `DeadlineManager` implementations, hooks, and configuration options.
+. *Migrate saga deadline handlers.* Depending on `axoniq-legacy` was sufficient, so you're all set!
+Be sure to xref:migration:paths/sagas.adoc[migrate your sagas] though.
+. *Migrate entity deadline handlers.* You need to replace `@DeadlineHandler` annotations for `@CommandHandler` annotations in your aggregates.
+Be sure to check out <<aggregate-deadlines>> for more details on the exact structure.
+. *Stop scheduling new deadlines.* For active sagas, the `DeadlineManager` can still be invoked.
+Just ensure you do not start any new sagas.
+For aggregates, you should remove the `DeadlineManager` entirely.
+Instead, schedule commands with your preferred scheduling tool yourself, as explained in more detail link:https://docs.axoniq.io/message-scheduling-guide/development/[here].
+. *Wait for scheduled deadlines to drain.* Monitor the deadline manager's store for outstanding deadlines against the migrated entity type, and watch the count fall to zero.
+. *Retire the deadline manager* once there are no more outstanding deadlines for the migrated entity, you can remove all remaining use of the
+`DeadlineManager`.
+
+[TIP]
+====
+Automated code conversion can take care of much of this mechanically.
+See xref:migration:openrewrite-code-conversion.adoc[OpenRewrite code conversion] for the available recipes and how
+to run them.
+====
+
+[#saga-deadlines]
+== Saga deadlines
+
+A deadline scheduled from, and handled by, a saga needs no migration action apart from depending on `axoniq-legacy`.
+The `axoniq-legacy` modules registers all required deadline-specific components for you, and ensures your Saga deadlines keep working as they are.
+This makes it so that existing `@DeadlineHandler` annotated methods in a saga keeps firing unchanged.
+
+However, as Sagas are deprecated, just as Deadlines, you are expected to migrate those as well.
+Checkout the xref:migration:paths/sagas.adoc[Saga Migration] for the full story, including what to do once every saga instance has drained and the legacy module is no longer needed.
+
+[#aggregate-deadlines]
+== Aggregate deadlines
+
+In Axon Framework 4, scheduling a deadline against an aggregate meant scheduling a reminder tied to that specific aggregate instance: once the deadline's trigger time arrived, it fired directly onto a `@DeadlineHandler` method on that same instance, without going through a command.
+
+Axon Framework 5 drops that direct delivery mechanism, for the same reason explained above: it is simple enough to achieve the same effect yourself, by scheduling a command that targets the entity instead.
+Going forward, what used to be "a deadline firing on an aggregate" becomes "a scheduled command handled by an entity", handled the same way as any other command.
+
+`axoniq-legacy` helps you make that transition: it automatically drains every deadline Axon Framework 4 already scheduled against an aggregate, by translating it into a command and dispatching it through the `CommandGateway`, so you do not need to re-schedule anything yourself.
+This changes what the migrated entity needs: replace the aggregate's `@DeadlineHandler` method with a
+`@CommandHandler` method, as shown below, first for a deadline scheduled with a payload, then for one scheduled
+without.
+
+[tabs]
+====
+Axon Framework 4::
++
+--
+[source,java]
+----
+@DeadlineHandler(deadlineName = "paymentDue")
+public void onPaymentDue(PaymentDueReminder payload) {
+    // ...
+}
+----
+--
+
+Axon Framework 5::
++
+--
+[source,java]
+----
+@CommandHandler
+void handle(PaymentDueReminder command) {
+    // ...
+}
+----
+--
+====
+
+A payload-less deadline keeps its name, but becomes a command without a payload:
+
+[tabs]
+====
+Axon Framework 4::
++
+--
+[source,java]
+----
+@DeadlineHandler(deadlineName = "accountExpired")
+public void onAccountExpired() {
+    // ...
+}
+----
+--
+
+Axon Framework 5::
++
+--
+[source,java]
+----
+@CommandHandler(commandName = "accountExpired")
+void handle(Void command) {
+    // ...
+}
+----
+--
+====
+
+[IMPORTANT]
+====
+* A deadline's payload typically carries no usable entity identifier, since Axon Framework 4 resolved an aggregate's
+identifier independently of its payload.
+`axoniq-legacy` resolves it instead, from the aggregate identifier it writes into the dispatched command's metadata,
+but only for an `@EventSourcedEntity`/`@EventSourced` entity.
+A migrated state-stored aggregate or a declaratively configured entity module does not consult this fallback, so its
+command handler payload needs a usable identifier of its own.
+* Resolving a non-`String` identifier through this fallback depends on the application's registered `Converter`.
+The default, Jackson-based converter handles a type like `Long` out of the box, but not every identifier type
+round-trips through it without a dedicated conversion being registered: a type such as `UUID` needs a `Converter`
+able to parse an unquoted `String` into one.
+====
