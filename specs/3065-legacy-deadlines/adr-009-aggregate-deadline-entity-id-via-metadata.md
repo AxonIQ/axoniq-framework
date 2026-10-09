@@ -93,6 +93,12 @@ Framework 4.
   fallback for every entity left at its default `entityIdResolverDefinition`, through
   `AggregateDeadlineEntityIdResolverConfigurationEnhancer`. An entity (or application) that explicitly registers its
   own `EntityIdResolverDefinition` is unaffected — the enhancer's `hasComponent(...)` guard steps aside for it.
+- **Known limitation**: the `Configuration`-registered default only benefits an `@EventSourcedEntity`/`@EventSourced`
+  entity — `AnnotatedEventSourcedEntityModule` is the only place consulting it. A migrated state-stored aggregate (a
+  typical Axon Framework 4 JPA aggregate) or a declaratively configured entity module does not consult this override
+  point at all, so a deadline translated for either still fails with `EntityIdResolutionException` unless that
+  entity's own command handler payload happens to carry a usable identifier. Closing this gap for state-stored or
+  declarative entities needs its own override point in Axon Framework; none exists today.
 - Tests: `MetadataEntityIdResolverTest` and `FallbackEntityIdResolverTest` (core Axon Framework), a focused
   `AnnotatedEventSourcedEntityModule` test proving the `Configuration` override is consulted only when the attribute
   is left at its default, and the `axoniq-legacy`/`axoniq-legacy-test` translator tests, whose entity-routing test

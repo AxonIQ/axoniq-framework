@@ -19,17 +19,19 @@
 
 package org.axonframework.deadline;
 
-import org.axonframework.conversion.PassThroughConverter;
+import org.axonframework.common.configuration.AxonConfiguration;
+import org.axonframework.conversion.ConversionException;
 import org.axonframework.messaging.commandhandling.GenericCommandMessage;
 import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.Metadata;
+import org.axonframework.messaging.core.configuration.MessagingConfigurer;
 import org.axonframework.messaging.core.unitofwork.StubProcessingContext;
-import org.axonframework.modelling.EntityIdResolutionException;
 import org.axonframework.modelling.EntityIdResolver;
-import org.axonframework.modelling.MetadataEntityIdResolver;
 import org.axonframework.modelling.annotation.TargetEntityId;
 import org.junit.jupiter.api.*;
+
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -43,97 +45,101 @@ import static org.axonframework.deadline.AggregateDeadlineEntityIdResolverDefini
 class AggregateDeadlineEntityIdResolverDefinitionTest {
 
     private AggregateDeadlineEntityIdResolverDefinition testSubject;
+    private AxonConfiguration configuration;
 
     @BeforeEach
     void setUp() {
         testSubject = new AggregateDeadlineEntityIdResolverDefinition();
+        configuration = MessagingConfigurer.create().start();
     }
 
-    @SuppressWarnings("DataFlowIssue")
-    @Test
-    void resolvesFromTheAggregateIdentifierMetadataKeyWhenThePayloadHasNoTargetEntityId() throws Exception {
-        // given
-        record Payload(String effect) {
-
-        }
-        EntityIdResolver<Object> resolver = testSubject.createIdResolver(Payload.class, Object.class, null, null);
-        Message message = new GenericCommandMessage(
-                new MessageType(Payload.class), new Payload("x"),
-                Metadata.with(DESCRIPTOR_BASED_ID, "entity-1")
-        );
-
-        // when
-        Object result = resolver.resolve(message, StubProcessingContext.forMessage(message));
-
-        // then
-        assertThat(result).isEqualTo("entity-1");
+    @AfterEach
+    void tearDown() {
+        configuration.shutdown();
     }
 
-    @SuppressWarnings("DataFlowIssue")
+    @SuppressWarnings("DataFlowIssue") // We do not require the model for testing, so passed as null
     @Test
     void resolvesFromTargetEntityIdWhenPresentOnThePayload() throws Exception {
         // given
         record Payload(@TargetEntityId String id) {
 
         }
-        EntityIdResolver<Object> resolver = testSubject.createIdResolver(Payload.class, Object.class, null, null);
-        Message message = new GenericCommandMessage(new MessageType(Payload.class), new Payload("payload-id"));
+        EntityIdResolver<String> resolver =
+                testSubject.createIdResolver(Payload.class, String.class, null, configuration);
+        Message message = new GenericCommandMessage(
+                new MessageType(Payload.class), new Payload("payload-id")
+        );
 
         // when
-        Object result = resolver.resolve(message, StubProcessingContext.forMessage(message));
+        String result = resolver.resolve(message, StubProcessingContext.forMessage(message));
 
         // then
         assertThat(result).isEqualTo("payload-id");
     }
 
-    @SuppressWarnings("DataFlowIssue")
-    @Test
-    void rejectsANullMetadataEntityIdResolver() {
-        assertThatThrownBy(() -> new AggregateDeadlineEntityIdResolverDefinition(null))
-                .isInstanceOf(NullPointerException.class);
-    }
+    @Nested
+    class MetadataFallbackByIdentifierType {
 
-    @SuppressWarnings("DataFlowIssue")
-    @Test
-    void usesTheGivenMetadataEntityIdResolverInstead() throws Exception {
-        // given
-        String customKey = "custom-entity-id";
-        AggregateDeadlineEntityIdResolverDefinition testSubject = new AggregateDeadlineEntityIdResolverDefinition(
-                MetadataEntityIdResolver.forKey(customKey, String.class, PassThroughConverter.INSTANCE)
-        );
         record Payload(String effect) {
 
         }
-        EntityIdResolver<Object> resolver = testSubject.createIdResolver(Payload.class, Object.class, null, null);
-        Message message = new GenericCommandMessage(
-                new MessageType(Payload.class), new Payload("x"), Metadata.with(customKey, "entity-42")
-        );
 
-        // when
-        Object result = resolver.resolve(message, StubProcessingContext.forMessage(message));
+        @SuppressWarnings("DataFlowIssue") // We do not require the model for testing, so passed as null
+        @Test
+        void resolvesAStringIdentifierFromTheAggregateIdentifierMetadataKey() throws Exception {
+            // given
+            EntityIdResolver<String> resolver =
+                    testSubject.createIdResolver(Payload.class, String.class, null, configuration);
+            Message message = new GenericCommandMessage(
+                    new MessageType(Payload.class), new Payload("x"),
+                    Metadata.with(DESCRIPTOR_BASED_ID, "entity-1")
+            );
 
-        // then
-        assertThat(result).isEqualTo("entity-42");
-    }
+            // when
+            String result = resolver.resolve(message, StubProcessingContext.forMessage(message));
 
-    @SuppressWarnings("DataFlowIssue")
-    @Test
-    void doesNotFallBackToTheDefaultAggregateIdentifierMetadataKey() {
-        // given
-        AggregateDeadlineEntityIdResolverDefinition testSubject = new AggregateDeadlineEntityIdResolverDefinition(
-                MetadataEntityIdResolver.forKey("custom-entity-id")
-        );
-        record Payload(String effect) {
-
+            // then
+            assertThat(result).isEqualTo("entity-1");
         }
-        EntityIdResolver<Object> resolver = testSubject.createIdResolver(Payload.class, Object.class, null, null);
-        Message message = new GenericCommandMessage(
-                new MessageType(Payload.class), new Payload("x"),
-                Metadata.with(DESCRIPTOR_BASED_ID, "entity-1")
-        );
 
-        // when / then
-        assertThatThrownBy(() -> resolver.resolve(message, StubProcessingContext.forMessage(message)))
-                .isInstanceOf(EntityIdResolutionException.class);
+        @SuppressWarnings("DataFlowIssue") // We do not require the model for testing, so passed as null
+        @Test
+        void resolvesALongIdentifierFromTheAggregateIdentifierMetadataKey() throws Exception {
+            // given
+            Long entityId = 42L;
+            EntityIdResolver<Long> resolver =
+                    testSubject.createIdResolver(Payload.class, Long.class, null, configuration);
+            Message message = new GenericCommandMessage(
+                    new MessageType(Payload.class), new Payload("x"),
+                    Metadata.with(DESCRIPTOR_BASED_ID, entityId.toString())
+            );
+
+            // when
+            Long result = resolver.resolve(message, StubProcessingContext.forMessage(message));
+
+            // then
+            assertThat(result).isEqualTo(entityId);
+        }
+
+        @SuppressWarnings("DataFlowIssue") // We do not require the model for testing, so passed as null
+        @Test
+        void failsToResolveAUuidIdentifierWithTheDefaultConverter() {
+            // given
+            UUID entityId = UUID.randomUUID();
+            EntityIdResolver<UUID> resolver =
+                    testSubject.createIdResolver(Payload.class, UUID.class, null, configuration);
+            Message message = new GenericCommandMessage(
+                    new MessageType(Payload.class), new Payload("x"),
+                    Metadata.with(DESCRIPTOR_BASED_ID, entityId.toString())
+            );
+
+            // when / then
+            // The default Jackson-based GeneralConverter round-trips a String source through byte[] and re-parses
+            // it as JSON, which requires a quoted value. A raw UUID string isn't quoted, so conversion fails here.
+            // An application with a UUID-identified entity needs a Converter able to parse an unquoted UUID String.
+            assertThatThrownBy(() -> resolver.resolve(message, StubProcessingContext.forMessage(message)))
+                    .isInstanceOf(ConversionException.class);
+        }
     }
 }

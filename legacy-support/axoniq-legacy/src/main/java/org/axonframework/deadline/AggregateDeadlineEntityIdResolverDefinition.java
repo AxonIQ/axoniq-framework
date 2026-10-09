@@ -20,6 +20,7 @@
 package org.axonframework.deadline;
 
 import org.axonframework.common.configuration.Configuration;
+import org.axonframework.conversion.GeneralConverter;
 import org.axonframework.messaging.core.Message;
 import org.axonframework.modelling.EntityIdResolver;
 import org.axonframework.modelling.FallbackEntityIdResolver;
@@ -28,8 +29,6 @@ import org.axonframework.modelling.annotation.AnnotationBasedEntityIdResolver;
 import org.axonframework.modelling.annotation.EntityIdResolverDefinition;
 import org.axonframework.modelling.entity.EntityMetamodel;
 
-import java.util.Objects;
-
 /**
  * An {@link EntityIdResolverDefinition} resolving an entity's identifier from a command's {@code @TargetEntityId}
  * payload field when present, falling back to the {@link #DESCRIPTOR_BASED_ID} metadata entry
@@ -37,15 +36,24 @@ import java.util.Objects;
  * <p>
  * A migrated aggregate's deadline {@link Message#payload()} typically carries no usable identifier of its own, so an
  * entity reached through a translated deadline needs this fallback to be resolvable at all.
- * {@link AggregateDeadlineEntityIdResolverConfigurationEnhancer} registers this class, constructed through
- * {@link #AggregateDeadlineEntityIdResolverDefinition()}, as the application-wide {@link EntityIdResolverDefinition}
- * default. This ensures {@link String}-based aggregate identifiers are resolved out of the box.
+ * {@link AggregateDeadlineEntityIdResolverConfigurationEnhancer} registers this class as the application-wide
+ * {@link EntityIdResolverDefinition} default. Every entity gets its own {@link MetadataEntityIdResolver}, built from
+ * the {@code idType} and {@link Configuration} {@link #createIdResolver(Class, Class, EntityMetamodel, Configuration)}
+ * is given, converting the metadata value, which <b>always</b> is a {@link String}, with the {@link GeneralConverter}
+ * the {@code Configuration} provides. This is not limited to a {@link String} identifier, but whether resolution
+ * succeeds for a different {@code idType} depends on that {@link GeneralConverter}: the default, Jackson-based one
+ * converts a type like {@link Long} out of the box, but not every identifier type round-trips through it without a
+ * dedicated conversion being registered. A type such as {@link java.util.UUID}, for example, needs a
+ * {@link GeneralConverter} able to parse an unquoted {@link String} into one.
  * <p>
- * An application whose entity identifier is a different type supplies its own {@link MetadataEntityIdResolver} through
- * {@link #AggregateDeadlineEntityIdResolverDefinition(MetadataEntityIdResolver)} instead. The
- * {@link MetadataEntityIdResolver#forKey(String, Class, org.axonframework.conversion.Converter)} factory method
- * allows to set the required identifier type and a {@link org.axonframework.conversion.Converter} to correctly
- * convert the metadata value to an entity identifier.
+ * This identifier predicament stems from the fact that Axon Framework 4 stored the {@link #toString()} value of
+ * aggregate identifiers. Hence, that's the value being returned in the metadata, not a converted format.
+ * <p>
+ * This definition only takes effect for an {@code @EventSourcedEntity}/{@code @EventSourced} entity, the only kind
+ * consulting a {@code Configuration}-registered {@link EntityIdResolverDefinition} default. A migrated state-stored
+ * aggregate (a typical Axon Framework 4 JPA aggregate) or a declaratively configured entity module never reaches this
+ * fallback: neither consults this override point, so a deadline translated for either still fails with an
+ * {@code EntityIdResolutionException} unless that entity's own command handler payload carries a usable identifier.
  *
  * @author Steven van Beelen
  * @see AggregateDeadlineCommandTranslator
@@ -62,33 +70,7 @@ public class AggregateDeadlineEntityIdResolverDefinition implements EntityIdReso
      */
     public static final String DESCRIPTOR_BASED_ID = "scope-descriptor-based-entity-identifier";
 
-    private final MetadataEntityIdResolver<?> metadataEntityIdResolver;
-
-    /**
-     * Initializes the definition with a {@link MetadataEntityIdResolver} resolving {@link #DESCRIPTOR_BASED_ID} as a
-     * {@link String} identifier, unconverted.
-     * <p>
-     * Use {@link #AggregateDeadlineEntityIdResolverDefinition(MetadataEntityIdResolver)} instead when the entity's
-     * identifier is not a {@link String}, or when the aggregate identifier is written under a different metadata key.
-     */
-    public AggregateDeadlineEntityIdResolverDefinition() {
-        this(MetadataEntityIdResolver.forKey(DESCRIPTOR_BASED_ID));
-    }
-
-    /**
-     * Initializes the definition with the given {@code metadataEntityIdResolver}, used as the fallback for a command
-     * whose payload carries no {@code @TargetEntityId}.
-     *
-     * @param metadataEntityIdResolver the {@link MetadataEntityIdResolver} to fall back to
-     */
-    public AggregateDeadlineEntityIdResolverDefinition(MetadataEntityIdResolver<?> metadataEntityIdResolver) {
-        this.metadataEntityIdResolver = Objects.requireNonNull(
-                metadataEntityIdResolver, "The MetadataEntityIdResolver may not be null."
-        );
-    }
-
     @Override
-    @SuppressWarnings("unchecked")
     public <E, ID> EntityIdResolver<ID> createIdResolver(
             Class<E> entityType,
             Class<ID> idType,
@@ -97,7 +79,9 @@ public class AggregateDeadlineEntityIdResolverDefinition implements EntityIdReso
     ) {
         return new FallbackEntityIdResolver<>(
                 new AnnotationBasedEntityIdResolver<>(),
-                (EntityIdResolver<ID>) metadataEntityIdResolver
+                MetadataEntityIdResolver.forKey(
+                        DESCRIPTOR_BASED_ID, idType, configuration.getComponent(GeneralConverter.class)
+                )
         );
     }
 }
