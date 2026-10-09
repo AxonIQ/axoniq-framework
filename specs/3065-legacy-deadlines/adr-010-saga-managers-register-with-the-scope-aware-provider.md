@@ -1,7 +1,7 @@
 # ADR 010: Saga managers register themselves with the configuration's `ScopeAwareProvider` (issues [#564](https://github.com/AxonIQ/axoniq-framework/issues/564), [#565](https://github.com/AxonIQ/axoniq-framework/issues/565))
 
 Date: 2026-10-09
-Status: proposed
+Status: accepted
 Related: [#3065](https://github.com/AxonIQ/AxonFramework/issues/3065) (parent), [#5005](https://github.com/AxonIQ/AxonFramework/issues/5005) (deadline backends), [#5004](https://github.com/AxonIQ/AxonFramework/issues/5004) (aggregate deadlines as commands), [ADR 002](adr-002-saga-deadline-scope-aware-delivery.md) (saga deadline delivery), [ADR 007](adr-007-aggregate-deadline-delivery-through-scope-aware.md) (aggregate deadline delivery)
 
 ## Context

@@ -84,8 +84,8 @@ public final class DeadlineDelivery {
      *
      * @param deadlineMessage the fired deadline
      * @param deadlineScope   the scope the deadline was scheduled for
-     * @throws RuntimeException the failure of the {@link ScopeAwareProvider}, of a handler interceptor or of the
-     *                          delivery, unwrapped from the unit of work
+     * @throws RuntimeException the failure of a handler interceptor or the delivery unwrapped from the UnitOfWork, or
+     *                          the failure of the {@link ScopeAwareProvider}
      */
     public void deliver(DeadlineMessage deadlineMessage, ScopeDescriptor deadlineScope) {
         List<ScopeAware> scopeAwareComponents = scopeAwareProvider.provideScopeAwareStream(deadlineScope).toList();
