@@ -1,7 +1,7 @@
 # ADR 002: Deliver fired saga deadlines through `ScopeAware`, with an explicit-list `ScopeAwareProvider` (issue [#564](https://github.com/AxonIQ/axoniq-framework/issues/564))
 
 Date: 2026-09-11
-Status: accepted
+Status: accepted; the explicit-list provider (Option B2) is superseded by [ADR 010](adr-010-saga-managers-register-with-the-scope-aware-provider.md), the delivery through `ScopeAware` stays
 Related: [#3065](https://github.com/AxonIQ/AxonFramework/issues/3065) (parent), [#3728](https://github.com/AxonIQ/AxonFramework/issues/3728) (saga port, merged), [#5001](https://github.com/AxonIQ/AxonFramework/issues/5001) (scope-routing types), [#5005](https://github.com/AxonIQ/AxonFramework/issues/5005) (scheduler backends), [#565](https://github.com/AxonIQ/axoniq-framework/issues/565) (wires autodiscovery into this provider once it lands), [ADR 001, aggregate deadline delivery](adr-001-aggregate-deadline-command-translation.md)
 
 ## Context

@@ -18,3 +18,4 @@
 #
 
 org.axonframework.deadline.DeadlineManagerLifecycleConfigurationEnhancer
+org.axonframework.messaging.LegacyScopeAwareProviderConfigurationEnhancer

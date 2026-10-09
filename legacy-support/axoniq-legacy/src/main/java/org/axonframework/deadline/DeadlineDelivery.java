@@ -21,6 +21,7 @@ package org.axonframework.deadline;
 
 import org.axonframework.common.FutureUtils;
 import org.axonframework.common.annotation.Internal;
+import org.axonframework.messaging.ScopeAware;
 import org.axonframework.messaging.ScopeAwareProvider;
 import org.axonframework.messaging.ScopeDescriptor;
 import org.axonframework.messaging.core.ExecutionException;
@@ -43,6 +44,9 @@ import java.util.Objects;
  * of work's {@link ProcessingContext}, which carries the deadline message. A component that fails to handle the
  * deadline fails the delivery with an {@link ExecutionException}, as in Axon Framework 4, and the unit of work rolls
  * back.
+ * <p>
+ * The components are taken from the {@link ScopeAwareProvider} before the unit of work starts, so that a provider
+ * waiting for the configuration to start does not keep a transaction open.
  * <p>
  * This class is internal, as it only serves the deadline managers of this module, which deliver fired deadlines in the
  * same way.
@@ -80,19 +84,22 @@ public final class DeadlineDelivery {
      *
      * @param deadlineMessage the fired deadline
      * @param deadlineScope   the scope the deadline was scheduled for
-     * @throws RuntimeException the failure of a handler interceptor or of the delivery, unwrapped from the unit of work
+     * @throws RuntimeException the failure of a handler interceptor or the delivery unwrapped from the UnitOfWork, or
+     *                          the failure of the {@link ScopeAwareProvider}
      */
     public void deliver(DeadlineMessage deadlineMessage, ScopeDescriptor deadlineScope) {
+        List<ScopeAware> scopeAwareComponents = scopeAwareProvider.provideScopeAwareStream(deadlineScope).toList();
         FutureUtils.joinAndUnwrap(
                 unitOfWorkFactory.create()
-                                 .executeWithResult(context -> chain(deadlineScope)
+                                 .executeWithResult(context -> chain(scopeAwareComponents, deadlineScope)
                                          .proceed(deadlineMessage, Message.addToContext(context, deadlineMessage))
                                          .ignoreEntries()
                                          .asCompletableFuture())
         );
     }
 
-    private MessageHandlerInterceptorChain<DeadlineMessage> chain(ScopeDescriptor deadlineScope) {
+    private MessageHandlerInterceptorChain<DeadlineMessage> chain(List<ScopeAware> scopeAwareComponents,
+                                                                  ScopeDescriptor deadlineScope) {
         // Interceptors are declared against a super type of DeadlineMessage, so each can handle the deadline being
         // delivered here; narrowing them lets the chain be typed against it.
         @SuppressWarnings("unchecked")
@@ -106,7 +113,7 @@ public final class DeadlineDelivery {
                     if (interceptors.hasNext()) {
                         return interceptors.next().interceptOnHandle(message, context, this);
                     }
-                    send(message, Message.addToContext(context, message), deadlineScope);
+                    send(scopeAwareComponents, message, Message.addToContext(context, message), deadlineScope);
                     return MessageStream.empty();
                 } catch (Exception e) {
                     return MessageStream.failed(e);
@@ -115,19 +122,22 @@ public final class DeadlineDelivery {
         };
     }
 
-    private void send(DeadlineMessage deadlineMessage, ProcessingContext context, ScopeDescriptor deadlineScope) {
-        scopeAwareProvider.provideScopeAwareStream(deadlineScope)
-                          .filter(scopeAwareComponent -> scopeAwareComponent.canResolve(deadlineScope))
-                          .forEach(scopeAwareComponent -> {
-                              try {
-                                  scopeAwareComponent.send(deadlineMessage, context, deadlineScope);
-                              } catch (Exception e) {
-                                  throw new ExecutionException(
-                                          "Failed to send a DeadlineMessage for scope ["
-                                                  + deadlineScope.scopeDescription() + "]",
-                                          e
-                                  );
-                              }
-                          });
+    private static void send(List<ScopeAware> scopeAwareComponents,
+                             DeadlineMessage deadlineMessage,
+                             ProcessingContext context,
+                             ScopeDescriptor deadlineScope) {
+        scopeAwareComponents.stream()
+                            .filter(scopeAwareComponent -> scopeAwareComponent.canResolve(deadlineScope))
+                            .forEach(scopeAwareComponent -> {
+                                try {
+                                    scopeAwareComponent.send(deadlineMessage, context, deadlineScope);
+                                } catch (Exception e) {
+                                    throw new ExecutionException(
+                                            "Failed to send a DeadlineMessage for scope ["
+                                                    + deadlineScope.scopeDescription() + "]",
+                                            e
+                                    );
+                                }
+                            });
     }
 }
