@@ -26,6 +26,10 @@ import org.axonframework.modelling.annotation.EntityIdResolverDefinition;
 /**
  * {@link ConfigurationEnhancer} registering {@link AggregateDeadlineEntityIdResolverDefinition} as the application-wide
  * {@link EntityIdResolverDefinition} default.
+ * <p>
+ * This registration only benefits an {@code @EventSourcedEntity}/{@code @EventSourced} entity: see
+ * {@link AggregateDeadlineEntityIdResolverDefinition}'s class Javadoc for why a migrated state-stored aggregate or a
+ * declaratively configured entity module does not pick up this default.
  *
  * @author Steven van Beelen
  * @see AggregateDeadlineEntityIdResolverDefinition
