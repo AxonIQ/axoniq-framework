@@ -23,8 +23,11 @@ import org.axonframework.common.FutureUtils;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.ScopeAware;
 import org.axonframework.messaging.ScopeDescriptor;
+import org.axonframework.messaging.commandhandling.CommandMessage;
+import org.axonframework.messaging.commandhandling.GenericCommandMessage;
 import org.axonframework.messaging.commandhandling.gateway.CommandGateway;
 import org.axonframework.messaging.core.Message;
+import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.Metadata;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.modelling.command.AggregateScopeDescriptor;
@@ -43,6 +46,11 @@ import java.util.Objects;
  * {@value #DESCRIPTOR_BASED_ID}. {@link AggregateDeadlineEntityIdResolverConfigurationEnhancer} registers the resolver
  * that reads this metadata entry as the application-wide default, used whenever the command's payload carries no
  * {@code @TargetEntityId}.
+ * <p>
+ * A deadline scheduled without a payload carries {@code null} as its {@link Message#payload()}. Since a {@code null}
+ * payload cannot name the command to dispatch, this translator falls back to the deadline's
+ * {@link DeadlineMessage#getDeadlineName()} in that case, dispatched as both the command's name and its payload, so the
+ * migrated handler becomes {@code @CommandHandler(commandName = "<deadlineName>") void handle(String command, ...)}.
  * <p>
  * An application wires this translator into its {@code ScopeAwareProvider}, next to its Saga managers:
  * <pre>{@code
@@ -106,6 +114,10 @@ public class AggregateDeadlineCommandTranslator implements ScopeAware {
      * not dispatched: this method logs a warning naming the deadline, the stored type and the aggregate scope, and
      * returns.
      * <p>
+     * A {@code message} whose payload is {@code null} is dispatched as a {@link GenericCommandMessage} named after, and
+     * carrying as its payload, {@link DeadlineMessage#getDeadlineName()}, since a {@code null} payload carries no type
+     * to derive a command name from.
+     * <p>
      * The dispatched command's metadata always carries the {@code scopeDescription}'s identifier under
      * {@value #DESCRIPTOR_BASED_ID}, so the target entity can be resolved from it instead of from the payload.
      *
@@ -144,6 +156,12 @@ public class AggregateDeadlineCommandTranslator implements ScopeAware {
         Metadata metadata = deadlineMessage.metadata().and(
                 DESCRIPTOR_BASED_ID, String.valueOf(aggregateScope.getIdentifier())
         );
-        FutureUtils.joinAndUnwrap(commandGateway.send(payload, metadata, context).getResultMessage());
+        if (payload == null) {
+            String deadlineName = deadlineMessage.getDeadlineName();
+            CommandMessage command = new GenericCommandMessage(new MessageType(deadlineName), deadlineName, metadata);
+            FutureUtils.joinAndUnwrap(commandGateway.send(command, context).getResultMessage());
+        } else {
+            FutureUtils.joinAndUnwrap(commandGateway.send(payload, metadata, context).getResultMessage());
+        }
     }
 }

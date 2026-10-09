@@ -21,6 +21,7 @@ package org.axonframework.deadline;
 
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.messaging.ScopeDescriptor;
+import org.axonframework.messaging.commandhandling.CommandMessage;
 import org.axonframework.messaging.commandhandling.gateway.CommandGateway;
 import org.axonframework.messaging.commandhandling.gateway.CommandResult;
 import org.axonframework.messaging.core.GenericMessage;
@@ -99,6 +100,28 @@ class AggregateDeadlineCommandTranslatorTest {
             assertThat(commandGateway.capturedMetadata)
                     .containsEntry("key", "value")
                     .containsEntry(AggregateDeadlineCommandTranslator.DESCRIPTOR_BASED_ID, "aggregateId");
+        }
+
+        @Test
+        void dispatchesGenericCommandMessageWithDeadlineNameWhenPayloadIsNull() throws Exception {
+            // given
+            Metadata metadata = Metadata.with("key", "value");
+            DeadlineMessage deadline =
+                    new GenericDeadlineMessage("paymentDue", new MessageType(Void.class), null, metadata);
+            ProcessingContext context = StubProcessingContext.forMessage(deadline);
+
+            // when
+            testSubject.send(deadline, context, TEST_SCOPE);
+
+            // then
+            assertThat(commandGateway.capturedPayload).isInstanceOf(CommandMessage.class);
+            CommandMessage command = (CommandMessage) commandGateway.capturedPayload;
+            assertThat(command.type().qualifiedName().name()).isEqualTo("paymentDue");
+            assertThat(command.payload()).isEqualTo("paymentDue");
+            assertThat(command.metadata())
+                    .containsEntry("key", "value")
+                    .containsEntry(AggregateDeadlineCommandTranslator.DESCRIPTOR_BASED_ID, "aggregateId");
+            assertThat(commandGateway.capturedContext).isSameAs(context);
         }
 
         @Test

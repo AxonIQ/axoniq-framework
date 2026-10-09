@@ -102,6 +102,32 @@ class AggregateDeadlineCommandTranslatorEntityRoutingTest {
         assertThat(observedEffect).isEqualTo("triggered-by-deadline");
     }
 
+    @Test
+    void firedPayloadLessDeadlineReachesTheEntityNamedByTheAggregateScopeDescriptor() {
+        // given
+        String entityId = "entity-2";
+        commandGateway.sendAndWait(new CreateDeadlineRoutingEntity(entityId));
+
+        DeadlineMessage deadline = new GenericDeadlineMessage("accountExpired", new MessageType(Void.class), null);
+        AggregateScopeDescriptor scope = new AggregateScopeDescriptor("DeadlineRoutingEntity", entityId);
+
+        // when
+        UnitOfWorkFactory unitOfWorkFactory = configuration.getComponent(UnitOfWorkFactory.class);
+        CompletableFuture<Void> result = unitOfWorkFactory.create().executeWithResult(context -> {
+            try {
+                testSubject.send(deadline, context, scope);
+                return CompletableFuture.completedFuture(null);
+            } catch (Exception e) {
+                return CompletableFuture.failedFuture(e);
+            }
+        });
+        result.orTimeout(5, TimeUnit.SECONDS).join();
+
+        // then
+        String observedEffect = commandGateway.sendAndWait(new ReadDeadlineEffect(entityId), String.class);
+        assertThat(observedEffect).isEqualTo("no-payload-deadline-handled: accountExpired");
+    }
+
     @SuppressWarnings("unused")
     @EventSourcedEntity(tagKey = "entityId")
     public static class DeadlineRoutingEntity {
@@ -122,6 +148,11 @@ class AggregateDeadlineCommandTranslatorEntityRoutingTest {
         @CommandHandler
         void handle(ApplyDeadlineEffect command, EventAppender appender) {
             appender.append(new DeadlineEffectApplied(this.id, command.effect()));
+        }
+
+        @CommandHandler(commandName = "accountExpired")
+        void handle(String command, EventAppender appender) {
+            appender.append(new DeadlineEffectApplied(this.id, "no-payload-deadline-handled: " + command));
         }
 
         @CommandHandler
