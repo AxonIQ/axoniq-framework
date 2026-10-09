@@ -34,9 +34,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Tests conversion capabilities of {@link AggregateScopeDescriptor}.
+ * Tests the {@link AggregateScopeDescriptor}: its description, its lazily supplied identifier and its conversion.
  */
-class AggregateScopeDescriptorSerializationTest {
+class AggregateScopeDescriptorTest {
 
     private final String expectedType = "aggregateType";
     private final String expectedIdentifier = "identifier";
@@ -96,6 +96,16 @@ class AggregateScopeDescriptorSerializationTest {
         assertThat(firstAccess).isEqualTo(expectedIdentifier);
         assertThat(secondAccess).isEqualTo(expectedIdentifier);
         assertThat(supplierInvocations).hasValue(1);
+        assertThat(lazyDescriptor).isEqualTo(testSubject);
+    }
+
+    @Test
+    void scopeDescriptionNamesTheTypeAndIdentifier() {
+        // when
+        String result = testSubject.scopeDescription();
+
+        // then
+        assertThat(result).isEqualTo("AggregateScopeDescriptor for type [aggregateType] and identifier [identifier]");
     }
 
     /**

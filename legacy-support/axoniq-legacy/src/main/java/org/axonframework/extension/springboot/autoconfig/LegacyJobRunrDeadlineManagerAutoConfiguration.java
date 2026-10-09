@@ -39,7 +39,7 @@ import org.springframework.context.annotation.Bean;
  * The manager converts the deadlines it stores with the {@link EventConverter}, the counterpart of the event serializer
  * Axon Framework 4 wired, so that deadlines an Axon Framework 4 application scheduled keep firing. A fired deadline
  * runs in a unit of work from the configuration's default {@link UnitOfWorkFactory}, and is delivered through the
- * application's {@link ScopeAwareProvider} bean. Without that bean, no manager is configured. Define a {@link
+ * configuration's {@link ScopeAwareProvider}, with which the Saga managers register themselves. Define a {@link
  * DeadlineManager} bean to configure the manager differently, for example with another converter. This is needed, for
  * example, when running a {@link DeadlineManager} in an upgrade scenario with an {@code XStream}-based serializer
  * in Axon Framework 4.
@@ -48,18 +48,17 @@ import org.springframework.context.annotation.Bean;
  * @since 5.4.0
  */
 @AutoConfiguration(afterName = {
-        "org.jobrunr.spring.autoconfigure.JobRunrAutoConfiguration",
-        "org.axonframework.extension.springboot.autoconfig.LegacySagaAutoConfiguration"
+        "org.jobrunr.spring.autoconfigure.JobRunrAutoConfiguration"
 })
 @ConditionalOnClass({JobScheduler.class, JobRunrDeadlineManager.class})
-@ConditionalOnBean({JobScheduler.class, ScopeAwareProvider.class})
+@ConditionalOnBean(JobScheduler.class)
 public class LegacyJobRunrDeadlineManagerAutoConfiguration {
 
     /**
      * Creates the {@link JobRunrDeadlineManager}, unless the application defines its own {@link DeadlineManager}.
      *
      * @param jobScheduler       the JobRunr scheduler storing and firing the deadlines
-     * @param scopeAwareProvider the provider of the components a fired deadline is delivered to
+     * @param scopeAwareProvider the configuration's provider of the components a fired deadline is delivered to
      * @param configuration      the Axon configuration, providing the default {@link UnitOfWorkFactory}, the factory
      *                           of the unit of work a fired deadline runs in
      * @param eventConverter     the converter of the stored deadlines
