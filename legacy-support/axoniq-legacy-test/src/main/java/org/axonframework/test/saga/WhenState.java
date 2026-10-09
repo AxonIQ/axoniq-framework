@@ -83,7 +83,6 @@ public interface WhenState {
      *
      * @param elapsedTime The amount of time to elapse
      * @return an object allowing you to verify the test results
-     * @throws UnsupportedOperationException always, until deadlines are ported into {@code axon-legacy}
      */
     FixtureExecutionResult whenTimeElapses(Duration elapsedTime);
 
@@ -97,7 +96,6 @@ public interface WhenState {
      *
      * @param newDateTime The time to advance the clock to
      * @return an object allowing you to verify the test results
-     * @throws UnsupportedOperationException always, until deadlines are ported into {@code axon-legacy}
      */
     FixtureExecutionResult whenTimeAdvancesTo(Instant newDateTime);
 }

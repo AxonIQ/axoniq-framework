@@ -57,6 +57,8 @@ class JobRunrDeadlineManagerIT extends AbstractDeadlineManagerTestSuite {
     @Override
     protected AbstractDeadlineManager buildDeadlineManager(ScopeAwareProvider scopeAwareProvider,
                                                            UnitOfWorkFactory unitOfWorkFactory) {
+        // JobRunr is configured statically, so the server of a manager built earlier in the test has to stop first.
+        stopBackgroundJobServer();
         storageProvider = new InMemoryStorageProvider();
         JobRunrDeadlineManager manager = JobRunrDeadlineManager.builder()
                                                                .jobScheduler(new JobScheduler(storageProvider))

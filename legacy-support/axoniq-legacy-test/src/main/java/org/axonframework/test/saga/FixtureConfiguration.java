@@ -19,7 +19,9 @@
 
 package org.axonframework.test.saga;
 
+import org.axonframework.deadline.DeadlineMessage;
 import org.axonframework.messaging.commandhandling.CommandBus;
+import org.axonframework.messaging.core.MessageDispatchInterceptor;
 import org.axonframework.messaging.core.MessageHandlerInterceptor;
 import org.axonframework.messaging.core.annotation.HandlerDefinition;
 import org.axonframework.messaging.core.annotation.HandlerEnhancerDefinition;
@@ -57,7 +59,6 @@ import java.util.function.UnaryOperator;
  *     parameter, and a test decides the answer by subscribing a handler through {@link #customize(UnaryOperator)}
  *     or by setting a {@link #setCallbackBehavior(CallbackBehavior) callback behaviour}.</li>
  * </ul>
- * The two deadline interceptor registrations are absent for a different reason, noted where they would sit.
  * Configuration is applied while building the fixture, which happens when the first event is handled or a bus is
  * requested. Merely selecting a given aggregate or declaring that there is no prior activity does not build it.
  * Anything registered after the fixture is built is ignored, as it was in Axon Framework 4.
@@ -134,6 +135,29 @@ public interface FixtureConfiguration {
      * @return the current FixtureConfiguration, for fluent interfacing
      */
     FixtureConfiguration registerHandlerEnhancerDefinition(HandlerEnhancerDefinition handlerEnhancerDefinition);
+
+    /**
+     * Registers a deadline dispatch interceptor which will always be invoked before a deadline is dispatched
+     * (scheduled) on the {@link org.axonframework.deadline.DeadlineManager} to perform a task specified in the
+     * interceptor.
+     *
+     * @param deadlineDispatchInterceptor the interceptor for dispatching (scheduling) deadlines
+     * @return the current FixtureConfiguration, for fluent interfacing
+     */
+    FixtureConfiguration registerDeadlineDispatchInterceptor(
+            MessageDispatchInterceptor<? super DeadlineMessage> deadlineDispatchInterceptor
+    );
+
+    /**
+     * Registers a deadline handler interceptor which will always be invoked before a deadline is handled to perform a
+     * task specified in the interceptor.
+     *
+     * @param deadlineHandlerInterceptor the interceptor for handling deadlines
+     * @return the current FixtureConfiguration, for fluent interfacing
+     */
+    FixtureConfiguration registerDeadlineHandlerInterceptor(
+            MessageHandlerInterceptor<? super DeadlineMessage> deadlineHandlerInterceptor
+    );
 
     /**
      * Registers the given {@code interceptor}, invoked around the Saga's event handling.
@@ -261,7 +285,6 @@ public interface FixtureConfiguration {
      *
      * @param currentTime The time to start the fixture at
      * @return an object that allows chaining of more given state
-     * @throws UnsupportedOperationException always, until deadlines are ported into {@code axon-legacy}
      */
     ContinuedGivenState givenCurrentTime(Instant currentTime);
 
@@ -269,13 +292,6 @@ public interface FixtureConfiguration {
      * The time as the fixture's scheduler sees it.
      *
      * @return the current time of the fixture's scheduler
-     * @throws UnsupportedOperationException always, until deadlines are ported into {@code axon-legacy}
      */
     Instant currentTime();
-
-    // TODO #5006 - not declared at all are the two deadline interceptor registrations, because DeadlineMessage
-    // itself is not ported:
-    //
-    //     FixtureConfiguration registerDeadlineDispatchInterceptor(MessageDispatchInterceptor<? super DeadlineMessage> interceptor);
-    //     FixtureConfiguration registerDeadlineHandlerInterceptor(MessageHandlerInterceptor<? super DeadlineMessage> interceptor);
 }

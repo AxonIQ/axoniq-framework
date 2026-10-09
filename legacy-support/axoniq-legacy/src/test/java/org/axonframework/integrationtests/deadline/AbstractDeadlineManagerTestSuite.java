@@ -20,8 +20,24 @@
 package org.axonframework.integrationtests.deadline;
 
 import org.axonframework.common.Registration;
+import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.deadline.AbstractDeadlineManager;
+import org.axonframework.deadline.DeadlineManager;
 import org.axonframework.deadline.DeadlineMessage;
+import org.axonframework.eventsourcing.configuration.EventSourcedEntityModule;
+import org.axonframework.eventsourcing.configuration.EventSourcingConfigurer;
+import org.axonframework.integrationtests.deadline.DeadlineTestEntity.CancelAllDeadlines;
+import org.axonframework.integrationtests.deadline.DeadlineTestEntity.CancelAllDeadlinesWithinScope;
+import org.axonframework.integrationtests.deadline.DeadlineTestEntity.CancelDeadline;
+import org.axonframework.integrationtests.deadline.DeadlineTestEntity.CreateEntity;
+import org.axonframework.integrationtests.deadline.DeadlineTestEntity.DeadlineOccurred;
+import org.axonframework.integrationtests.deadline.DeadlineTestEntity.DeadlinePayload;
+import org.axonframework.integrationtests.deadline.DeadlineTestEntity.FailingDeadlinePayload;
+import org.axonframework.integrationtests.deadline.DeadlineTestEntity.Occurrences;
+import org.axonframework.integrationtests.deadline.DeadlineTestEntity.ReadOccurrences;
+import org.axonframework.integrationtests.deadline.DeadlineTestEntity.ScheduleDeadline;
+import org.axonframework.integrationtests.deadline.DeadlineTestEntity.ScheduleDeadlineThenFail;
+import org.axonframework.messaging.commandhandling.gateway.CommandGateway;
 import org.axonframework.messaging.ContextAwareScope;
 import org.axonframework.messaging.ScopeAware;
 import org.axonframework.messaging.ScopeAwareProvider;
@@ -51,8 +67,10 @@ import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatNoException;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assumptions.assumeThat;
 import static org.awaitility.Awaitility.await;
+import static org.axonframework.integrationtests.deadline.DeadlineTestEntity.PAYLOADLESS_DEADLINE_NAME;
 
 /**
  * Tests whether a {@link AbstractDeadlineManager} implementation schedules, fires and cancels deadlines as expected.
@@ -345,6 +363,255 @@ public abstract class AbstractDeadlineManagerTestSuite {
             // then
             awaitSingleDelivery();
             assertThat(invocations).isEmpty();
+        }
+    }
+
+    /**
+     * Fires deadlines on a real Axon Framework 5 entity. The deadline manager under test is built over the
+     * configuration's {@link ScopeAwareProvider} and {@link UnitOfWorkFactory}, so a fired deadline reaches the
+     * entity's {@code @CommandHandler} through the {@code AggregateDeadlineCommandTranslator}, and the resulting event
+     * is persisted through the entity's repository.
+     */
+    @Nested
+    class OnAnEntity {
+
+        private static final String ENTITY_ID = "entity-1";
+
+        private AxonConfiguration configuration;
+        private CommandGateway commandGateway;
+
+        @BeforeEach
+        void setUpEntity() {
+            // Replaces the manager the suite built over the RecordingScopeAware
+            deadlineManager.shutdown();
+            DeadlineTestEntity.FAILED_DELIVERIES.set(0);
+            configuration = EventSourcingConfigurer
+                    .create()
+                    .registerEntity(EventSourcedEntityModule.autodetected(String.class, DeadlineTestEntity.class))
+                    .componentRegistry(registry -> registry.registerComponent(
+                            DeadlineManager.class,
+                            config -> buildDeadlineManager(config.getComponent(ScopeAwareProvider.class),
+                                                           config.getComponent(UnitOfWorkFactory.class))
+                    ))
+                    .start();
+            deadlineManager = (AbstractDeadlineManager) configuration.getComponent(DeadlineManager.class);
+            commandGateway = configuration.getComponent(CommandGateway.class);
+            commandGateway.sendAndWait(new CreateEntity(ENTITY_ID));
+        }
+
+        @AfterEach
+        void tearDownEntity() {
+            configuration.shutdown();
+        }
+
+        @Test
+        void aDeadlineFiresOnTheEntity() {
+            // when
+            schedule(ENTITY_ID, DEADLINE_NAME, new DeadlinePayload("text"));
+
+            // then
+            awaitOccurrences(ENTITY_ID, new DeadlineOccurred(ENTITY_ID, "payload", "text", null));
+        }
+
+        @Test
+        void aDeadlineScheduledInThePastFires() {
+            // when
+            schedule(ENTITY_ID, DEADLINE_NAME, new DeadlinePayload("overdue"), -10_000);
+
+            // then
+            awaitOccurrences(ENTITY_ID, new DeadlineOccurred(ENTITY_ID, "payload", "overdue", null));
+        }
+
+        @Test
+        void aDeadlineWithoutPayloadFiresOnTheHandlerNamedAfterTheDeadline() {
+            // when
+            schedule(ENTITY_ID, PAYLOADLESS_DEADLINE_NAME, null);
+
+            // then
+            awaitOccurrences(ENTITY_ID, new DeadlineOccurred(
+                    ENTITY_ID, "payloadless", PAYLOADLESS_DEADLINE_NAME, null
+            ));
+        }
+
+        @Test
+        void aDeadlineOfTheEntityDoesNotFireOnAnotherEntity() {
+            // given
+            commandGateway.sendAndWait(new CreateEntity("entity-2"));
+
+            // when
+            schedule("entity-2", DEADLINE_NAME, new DeadlinePayload("for entity-2"));
+
+            // then
+            awaitOccurrences("entity-2", new DeadlineOccurred("entity-2", "payload", "for entity-2", null));
+            assertThat(occurrences(ENTITY_ID)).isEmpty();
+        }
+
+        @Nested
+        class CancellingEntityDeadlines {
+
+            @Test
+            void aCancelledScheduleDoesNotFire() {
+                // given
+                String scheduleId = schedule(ENTITY_ID, DEADLINE_NAME, new DeadlinePayload("cancelled"));
+
+                // when
+                commandGateway.sendAndWait(new CancelDeadline(ENTITY_ID, DEADLINE_NAME, scheduleId));
+
+                // then
+                assertNothingFiresOn(ENTITY_ID);
+            }
+
+            @Test
+            void cancelAllCancelsEveryDeadlineOfThatNameOnly() {
+                assumeThat(supportsCancellingByNameAndScope()).isTrue();
+                // given
+                schedule(ENTITY_ID, DEADLINE_NAME, new DeadlinePayload("first"));
+                schedule(ENTITY_ID, DEADLINE_NAME, new DeadlinePayload("second"));
+                schedule(ENTITY_ID, "otherDeadline", new DeadlinePayload("other"));
+
+                // when
+                commandGateway.sendAndWait(new CancelAllDeadlines(ENTITY_ID, DEADLINE_NAME));
+
+                // then
+                awaitOccurrences(ENTITY_ID, new DeadlineOccurred(ENTITY_ID, "payload", "other", null));
+            }
+
+            @Test
+            void cancelAllWithinScopeCancelsTheDeadlinesOfThatEntityOnly() {
+                assumeThat(supportsCancellingByNameAndScope()).isTrue();
+                // given
+                commandGateway.sendAndWait(new CreateEntity("entity-2"));
+                schedule(ENTITY_ID, DEADLINE_NAME, new DeadlinePayload("cancelled"));
+                schedule("entity-2", DEADLINE_NAME, new DeadlinePayload("kept"));
+
+                // when
+                commandGateway.sendAndWait(new CancelAllDeadlinesWithinScope(ENTITY_ID, DEADLINE_NAME));
+
+                // then
+                awaitOccurrences("entity-2", new DeadlineOccurred("entity-2", "payload", "kept", null));
+                assertThat(occurrences(ENTITY_ID)).isEmpty();
+            }
+        }
+
+        @Nested
+        class InterceptingEntityDeadlines {
+
+            @Test
+            void aHandlerInterceptorChangesTheDeadlineTheEntityReceives() {
+                // given
+                deadlineManager.registerHandlerInterceptor(
+                        (message, context, chain) -> chain.proceed(message.andMetadata(Map.of("origin", "handler")),
+                                                                   context)
+                );
+
+                // when
+                schedule(ENTITY_ID, DEADLINE_NAME, new DeadlinePayload("text"));
+
+                // then
+                awaitOccurrences(ENTITY_ID, new DeadlineOccurred(ENTITY_ID, "payload", "text", "handler"));
+            }
+
+            @Test
+            void aDispatchInterceptorChangesTheDeadlineTheEntityReceives() {
+                // given
+                deadlineManager.registerDispatchInterceptor(
+                        (message, context, chain) -> chain.proceed(message.andMetadata(Map.of("origin", "dispatch")),
+                                                                   context)
+                );
+
+                // when
+                schedule(ENTITY_ID, DEADLINE_NAME, new DeadlinePayload("text"));
+
+                // then
+                awaitOccurrences(ENTITY_ID, new DeadlineOccurred(ENTITY_ID, "payload", "text", "dispatch"));
+            }
+        }
+
+        @Nested
+        class SchedulingFromTheEntity {
+
+            /**
+             * A command handler of an entity is not run within a scope, as a Saga handler is, so a deadline call it
+             * makes runs at once. It does not wait for the unit of work of the command to prepare its commit.
+             * <p>
+             * This differs from Axon Framework 4, which deferred the call to the prepare-commit phase of the current
+             * unit of work, so a failing command never scheduled its deadline. The test pins the current behaviour
+             * to keep that difference visible.
+             */
+            @Test
+            void aDeadlineIsScheduledEvenWhenTheCommandSchedulingItFails() {
+                // when
+                assertThatThrownBy(() -> commandGateway.sendAndWait(new ScheduleDeadlineThenFail(
+                        ENTITY_ID, DEADLINE_NAME, new DeadlinePayload("scheduled"), TRIGGER_DURATION.toMillis()
+                ))).hasMessageContaining("fails after it scheduled");
+
+                // then
+                awaitOccurrences(ENTITY_ID, new DeadlineOccurred(ENTITY_ID, "payload", "scheduled", null));
+            }
+
+            /**
+             * For the same reason, the dispatch interceptors of a deadline scheduled by an entity get no context.
+             * <p>
+             * This differs from Axon Framework 4, which ran them within the unit of work of the command and attached
+             * its correlation data to the deadline message. The test pins the current behaviour to keep that
+             * difference visible.
+             */
+            @Test
+            void theDispatchInterceptorsGetNoContext() {
+                // given
+                List<Optional<ProcessingContext>> interceptionContexts = new CopyOnWriteArrayList<>();
+                deadlineManager.registerDispatchInterceptor((message, context, chain) -> {
+                    interceptionContexts.add(Optional.ofNullable(context));
+                    return chain.proceed(message, context);
+                });
+
+                // when
+                schedule(ENTITY_ID, DEADLINE_NAME, new DeadlinePayload("text"));
+
+                // then
+                assertThat(interceptionContexts).containsExactly(Optional.empty());
+            }
+        }
+
+        @Nested
+        class FailingEntityHandlers {
+
+            @Test
+            void aFailingEntityHandlerPersistsNothingAndDoesNotBlockOtherDeadlines() {
+                // given
+                schedule(ENTITY_ID, DEADLINE_NAME, new FailingDeadlinePayload("fails"));
+
+                // when
+                schedule(ENTITY_ID, DEADLINE_NAME, new DeadlinePayload("succeeds"));
+
+                // then
+                awaitOccurrences(ENTITY_ID, new DeadlineOccurred(ENTITY_ID, "payload", "succeeds", null));
+                assertThat(DeadlineTestEntity.FAILED_DELIVERIES).hasValueGreaterThanOrEqualTo(1);
+            }
+        }
+
+        private String schedule(String entityId, String deadlineName, @Nullable Object payload) {
+            return schedule(entityId, deadlineName, payload, TRIGGER_DURATION.toMillis());
+        }
+
+        private String schedule(String entityId, String deadlineName, @Nullable Object payload, long triggerMillis) {
+            return commandGateway.sendAndWait(new ScheduleDeadline(entityId, deadlineName, payload, triggerMillis),
+                                              String.class);
+        }
+
+        private List<DeadlineOccurred> occurrences(String entityId) {
+            return commandGateway.sendAndWait(new ReadOccurrences(entityId), Occurrences.class).events();
+        }
+
+        private void awaitOccurrences(String entityId, DeadlineOccurred... expected) {
+            await().atMost(FIRING_TIMEOUT).untilAsserted(() -> assertThat(occurrences(entityId)).contains(expected));
+            await().during(Duration.ofMillis(500)).atMost(FIRING_TIMEOUT)
+                   .untilAsserted(() -> assertThat(occurrences(entityId)).containsExactly(expected));
+        }
+
+        private void assertNothingFiresOn(String entityId) {
+            await().during(NOT_FIRING_PERIOD).atMost(NOT_FIRING_PERIOD.plusSeconds(1))
+                   .until(() -> occurrences(entityId).isEmpty());
         }
     }
 
