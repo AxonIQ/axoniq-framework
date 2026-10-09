@@ -30,6 +30,7 @@ import org.axonframework.deadline.SimpleDeadlineManager;
 import org.axonframework.deadline.dbscheduler.DbSchedulerDeadlineManager;
 import org.axonframework.deadline.jobrunr.JobRunrDeadlineManager;
 import org.axonframework.messaging.ScopeAware;
+import org.axonframework.messaging.LegacyScopeAwareProvider;
 import org.axonframework.messaging.ScopeAwareProvider;
 import org.axonframework.messaging.ScopeDescriptor;
 import org.axonframework.messaging.core.Message;
@@ -56,7 +57,6 @@ import java.lang.reflect.Type;
 import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.stream.Stream;
 import javax.sql.DataSource;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -81,16 +81,14 @@ class LegacyDeadlineManagerAutoConfigurationTest {
 
         @Test
         void configuresAJobRunrDeadlineManager() {
-            testContext.withUserConfiguration(JobSchedulerContext.class, ScopeAwareProviderContext.class)
+            testContext.withUserConfiguration(JobSchedulerContext.class)
                        .run(context -> assertThat(context).hasSingleBean(DeadlineManager.class)
                                                           .hasSingleBean(JobRunrDeadlineManager.class));
         }
 
         @Test
         void storesDeadlinesWithTheEventConverter() {
-            testContext.withUserConfiguration(JobSchedulerContext.class,
-                                              ScopeAwareProviderContext.class,
-                                              RecordingEventConverterContext.class)
+            testContext.withUserConfiguration(JobSchedulerContext.class, RecordingEventConverterContext.class)
                        .run(context -> {
                            // when
                            context.getBean(DeadlineManager.class).schedule(
@@ -103,22 +101,13 @@ class LegacyDeadlineManagerAutoConfigurationTest {
         }
 
         @Test
-        void configuresNoManagerWithoutAScopeAwareProvider() {
-            testContext.withUserConfiguration(JobSchedulerContext.class)
-                       .run(context -> assertThat(context).doesNotHaveBean(DeadlineManager.class));
-        }
-
-        @Test
         void configuresNoManagerWithoutAJobScheduler() {
-            testContext.withUserConfiguration(ScopeAwareProviderContext.class)
-                       .run(context -> assertThat(context).doesNotHaveBean(DeadlineManager.class));
+            testContext.run(context -> assertThat(context).doesNotHaveBean(DeadlineManager.class));
         }
 
         @Test
         void aDeadlineManagerOfTheApplicationWins() {
-            testContext.withUserConfiguration(JobSchedulerContext.class,
-                                              ScopeAwareProviderContext.class,
-                                              CustomDeadlineManagerContext.class)
+            testContext.withUserConfiguration(JobSchedulerContext.class, CustomDeadlineManagerContext.class)
                        .run(context -> assertThat(context).hasSingleBean(DeadlineManager.class)
                                                           .doesNotHaveBean(JobRunrDeadlineManager.class));
         }
@@ -129,7 +118,7 @@ class LegacyDeadlineManagerAutoConfigurationTest {
 
         @Test
         void configuresADbSchedulerDeadlineManagerAndItsTask() {
-            testContext.withUserConfiguration(DbSchedulerContext.class, ScopeAwareProviderContext.class)
+            testContext.withUserConfiguration(DbSchedulerContext.class)
                        .run(context -> {
                            assertThat(context).hasSingleBean(DeadlineManager.class)
                                               .hasSingleBean(DbSchedulerDeadlineManager.class)
@@ -139,10 +128,28 @@ class LegacyDeadlineManagerAutoConfigurationTest {
                        });
         }
 
+        /**
+         * The Saga managers and the aggregate deadline translator register with the configuration's
+         * {@link ScopeAwareProvider}, which the manager delivers fired deadlines through.
+         */
         @Test
-        void configuresNoManagerWithoutAScopeAwareProvider() {
-            testContext.withUserConfiguration(DbSchedulerContext.class)
-                       .run(context -> assertThat(context).doesNotHaveBean(DeadlineManager.class));
+        void theManagerDeliversThroughTheConfigurationsScopeAwareProvider() {
+            testContext.withUserConfiguration(StartedDbSchedulerContext.class)
+                       .run(context -> {
+                           // given
+                           RecordingScopeAware scopeAware = new RecordingScopeAware();
+                           ((LegacyScopeAwareProvider) context.getBean(ScopeAwareProvider.class)).register(scopeAware);
+                           context.getBean(Scheduler.class).start();
+
+                           // when
+                           context.getBean(DeadlineManager.class).schedule(
+                                   Duration.ofMillis(10), "deadline", "payload", new SagaScopeDescriptor("Saga", "id")
+                           );
+
+                           // then
+                           await().atMost(Duration.ofSeconds(10))
+                                  .untilAsserted(() -> assertThat(scopeAware.payloads).containsExactly("payload"));
+                       });
         }
 
         /**
@@ -155,6 +162,8 @@ class LegacyDeadlineManagerAutoConfigurationTest {
                        .run(context -> {
                            // given
                            assertThat(context).hasSingleBean(DeadlineManager.class).hasBean("deadlineDetailsTask");
+                           RecordingScopeAware scopeAware = new RecordingScopeAware();
+                           ((LegacyScopeAwareProvider) context.getBean(ScopeAwareProvider.class)).register(scopeAware);
                            context.getBean(Scheduler.class).start();
 
                            // when
@@ -163,7 +172,6 @@ class LegacyDeadlineManagerAutoConfigurationTest {
                            );
 
                            // then
-                           RecordingScopeAware scopeAware = context.getBean(RecordingScopeAware.class);
                            await().atMost(Duration.ofSeconds(10))
                                   .untilAsserted(() -> assertThat(scopeAware.payloads).containsExactly("payload"));
                        });
@@ -171,9 +179,7 @@ class LegacyDeadlineManagerAutoConfigurationTest {
 
         @Test
         void aDeadlineManagerOfTheApplicationWins() {
-            testContext.withUserConfiguration(DbSchedulerContext.class,
-                                              ScopeAwareProviderContext.class,
-                                              CustomDeadlineManagerContext.class)
+            testContext.withUserConfiguration(DbSchedulerContext.class, CustomDeadlineManagerContext.class)
                        .run(context -> assertThat(context).hasSingleBean(DeadlineManager.class)
                                                           .doesNotHaveBean(DbSchedulerDeadlineManager.class));
         }
@@ -188,7 +194,7 @@ class LegacyDeadlineManagerAutoConfigurationTest {
          */
         @Test
         void theAutoConfiguredDeadlineManagerShutsDownTheJobSchedulerOnce() {
-            testContext.withUserConfiguration(SpiedJobSchedulerContext.class, ScopeAwareProviderContext.class)
+            testContext.withUserConfiguration(SpiedJobSchedulerContext.class)
                        .run(context -> {
                            // given
                            assertThat(context).hasSingleBean(JobRunrDeadlineManager.class);
@@ -252,22 +258,22 @@ class LegacyDeadlineManagerAutoConfigurationTest {
     }
 
     @Configuration
-    static class XStreamDbSchedulerContext {
+    static class StartedDbSchedulerContext {
 
         @Bean(destroyMethod = "stop")
         public Scheduler scheduler(DataSource dataSource, List<Task<?>> tasks) {
             reCreateTable(dataSource);
             return new SchedulerBuilder(dataSource, tasks).pollingInterval(Duration.ofMillis(50)).build();
         }
+    }
 
-        @Bean
-        public RecordingScopeAware scopeAware() {
-            return new RecordingScopeAware();
-        }
+    @Configuration
+    static class XStreamDbSchedulerContext {
 
-        @Bean
-        public ScopeAwareProvider scopeAwareProvider(RecordingScopeAware scopeAware) {
-            return scope -> Stream.of(scopeAware);
+        @Bean(destroyMethod = "stop")
+        public Scheduler scheduler(DataSource dataSource, List<Task<?>> tasks) {
+            reCreateTable(dataSource);
+            return new SchedulerBuilder(dataSource, tasks).pollingInterval(Duration.ofMillis(50)).build();
         }
 
         @Bean
@@ -299,15 +305,6 @@ class LegacyDeadlineManagerAutoConfigurationTest {
         @Override
         public boolean canResolve(ScopeDescriptor scopeDescription) {
             return true;
-        }
-    }
-
-    @Configuration
-    static class ScopeAwareProviderContext {
-
-        @Bean
-        public ScopeAwareProvider scopeAwareProvider() {
-            return scope -> Stream.empty();
         }
     }
 

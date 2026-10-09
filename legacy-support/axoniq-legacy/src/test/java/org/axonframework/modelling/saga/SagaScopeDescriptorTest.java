@@ -28,11 +28,11 @@ import org.junit.jupiter.api.*;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Tests conversion capabilities of {@link SagaScopeDescriptor}.
+ * Tests the {@link SagaScopeDescriptor}: its description and its conversion.
  *
  * @author JohT
  */
-class SagaScopeDescriptorSerializationTest {
+class SagaScopeDescriptorTest {
 
     private final String expectedType = "sagaType";
     private final String expectedIdentifier = "identifier";
@@ -65,5 +65,14 @@ class SagaScopeDescriptorSerializationTest {
 
         assertThat(result.getType()).isEqualTo(expectedType);
         assertThat(result.getIdentifier()).isEqualTo(expectedIdentifier);
+    }
+
+    @Test
+    void scopeDescriptionNamesTheTypeAndIdentifier() {
+        // when
+        String result = testSubject.scopeDescription();
+
+        // then
+        assertThat(result).isEqualTo("SagaScopeDescriptor for type [sagaType] and identifier [identifier]");
     }
 }

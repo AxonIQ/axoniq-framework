@@ -44,17 +44,22 @@ import org.springframework.context.annotation.Bean;
  * with the scheduler. The manager converts the deadlines with the {@link EventConverter}, the counterpart of the event
  * serializer Axon Framework 4 wired, so that deadlines an Axon Framework 4 application scheduled keep firing. A fired
  * deadline runs in a unit of work from the configuration's default {@link UnitOfWorkFactory}, and is delivered through
- * the application's {@link ScopeAwareProvider} bean. Without that bean, no manager is configured. The scheduler's
- * lifecycle stays with db-scheduler's auto-configuration. Define a {@link DeadlineManager} bean to configure the
- * manager differently, for example with another converter. This is needed, for example, when running a
- * {@link DeadlineManager} in an upgrade scenario with an {@code XStream}-based serializer in Axon Framework 4.
+ * the configuration's {@link ScopeAwareProvider}, with which the Saga managers register themselves.
+ * <p>
+ * The scheduler's lifecycle stays with db-scheduler's auto-configuration, which starts the scheduler as soon as it
+ * creates it, unless {@code db-scheduler.delay-startup-until-context-ready} is set. Deadlines that are overdue by then
+ * wait until Axon has started its event processors, as the {@code ScopeAwareProvider} only provides the Saga managers
+ * once these are built. Set the property to start the scheduler after Axon instead.
+ * <p>
+ * Define a {@link DeadlineManager} bean to configure the manager differently, for example with another converter. This
+ * is needed, for example, when running a {@link DeadlineManager} in an upgrade scenario with an {@code XStream}-based
+ * serializer in Axon Framework 4.
  *
  * @author Jakob Hatzl
  * @since 5.4.0
  */
 @AutoConfiguration(afterName = {
-        "com.github.kagkarlsson.scheduler.boot.autoconfigure.DbSchedulerAutoConfiguration",
-        "org.axonframework.extension.springboot.autoconfig.LegacySagaAutoConfiguration"
+        "com.github.kagkarlsson.scheduler.boot.autoconfigure.DbSchedulerAutoConfiguration"
 })
 @ConditionalOnClass({Scheduler.class, DbSchedulerDeadlineManager.class})
 public class LegacyDbSchedulerDeadlineManagerAutoConfiguration {
@@ -77,14 +82,14 @@ public class LegacyDbSchedulerDeadlineManagerAutoConfiguration {
      * The manager neither starts nor stops the scheduler, as db-scheduler's Spring Boot auto-configuration does.
      *
      * @param scheduler          the db-scheduler scheduler storing and firing the deadlines
-     * @param scopeAwareProvider the provider of the components a fired deadline is delivered to
+     * @param scopeAwareProvider the configuration's provider of the components a fired deadline is delivered to
      * @param configuration      the Axon configuration, providing the default {@link UnitOfWorkFactory}, the factory
      *                           of the unit of work a fired deadline runs in
      * @param eventConverter     the converter of the stored deadlines
      * @return the db-scheduler deadline manager
      */
     @Bean
-    @ConditionalOnBean({Scheduler.class, ScopeAwareProvider.class})
+    @ConditionalOnBean(Scheduler.class)
     @ConditionalOnMissingBean(DeadlineManager.class)
     public DbSchedulerDeadlineManager deadlineManager(Scheduler scheduler,
                                                       ScopeAwareProvider scopeAwareProvider,
