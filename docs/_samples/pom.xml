@@ -101,6 +101,22 @@
             <artifactId>axoniq-workflow-dsl</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <!-- Workflow test fixture, for the testing-workflows samples (not managed by the BOM). Compile scope here
+             since this module compiles every documented sample as ordinary main sources, unlike a real application
+             where this dependency is test-scoped. -->
+        <dependency>
+            <groupId>io.axoniq.framework</groupId>
+            <artifactId>axoniq-workflow-test</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <!-- The parent POM declares junit-jupiter at test scope; the testing-workflows samples use @Test,
+             @BeforeEach, and @AfterEach as ordinary main sources (see note above), so it is re-declared here at
+             compile scope. -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>compile</scope>
+        </dependency>
         <!-- Data Protection types used by the multi-tenancy data-protection samples -->
         <dependency>
             <groupId>io.axoniq.framework</groupId>

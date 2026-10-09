@@ -4,38 +4,27 @@
 Real-world workflows often need to run steps concurrently.
 You might want to ship the order and send a confirmation email at the same time, request shipping quotes from two carriers and take the fastest, or wait for multiple approvals before proceeding.
 
-The three combinators—`anyMatch`, `allMatch`, and `noneMatch`—let you compose non-blocking steps (`execute` and `waitForEvent`) into powerful orchestration patterns.
+The three combinators, `anyMatch`, `allMatch`, and `noneMatch`, let you compose non-blocking steps (`execute` and `waitForEvent`) into powerful orchestration patterns.
 
 == Non-blocking execution
 
 So far we've used `awaitExecute` and `awaitEvent`, which block until the step completes.
-The non-blocking variants—`execute` and `waitForEvent`—start steps without waiting and return a `WorkflowStepResult`:
+The non-blocking variants, `execute` and `waitForEvent`, start steps without waiting and return a `WorkflowStepResult`:
 
 [source,java]
 ----
-var shipping = ctx.execute("shipOrder", ctx.workflowPayload(),
-        ShippingService::shipOrder,
-        step -> step.timeout(Duration.ofMinutes(5)));
-
-var notification = ctx.execute("notifyCustomer", ctx.workflowPayload(),
-        NotificationService::sendConfirmation,
-        step -> step.timeout(Duration.ofSeconds(30)));
+include::example$workflows/steporchestration/StepOrchestrationExamples.java[tag=non-blocking-execute,indent=0]
 ----
 
-Both steps run concurrently. You can also mix `execute` with `waitForEvent`:
+Both steps run concurrently.
+You can also mix `execute` with `waitForEvent`:
 
 [source,java]
 ----
-var approval = ctx.waitForEvent("awaitApproval", ManagerApproved.class,
-        associate(payloadProperty("orderId"), equalsTo(ctx.workflowId())),
-        step -> step.timeout(Duration.ofMinutes(30)));
-
-var backgroundCheck = ctx.execute("runBackgroundCheck", ctx.workflowPayload(),
-        ComplianceService::check,
-        step -> step.timeout(Duration.ofMinutes(10)));
+include::example$workflows/steporchestration/StepOrchestrationExamples.java[tag=mix-execute-waitforevent,indent=0]
 ----
 
-== `anyMatch`—first match wins
+== `anyMatch`: first match wins
 
 `anyMatch` resolves as soon as the *first* step reaches a terminal state that matches the predicate.
 
@@ -48,35 +37,14 @@ They are *not* automatically cancelled—if you need cleanup, cancel them explic
 
 === Race two events
 
-Wait for the first of two possible outcomes—whichever event arrives first wins:
+Wait for the first of two possible outcomes.
+Whichever event arrives first wins:
 
 [source,java]
 ----
-var accepted = ctx.waitForEvent("paymentAccepted", CardPaymentAccepted.class,
-        associate(payloadProperty("orderId"), equalsTo(ctx.workflowId())),
-        step -> step.timeout(Duration.ofMinutes(10)));
-
-var declined = ctx.waitForEvent("paymentDeclined", CardPaymentDeclined.class,
-        associate(payloadProperty("orderId"), equalsTo(ctx.workflowId())),
-        step -> step.timeout(Duration.ofMinutes(10)));
-
-var result = ctx.anyMatch(WorkflowStepResult::isCompleted,     // <1>
-                          accepted, declined);
-
-result.await();                                                 // <2>
-
-var winner = result.matched().getFirst();                       // <3>
-logger.info("Payment outcome: {}", winner.getStepName());
-
-// Cancel the wait for the other event
-for (var remaining : result.unmatched()) {                      // <4>
-    remaining.cancel("Outcome already determined");
-}
-
-if (winner == declined) {
-    ctx.fail(new RuntimeException("Payment was declined"));
-}
+include::example$workflows/steporchestration/StepOrchestrationExamples.java[tag=anymatch-race-events,indent=0]
 ----
+
 <.> Resolves when the first result reaches a terminal state matching the predicate.
 <.> Blocks until the outcome is determined.
 <.> `matched()` contains the event that arrived first—the winner is always the first element.
@@ -84,63 +52,29 @@ if (winner == declined) {
 
 === Race two services
 
-Same pattern works with `execute`—request shipping quotes from two carriers, take whichever responds first:
+The same pattern works with `execute`.
+Request shipping quotes from two carriers, take whichever responds first:
 
 [source,java]
 ----
-var dhlQuote = ctx.execute("getDhlQuote", ctx.workflowPayload(),
-        DhlService::getQuote, step -> step.timeout(Duration.ofSeconds(10)));
-
-var fedexQuote = ctx.execute("getFedexQuote", ctx.workflowPayload(),
-        FedexService::getQuote, step -> step.timeout(Duration.ofSeconds(10)));
-
-var race = ctx.anyMatch(WorkflowStepResult::isCompleted,
-                        dhlQuote, fedexQuote);
-race.await();
-
-var winner = race.matched().getFirst();
-logger.info("Using {} — quoted first", winner.getStepName());
-
-// Cancel the slower carrier
-for (var loser : race.unmatched()) {
-    loser.cancel("Went with " + winner.getStepName());
-}
+include::example$workflows/steporchestration/StepOrchestrationExamples.java[tag=anymatch-race-services,indent=0]
 ----
 
-== `allMatch`—all must succeed
+== `allMatch`: all must succeed
 
 `allMatch` succeeds only when _all_ steps match the predicate.
 It short-circuits on the first non-match:
 
 [source,java]
 ----
-// Ship and notify in parallel
-var shipping = ctx.execute("shipOrder", ctx.workflowPayload(),
-        ShippingService::shipOrder,
-        step -> step.timeout(Duration.ofMinutes(5)));
-
-var notification = ctx.execute("notifyCustomer", ctx.workflowPayload(),
-        NotificationService::sendConfirmation,
-        step -> step.timeout(Duration.ofSeconds(30)));
-
-var guard = ctx.allMatch(WorkflowStepResult::success,           // <1>
-                         shipping, notification);
-
-if (guard.success()) {                                           // <2>
-    logger.info("All steps completed successfully!");
-} else {
-    // Something failed — inspect what went wrong
-    for (var failed : guard.unmatched()) {                       // <3>
-        logger.warn("Step {} did not succeed", failed.getStepName());
-    }
-    ctx.fail(new RuntimeException("Not all steps completed successfully"));
-}
+include::example$workflows/steporchestration/StepOrchestrationExamples.java[tag=allmatch-basic,indent=0]
 ----
+
 <.> Blocks until all steps complete successfully, or one fails (short-circuit).
 <.> `success()` on the combinator is `true` only if all steps matched the predicate.
 <.> `unmatched()` contains the step that violated the predicate, plus any steps that hadn't completed yet when the short-circuit happened.
 
-== `noneMatch`—no failures allowed
+== `noneMatch`: no failures allowed
 
 `noneMatch` succeeds when _no_ step matches the predicate.
 
@@ -155,22 +89,12 @@ They are *not* automatically cancelled—cancel them explicitly via `unmatched()
 
 [source,java]
 ----
-var stepA = ctx.execute("processA", Map.of(), ServiceA::process,
-        step -> step.timeout(Duration.ofMinutes(5)));
-
-var stepB = ctx.execute("processB", Map.of(), ServiceB::process,
-        step -> step.timeout(Duration.ofMinutes(5)));
-
-var stepC = ctx.execute("processC", Map.of(), ServiceC::process,
-        step -> step.timeout(Duration.ofMinutes(5)));
-
-var check = ctx.noneMatch(WorkflowStepResult::failure,          // <1>
-                          stepA, stepB, stepC);
-if (check.success()) {
-    logger.info("No failures — all clear!");
-}
+include::example$workflows/steporchestration/StepOrchestrationExamples.java[tag=nonematch-basic,indent=0]
 ----
-<.> Succeeds if none of the steps fail. Short-circuits as soon as one fails. When `success()` returns `true`, all steps have reached a terminal state—no cancellation is needed.
+
+<.> Succeeds if none of the steps fail.
+Short-circuits as soon as one fails.
+When `success()` returns `true`, all steps have reached a terminal state—no cancellation is needed.
 
 === Cancel remaining on failure
 
@@ -178,22 +102,9 @@ When one step fails, cancel the others immediately:
 
 [source,java]
 ----
-var check = ctx.noneMatch(WorkflowStepResult::failure,
-                          stepA, stepB, stepC);
-check.await();
-
-if (!check.success()) {
-    var failedStep = check.matched().getFirst();                // <1>
-    logger.warn("Step {} failed", failedStep.getStepName());
-
-    // Cancel all steps that are still running
-    for (var remaining : check.unmatched()) {                   // <2>
-        remaining.cancel("Cancelled due to failure of " + failedStep.getStepName());
-    }
-
-    ctx.fail(new RuntimeException("Step " + failedStep.getStepName() + " failed"));
-}
+include::example$workflows/steporchestration/StepOrchestrationExamples.java[tag=nonematch-cancel-remaining,indent=0]
 ----
+
 <.> `matched()` contains the steps that triggered the predicate—the violators.
 <.> `unmatched()` contains the steps that didn't fail—some may still be running.
 
@@ -203,46 +114,11 @@ For a more robust pattern, cancel remaining steps *and* run a compensating actio
 
 [source,java]
 ----
-var reserveStock = ctx.execute("reserveStock", ctx.workflowPayload(),
-        InventoryService::reserveStock,
-        step -> step.timeout(Duration.ofMinutes(1)));
-
-var reserveShipping = ctx.execute("reserveShipping", ctx.workflowPayload(),
-        ShippingService::reserveSlot,
-        step -> step.timeout(Duration.ofMinutes(1)));
-
-var chargePayment = ctx.execute("chargePayment", ctx.workflowPayload(),
-        PaymentService::charge,
-        step -> step.timeout(Duration.ofSeconds(30)));
-
-var check = ctx.noneMatch(WorkflowStepResult::failure,
-                          reserveStock, reserveShipping, chargePayment);
-check.await();
-
-if (!check.success()) {
-    var failedStep = check.matched().getFirst();
-
-    // 1. Cancel steps that are still running
-    for (var remaining : check.unmatched()) {
-        if (!remaining.isCompleted()) {
-            remaining.cancel("Rolling back due to " + failedStep.getStepName());
-        }
-    }
-
-    // 2. Compensate steps that already completed successfully
-    for (var completed : check.unmatched()) {                   // <1>
-        if (completed.success()) {
-            ctx.awaitExecute("rollback-" + completed.getStepName(),
-                    ctx.workflowPayload(),
-                    CompensationService::rollback);
-        }
-    }
-
-    ctx.fail(new RuntimeException("Order failed at " + failedStep.getStepName()
-             + ": " + failedStep.error().map(Throwable::getMessage).orElse("unknown")));
-}
+include::example$workflows/steporchestration/StepOrchestrationExamples.java[tag=nonematch-compensate,indent=0]
 ----
-<.> Iterate over `unmatched()`—steps that didn't fail. If they already completed successfully, run a compensating action to undo their work.
+
+<.> Iterate over `unmatched()` steps that didn't fail.
+If they already completed successfully, run a compensating action to undo their work.
 
 == Inspecting sub-results
 
@@ -297,64 +173,36 @@ The general pattern after a short-circuit:
 
 [source,java]
 ----
-result.await();
-
-if (!result.success()) {
-    // 1. Who caused the problem?
-    var trigger = result.matched().getFirst();    // for noneMatch: the violator
-                                                   // for anyMatch: the winner
-
-    // 2. Clean up the rest
-    for (var step : result.unmatched()) {
-        if (!step.isCompleted()) {
-            step.cancel("No longer needed — " + trigger.getStepName() + " already resolved");  // still running → cancel
-        } else if (step.success()) {
-            // already completed → compensate if needed
-        }
-    }
-}
+include::example$workflows/steporchestration/StepOrchestrationExamples.java[tag=general-pattern,indent=0]
 ----
 
 == Parallel workflows
 
 Multiple workflows can be triggered by the same event, each handling a different concern independently.
-When an `OrderPlaced` event is published, both workflows start in parallel—each with its own state and lifecycle.
+When an `OrderPlaced` event is published, both workflows start in parallel.
+Each with its own state and lifecycle.
 
-Workflow IDs must be unique across all running workflows. If two workflow definitions derive the same ID from the triggering event, only the first one starts—the second is ignored and a warning is logged. To run genuinely parallel workflows on the same event, associate each with a different `idProperty`:
+Workflow IDs must be unique across all running workflows.
+If two workflow definitions derive the same ID from the triggering event, only the first one starts.
+The second is ignored and a warning is logged.
+To run genuinely parallel workflows on the same event, associate each with a different `idProperty`:
 
 [source,java]
-.OrderFulfillmentWorkflow—handles stock and shipping
+.OrderFulfillmentWorkflow.java - handles stock and shipping
 ----
-@Workflow(idProperty = "orderId", startOnEventClass = OrderPlacedEvent.class)
-public void execute(SimpleWorkflowContext ctx) {
-    ctx.awaitExecute("reserveStock",
-            Map.of(),
-            (pc, input) -> Map.of("reserved", InventoryService.reserveStock()));
-    ctx.awaitExecute("shipOrder", ctx.workflowPayload(),
-                      ShippingService::shipOrder);
-}
+include::example$workflows/steporchestration/OrderFulfillmentWorkflow.java[tag=order-fulfillment-workflow,indent=0]
 ----
 
 [source,java]
-.CustomerNotificationWorkflow—handles all customer communication
+.CustomerNotificationWorkflow.java - handles all customer communication
 ----
-@Workflow(idProperty = "customerId", startOnEventClass = OrderPlacedEvent.class)
-public void execute(SimpleWorkflowContext ctx) {
-    ctx.awaitExecute("sendConfirmationEmail",
-            payload("email", ctx.workflowPayload().get("email"),
-                    "orderId", ctx.workflowId()).getValues(),
-            EmailService::sendOrderConfirmation);
-
-    ctx.sleep("waitBeforeFollowUp", Duration.ofDays(3));
-
-    ctx.awaitExecute("sendFollowUpEmail",
-            payload("email", ctx.workflowPayload().get("email"),
-                    "orderId", ctx.workflowId()).getValues(),
-            EmailService::sendFollowUp);
-}
+include::example$workflows/steporchestration/CustomerNotificationWorkflow.java[tag=customer-notification-workflow,indent=0]
 ----
 
-Both workflows receive the same `OrderPlaced` event payload, but they run independently—each has its own workflow instance, event stream, and lifecycle. If one fails, the other is unaffected. Because each workflow binds to a different ID property (`orderId` vs. `customerId`), both start independently even though they react to the same event.
+Both workflows receive the same `OrderPlaced` event payload, but they run independently.
+Each has its own workflow instance, event stream, and lifecycle.
+If one fails, the other is unaffected.
+Because each workflow binds to a different ID property (`orderId` vs. `customerId`), both start independently even though they react to the same event.
 
 ++++
 <div class="et-player" data-autoplay>
@@ -379,6 +227,6 @@ Both workflows receive the same `OrderPlaced` event payload, but they run indepe
 </div>
 ++++
 
-For cross-workflow interaction patterns—parent-child workflows, event-based signalling between workflows—see xref:common-patterns.adoc#_sub_workflows[Sub-workflows] in Common Patterns.
+For cross-workflow interaction patterns—parent-child workflows, event-based signalling between workflows, see xref:common-patterns.adoc#_sub_workflows[Sub-workflows] in Common Patterns.
 
 For more orchestration patterns like fan-out/fan-in, saga compensation, scatter-gather, and human-in-the-loop, see xref:common-patterns.adoc[].

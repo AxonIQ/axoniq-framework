@@ -32,4 +32,8 @@ public class PaymentService {
     public static Map<String, Object> charge(ProcessingContext context, Map<String, Object> payload) {
         return payload;
     }
+
+    public static Map<String, Object> refund(ProcessingContext context, Map<String, Object> payload) {
+        return payload;
+    }
 }
