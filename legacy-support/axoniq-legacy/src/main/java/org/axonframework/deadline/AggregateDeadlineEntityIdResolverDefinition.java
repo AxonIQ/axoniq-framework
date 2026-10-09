@@ -20,14 +20,21 @@
 package org.axonframework.deadline;
 
 import org.axonframework.common.configuration.Configuration;
+import org.axonframework.common.infra.ComponentDescriptor;
+import org.axonframework.common.infra.DescribableComponent;
+import org.axonframework.conversion.ConversionException;
 import org.axonframework.conversion.GeneralConverter;
 import org.axonframework.messaging.core.Message;
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.axonframework.modelling.EntityIdResolutionException;
 import org.axonframework.modelling.EntityIdResolver;
 import org.axonframework.modelling.FallbackEntityIdResolver;
 import org.axonframework.modelling.MetadataEntityIdResolver;
 import org.axonframework.modelling.annotation.AnnotationBasedEntityIdResolver;
 import org.axonframework.modelling.annotation.EntityIdResolverDefinition;
 import org.axonframework.modelling.entity.EntityMetamodel;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * An {@link EntityIdResolverDefinition} resolving an entity's identifier from a command's {@code @TargetEntityId}
@@ -40,11 +47,12 @@ import org.axonframework.modelling.entity.EntityMetamodel;
  * {@link EntityIdResolverDefinition} default. Every entity gets its own {@link MetadataEntityIdResolver}, built from
  * the {@code idType} and {@link Configuration} {@link #createIdResolver(Class, Class, EntityMetamodel, Configuration)}
  * is given, converting the metadata value, which <b>always</b> is a {@link String}, with the {@link GeneralConverter}
- * the {@code Configuration} provides. This is not limited to a {@link String} identifier, but whether resolution
- * succeeds for a different {@code idType} depends on that {@link GeneralConverter}: the default, Jackson-based one
- * converts a type like {@link Long} out of the box, but not every identifier type round-trips through it without a
- * dedicated conversion being registered. A type such as {@link java.util.UUID}, for example, needs a
- * {@link GeneralConverter} able to parse an unquoted {@link String} into one.
+ * the {@code Configuration} provides. The default, Jackson-based {@link GeneralConverter} converts a type like
+ * {@link Long} out of the box, but not every identifier type round-trips through it. A {@link java.util.UUID}, for
+ * example, would need a {@link GeneralConverter} able to parse an unquoted {@link String}. When the conversion fails,
+ * the raw {@link String} value is used instead. That value still finds the entity's events, since the default event
+ * tag uses the identifier's {@code toString()} value as well. Only an {@code @EntityCreator} that injects the
+ * identifier then fails to match, as it expects the converted identifier type.
  * <p>
  * This identifier predicament stems from the fact that Axon Framework 4 stored the {@link #toString()} value of
  * aggregate identifiers. Hence, that's the value being returned in the metadata, not a converted format.
@@ -70,6 +78,8 @@ public class AggregateDeadlineEntityIdResolverDefinition implements EntityIdReso
      */
     public static final String DESCRIPTOR_BASED_ID = "scope-descriptor-based-entity-identifier";
 
+    private static final Logger logger = LoggerFactory.getLogger(AggregateDeadlineEntityIdResolverDefinition.class);
+
     @Override
     public <E, ID> EntityIdResolver<ID> createIdResolver(
             Class<E> entityType,
@@ -79,9 +89,51 @@ public class AggregateDeadlineEntityIdResolverDefinition implements EntityIdReso
     ) {
         return new FallbackEntityIdResolver<>(
                 new AnnotationBasedEntityIdResolver<>(),
-                MetadataEntityIdResolver.forKey(
-                        DESCRIPTOR_BASED_ID, idType, configuration.getComponent(GeneralConverter.class)
+                new ConvertingOrRawMetadataEntityIdResolver<>(
+                        MetadataEntityIdResolver.forKey(
+                                DESCRIPTOR_BASED_ID, idType, configuration.getComponent(GeneralConverter.class)
+                        )
                 )
         );
+    }
+
+    /**
+     * An {@link EntityIdResolver} resolving the {@link #DESCRIPTOR_BASED_ID} metadata entry through the given
+     * converting {@link MetadataEntityIdResolver}, falling back to the raw {@link String} value when the converter
+     * cannot convert it into the entity's identifier type.
+     * <p>
+     * The raw {@code String} still finds the entity's events, since the default event tag uses the identifier's
+     * {@code toString()} value as well. Hence, an entity whose {@code @EntityCreator} does not inject the identifier is
+     * reached through a translated deadline regardless of its identifier type.
+     *
+     * @param <ID> the type of identifier to resolve
+     */
+    private static final class ConvertingOrRawMetadataEntityIdResolver<ID>
+            implements EntityIdResolver<ID>, DescribableComponent {
+
+        private final EntityIdResolver<ID> converting;
+        private final EntityIdResolver<String> raw = MetadataEntityIdResolver.forKey(DESCRIPTOR_BASED_ID);
+
+        private ConvertingOrRawMetadataEntityIdResolver(EntityIdResolver<ID> converting) {
+            this.converting = converting;
+        }
+
+        @Override
+        @SuppressWarnings("unchecked")
+        public ID resolve(Message message, ProcessingContext context) throws EntityIdResolutionException {
+            try {
+                return converting.resolve(message, context);
+            } catch (ConversionException e) {
+                logger.debug("Unable to convert the [{}] metadata entry into the entity's identifier type. "
+                                     + "Falling back to the raw String value.", DESCRIPTOR_BASED_ID, e);
+                return (ID) raw.resolve(message, context);
+            }
+        }
+
+        @Override
+        public void describeTo(ComponentDescriptor descriptor) {
+            descriptor.describeProperty("converting", converting);
+            descriptor.describeProperty("raw", raw);
+        }
     }
 }

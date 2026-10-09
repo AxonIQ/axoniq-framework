@@ -20,13 +20,13 @@
 package org.axonframework.deadline;
 
 import org.axonframework.common.configuration.AxonConfiguration;
-import org.axonframework.conversion.ConversionException;
 import org.axonframework.messaging.commandhandling.GenericCommandMessage;
 import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.Metadata;
 import org.axonframework.messaging.core.configuration.MessagingConfigurer;
 import org.axonframework.messaging.core.unitofwork.StubProcessingContext;
+import org.axonframework.modelling.EntityIdResolutionException;
 import org.axonframework.modelling.EntityIdResolver;
 import org.axonframework.modelling.annotation.TargetEntityId;
 import org.junit.jupiter.api.*;
@@ -124,7 +124,7 @@ class AggregateDeadlineEntityIdResolverDefinitionTest {
 
         @SuppressWarnings("DataFlowIssue") // We do not require the model for testing, so passed as null
         @Test
-        void failsToResolveAUuidIdentifierWithTheDefaultConverter() {
+        void fallsBackToTheRawStringWhenTheDefaultConverterCannotConvertAUuidIdentifier() throws Exception {
             // given
             UUID entityId = UUID.randomUUID();
             EntityIdResolver<UUID> resolver =
@@ -134,12 +134,26 @@ class AggregateDeadlineEntityIdResolverDefinitionTest {
                     Metadata.with(DESCRIPTOR_BASED_ID, entityId.toString())
             );
 
+            // when
+            // The default Jackson-based GeneralConverter re-parses a String source as JSON, which requires a quoted
+            // value. A raw UUID string isn't quoted, so conversion fails and the raw String is returned instead.
+            Object result = resolver.resolve(message, StubProcessingContext.forMessage(message));
+
+            // then
+            assertThat(result).isEqualTo(entityId.toString());
+        }
+
+        @SuppressWarnings("DataFlowIssue") // We do not require the model for testing, so passed as null
+        @Test
+        void throwsEntityIdResolutionExceptionWhenTheMetadataEntryIsMissing() {
+            // given
+            EntityIdResolver<UUID> resolver =
+                    testSubject.createIdResolver(Payload.class, UUID.class, null, configuration);
+            Message message = new GenericCommandMessage(new MessageType(Payload.class), new Payload("x"));
+
             // when / then
-            // The default Jackson-based GeneralConverter round-trips a String source through byte[] and re-parses
-            // it as JSON, which requires a quoted value. A raw UUID string isn't quoted, so conversion fails here.
-            // An application with a UUID-identified entity needs a Converter able to parse an unquoted UUID String.
             assertThatThrownBy(() -> resolver.resolve(message, StubProcessingContext.forMessage(message)))
-                    .isInstanceOf(ConversionException.class);
+                    .isInstanceOf(EntityIdResolutionException.class);
         }
     }
 }
