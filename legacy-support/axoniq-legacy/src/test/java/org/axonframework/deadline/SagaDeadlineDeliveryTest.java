@@ -25,6 +25,9 @@ import org.axonframework.config.SagaConfigurer;
 import org.axonframework.deadline.annotation.DeadlineHandler;
 import org.axonframework.messaging.ScopeAwareProvider;
 import org.axonframework.messaging.ScopeDescriptor;
+import org.axonframework.messaging.core.GenericMessage;
+import org.axonframework.messaging.core.MessageType;
+import org.axonframework.messaging.core.annotation.MetadataValue;
 import org.axonframework.messaging.core.configuration.MessagingConfigurer;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventMessage;
@@ -41,6 +44,7 @@ import org.junit.jupiter.api.*;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 
@@ -65,6 +69,7 @@ class SagaDeadlineDeliveryTest {
     @BeforeEach
     void setUp() {
         PaymentSaga.REMINDERS.clear();
+        PaymentSaga.DELIVERY_CHECKS.clear();
     }
 
     @AfterEach
@@ -118,6 +123,36 @@ class SagaDeadlineDeliveryTest {
             // then
             await().atMost(TIMEOUT).untilAsserted(() -> assertThat(PaymentSaga.REMINDERS).hasSize(3));
             assertThat(PaymentSaga.REMINDERS).extracting(Reminder::orderId).containsOnly("order-1");
+        }
+
+        @Test
+        void aDeadlineHandlerCancelsAPendingDeadline() {
+            // given: the first reminder is due well after the payment is confirmed
+            start();
+            publish(new OrderPlaced("order-1", 1, REMINDER_DELAY.multipliedBy(5)));
+
+            // when
+            publish(new PaymentReceived("order-1"));
+
+            // then
+            await().atMost(TIMEOUT).untilAsserted(() -> assertThat(sagaOf("order-1").paid).isTrue());
+            await().during(REMINDER_DELAY.multipliedBy(8))
+                   .atMost(TIMEOUT)
+                   .untilAsserted(() -> assertThat(PaymentSaga.REMINDERS).isEmpty());
+        }
+
+        @Test
+        void theDeadlineHandlerResolvesTheMetadataTheDeadlineWasScheduledWith() {
+            // given
+            start();
+            publish(new OrderPlaced("order-1", 1));
+
+            // when
+            publish(new OrderShipped("order-1", "parcel-service"));
+
+            // then
+            await().atMost(TIMEOUT).untilAsserted(() -> assertThat(PaymentSaga.DELIVERY_CHECKS)
+                    .containsExactly(new DeliveryCheck("order-1", "parcel-service")));
         }
     }
 
@@ -230,8 +265,11 @@ class SagaDeadlineDeliveryTest {
         return entry.saga();
     }
 
-    public record OrderPlaced(String orderId, int reminders) {
+    public record OrderPlaced(String orderId, int reminders, Duration firstReminderAfter) {
 
+        public OrderPlaced(String orderId, int reminders) {
+            this(orderId, reminders, REMINDER_DELAY);
+        }
     }
 
     public record PaymentOverdue(String orderId) {
@@ -239,6 +277,18 @@ class SagaDeadlineDeliveryTest {
     }
 
     public record OrderCancelled(String orderId) {
+
+    }
+
+    public record PaymentReceived(String orderId) {
+
+    }
+
+    public record OrderShipped(String orderId, String carrier) {
+
+    }
+
+    public record DeliveryCheck(String orderId, String carrier) {
 
     }
 
@@ -250,17 +300,19 @@ class SagaDeadlineDeliveryTest {
     public static class PaymentSaga {
 
         static final List<Reminder> REMINDERS = new CopyOnWriteArrayList<>();
+        static final List<DeliveryCheck> DELIVERY_CHECKS = new CopyOnWriteArrayList<>();
 
         private String orderId;
         private int remindersToSend;
         private int remindersSent;
+        private boolean paid;
 
         @StartSaga
         @SagaEventHandler(associationProperty = "orderId")
         public void on(OrderPlaced event, DeadlineManager deadlineManager) {
             orderId = event.orderId();
             remindersToSend = event.reminders();
-            deadlineManager.schedule(REMINDER_DELAY, "paymentReminder", orderId);
+            deadlineManager.schedule(event.firstReminderAfter(), "paymentReminder", orderId);
         }
 
         @DeadlineHandler(deadlineName = "paymentReminder")
@@ -270,6 +322,29 @@ class SagaDeadlineDeliveryTest {
             if (remindersSent < remindersToSend) {
                 deadlineManager.schedule(REMINDER_DELAY, "paymentReminder", orderId);
             }
+        }
+
+        @SagaEventHandler(associationProperty = "orderId")
+        public void on(PaymentReceived event, DeadlineManager deadlineManager) {
+            deadlineManager.schedule(Duration.ZERO, "paymentConfirmed", event.orderId());
+        }
+
+        @DeadlineHandler(deadlineName = "paymentConfirmed")
+        public void onPaymentConfirmed(String orderId, DeadlineManager deadlineManager) {
+            paid = true;
+            deadlineManager.cancelAllWithinScope("paymentReminder");
+        }
+
+        @SagaEventHandler(associationProperty = "orderId")
+        public void on(OrderShipped event, DeadlineManager deadlineManager) {
+            deadlineManager.schedule(Duration.ZERO, "deliveryCheck", new GenericMessage(
+                    new MessageType(String.class), orderId, Map.of("carrier", event.carrier())
+            ));
+        }
+
+        @DeadlineHandler(deadlineName = "deliveryCheck")
+        public void onDeliveryCheck(String orderId, @MetadataValue("carrier") String carrier) {
+            DELIVERY_CHECKS.add(new DeliveryCheck(orderId, carrier));
         }
 
         @SagaEventHandler(associationProperty = "orderId")
