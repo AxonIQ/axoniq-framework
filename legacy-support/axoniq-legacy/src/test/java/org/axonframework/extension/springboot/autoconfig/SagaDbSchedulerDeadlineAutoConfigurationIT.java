@@ -16,24 +16,23 @@
  * For licensing information and to register, visit:
  *  https://www.axoniq.io/pricing
  */
-
 package org.axonframework.extension.springboot.autoconfig;
 
-import org.axonframework.common.configuration.AxonConfiguration;
-import org.axonframework.common.configuration.Configuration;
+import com.github.kagkarlsson.scheduler.Scheduler;
+import com.github.kagkarlsson.scheduler.SchedulerBuilder;
+import com.github.kagkarlsson.scheduler.task.Task;
 import org.axonframework.deadline.DeadlineManager;
-import org.axonframework.deadline.SimpleDeadlineManager;
 import org.axonframework.deadline.annotation.DeadlineHandler;
-import org.axonframework.messaging.LegacyScopeAwareProvider;
+import org.axonframework.deadline.dbscheduler.DbSchedulerDeadlineManager;
+import org.axonframework.extension.springboot.autoconfig.SagaDeadlineAutoConfigurationIT.ReminderRecorder;
+import org.axonframework.extension.springboot.autoconfig.SagaDeadlineAutoConfigurationIT.ReminderRequested;
+import org.axonframework.extension.springboot.autoconfig.SagaDeadlineAutoConfigurationIT.ReminderSaga;
 import org.axonframework.messaging.ScopeAwareProvider;
-import org.axonframework.messaging.ScopeAwareProviderSettings;
-import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.gateway.EventGateway;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.store.TokenStore;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.store.inmemory.InMemoryTokenStore;
-import org.axonframework.modelling.saga.SagaEventHandler;
-import org.axonframework.modelling.saga.StartSaga;
 import org.axonframework.spring.stereotype.Saga;
+import org.hsqldb.jdbc.JDBCDataSource;
 import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
@@ -49,31 +48,28 @@ import org.springframework.test.context.ContextConfiguration;
 import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
-import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
+import static org.axonframework.common.util.DbSchedulerTestUtil.reCreateTable;
 
 /**
  * Test class validating that a deadline a Spring Boot discovered {@link Saga @Saga} schedules reaches its
- * {@link DeadlineHandler @DeadlineHandler}, with no other wiring than a {@link DeadlineManager} bean autowiring the
- * configuration's {@link ScopeAwareProvider}.
+ * {@link DeadlineHandler @DeadlineHandler} through the auto-configured {@link DbSchedulerDeadlineManager}, when the
+ * application only provides the db-scheduler {@link Scheduler}: no {@link ScopeAwareProvider} wiring.
  * <p>
- * Hibernate and the embedded {@code DataSource} auto-configuration are excluded, as in {@link SagaAutoConfigurationIT},
- * to keep the in-memory event store and Saga store.
+ * The scheduler starts when its bean is created, as with db-scheduler's Spring Boot starter. Its
+ * {@link javax.sql.DataSource} is not a bean, so that the in-memory event store and Saga store are kept, as in
+ * {@link SagaDeadlineAutoConfigurationIT}.
  *
  * @author Jakob Hatzl
  */
 @SpringBootTest(
-        classes = {
-                SagaDeadlineAutoConfigurationIT.TestContext.class,
-                SagaDeadlineAutoConfigurationIT.ReminderSaga.class
-        },
-        webEnvironment = SpringBootTest.WebEnvironment.NONE,
-        properties = "axon.deadline.scope-aware-provider-readiness-timeout=2m"
+        classes = {SagaDbSchedulerDeadlineAutoConfigurationIT.TestContext.class, ReminderSaga.class},
+        webEnvironment = SpringBootTest.WebEnvironment.NONE
 )
-class SagaDeadlineAutoConfigurationIT {
+class SagaDbSchedulerDeadlineAutoConfigurationIT {
 
     private static final Duration TIMEOUT = Duration.ofSeconds(10);
 
@@ -83,6 +79,7 @@ class SagaDeadlineAutoConfigurationIT {
     @Test
     void aDeadlineScheduledByADiscoveredSagaReachesItsDeadlineHandler() {
         // given
+        assertThat(context.getBean(DeadlineManager.class)).isInstanceOf(DbSchedulerDeadlineManager.class);
         String id = UUID.randomUUID().toString();
 
         // when
@@ -94,35 +91,6 @@ class SagaDeadlineAutoConfigurationIT {
         // then
         ReminderRecorder recorder = context.getBean(ReminderRecorder.class);
         await().atMost(TIMEOUT).untilAsserted(() -> assertThat(recorder.reminders).containsExactly(id));
-    }
-
-    @Test
-    void theAutowiredScopeAwareProviderIsTheConfigurationsLegacyScopeAwareProvider() {
-        // when
-        ScopeAwareProvider bean = context.getBean(ScopeAwareProvider.class);
-
-        // then
-        assertThat(bean).isInstanceOf(LegacyScopeAwareProvider.class)
-                        .isSameAs(context.getBean(AxonConfiguration.class).getComponent(ScopeAwareProvider.class));
-    }
-
-    @Test
-    void theReadinessTimeoutIsBoundFromTheProperty() {
-        // when
-        ScopeAwareProviderSettings settings =
-                context.getBean(AxonConfiguration.class).getComponent(ScopeAwareProviderSettings.class);
-
-        // then
-        assertThat(settings.readinessTimeout()).isEqualTo(Duration.ofMinutes(2));
-    }
-
-    public record ReminderRequested(String id) {
-
-    }
-
-    public static class ReminderRecorder {
-
-        final List<String> reminders = new CopyOnWriteArrayList<>();
     }
 
     @ContextConfiguration
@@ -140,29 +108,16 @@ class SagaDeadlineAutoConfigurationIT {
             return new ReminderRecorder();
         }
 
-        @Bean
-        public SimpleDeadlineManager deadlineManager(ScopeAwareProvider scopeAwareProvider,
-                                                     Configuration configuration) {
-            return SimpleDeadlineManager.builder()
-                                        .scopeAwareProvider(scopeAwareProvider)
-                                        .unitOfWorkFactory(configuration.getComponent(UnitOfWorkFactory.class))
-                                        .build();
-        }
-    }
-
-    @Saga
-    @SuppressWarnings({"unused", "deprecation", "removal"})
-    public static class ReminderSaga {
-
-        @StartSaga
-        @SagaEventHandler(associationProperty = "id")
-        void on(ReminderRequested event, DeadlineManager deadlineManager) {
-            deadlineManager.schedule(Duration.ofMillis(100), "reminder", event.id());
-        }
-
-        @DeadlineHandler(deadlineName = "reminder")
-        void onReminder(String id, ReminderRecorder recorder) {
-            recorder.reminders.add(id);
+        @Bean(destroyMethod = "stop")
+        public Scheduler scheduler(List<Task<?>> tasks) {
+            JDBCDataSource dataSource = new JDBCDataSource();
+            dataSource.setUrl("jdbc:hsqldb:mem:sagaDbSchedulerDeadline");
+            dataSource.setUser("sa");
+            reCreateTable(dataSource);
+            Scheduler scheduler = new SchedulerBuilder(dataSource, tasks).pollingInterval(Duration.ofMillis(50))
+                                                                         .build();
+            scheduler.start();
+            return scheduler;
         }
     }
 }
