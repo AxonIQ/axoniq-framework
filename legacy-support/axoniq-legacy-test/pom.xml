@@ -65,6 +65,18 @@
             <artifactId>awaitility</artifactId>
             <scope>compile</scope>
         </dependency>
+        <dependency>
+            <groupId>org.axonframework</groupId>
+            <artifactId>axon-modelling</artifactId>
+            <version>${axon-framework.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.axonframework</groupId>
+            <artifactId>axon-eventsourcing</artifactId>
+            <version>${axon-framework.version}</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>

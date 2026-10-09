@@ -17,5 +17,7 @@
 #  https://www.axoniq.io/pricing
 #
 
+org.axonframework.deadline.AggregateDeadlineCommandTranslatorConfigurationEnhancer
+org.axonframework.deadline.AggregateDeadlineEntityIdResolverConfigurationEnhancer
 org.axonframework.deadline.DeadlineManagerLifecycleConfigurationEnhancer
 org.axonframework.messaging.LegacyScopeAwareProviderConfigurationEnhancer
