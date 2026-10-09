@@ -261,7 +261,6 @@ public interface FixtureConfiguration {
      *
      * @param currentTime The time to start the fixture at
      * @return an object that allows chaining of more given state
-     * @throws UnsupportedOperationException always, until deadlines are ported into {@code axon-legacy}
      */
     ContinuedGivenState givenCurrentTime(Instant currentTime);
 
@@ -269,7 +268,6 @@ public interface FixtureConfiguration {
      * The time as the fixture's scheduler sees it.
      *
      * @return the current time of the fixture's scheduler
-     * @throws UnsupportedOperationException always, until deadlines are ported into {@code axon-legacy}
      */
     Instant currentTime();
 

@@ -65,7 +65,6 @@ class FixtureRegisteringSagaEnhancementsTest {
     }
 
     @Test
-    @Disabled("#5006 - deadlines and the event scheduler are not ported into axon-legacy yet")
     void startRecordingCallbackIsInvokedOnWhenTimeAdvances() {
         testSubject.registerStartRecordingCallback(startRecordingCount::getAndIncrement)
                    .givenAPublished(new SomeTestSaga.SomeEvent());
@@ -76,7 +75,6 @@ class FixtureRegisteringSagaEnhancementsTest {
     }
 
     @Test
-    @Disabled("#5006 - deadlines and the event scheduler are not ported into axon-legacy yet")
     void startRecordingCallbackIsInvokedOnWhenTimeElapses() {
         testSubject.registerStartRecordingCallback(startRecordingCount::getAndIncrement)
                    .givenAPublished(new SomeTestSaga.SomeEvent());
