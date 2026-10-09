@@ -28,6 +28,7 @@ import org.axonframework.messaging.ScopeAware;
 import org.axonframework.messaging.ScopeAwareProvider;
 import org.axonframework.messaging.ScopeDescriptor;
 import org.axonframework.messaging.commandhandling.CommandBus;
+import org.axonframework.messaging.core.MessageDispatchInterceptor;
 import org.axonframework.messaging.core.MessageHandlerInterceptor;
 import org.axonframework.messaging.core.annotation.HandlerDefinition;
 import org.axonframework.messaging.core.annotation.HandlerEnhancerDefinition;
@@ -184,6 +185,26 @@ public class SagaTestFixture<T> implements FixtureConfiguration, ContinuedGivenS
     public FixtureConfiguration registerHandlerEnhancerDefinition(HandlerEnhancerDefinition definition) {
         handlerEnhancerDefinitions.addFirst(
                 Objects.requireNonNull(definition, "The handlerEnhancerDefinition may not be null.")
+        );
+        return this;
+    }
+
+    @Override
+    public FixtureConfiguration registerDeadlineDispatchInterceptor(
+            MessageDispatchInterceptor<? super DeadlineMessage> deadlineDispatchInterceptor
+    ) {
+        this.deadlineManager.registerDispatchInterceptor(
+                Objects.requireNonNull(deadlineDispatchInterceptor, "The deadlineDispatchInterceptor may not be null.")
+        );
+        return this;
+    }
+
+    @Override
+    public FixtureConfiguration registerDeadlineHandlerInterceptor(
+            MessageHandlerInterceptor<? super DeadlineMessage> deadlineHandlerInterceptor
+    ) {
+        this.deadlineManager.registerHandlerInterceptor(
+                Objects.requireNonNull(deadlineHandlerInterceptor, "The deadlineHandlerInterceptor may not be null.")
         );
         return this;
     }
