@@ -145,6 +145,20 @@ class SagaTestFixtureTimeTest {
     }
 
     @Nested
+    class WhenAHandlerFails {
+
+        @Test
+        void aDeadlineItScheduledBeforeFailingStaysScheduled() {
+            // Axon Framework 4 behaved this way too: its stub recorded a deadline the moment it was scheduled, rather
+            // than when the handler scheduling it completed.
+            // given / when / then
+            fixture.givenNoPriorActivity()
+                   .whenPublishingA(new OrderPlacedThenFailed(ORDER_ID))
+                   .expectScheduledDeadlineWithName(REMINDER_DELAY, "remind");
+        }
+    }
+
+    @Nested
     class InTheGivenPhase {
 
         @Test
@@ -214,15 +228,6 @@ class SagaTestFixtureTimeTest {
                    .whenPublishingA(message)
                    .expectDispatchedCommands(new RecordTimestamp(START));
         }
-    }
-
-    @Test
-    void aDeadlineScheduledByAHandlerThatFailsAfterwardsStaysScheduled() {
-        // Axon Framework 4 behaved this way too: its stub recorded a deadline the moment it was scheduled, rather than
-        // when the handler scheduling it completed.
-        fixture.givenNoPriorActivity()
-               .whenPublishingA(new OrderPlacedThenFailed(ORDER_ID))
-               .expectScheduledDeadlineWithName(REMINDER_DELAY, "remind");
     }
 
     public record OrderPlaced(String orderId) {
