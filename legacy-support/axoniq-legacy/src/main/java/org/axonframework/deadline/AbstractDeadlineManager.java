@@ -29,6 +29,7 @@ import org.axonframework.messaging.core.DefaultMessageDispatchInterceptorChain;
 import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.MessageDispatchInterceptor;
 import org.axonframework.messaging.core.MessageHandlerInterceptor;
+import org.axonframework.messaging.core.Metadata;
 import org.axonframework.messaging.core.interception.CorrelationDataInterceptor;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.ProcessingLifecycle;
@@ -38,7 +39,6 @@ import org.jspecify.annotations.Nullable;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -250,16 +250,12 @@ public abstract class AbstractDeadlineManager implements DeadlineManager {
     }
 
     private static DeadlineMessage withCorrelationData(DeadlineMessage message, @Nullable ProcessingContext context) {
-        if (context == null || !context.containsResource(CorrelationDataInterceptor.CORRELATION_DATA)) {
-            return message;
-        }
-        Map<String, String> correlationData = context.getResource(CorrelationDataInterceptor.CORRELATION_DATA);
+        @Nullable Map<String, String> correlationData =
+                context == null ? null : context.getResource(CorrelationDataInterceptor.CORRELATION_DATA);
         if (correlationData == null || correlationData.isEmpty()) {
             return message;
         }
-        Map<String, String> metadata = new HashMap<>(correlationData);
-        metadata.putAll(message.metadata());
-        return message.withMetadata(metadata);
+        return message.withMetadata(Metadata.from(correlationData).mergedWith(message.metadata()));
     }
 
     /**
