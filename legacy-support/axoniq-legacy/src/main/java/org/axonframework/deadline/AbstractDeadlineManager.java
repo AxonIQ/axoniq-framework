@@ -104,13 +104,13 @@ public abstract class AbstractDeadlineManager implements DeadlineManager {
      * they did in the prepare-commit phase of an Axon Framework 4 unit of work. They never run when the context rolls
      * back before reaching that phase.
      * <p>
-     * The call is handed the {@link ProcessingContext} it was deferred to, or {@code null} when it runs immediately.
-     * Concrete deadline managers pass it on to {@link #processDispatchInterceptors(DeadlineMessage,
+     * The call is handed the {@link ProcessingContext} of the scope it was made in, or {@code null} when it runs
+     * immediately. Concrete deadline managers pass it on to {@link #processDispatchInterceptors(DeadlineMessage,
      * ProcessingContext)}, so that the dispatch interceptors of a deadline scheduled by a Saga see the Saga's context.
      * The call cannot look that context up itself: by the time a deferred call runs, the Saga's scope is no longer
-     * current. Each call is handed the context of the scope it was made in. Several Sagas handling different messages
-     * of one batch share a unit of work, yet each sees that unit of work through its own resource-overriding view,
-     * carrying the resources of the message it handles, such as that message's correlation data.
+     * current. That context is not simply the shared unit of work: several Sagas handling different messages of one
+     * batch share a unit of work, yet each sees that unit of work through its own resource-overriding view, carrying
+     * the resources of the message it handles, such as that message's correlation data.
      *
      * @param deadlineCall the call to be executed now, or when the {@link ProcessingContext} of the current scope
      *                     prepares its commit, receiving that context or {@code null}
@@ -218,7 +218,7 @@ public abstract class AbstractDeadlineManager implements DeadlineManager {
      * deliberately differs from a message dispatched through a bus, on which the {@link CorrelationDataInterceptor}
      * lets the correlation data replace the message's own metadata under the same key.
      * <p>
-     * The {@code context} is the one a deadline call was deferred to, as handed out by
+     * The {@code context} is the one of the scope a deadline call was made in, as handed out by
      * {@link #runOnPrepareCommitOrNow(Consumer)}, or {@code null} for a call that runs immediately, outside any
      * {@link ProcessingContext}. A failing interceptor fails this call with the interceptor's own exception, and an
      * interceptor that ends the chain without a message fails it with an {@link IllegalStateException}, instead of
@@ -278,7 +278,7 @@ public abstract class AbstractDeadlineManager implements DeadlineManager {
 
     /**
      * The calls deferred to a single {@link ProcessingContext}, in the order they were made, each already bound to the
-     * context it was deferred from.
+     * context of the scope it was made in.
      * <p>
      * Offering a call and draining all calls exclude each other. A call is therefore either part of the drained calls
      * or rejected, but never accepted after the drained calls were taken, where nothing would run it. A call can arrive
