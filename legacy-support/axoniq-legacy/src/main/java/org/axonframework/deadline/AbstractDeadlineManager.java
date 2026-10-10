@@ -105,7 +105,9 @@ public abstract class AbstractDeadlineManager implements DeadlineManager {
      * Concrete deadline managers pass it on to {@link #processDispatchInterceptors(DeadlineMessage,
      * ProcessingContext)}, so that the dispatch interceptors of a deadline scheduled by a Saga see the Saga's context.
      * The call cannot look that context up itself: by the time a deferred call runs, the Saga's scope is no longer
-     * current.
+     * current. Each call is handed the context of the scope it was made in. Several Sagas handling different messages
+     * of one batch share a unit of work, yet each sees that unit of work through its own resource-overriding view,
+     * carrying the resources of the message it handles, such as that message's correlation data.
      *
      * @param deadlineCall the call to be executed now, or when the {@link ProcessingContext} of the current scope
      *                     prepares its commit, receiving that context or {@code null}
@@ -119,7 +121,8 @@ public abstract class AbstractDeadlineManager implements DeadlineManager {
             deadlineCall.accept(null);
             return;
         }
-        if (!deferredCalls(context.get()).offer(deadlineCall)) {
+        ProcessingContext deferringContext = context.get();
+        if (!deferredCalls(deferringContext).offer(() -> deadlineCall.accept(deferringContext))) {
             throw new IllegalStateException(TOO_LATE_TO_DEFER);
         }
     }
@@ -137,7 +140,7 @@ public abstract class AbstractDeadlineManager implements DeadlineManager {
         return context.computeResourceIfAbsent(deferredCallsKey, () -> {
             DeferredCalls calls = new DeferredCalls();
             try {
-                context.runOn(RUN_DEADLINE_CALLS, phaseContext -> calls.drain().forEach(call -> call.accept(context)));
+                context.runOn(RUN_DEADLINE_CALLS, phaseContext -> calls.drain().forEach(Runnable::run));
             } catch (IllegalStateException e) {
                 throw new IllegalStateException(TOO_LATE_TO_DEFER, e);
             }
@@ -254,7 +257,8 @@ public abstract class AbstractDeadlineManager implements DeadlineManager {
     }
 
     /**
-     * The calls deferred to a single {@link ProcessingContext}, in the order they were made.
+     * The calls deferred to a single {@link ProcessingContext}, in the order they were made, each already bound to the
+     * context it was deferred from.
      * <p>
      * Offering a call and draining all calls exclude each other. A call is therefore either part of the drained calls
      * or rejected, but never accepted after the drained calls were taken, where nothing would run it. A call can arrive
@@ -263,10 +267,10 @@ public abstract class AbstractDeadlineManager implements DeadlineManager {
      */
     private static final class DeferredCalls {
 
-        private final List<Consumer<@Nullable ProcessingContext>> calls = new ArrayList<>();
+        private final List<Runnable> calls = new ArrayList<>();
         private boolean drained;
 
-        private synchronized boolean offer(Consumer<@Nullable ProcessingContext> call) {
+        private synchronized boolean offer(Runnable call) {
             if (drained) {
                 return false;
             }
@@ -274,7 +278,7 @@ public abstract class AbstractDeadlineManager implements DeadlineManager {
             return true;
         }
 
-        private synchronized List<Consumer<@Nullable ProcessingContext>> drain() {
+        private synchronized List<Runnable> drain() {
             drained = true;
             return List.copyOf(calls);
         }

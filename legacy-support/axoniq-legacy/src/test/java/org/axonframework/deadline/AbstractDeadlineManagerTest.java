@@ -22,6 +22,7 @@ package org.axonframework.deadline;
 import org.axonframework.deadline.RecordingDeadlineManager.ScheduledCall;
 import org.axonframework.messaging.ContextAwareScope;
 import org.axonframework.messaging.ScopeDescriptor;
+import org.axonframework.messaging.core.Context;
 import org.axonframework.messaging.core.GenericMessage;
 import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.MessageStream;
@@ -466,6 +467,30 @@ class AbstractDeadlineManagerTest {
 
             // then
             assertThat(interceptionContexts).singleElement().isSameAs(deferringContext.get());
+        }
+
+        @Test
+        void interceptorsOfEachDeferredCallGetTheContextOfTheHandlerThatMadeIt() {
+            // given
+            Context.ResourceKey<String> handledMessage = Context.ResourceKey.withLabel("handledMessage");
+            List<String> interceptedFor = new CopyOnWriteArrayList<>();
+            testSubject.registerDispatchInterceptor((message, context, chain) -> {
+                interceptedFor.add(context.getResource(handledMessage));
+                return chain.proceed(message, context);
+            });
+
+            // when
+            // Each Saga handler sees the batch's unit of work through its own resource-overriding view, so two
+            // handlers in one unit of work defer their calls from two different contexts.
+            runInUnitOfWork(context -> {
+                new TestScope(context.withResource(handledMessage, "first event")).run(
+                        () -> testSubject.schedule(Instant.now(), "first", "payload", EXPLICIT_SCOPE));
+                new TestScope(context.withResource(handledMessage, "second event")).run(
+                        () -> testSubject.schedule(Instant.now(), "second", "payload", EXPLICIT_SCOPE));
+            });
+
+            // then
+            assertThat(interceptedFor).containsExactly("first event", "second event");
         }
 
         @Test
