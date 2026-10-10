@@ -29,6 +29,7 @@ import org.axonframework.messaging.core.DefaultMessageDispatchInterceptorChain;
 import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.MessageDispatchInterceptor;
 import org.axonframework.messaging.core.MessageHandlerInterceptor;
+import org.axonframework.messaging.core.interception.CorrelationDataInterceptor;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.ProcessingLifecycle;
 import org.axonframework.modelling.saga.repository.AnnotatedSagaRepository;
@@ -37,7 +38,9 @@ import org.jspecify.annotations.Nullable;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -207,6 +210,12 @@ public abstract class AbstractDeadlineManager implements DeadlineManager {
      * Applies registered {@link MessageDispatchInterceptor}s to the given {@code message}, handing them the given
      * {@code context}.
      * <p>
+     * Before the interceptors run, the correlation data the {@code context} carries, as put there by a
+     * {@link CorrelationDataInterceptor} around the handler that made the deadline call, is added to the message's
+     * metadata. Metadata the message already holds under the same key is kept. A deadline thereby carries the
+     * correlation data of the message whose handling scheduled it, as any other message dispatched while handling it
+     * does.
+     * <p>
      * The {@code context} is the one a deadline call was deferred to, as handed out by
      * {@link #runOnPrepareCommitOrNow(Consumer)}, or {@code null} for a call that runs immediately, outside any
      * {@link ProcessingContext}. A failing interceptor fails this call with the interceptor's own exception, and an
@@ -223,7 +232,7 @@ public abstract class AbstractDeadlineManager implements DeadlineManager {
         Objects.requireNonNull(message, "The deadline message may not be null.");
         return FutureUtils.joinAndUnwrap(
                 new DefaultMessageDispatchInterceptorChain<>(dispatchInterceptors())
-                        .proceed(message, context)
+                        .proceed(withCorrelationData(message, context), context)
                         .first()
                         .<DeadlineMessage>cast()
                         .asCompletableFuture()
@@ -236,6 +245,19 @@ public abstract class AbstractDeadlineManager implements DeadlineManager {
                             return entry.message();
                         })
         );
+    }
+
+    private static DeadlineMessage withCorrelationData(DeadlineMessage message, @Nullable ProcessingContext context) {
+        if (context == null || !context.containsResource(CorrelationDataInterceptor.CORRELATION_DATA)) {
+            return message;
+        }
+        Map<String, String> correlationData = context.getResource(CorrelationDataInterceptor.CORRELATION_DATA);
+        if (correlationData == null || correlationData.isEmpty()) {
+            return message;
+        }
+        Map<String, String> metadata = new HashMap<>(correlationData);
+        metadata.putAll(message.metadata());
+        return message.withMetadata(metadata);
     }
 
     /**
