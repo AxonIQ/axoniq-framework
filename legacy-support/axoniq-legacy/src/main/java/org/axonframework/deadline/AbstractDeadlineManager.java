@@ -143,9 +143,10 @@ public abstract class AbstractDeadlineManager implements DeadlineManager {
      * deferred to that context by {@link #runOnPrepareCommitOrNow(Consumer)} when no {@link ContextAwareScope} is
      * current, and otherwise behaves as the same call made on this manager.
      * <p>
-     * This view is meant for a handler that declares a {@link DeadlineManager} parameter. That is how a handler that
-     * runs in a {@link ProcessingContext} but in no scope, such as the command handler of an entity, defers its calls
-     * as Axon Framework 4 did through its current unit of work.
+     * The {@link DeadlineManagerParameterResolverFactory} hands this view to a handler that declares a
+     * {@link DeadlineManager} parameter. That is how a handler that runs in a {@link ProcessingContext} but in no
+     * scope, such as the command handler of an entity, defers its calls as Axon Framework 4 did through its current
+     * unit of work.
      *
      * @param context the context the calls made through the view are deferred to
      * @return a view of this deadline manager that defers its calls to the given {@code context}
