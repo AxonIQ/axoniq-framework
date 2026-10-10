@@ -40,7 +40,9 @@ import org.axonframework.messaging.core.configuration.reflection.ParameterResolv
  * no {@link DeadlineManager} is configured, or when the configured one does not extend
  * {@link AbstractDeadlineManager}, such as the {@code org.axonframework.test.deadline.StubDeadlineManager} of the saga
  * test fixture. A {@link DeadlineManager} reached in any other way than as a handler parameter, for example as a field
- * of a collaborator, is not bound to a context, so its calls outside a Saga handler run immediately.
+ * of a collaborator, is not bound to a context, so its calls outside a Saga handler run immediately. The bound view is
+ * not the configured instance, so a handler that casts the parameter to its implementation or compares it by identity
+ * should declare the implementation type instead, or disable this enhancer.
  * <p>
  * The enhancer is discovered through the {@link java.util.ServiceLoader}, so an application gets this behaviour by
  * having {@code axoniq-legacy} on its classpath. An application can opt out with

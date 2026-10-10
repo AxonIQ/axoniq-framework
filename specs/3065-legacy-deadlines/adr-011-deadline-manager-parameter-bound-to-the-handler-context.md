@@ -120,6 +120,11 @@ a Saga invocation or a `DeadlineManager` handler parameter".
     a Saga handler, such a call still runs immediately. This is pinned by
     `aCollaboratorHoldingTheManagerSchedulesEvenWhenTheCommandFails` and by
     `aCallOnTheManagerItselfStillRunsImmediately`;
+  - the `DeadlineManager` parameter is a view, not the configured instance. A cast to a backend type such as
+    `QuartzDeadlineManager`, an `instanceof` check against a backend type, or an identity comparison with an injected
+    field now fails, where Axon Framework 4 handed out the component itself. Such a handler declares the parameter as
+    the implementation type, or the application disables `DeadlineManagerParameterResolverFactoryConfigurationEnhancer`.
+    Both give up the deferral;
   - a manager the configuration wraps in a decorator that does not extend `AbstractDeadlineManager` is not bound
     either: the resolver finds no `AbstractDeadlineManager`, and the configuration resolver injects the decorator.
     ADR 004 plans such a decorator, the `TracingDeadlineManager` of
