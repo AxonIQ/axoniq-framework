@@ -433,8 +433,9 @@ it, online as long as saga instances still rely on it for deadlines.
 A saga kept running on the <<legacy-module,legacy module>> keeps its existing tests.
 Add the `axoniq-legacy-test` dependency, in test scope, for the Axon Framework 4 `SagaTestFixture`.
 Its deadline support works as before: a saga handler's `DeadlineManager` parameter resolves to the fixture's
-`StubDeadlineManager`, and `givenCurrentTime`, `andThenTimeElapses`, `whenTimeElapses` and `whenTimeAdvancesTo` fire
-every deadline due by then in the saga's `@DeadlineHandler`.
+`StubDeadlineManager`, and `givenCurrentTime` sets the fixture's time.
+`andThenTimeElapses`, `andThenTimeAdvancesTo`, `whenTimeElapses` and `whenTimeAdvancesTo` fire every deadline due by
+then in the saga's `@DeadlineHandler`.
 The `expectScheduledDeadline*`, `expectNoScheduledDeadline*` and `expectTriggeredDeadlines*` assertions and the deadline
 interceptor registrations are available too.
 A suite needs the following changes:
