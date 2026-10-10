@@ -115,7 +115,8 @@ class AbstractDeadlineManagerTest {
 
         /**
          * Axon Framework 4 deferred whenever a unit of work was active. Axon Framework 5 has no ambient one, so
-         * without a scope carrying the context there is nothing to defer to, even while a context is running.
+         * without a scope carrying the context, or a view bound to it, there is nothing to defer to, even while a
+         * context is running.
          */
         @Test
         void aCallMadeWhileAContextRunsButNoScopeIsActiveRunsImmediately() {
@@ -295,6 +296,146 @@ class AbstractDeadlineManagerTest {
                     .hasRootCauseInstanceOf(IllegalStateException.class)
                     .hasRootCauseMessage("second call failure");
             assertThat(timeline).containsExactly("manager:schedule first");
+        }
+    }
+
+    /**
+     * A view bound to a context stands in for the {@code DeadlineManager} parameter of a handler that runs in that
+     * context but in no scope, such as the command handler of an entity. Axon Framework 4 deferred such calls to the
+     * prepare-commit phase of the current unit of work.
+     */
+    @Nested
+    class ThroughAViewBoundToAContext {
+
+        @Test
+        void callsAreDeferredUntilTheContextPreparesItsCommit() {
+            // given
+            AtomicInteger callsDuringInvocation = new AtomicInteger(-1);
+
+            // when
+            runInUnitOfWork(context -> {
+                DeadlineManager boundManager = testSubject.forContext(context);
+                boundManager.schedule(Instant.now(), "deadlineName", "payload", EXPLICIT_SCOPE);
+                boundManager.cancelSchedule("deadlineName", "scheduleId");
+                boundManager.cancelAll("deadlineName");
+                boundManager.cancelAllWithinScope("deadlineName", EXPLICIT_SCOPE);
+                callsDuringInvocation.set(timeline.size());
+            });
+
+            // then
+            assertThat(callsDuringInvocation).hasValue(0);
+            assertThat(timeline).containsExactly("manager:schedule deadlineName",
+                                                 "manager:cancelSchedule deadlineName/scheduleId",
+                                                 "manager:cancelAll deadlineName",
+                                                 "manager:cancelAllWithinScope deadlineName@explicitScope");
+        }
+
+        @Test
+        void scheduleReturnsTheIdentifierOfTheDeadlineItDefers() {
+            // given
+            AtomicReference<String> scheduleId = new AtomicReference<>();
+
+            // when
+            runInUnitOfWork(context -> scheduleId.set(
+                    testSubject.forContext(context).schedule(Instant.now(), "deadlineName", "payload", EXPLICIT_SCOPE)
+            ));
+
+            // then
+            assertThat(testSubject.scheduled).singleElement()
+                                             .extracting(call -> call.message().identifier())
+                                             .isEqualTo(scheduleId.get());
+        }
+
+        @Test
+        void deferredCallsNeverRunWhenTheContextRollsBack() {
+            // when
+            CompletableFuture<Object> result = UnitOfWorkTestUtils.aUnitOfWork().executeWithResult(context -> {
+                testSubject.forContext(context).schedule(Instant.now(), "deadlineName", "payload", EXPLICIT_SCOPE);
+                return CompletableFuture.failedFuture(new IllegalStateException("handler failure"));
+            });
+
+            // then
+            assertThatThrownBy(() -> result.orTimeout(1, TimeUnit.SECONDS).join())
+                    .hasRootCauseInstanceOf(IllegalStateException.class);
+            assertThat(testSubject.scheduled).isEmpty();
+        }
+
+        @Test
+        void theDispatchInterceptorsGetTheBoundContext() {
+            // given
+            List<Optional<ProcessingContext>> interceptionContexts = new CopyOnWriteArrayList<>();
+            testSubject.registerDispatchInterceptor((message, context, chain) -> {
+                interceptionContexts.add(Optional.ofNullable(context));
+                return chain.proceed(message, context);
+            });
+            AtomicReference<ProcessingContext> boundContext = new AtomicReference<>();
+
+            // when
+            runInUnitOfWork(context -> {
+                boundContext.set(context);
+                testSubject.forContext(context).schedule(Instant.now(), "deadlineName", "payload", EXPLICIT_SCOPE);
+            });
+
+            // then
+            assertThat(interceptionContexts).singleElement()
+                                            .satisfies(context -> assertThat(context).containsSame(
+                                                    boundContext.get()
+                                            ));
+        }
+
+        /**
+         * The view binds the context for the duration of its own calls only. A collaborator holding the manager
+         * itself, outside any handler parameter, has nothing to defer to.
+         */
+        @Test
+        void aCallOnTheManagerItselfStillRunsImmediately() {
+            // given
+            AtomicInteger scheduledDuringInvocation = new AtomicInteger(-1);
+
+            // when
+            runInUnitOfWork(context -> {
+                testSubject.forContext(context).cancelAll("deadlineName");
+                testSubject.schedule(Instant.now(), "deadlineName", "payload", EXPLICIT_SCOPE);
+                scheduledDuringInvocation.set(testSubject.scheduled.size());
+            });
+
+            // then
+            assertThat(scheduledDuringInvocation).hasValue(1);
+            assertThat(timeline).containsExactly("manager:schedule deadlineName", "manager:cancelAll deadlineName");
+        }
+
+        /**
+         * Axon Framework 5 starts no scope around the command handler of an entity, so binding a context does not
+         * describe one.
+         */
+        @Test
+        void scheduleWithoutAScopeDescriptorStillThrows() {
+            // when / then
+            runInUnitOfWork(context -> assertThatThrownBy(
+                    () -> testSubject.forContext(context).schedule(Instant.now(), "deadlineName", "payload")
+            ).isInstanceOf(IllegalStateException.class)
+             .hasMessage("Cannot request current Scope if none is active"));
+            assertThat(testSubject.scheduled).isEmpty();
+        }
+
+        @Test
+        void theScopeOfASagaHandlerKeepsDecidingWhereACallIsDeferredTo() {
+            // given
+            AtomicReference<ProcessingContext> committedContext = new AtomicReference<>();
+            runInUnitOfWork(committedContext::set);
+            AtomicInteger scheduledDuringInvocation = new AtomicInteger(-1);
+
+            // when
+            // A view bound to a context that already committed would reject the call, unless the scope wins
+            runInUnitOfWork(context -> new TestScope(context).run(() -> {
+                testSubject.forContext(committedContext.get())
+                           .schedule(Instant.now(), "deadlineName", "payload", EXPLICIT_SCOPE);
+                scheduledDuringInvocation.set(testSubject.scheduled.size());
+            }));
+
+            // then
+            assertThat(scheduledDuringInvocation).hasValue(0);
+            assertThat(testSubject.scheduled).hasSize(1);
         }
     }
 
