@@ -112,7 +112,9 @@ a Saga invocation or a `DeadlineManager` handler parameter".
   pinned by `aFailingCommandSchedulesNoDeadline`, `aSucceedingCommandSchedulesItsDeadlineWhenItCommits` and
   `theDispatchInterceptorsGetTheContextOfTheCommand`, for all five backends.
 - The same applies to any handler that runs in a `ProcessingContext` and declares a `DeadlineManager` parameter, for
-  example a plain `@CommandHandler` or `@EventHandler` component.
+  example a plain `@CommandHandler` or `@EventHandler` component. This is pinned by
+  `anEventHandlerComponentDefersItsDeadlineCallsToTheContextOfTheEvent` and
+  `aCommandHandlerComponentFailingAfterSchedulingSchedulesNoDeadline`.
 - Remaining deviations from Axon Framework 4. The first is forced by the absence of an ambient unit of work. The others
   follow from this design, or from ADR 003, and are not forced by Axon Framework 5:
   - a `DeadlineManager` reached any other way than as a parameter declared as `DeadlineManager` is not bound. Examples
@@ -143,8 +145,10 @@ a Saga invocation or a `DeadlineManager` handler parameter".
     for an entity handler. That design is left to a follow-up issue.
 - Correlation data is not attached automatically. Axon Framework 4 merged the current unit of work's correlation data
   into every new `GenericMessage`. In Axon Framework 5, a deadline gets it only through a dispatch interceptor that
-  reads it from the context it now receives, such as `CorrelationDataInterceptor`. Wiring that up, together with
-  handing each deferred call its own context when several branches of one context defer calls, is a separate
-  decision.
+  reads it from the context it now receives, such as `CorrelationDataInterceptor`. When several messages handled in
+  one context defer calls, for example a batch of events a subscribing processor handles in one context, every
+  deferred call receives the context of the first message that deferred one. The dispatch interceptors of a later
+  event's deadline therefore see the first event's message. Wiring up correlation data, together with handing each
+  deferred call its own context, is a separate decision.
 - The migration guide's `axon-5/api-changes/02-processing-context.md#scope` entry for ADR 003 needs the narrowed
   condition above.
