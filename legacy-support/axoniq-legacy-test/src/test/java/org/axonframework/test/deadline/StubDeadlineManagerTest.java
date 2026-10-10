@@ -393,6 +393,22 @@ class StubDeadlineManagerTest {
         }
 
         @Test
+        @SuppressWarnings("deprecation")
+        void theDeadlinesMetAreTheTriggeredDeadlines() {
+            // given
+            testSubject.schedule(Duration.ofMinutes(5), "reminder", "payload", SCOPE);
+
+            // when
+            testSubject.advanceTimeBy(Duration.ofMinutes(5), (scope, message) -> {
+            });
+
+            // then
+            assertThat(testSubject.getDeadlinesMet())
+                    .hasSize(1)
+                    .containsExactlyElementsOf(testSubject.getTriggeredDeadlines());
+        }
+
+        @Test
         void advanceToNextTriggerMovesTheClockToTheNextDeadlineWithoutFiringIt() {
             // given
             testSubject.initializeAt(START);

@@ -194,6 +194,17 @@ public class StubDeadlineManager implements DeadlineManager {
     }
 
     /**
+     * Return all deadlines which have been met.
+     *
+     * @return all deadlines which have been met
+     * @deprecated in favor of {@link #getTriggeredDeadlines()}
+     */
+    @Deprecated
+    public List<ScheduledDeadlineInfo> getDeadlinesMet() {
+        return getTriggeredDeadlines();
+    }
+
+    /**
      * Return all triggered deadlines.
      *
      * @return all triggered deadlines
