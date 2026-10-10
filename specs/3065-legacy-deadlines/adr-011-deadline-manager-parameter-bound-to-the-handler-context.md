@@ -143,12 +143,13 @@ a Saga invocation or a `DeadlineManager` handler parameter".
     forced by the binding: the resolver is created per handler `Executable`, so it knows the declaring entity type, and
     the entity identifier could be resolved from the command. A view could then describe an `AggregateScopeDescriptor`
     for an entity handler. That design is left to a follow-up issue.
-- Correlation data is not attached automatically. Axon Framework 4 merged the current unit of work's correlation data
-  into every new `GenericMessage`. In Axon Framework 5, a deadline gets it only through a dispatch interceptor that
-  reads it from the context it now receives, such as `CorrelationDataInterceptor`. When several messages handled in
-  one context defer calls, for example a batch of events a subscribing processor handles in one context, every
-  deferred call receives the context of the first message that deferred one. The dispatch interceptors of a later
-  event's deadline therefore see the first event's message. Wiring up correlation data, together with handing each
-  deferred call its own context, is a separate decision.
+- Correlation data is not attached by this decision. Axon Framework 4 merged the current unit of work's correlation
+  data into every new `GenericMessage`. With this decision, a deadline scheduled from an entity receives the
+  command's context, which carries that data, but nothing merges it into the deadline yet. When several messages
+  handled in one context defer calls, for example a batch of events a subscribing processor handles in one context,
+  every deferred call receives the context of the first message that deferred one. The dispatch interceptors of a
+  later event's deadline therefore see the first event's message. Attaching correlation data, together with handing
+  each deferred call its own context, is a separate change, which merges the data into the deadline before the
+  dispatch interceptors run, with the message's own metadata winning, as Axon Framework 4 did.
 - The migration guide's `axon-5/api-changes/02-processing-context.md#scope` entry for ADR 003 needs the narrowed
   condition above.
