@@ -20,7 +20,6 @@
 package org.axonframework.test.deadline;
 
 import org.axonframework.common.FutureUtils;
-import org.axonframework.common.ObjectUtils;
 import org.axonframework.common.Registration;
 import org.axonframework.deadline.DeadlineManager;
 import org.axonframework.deadline.DeadlineMessage;
@@ -29,13 +28,11 @@ import org.axonframework.messaging.ContextAwareScope;
 import org.axonframework.messaging.ScopeDescriptor;
 import org.axonframework.messaging.core.DefaultMessageDispatchInterceptorChain;
 import org.axonframework.messaging.core.EmptyApplicationContext;
-import org.axonframework.messaging.core.GenericMessage;
 import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.MessageDispatchInterceptor;
 import org.axonframework.messaging.core.MessageHandlerInterceptor;
 import org.axonframework.messaging.core.MessageHandlerInterceptorChain;
 import org.axonframework.messaging.core.MessageStream;
-import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.SimpleUnitOfWorkFactory;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
@@ -143,8 +140,9 @@ public class StubDeadlineManager implements DeadlineManager {
                            String deadlineName,
                            @Nullable Object payloadOrMessage,
                            ScopeDescriptor deadlineScope) {
-        DeadlineMessage scheduledMessage =
-                processDispatchInterceptors(asDeadlineMessage(deadlineName, payloadOrMessage, triggerDateTime));
+        DeadlineMessage scheduledMessage = processDispatchInterceptors(
+                GenericDeadlineMessage.asDeadlineMessage(deadlineName, payloadOrMessage, triggerDateTime)
+        );
 
         scheduledDeadlines.add(new ScheduledDeadlineInfo(triggerDateTime,
                                                          deadlineName,
@@ -294,18 +292,6 @@ public class StubDeadlineManager implements DeadlineManager {
         Objects.requireNonNull(handlerInterceptor, "The handler interceptor may not be null.");
         handlerInterceptors.add(handlerInterceptor);
         return () -> handlerInterceptors.remove(handlerInterceptor);
-    }
-
-    private static DeadlineMessage asDeadlineMessage(String deadlineName,
-                                                     @Nullable Object messageOrPayload,
-                                                     Instant expiryTime) {
-        if (messageOrPayload instanceof Message message) {
-            return new GenericDeadlineMessage(deadlineName, message, () -> expiryTime);
-        }
-        MessageType type = new MessageType(ObjectUtils.nullSafeTypeOf(messageOrPayload));
-        return new GenericDeadlineMessage(
-                deadlineName, new GenericMessage(type, messageOrPayload), () -> expiryTime
-        );
     }
 
     private DeadlineMessage processDispatchInterceptors(DeadlineMessage message) {

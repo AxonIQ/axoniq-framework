@@ -77,6 +77,56 @@ class GenericDeadlineMessageTest extends MessageTestSuite<DeadlineMessage> {
     }
 
     @Nested
+    class AsDeadlineMessage {
+
+        private static final Instant EXPIRY_TIME = Instant.parse("2026-10-10T10:00:00Z");
+
+        @Test
+        void aPayloadIsWrappedWithItsClassBasedTypeAndExpiresAtTheGivenTime() {
+            // when
+            DeadlineMessage result =
+                    GenericDeadlineMessage.asDeadlineMessage(TEST_DEADLINE_NAME, "payload", EXPIRY_TIME);
+
+            // then
+            assertThat(result.getDeadlineName()).isEqualTo(TEST_DEADLINE_NAME);
+            assertThat(result.type()).isEqualTo(new MessageType(String.class));
+            assertThat(result.payload()).isEqualTo("payload");
+            assertThat(result.metadata()).isEmpty();
+            assertThat(result.timestamp()).isEqualTo(EXPIRY_TIME);
+        }
+
+        @Test
+        void aMissingPayloadIsWrappedWithTheVoidType() {
+            // when
+            DeadlineMessage result = GenericDeadlineMessage.asDeadlineMessage(TEST_DEADLINE_NAME, null, EXPIRY_TIME);
+
+            // then
+            assertThat(result.type()).isEqualTo(new MessageType(Void.class));
+            assertThat(result.payload()).isNull();
+            assertThat(result.timestamp()).isEqualTo(EXPIRY_TIME);
+        }
+
+        @Test
+        void aMessageKeepsItsIdentityAndExpiresAtTheGivenTime() {
+            // given
+            Message message =
+                    new GenericMessage(TEST_IDENTIFIER, TEST_TYPE, TEST_PAYLOAD, TEST_PAYLOAD_TYPE, TEST_METADATA);
+
+            // when
+            DeadlineMessage result =
+                    GenericDeadlineMessage.asDeadlineMessage(TEST_DEADLINE_NAME, message, EXPIRY_TIME);
+
+            // then
+            assertThat(result.getDeadlineName()).isEqualTo(TEST_DEADLINE_NAME);
+            assertThat(result.identifier()).isEqualTo(TEST_IDENTIFIER);
+            assertThat(result.type()).isEqualTo(TEST_TYPE);
+            assertThat(result.payload()).isEqualTo(TEST_PAYLOAD);
+            assertThat(result.metadata()).isEqualTo(TEST_METADATA);
+            assertThat(result.timestamp()).isEqualTo(EXPIRY_TIME);
+        }
+    }
+
+    @Nested
     class WithConverter {
 
         private static final String STRING_PAYLOAD = "payload";

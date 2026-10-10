@@ -20,11 +20,7 @@
 package org.axonframework.test.saga;
 
 import org.axonframework.deadline.DeadlineManager;
-import org.axonframework.deadline.DeadlineMessage;
-import org.axonframework.deadline.GenericDeadlineMessage;
 import org.axonframework.deadline.annotation.DeadlineHandler;
-import org.axonframework.messaging.core.GenericMessage;
-import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.eventhandling.annotation.Timestamp;
 import org.axonframework.modelling.saga.EndSaga;
 import org.axonframework.modelling.saga.SagaEventHandler;
@@ -36,6 +32,7 @@ import java.time.Duration;
 import java.time.Instant;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.axonframework.deadline.GenericDeadlineMessage.asDeadlineMessage;
 import static org.axonframework.test.matchers.Matchers.*;
 
 /**
@@ -301,16 +298,6 @@ class FixtureDeadlinesTest {
                .published(new TriggerSagaStartEvent(AGGREGATE_ID, "sagaEndingDeadline"))
                .whenTimeElapses(Duration.ofMinutes(TRIGGER_DURATION_MINUTES + 1))
                .expectActiveSagas(0);
-    }
-
-    /**
-     * Axon Framework 4 had {@code GenericDeadlineMessage.asDeadlineMessage(..)} for this, which Axon Framework 5 does
-     * not carry over.
-     */
-    private static DeadlineMessage asDeadlineMessage(String deadlineName, Object payload, Instant expiryTime) {
-        return new GenericDeadlineMessage(
-                deadlineName, new GenericMessage(new MessageType(payload.getClass()), payload), () -> expiryTime
-        );
     }
 
     private static class ResetAllTriggeredEvent {
