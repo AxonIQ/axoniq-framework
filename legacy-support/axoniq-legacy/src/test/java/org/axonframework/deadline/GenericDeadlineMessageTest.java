@@ -124,6 +124,21 @@ class GenericDeadlineMessageTest extends MessageTestSuite<DeadlineMessage> {
             assertThat(result.metadata()).isEqualTo(TEST_METADATA);
             assertThat(result.timestamp()).isEqualTo(EXPIRY_TIME);
         }
+
+        @SuppressWarnings("deprecation")
+        @Test
+        void withoutAnExpiryTimeTheDeadlineIsStampedWithTheCurrentTime() {
+            // given
+            Instant before = Instant.now();
+
+            // when
+            DeadlineMessage result = GenericDeadlineMessage.asDeadlineMessage(TEST_DEADLINE_NAME, "payload");
+
+            // then
+            assertThat(result.getDeadlineName()).isEqualTo(TEST_DEADLINE_NAME);
+            assertThat(result.payload()).isEqualTo("payload");
+            assertThat(result.timestamp()).isBetween(before, Instant.now());
+        }
     }
 
     @Nested

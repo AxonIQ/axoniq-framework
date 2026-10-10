@@ -19,6 +19,7 @@
 
 package org.axonframework.deadline;
 
+import org.axonframework.common.ClockUtils;
 import org.axonframework.common.ObjectUtils;
 import org.axonframework.conversion.Converter;
 import org.axonframework.messaging.core.ClassBasedMessageTypeResolver;
@@ -47,6 +48,24 @@ public class GenericDeadlineMessage extends GenericEventMessage implements Deadl
     private static final MessageTypeResolver MESSAGE_TYPE_RESOLVER = new ClassBasedMessageTypeResolver();
 
     private final String deadlineName;
+
+    /**
+     * Returns the given {@code deadlineName} and {@code messageOrPayload} as a DeadlineMessage. If the
+     * {@code messageOrPayload} parameter is of type {@link Message}, a new DeadlineMessage will be created using the
+     * payload and metadata of the given message. Otherwise, the given {@code messageOrPayload} is wrapped into a
+     * GenericDeadlineMessage as its payload.
+     *
+     * @param deadlineName     the name for the resulting {@link DeadlineMessage}
+     * @param messageOrPayload a {@link Message} or payload to wrap as a DeadlineMessage
+     * @return a DeadlineMessage using the {@code deadlineName} as its deadline name and containing the given
+     * {@code messageOrPayload} as the payload
+     * @deprecated use {@link #asDeadlineMessage(String, Object, Instant)} instead, as it sets the timestamp of the
+     * deadline, rather than the current time
+     */
+    @Deprecated
+    public static DeadlineMessage asDeadlineMessage(String deadlineName, @Nullable Object messageOrPayload) {
+        return asDeadlineMessage(deadlineName, messageOrPayload, ClockUtils.instant());
+    }
 
     /**
      * Returns the given {@code deadlineName} and {@code messageOrPayload} as a DeadlineMessage which expires at the
