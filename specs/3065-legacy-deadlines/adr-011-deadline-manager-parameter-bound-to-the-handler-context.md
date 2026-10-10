@@ -2,7 +2,7 @@
 
 Date: 2026-10-10
 Status: accepted
-Related: [#3065](https://github.com/AxonIQ/AxonFramework/issues/3065) (parent), [#5003](https://github.com/AxonIQ/AxonFramework/issues/5003) (deadline core), [ADR 003](adr-003-deadline-manager-current-scope.md) (current `Scope`), [ADR 006](adr-006-deadline-manager-builders-on-af5.md) (context of the dispatch interceptors), [ADR 007](adr-007-aggregate-deadline-delivery-through-scope-aware.md) (aggregate deadline delivery), [ADR 009](adr-009-aggregate-deadline-entity-id-via-metadata.md) (entity id of a translated deadline)
+Related: [#3065](https://github.com/AxonIQ/AxonFramework/issues/3065) (parent), [#5003](https://github.com/AxonIQ/AxonFramework/issues/5003) (deadline core), [ADR 003](adr-003-deadline-manager-current-scope.md) (current `Scope`), [ADR 004](adr-004-deadline-manager-tracing-decorator.md) (tracing decorator), [ADR 006](adr-006-deadline-manager-builders-on-af5.md) (context of the dispatch interceptors), [ADR 007](adr-007-aggregate-deadline-delivery-through-scope-aware.md) (aggregate deadline delivery), [ADR 009](adr-009-aggregate-deadline-entity-id-via-metadata.md) (entity id of a translated deadline)
 
 ## Context
 
@@ -113,13 +113,22 @@ a Saga invocation or a `DeadlineManager` handler parameter".
   `theDispatchInterceptorsGetTheContextOfTheCommand`, for all five backends.
 - The same applies to any handler that runs in a `ProcessingContext` and declares a `DeadlineManager` parameter, for
   example a plain `@CommandHandler` or `@EventHandler` component.
-- Remaining deviations from Axon Framework 4, each forced by the absence of an ambient unit of work:
+- Remaining deviations from Axon Framework 4. The first is forced by the absence of an ambient unit of work. The others
+  follow from this design, or from ADR 003, and are not forced by Axon Framework 5:
   - a `DeadlineManager` reached any other way than as a parameter declared as `DeadlineManager` is not bound. Examples
-    are a field of a collaborator the handler delegates to, a parameter declared as an implementation type, and a
-    manager the configuration wraps in a decorator that does not extend `AbstractDeadlineManager`. Outside a Saga
-    handler, such a call still runs immediately. This is pinned by
+    are a field of a collaborator the handler delegates to and a parameter declared as an implementation type. Outside
+    a Saga handler, such a call still runs immediately. This is pinned by
     `aCollaboratorHoldingTheManagerSchedulesEvenWhenTheCommandFails` and by
     `aCallOnTheManagerItselfStillRunsImmediately`;
+  - a manager the configuration wraps in a decorator that does not extend `AbstractDeadlineManager` is not bound
+    either: the resolver finds no `AbstractDeadlineManager`, and the configuration resolver injects the decorator.
+    ADR 004 plans such a decorator, the `TracingDeadlineManager` of
+    [#5111](https://github.com/AxonIQ/AxonFramework/issues/5111), which wraps every configured `DeadlineManager` when a
+    `SpanFactory` is registered. With this decision alone, enabling tracing would make a failing entity command store
+    its deadline again, without any error. #5111 has to keep the binding, for example by letting the decorator bind the
+    context on the `AbstractDeadlineManager` it wraps, or by letting `DeadlineManagerParameterResolverFactory` reach
+    the wrapped `AbstractDeadlineManager`. It also needs a test showing that a failing entity command schedules nothing
+    while tracing is enabled;
   - the view does not make an entity command handler a scope, so the scope-less overloads still throw there. A migrated
     aggregate passes its `AggregateScopeDescriptor` explicitly. In Axon Framework 4, the aggregate was the current
     scope.
