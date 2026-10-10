@@ -213,8 +213,10 @@ public abstract class AbstractDeadlineManager implements DeadlineManager {
      * Before the interceptors run, the correlation data the {@code context} carries, as put there by a
      * {@link CorrelationDataInterceptor} around the handler that made the deadline call, is added to the message's
      * metadata. Metadata the message already holds under the same key is kept. A deadline thereby carries the
-     * correlation data of the message whose handling scheduled it, as any other message dispatched while handling it
-     * does.
+     * correlation data of the message whose handling scheduled it, with the precedence of Axon Framework 4, which
+     * created a message with the correlation data of the current unit of work beneath its own metadata. This
+     * deliberately differs from a message dispatched through a bus, on which the {@link CorrelationDataInterceptor}
+     * lets the correlation data replace the message's own metadata under the same key.
      * <p>
      * The {@code context} is the one a deadline call was deferred to, as handed out by
      * {@link #runOnPrepareCommitOrNow(Consumer)}, or {@code null} for a call that runs immediately, outside any
