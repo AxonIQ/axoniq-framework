@@ -134,9 +134,13 @@ a Saga invocation or a `DeadlineManager` handler parameter".
     context on the `AbstractDeadlineManager` it wraps, or by letting `DeadlineManagerParameterResolverFactory` reach
     the wrapped `AbstractDeadlineManager`. It also needs a test showing that a failing entity command schedules nothing
     while tracing is enabled;
-  - the view does not make an entity command handler a scope, so the scope-less overloads still throw there. A migrated
-    aggregate passes its `AggregateScopeDescriptor` explicitly. In Axon Framework 4, the aggregate was the current
-    scope.
+  - the view does not make an entity command handler a scope, so the scope-less overloads still throw there (ADR 003).
+    In Axon Framework 4, the aggregate was the current scope (`AggregateLifecycle` extends `Scope`), so
+    `schedule(duration, deadlineName)` in an aggregate command handler was the most common idiom. Every migrated
+    aggregate that uses the scope-less overloads has to pass its `AggregateScopeDescriptor` explicitly. This is not
+    forced by the binding: the resolver is created per handler `Executable`, so it knows the declaring entity type, and
+    the entity identifier could be resolved from the command. A view could then describe an `AggregateScopeDescriptor`
+    for an entity handler. That design is left to a follow-up issue.
 - Correlation data is not attached automatically. Axon Framework 4 merged the current unit of work's correlation data
   into every new `GenericMessage`. In Axon Framework 5, a deadline gets it only through a dispatch interceptor that
   reads it from the context it now receives, such as `CorrelationDataInterceptor`. Wiring that up, together with
