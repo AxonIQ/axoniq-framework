@@ -355,7 +355,7 @@ public interface FixtureExecutionResult {
      * deadline has never been set or has been canceled.
      *
      * @param matcher the matcher defining the deadline which should not be scheduled
-     * @return the current ResultValidator, for fluent interfacing
+     * @return the FixtureExecutionResult for method chaining
      */
     FixtureExecutionResult expectNoScheduledDeadlineMatching(Matcher<? super DeadlineMessage> matcher);
 
@@ -417,7 +417,7 @@ public interface FixtureExecutionResult {
      * in time.
      * <p/>
      * If the {@code scheduledTime} is calculated based on the "current time", use the {@link
-     * TestExecutor#currentTime()} to get the time to use as "current time".
+     * FixtureConfiguration#currentTime()} to get the time to use as "current time".
      *
      * @param scheduledTime the time at which no deadline matching the given {@code matcher} should be scheduled
      * @param matcher       the matcher defining the deadline which should not be scheduled
@@ -432,7 +432,7 @@ public interface FixtureExecutionResult {
      * in time.
      * <p/>
      * If the {@code scheduledTime} is calculated based on the "current time", use the {@link
-     * TestExecutor#currentTime()} to get the time to use as "current time".
+     * FixtureConfiguration#currentTime()} to get the time to use as "current time".
      * <p/>
      * Note that the source attribute of the deadline is ignored when comparing deadlines. Deadlines are compared using
      * an "equals" check on all fields in the deadlines.
@@ -475,7 +475,7 @@ public interface FixtureExecutionResult {
      * @param to      the time until which no deadline equal to the given {@code deadline} should be scheduled
      *                (inclusive)
      * @param matcher the matcher defining the deadline which should not be scheduled
-     * @return the current ResultValidator, for fluent interfacing
+     * @return the FixtureExecutionResult for method chaining
      */
     FixtureExecutionResult expectNoScheduledDeadlineMatching(Instant from, Instant to,
                                                              Matcher<? super DeadlineMessage> matcher);
@@ -490,7 +490,7 @@ public interface FixtureExecutionResult {
      * @param to       the time until which no deadline equal to the given {@code deadline} should be scheduled
      *                 (inclusive)
      * @param deadline the deadline which should not be scheduled
-     * @return the current ResultValidator, for fluent interfacing
+     * @return the FixtureExecutionResult for method chaining
      */
     FixtureExecutionResult expectNoScheduledDeadline(Instant from, Instant to, Object deadline);
 
@@ -504,7 +504,7 @@ public interface FixtureExecutionResult {
      * @param to           the time until which no deadline equal to the given {@code deadline} should be scheduled
      *                     (inclusive)
      * @param deadlineType the type of the deadline which should not be scheduled
-     * @return the current ResultValidator, for fluent interfacing
+     * @return the FixtureExecutionResult for method chaining
      */
     FixtureExecutionResult expectNoScheduledDeadlineOfType(Instant from, Instant to, Class<?> deadlineType);
 
@@ -518,7 +518,7 @@ public interface FixtureExecutionResult {
      * @param to           the time until which no deadline equal to the given {@code deadline} should be scheduled
      *                     (inclusive)
      * @param deadlineName the name of the deadline which should not be scheduled
-     * @return the current ResultValidator, for fluent interfacing
+     * @return the FixtureExecutionResult for method chaining
      */
     FixtureExecutionResult expectNoScheduledDeadlineWithName(Instant from, Instant to, String deadlineName);
 
@@ -533,7 +533,7 @@ public interface FixtureExecutionResult {
     FixtureExecutionResult expectDeadlinesMetMatching(Matcher<? extends List<?>> matcher);
 
     /**
-     * Asserts that deadlines matching the given {@code matcher} have been triggered for this aggregate.
+     * Asserts that deadlines matching the given {@code matcher} have been triggered for this saga.
      * <p>
      * The {@code matcher} is matched against the list of triggered {@link DeadlineMessage DeadlineMessages}. Axon
      * Framework 4 typed it as a matcher of a list of a super type of {@code DeadlineMessage}, which Axon Framework 5's

@@ -20,8 +20,8 @@
 package org.axonframework.test.deadline;
 
 import org.axonframework.deadline.DeadlineMessage;
-import org.axonframework.messaging.ScopeDescriptor;
 import org.axonframework.messaging.Scope;
+import org.axonframework.messaging.ScopeDescriptor;
 
 import java.time.Instant;
 import java.util.Objects;
