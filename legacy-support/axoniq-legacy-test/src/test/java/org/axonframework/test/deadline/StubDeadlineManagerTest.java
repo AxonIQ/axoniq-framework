@@ -376,6 +376,23 @@ class StubDeadlineManagerTest {
         }
 
         @Test
+        void aConsumerFailingWithAnErrorIsReportedAsAFixtureExecutionException() {
+            // given
+            AssertionError failure = new AssertionError("boom");
+            testSubject.schedule(Duration.ofMinutes(5), "reminder", "payload", SCOPE);
+
+            // when / then
+            assertThatThrownBy(() -> testSubject.advanceTimeBy(Duration.ofMinutes(5), (scope, message) -> {
+                throw failure;
+            }))
+                    .isInstanceOf(FixtureExecutionException.class)
+                    .hasMessage("Exception occurred while handling the deadline")
+                    .cause()
+                    .isInstanceOf(AssertionError.class)
+                    .hasMessage("boom");
+        }
+
+        @Test
         void advanceToNextTriggerMovesTheClockToTheNextDeadlineWithoutFiringIt() {
             // given
             testSubject.initializeAt(START);

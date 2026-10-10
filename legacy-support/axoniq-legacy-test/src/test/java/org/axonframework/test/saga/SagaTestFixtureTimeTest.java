@@ -142,6 +142,21 @@ class SagaTestFixtureTimeTest {
                     .rootCause()
                     .hasMessage("The reminder could not be sent");
         }
+
+        @Test
+        void aDeadlineHandlerFailingWithAnErrorFailsTheWhenPhaseWithAFixtureExecutionException() {
+            // given
+            fixture.givenAPublished(new OrderPlaced(ORDER_ID))
+                   .andThenAPublished(new ReminderFailedAnAssertion(ORDER_ID));
+
+            // when / then
+            assertThatThrownBy(() -> fixture.whenTimeElapses(REMINDER_DELAY))
+                    .isInstanceOf(FixtureExecutionException.class)
+                    .hasMessage("Exception occurred while trying to advance time and handle scheduled events")
+                    .rootCause()
+                    .isInstanceOf(AssertionError.class)
+                    .hasMessage("The reminder failed an assertion");
+        }
     }
 
     @Nested
@@ -246,6 +261,10 @@ class SagaTestFixtureTimeTest {
 
     }
 
+    public record ReminderFailedAnAssertion(String orderId) {
+
+    }
+
     public record TimestampRequested(String orderId) {
 
     }
@@ -265,6 +284,7 @@ class SagaTestFixtureTimeTest {
     public static class ReminderSaga {
 
         private boolean broken;
+        private boolean failingAnAssertion;
 
         @StartSaga
         @SagaEventHandler(associationProperty = "orderId")
@@ -295,10 +315,18 @@ class SagaTestFixtureTimeTest {
             broken = true;
         }
 
+        @SagaEventHandler(associationProperty = "orderId")
+        public void on(ReminderFailedAnAssertion event) {
+            failingAnAssertion = true;
+        }
+
         @DeadlineHandler(deadlineName = "remind")
         public void remind(Reminder reminder, CommandDispatcher dispatcher) {
             if (broken) {
                 throw new IllegalStateException("The reminder could not be sent");
+            }
+            if (failingAnAssertion) {
+                throw new AssertionError("The reminder failed an assertion");
             }
             dispatcher.send(new SendReminder(reminder.orderId()));
         }

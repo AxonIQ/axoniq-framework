@@ -335,7 +335,8 @@ public class StubDeadlineManager implements DeadlineManager {
                                              .ignoreEntries()
                                              .asCompletableFuture())
             );
-        } catch (Exception e) {
+        } catch (Exception | Error e) {
+            // Axon Framework 4's unit of work caught every Throwable, so an Error from a handler was reported here too.
             throw new FixtureExecutionException("Exception occurred while handling the deadline", e);
         }
         return consumedMessage.get();
