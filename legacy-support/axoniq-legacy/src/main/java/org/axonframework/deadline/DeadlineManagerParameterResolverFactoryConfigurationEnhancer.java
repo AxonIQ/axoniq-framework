@@ -36,11 +36,11 @@ import org.axonframework.messaging.core.configuration.reflection.ParameterResolv
  * handler. Calls made through it are deferred to that context, and its dispatch interceptors receive it, as for a
  * Saga handler.
  * <p>
- * The parameter is resolved as before, to the configured component itself, when it is declared as an implementation
- * type, when no {@link DeadlineManager} is configured, or when the configured one does not extend
- * {@link AbstractDeadlineManager}, such as the stub of the test fixture. A {@link DeadlineManager} reached in any other
- * way than as a handler parameter, for example as a field of a collaborator, is not bound to a context, so its calls
- * outside a Saga handler run immediately.
+ * The parameter is resolved to the configured component itself when it is declared as an implementation type, when
+ * no {@link DeadlineManager} is configured, or when the configured one does not extend
+ * {@link AbstractDeadlineManager}, such as the {@code org.axonframework.test.deadline.StubDeadlineManager} of the saga
+ * test fixture. A {@link DeadlineManager} reached in any other way than as a handler parameter, for example as a field
+ * of a collaborator, is not bound to a context, so its calls outside a Saga handler run immediately.
  * <p>
  * The enhancer is discovered through the {@link java.util.ServiceLoader}, so an application gets this behaviour by
  * having {@code axoniq-legacy} on its classpath. An application can opt out with

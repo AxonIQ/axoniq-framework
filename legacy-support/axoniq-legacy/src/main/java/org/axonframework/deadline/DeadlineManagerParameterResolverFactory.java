@@ -36,8 +36,11 @@ import java.util.concurrent.CompletableFuture;
  * <p>
  * It returns no resolver for a parameter of any other type, when the configuration has no {@link DeadlineManager}, or
  * when the configured one does not extend {@link AbstractDeadlineManager}. The configuration's own parameter resolver
- * then resolves the parameter to the configured component, as it did before. Registered by
+ * then resolves the parameter to the configured component itself. Registered by
  * {@link DeadlineManagerParameterResolverFactoryConfigurationEnhancer}.
+ *
+ * @author Mateusz Nowak
+ * @since 5.4.0
  */
 final class DeadlineManagerParameterResolverFactory implements ParameterResolverFactory {
 

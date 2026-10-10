@@ -52,7 +52,8 @@ import static org.axonframework.messaging.eventhandling.EventTestUtils.asEventMe
 /**
  * Test class validating that the {@link DeadlineManagerParameterResolverFactoryConfigurationEnhancer} makes a
  * {@link DeadlineManager} handler parameter defer its calls to the {@link ProcessingContext} of the handler, as Axon
- * Framework 4 deferred them to the current unit of work, and otherwise resolves the parameter as before.
+ * Framework 4 deferred them to the current unit of work, and otherwise resolves the parameter to the configured
+ * component itself.
  */
 class DeadlineManagerParameterResolverFactoryConfigurationEnhancerTest {
 
