@@ -21,9 +21,11 @@ package org.axonframework.deadline;
 
 import org.axonframework.common.ObjectUtils;
 import org.axonframework.conversion.Converter;
+import org.axonframework.messaging.core.ClassBasedMessageTypeResolver;
 import org.axonframework.messaging.core.GenericMessage;
 import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.MessageType;
+import org.axonframework.messaging.core.MessageTypeResolver;
 import org.axonframework.messaging.core.Metadata;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
 import org.jspecify.annotations.Nullable;
@@ -42,7 +44,34 @@ import java.util.function.Supplier;
  */
 public class GenericDeadlineMessage extends GenericEventMessage implements DeadlineMessage {
 
+    private static final MessageTypeResolver MESSAGE_TYPE_RESOLVER = new ClassBasedMessageTypeResolver();
+
     private final String deadlineName;
+
+    /**
+     * Returns the given {@code deadlineName} and {@code messageOrPayload} as a DeadlineMessage which expires at the
+     * given {@code expiryTime}. If the {@code messageOrPayload} parameter is of type {@link Message}, a new
+     * {@code DeadlineMessage} instance will be created using the payload and metadata of the given message. Otherwise,
+     * the given {@code messageOrPayload} is wrapped into a {@code GenericDeadlineMessage} as its payload, with a
+     * {@link MessageType} resolved from the payload's class.
+     *
+     * @param deadlineName     the name for the resulting {@link DeadlineMessage}
+     * @param messageOrPayload a {@link Message} or payload to wrap as a DeadlineMessage
+     * @param expiryTime       the timestamp at which the deadline expires
+     * @return a DeadlineMessage using the {@code deadlineName} as its deadline name and containing the given
+     * {@code messageOrPayload} as the payload
+     */
+    public static DeadlineMessage asDeadlineMessage(String deadlineName,
+                                                    @Nullable Object messageOrPayload,
+                                                    Instant expiryTime) {
+        if (messageOrPayload instanceof Message message) {
+            return new GenericDeadlineMessage(deadlineName, message, () -> expiryTime);
+        }
+        MessageType type = MESSAGE_TYPE_RESOLVER.resolveOrThrow(ObjectUtils.nullSafeTypeOf(messageOrPayload));
+        return new GenericDeadlineMessage(
+                deadlineName, new GenericMessage(type, messageOrPayload), () -> expiryTime
+        );
+    }
 
     /**
      * Constructs a {@code GenericDeadlineMessage} for the given {@code type} and {@code deadlineName}.

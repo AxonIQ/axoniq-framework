@@ -22,18 +22,13 @@ package org.axonframework.deadline;
 import io.axoniq.framework.legacy.LegacySupportAxoniqAddon;
 import io.axoniq.license.entitlement.EntitlementManager;
 import org.axonframework.common.FutureUtils;
-import org.axonframework.common.ObjectUtils;
 import org.axonframework.common.Registration;
 import org.axonframework.messaging.ContextAwareScope;
-import org.axonframework.messaging.core.ClassBasedMessageTypeResolver;
 import org.axonframework.messaging.core.Context;
 import org.axonframework.messaging.core.DefaultMessageDispatchInterceptorChain;
-import org.axonframework.messaging.core.GenericMessage;
 import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.MessageDispatchInterceptor;
 import org.axonframework.messaging.core.MessageHandlerInterceptor;
-import org.axonframework.messaging.core.MessageType;
-import org.axonframework.messaging.core.MessageTypeResolver;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.ProcessingLifecycle;
 import org.axonframework.modelling.saga.repository.AnnotatedSagaRepository;
@@ -80,8 +75,6 @@ public abstract class AbstractDeadlineManager implements DeadlineManager {
 
     private static final String TOO_LATE_TO_DEFER =
             "Cannot defer a deadline call to a ProcessingContext whose deferred deadline calls already ran";
-
-    private static final MessageTypeResolver MESSAGE_TYPE_RESOLVER = new ClassBasedMessageTypeResolver();
 
     private final List<MessageDispatchInterceptor<? super DeadlineMessage>> dispatchInterceptors =
             new CopyOnWriteArrayList<>();
@@ -257,15 +250,7 @@ public abstract class AbstractDeadlineManager implements DeadlineManager {
     protected DeadlineMessage asDeadlineMessage(String deadlineName,
                                                 @Nullable Object messageOrPayload,
                                                 Instant expiryTime) {
-        if (messageOrPayload instanceof Message message) {
-            return new GenericDeadlineMessage(deadlineName,
-                                              message,
-                                              () -> expiryTime);
-        }
-        MessageType type = MESSAGE_TYPE_RESOLVER.resolveOrThrow(ObjectUtils.nullSafeTypeOf(messageOrPayload));
-        return new GenericDeadlineMessage(
-                deadlineName, new GenericMessage(type, messageOrPayload), () -> expiryTime
-        );
+        return GenericDeadlineMessage.asDeadlineMessage(deadlineName, messageOrPayload, expiryTime);
     }
 
     /**
