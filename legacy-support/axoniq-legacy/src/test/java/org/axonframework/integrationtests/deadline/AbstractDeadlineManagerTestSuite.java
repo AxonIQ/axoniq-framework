@@ -30,6 +30,7 @@ import org.axonframework.integrationtests.deadline.DeadlineTestEntity.CancelAllD
 import org.axonframework.integrationtests.deadline.DeadlineTestEntity.CancelAllDeadlinesWithinScope;
 import org.axonframework.integrationtests.deadline.DeadlineTestEntity.CancelDeadline;
 import org.axonframework.integrationtests.deadline.DeadlineTestEntity.CreateEntity;
+import org.axonframework.integrationtests.deadline.DeadlineTestEntity.DeadlineCollaborator;
 import org.axonframework.integrationtests.deadline.DeadlineTestEntity.DeadlineOccurred;
 import org.axonframework.integrationtests.deadline.DeadlineTestEntity.DeadlinePayload;
 import org.axonframework.integrationtests.deadline.DeadlineTestEntity.FailingDeadlinePayload;
@@ -37,6 +38,8 @@ import org.axonframework.integrationtests.deadline.DeadlineTestEntity.Occurrence
 import org.axonframework.integrationtests.deadline.DeadlineTestEntity.ReadOccurrences;
 import org.axonframework.integrationtests.deadline.DeadlineTestEntity.ScheduleDeadline;
 import org.axonframework.integrationtests.deadline.DeadlineTestEntity.ScheduleDeadlineThenFail;
+import org.axonframework.integrationtests.deadline.DeadlineTestEntity.ScheduleDeadlineThroughCollaboratorThenFail;
+import org.axonframework.messaging.commandhandling.CommandMessage;
 import org.axonframework.messaging.commandhandling.gateway.CommandGateway;
 import org.axonframework.messaging.ContextAwareScope;
 import org.axonframework.messaging.ScopeAware;
@@ -44,6 +47,8 @@ import org.axonframework.messaging.ScopeAwareProvider;
 import org.axonframework.messaging.ScopeDescriptor;
 import org.axonframework.messaging.core.GenericMessage;
 import org.axonframework.messaging.core.Message;
+import org.axonframework.messaging.core.MessageHandlerInterceptorChain;
+import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
@@ -379,6 +384,7 @@ public abstract class AbstractDeadlineManagerTestSuite {
 
         private AxonConfiguration configuration;
         private CommandGateway commandGateway;
+        private final List<String> commandTimeline = new CopyOnWriteArrayList<>();
 
         @BeforeEach
         void setUpEntity() {
@@ -388,11 +394,19 @@ public abstract class AbstractDeadlineManagerTestSuite {
             configuration = EventSourcingConfigurer
                     .create()
                     .registerEntity(EventSourcedEntityModule.autodetected(String.class, DeadlineTestEntity.class))
-                    .componentRegistry(registry -> registry.registerComponent(
-                            DeadlineManager.class,
-                            config -> buildDeadlineManager(config.getComponent(ScopeAwareProvider.class),
-                                                           config.getComponent(UnitOfWorkFactory.class))
+                    .messaging(messaging -> messaging.registerCommandHandlerInterceptor(
+                            config -> this::recordCommitPhasesOfScheduleCommands
                     ))
+                    .componentRegistry(registry -> registry
+                            .registerComponent(
+                                    DeadlineManager.class,
+                                    config -> buildDeadlineManager(config.getComponent(ScopeAwareProvider.class),
+                                                                   config.getComponent(UnitOfWorkFactory.class))
+                            )
+                            .registerComponent(
+                                    DeadlineCollaborator.class,
+                                    config -> new DeadlineCollaborator(config.getComponent(DeadlineManager.class))
+                            ))
                     .start();
             deadlineManager = (AbstractDeadlineManager) configuration.getComponent(DeadlineManager.class);
             commandGateway = configuration.getComponent(CommandGateway.class);
@@ -527,41 +541,30 @@ public abstract class AbstractDeadlineManagerTestSuite {
             }
         }
 
+        /**
+         * A command handler of an entity runs in the context of its command but in no scope, as a Saga handler does.
+         * Its {@link DeadlineManager} parameter is bound to that context, so its deadline calls are deferred to the
+         * command's commit, as Axon Framework 4 deferred them to the prepare-commit phase of the current unit of work.
+         */
         @Nested
         class SchedulingFromTheEntity {
 
-            /**
-             * A command handler of an entity is not run within a scope, as a Saga handler is, so a deadline call it
-             * makes runs at once. It does not wait for the unit of work of the command to prepare its commit.
-             * <p>
-             * This differs from Axon Framework 4, which deferred the call to the prepare-commit phase of the current
-             * unit of work, so a failing command never scheduled its deadline. The test pins the current behaviour
-             * to keep that difference visible.
-             */
             @Test
-            void aDeadlineIsScheduledEvenWhenTheCommandSchedulingItFails() {
+            void aFailingCommandSchedulesNoDeadline() {
                 // when
                 assertThatThrownBy(() -> commandGateway.sendAndWait(new ScheduleDeadlineThenFail(
-                        ENTITY_ID, DEADLINE_NAME, new DeadlinePayload("scheduled"), TRIGGER_DURATION.toMillis()
+                        ENTITY_ID, DEADLINE_NAME, new DeadlinePayload("never scheduled"), TRIGGER_DURATION.toMillis()
                 ))).hasMessageContaining("fails after it scheduled");
 
                 // then
-                awaitOccurrences(ENTITY_ID, new DeadlineOccurred(ENTITY_ID, "payload", "scheduled", null));
+                assertNothingFiresOn(ENTITY_ID);
             }
 
-            /**
-             * For the same reason, the dispatch interceptors of a deadline scheduled by an entity get no context.
-             * <p>
-             * This differs from Axon Framework 4, which ran them within the unit of work of the command and attached
-             * its correlation data to the deadline message. The test pins the current behaviour to keep that
-             * difference visible.
-             */
             @Test
-            void theDispatchInterceptorsGetNoContext() {
+            void aSucceedingCommandSchedulesItsDeadlineWhenItCommits() {
                 // given
-                List<Optional<ProcessingContext>> interceptionContexts = new CopyOnWriteArrayList<>();
                 deadlineManager.registerDispatchInterceptor((message, context, chain) -> {
-                    interceptionContexts.add(Optional.ofNullable(context));
+                    commandTimeline.add("schedule");
                     return chain.proceed(message, context);
                 });
 
@@ -569,7 +572,45 @@ public abstract class AbstractDeadlineManagerTestSuite {
                 schedule(ENTITY_ID, DEADLINE_NAME, new DeadlinePayload("text"));
 
                 // then
-                assertThat(interceptionContexts).containsExactly(Optional.empty());
+                assertThat(commandTimeline).containsExactly("prepareCommit", "schedule", "commit");
+                awaitOccurrences(ENTITY_ID, new DeadlineOccurred(ENTITY_ID, "payload", "text", null));
+            }
+
+            /**
+             * A collaborator holding the manager itself has no handler parameter that binds the command's context, and
+             * Axon Framework 5 has no ambient unit of work to find it through. Its call therefore runs at once, where
+             * Axon Framework 4 deferred it. The test pins that difference to keep it visible.
+             */
+            @Test
+            void aCollaboratorHoldingTheManagerSchedulesEvenWhenTheCommandFails() {
+                // when
+                assertThatThrownBy(() -> commandGateway.sendAndWait(new ScheduleDeadlineThroughCollaboratorThenFail(
+                        ENTITY_ID, DEADLINE_NAME, new DeadlinePayload("scheduled"), TRIGGER_DURATION.toMillis()
+                ))).hasMessageContaining("fails after its collaborator scheduled");
+
+                // then
+                awaitOccurrences(ENTITY_ID, new DeadlineOccurred(ENTITY_ID, "payload", "scheduled", null));
+            }
+
+            @Test
+            void theDispatchInterceptorsGetTheContextOfTheCommand() {
+                // given
+                List<Optional<Object>> interceptedCommands = new CopyOnWriteArrayList<>();
+                deadlineManager.registerDispatchInterceptor((message, context, chain) -> {
+                    interceptedCommands.add(Optional.ofNullable(context)
+                                                    .map(Message::fromContext)
+                                                    .map(Message::payload));
+                    return chain.proceed(message, context);
+                });
+                ScheduleDeadline command = new ScheduleDeadline(
+                        ENTITY_ID, DEADLINE_NAME, new DeadlinePayload("text"), TRIGGER_DURATION.toMillis()
+                );
+
+                // when
+                commandGateway.sendAndWait(command);
+
+                // then
+                assertThat(interceptedCommands).containsExactly(Optional.of(command));
             }
         }
 
@@ -588,6 +629,18 @@ public abstract class AbstractDeadlineManagerTestSuite {
                 awaitOccurrences(ENTITY_ID, new DeadlineOccurred(ENTITY_ID, "payload", "succeeds", null));
                 assertThat(DeadlineTestEntity.FAILED_DELIVERIES).hasValueGreaterThanOrEqualTo(1);
             }
+        }
+
+        private MessageStream<?> recordCommitPhasesOfScheduleCommands(
+                CommandMessage command,
+                ProcessingContext context,
+                MessageHandlerInterceptorChain<CommandMessage> chain
+        ) {
+            if (command.payload() instanceof ScheduleDeadline) {
+                context.runOnPrepareCommit(phaseContext -> commandTimeline.add("prepareCommit"));
+                context.runOnCommit(phaseContext -> commandTimeline.add("commit"));
+            }
+            return chain.proceed(command, context);
         }
 
         private String schedule(String entityId, String deadlineName, @Nullable Object payload) {
