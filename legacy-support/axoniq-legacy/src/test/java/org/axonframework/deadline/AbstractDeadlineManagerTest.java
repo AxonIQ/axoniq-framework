@@ -418,24 +418,25 @@ class AbstractDeadlineManagerTest {
             assertThat(testSubject.scheduled).isEmpty();
         }
 
+        /**
+         * A command a Saga handler sends can run in a unit of work of its own while the Saga's scope is still current.
+         * Axon Framework 4 deferred a call to the innermost unit of work, which is the command's, so a failing command
+         * stored nothing even when the Saga survived its failure.
+         */
         @Test
-        void theScopeOfASagaHandlerKeepsDecidingWhereACallIsDeferredTo() {
-            // given
-            AtomicReference<ProcessingContext> committedContext = new AtomicReference<>();
-            runInUnitOfWork(committedContext::set);
-            AtomicInteger scheduledDuringInvocation = new AtomicInteger(-1);
-
+        void theBoundContextWinsOverTheScopeOfAnEnclosingSagaHandler() {
             // when
-            // A view bound to a context that already committed would reject the call, unless the scope wins
-            runInUnitOfWork(context -> new TestScope(context).run(() -> {
-                testSubject.forContext(committedContext.get())
-                           .schedule(Instant.now(), "deadlineName", "payload", EXPLICIT_SCOPE);
-                scheduledDuringInvocation.set(testSubject.scheduled.size());
+            runInUnitOfWork(sagaContext -> new TestScope(sagaContext).run(() -> {
+                CompletableFuture<Object> command = UnitOfWorkTestUtils.aUnitOfWork().executeWithResult(context -> {
+                    testSubject.forContext(context).schedule(Instant.now(), "deadlineName", "payload", EXPLICIT_SCOPE);
+                    return CompletableFuture.failedFuture(new IllegalStateException("command failure"));
+                });
+                assertThatThrownBy(() -> command.orTimeout(1, TimeUnit.SECONDS).join())
+                        .hasRootCauseInstanceOf(IllegalStateException.class);
             }));
 
             // then
-            assertThat(scheduledDuringInvocation).hasValue(0);
-            assertThat(testSubject.scheduled).hasSize(1);
+            assertThat(testSubject.scheduled).isEmpty();
         }
     }
 

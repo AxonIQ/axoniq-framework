@@ -560,6 +560,24 @@ public abstract class AbstractDeadlineManagerTestSuite {
                 assertNothingFiresOn(ENTITY_ID);
             }
 
+            /**
+             * The command runs on the thread of the Saga handler that sends it, so the Saga's scope is still current
+             * while the entity schedules. Axon Framework 4 deferred the call to the command's own unit of work.
+             */
+            @Test
+            void aFailingCommandSentFromASagaHandlerSchedulesNoDeadline() {
+                // when
+                runInScope(sagaContext -> assertThatThrownBy(() -> commandGateway.sendAndWait(
+                        new ScheduleDeadlineThenFail(ENTITY_ID,
+                                                     DEADLINE_NAME,
+                                                     new DeadlinePayload("never scheduled"),
+                                                     TRIGGER_DURATION.toMillis())
+                )).hasMessageContaining("fails after it scheduled"));
+
+                // then
+                assertNothingFiresOn(ENTITY_ID);
+            }
+
             @Test
             void aSucceedingCommandSchedulesItsDeadlineWhenItCommits() {
                 // given

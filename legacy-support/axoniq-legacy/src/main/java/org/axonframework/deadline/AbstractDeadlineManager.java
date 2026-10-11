@@ -97,11 +97,17 @@ public abstract class AbstractDeadlineManager implements DeadlineManager {
     }
 
     /**
-     * Run a given {@code deadlineCall} immediately, or defer it to a phase of the {@link ProcessingContext} carried by
-     * the current {@link ContextAwareScope}, if one is active. Without such a scope, the call is deferred to the
-     * context a {@link #forContext(ProcessingContext) context-bound view} of this manager was made for, if the call is
-     * made through one. That phase runs after the Saga write and before the context commits. This is required as the
-     * DeadlineManager schedules messages which we want to happen in order with other messages being handled.
+     * Run a given {@code deadlineCall} immediately, or defer it to a phase of a {@link ProcessingContext}. A call made
+     * through a {@link #forContext(ProcessingContext) context-bound view} of this manager is deferred to the context
+     * the view was made for. Any other call is deferred to the context carried by the current
+     * {@link ContextAwareScope}, if one is active. That phase runs after the Saga write and before the context commits.
+     * This is required as the DeadlineManager schedules messages which we want to happen in order with other messages
+     * being handled.
+     * <p>
+     * The view's context wins over the scope's, as it is the innermost one: a command a Saga handler sends can run on
+     * the Saga's thread, in a context of its own, while the Saga's scope is still current. Axon Framework 4 deferred
+     * such a call to the command's unit of work, so a failing command scheduled nothing even when the Saga survived
+     * its failure. Within the Saga handler itself, the view and the scope carry the same context.
      * <p>
      * Deferred calls run in the order they were made, also across Sagas sharing the same {@link ProcessingContext}, as
      * they did in the prepare-commit phase of an Axon Framework 4 unit of work. They never run when the context rolls
@@ -120,8 +126,8 @@ public abstract class AbstractDeadlineManager implements DeadlineManager {
      */
     protected void runOnPrepareCommitOrNow(Consumer<@Nullable ProcessingContext> deadlineCall) {
         Objects.requireNonNull(deadlineCall, "The deadline call may not be null.");
-        Optional<ProcessingContext> context = ContextAwareScope.currentProcessingContext()
-                                                               .or(() -> Optional.ofNullable(boundContext.get()));
+        Optional<ProcessingContext> context = Optional.ofNullable(boundContext.get())
+                                                      .or(ContextAwareScope::currentProcessingContext);
         if (context.isEmpty()) {
             deadlineCall.accept(null);
             return;
@@ -133,8 +139,8 @@ public abstract class AbstractDeadlineManager implements DeadlineManager {
 
     /**
      * Returns a view of this deadline manager bound to the given {@code context}. A call made through the view is
-     * deferred to that context by {@link #runOnPrepareCommitOrNow(Consumer)} when no {@link ContextAwareScope} is
-     * current, and otherwise behaves as the same call made on this manager.
+     * deferred to that context by {@link #runOnPrepareCommitOrNow(Consumer)}, also when a {@link ContextAwareScope}
+     * is current, and otherwise behaves as the same call made on this manager.
      * <p>
      * The {@link DeadlineManagerParameterResolverFactory} hands this view to a handler that declares a
      * {@link DeadlineManager} parameter. That is how a handler that runs in a {@link ProcessingContext} but in no
@@ -150,8 +156,8 @@ public abstract class AbstractDeadlineManager implements DeadlineManager {
 
     /**
      * Runs the given {@code call} while {@code context} is the context {@link #runOnPrepareCommitOrNow(Consumer)}
-     * defers to when no scope provides one. The binding lasts for this synchronous call only, and restores the
-     * previous binding afterwards.
+     * defers to, ahead of the context of the current scope. The binding lasts for this synchronous call only, and
+     * restores the previous binding afterwards.
      */
     private <R> R withBoundContext(ProcessingContext context, Supplier<R> call) {
         ProcessingContext previous = boundContext.get();
