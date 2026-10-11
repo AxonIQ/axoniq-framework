@@ -36,7 +36,7 @@ resolves a parameter declared as `DeadlineManager` to a view of the configured `
 `ProcessingContext` the handler runs in. This is how Axon Framework 5 binds `CommandDispatcher` and `EventAppender`
 parameters (`CommandDispatcher.forContext(context)`). The view delegates each call to the same method of the manager.
 While the call runs, it sets a `ThreadLocal` that is private to that manager instance, and clears it again in a
-`finally` block. `runOnPrepareCommitOrNow(...)` uses that context only when no `ContextAwareScope` provides one.
+`finally` block. `runOnPrepareCommitOrNow(...)` uses that context ahead of the one a `ContextAwareScope` provides.
 
 **Option B: the view pushes a `ContextAwareScope` instead of a private `ThreadLocal`.** This reuses the mechanism
 `runOnPrepareCommitOrNow(...)` already reads, and adds no field. Rejected: a scope also answers
@@ -84,9 +84,12 @@ ADR 003 rejected an earlier context-bound `DeadlineManager` parameter. This one 
 Option A.
 
 - `AbstractDeadlineManager` gains a package-private `forContext(ProcessingContext)`, returning the view.
-  `runOnPrepareCommitOrNow(...)` takes the context from the current `ContextAwareScope` first, then from the view's
-  binding, and runs the call immediately when neither provides one. A Saga's scope therefore keeps deciding where a
-  Saga's calls go, even when the Saga handler declares a `DeadlineManager` parameter too.
+  `runOnPrepareCommitOrNow(...)` takes the context from the view's binding first, then from the current
+  `ContextAwareScope`, and runs the call immediately when neither provides one. The binding is the innermost context:
+  a command a Saga handler sends runs on the Saga's thread with Axon Framework 5's default work scheduler, in a unit
+  of work of its own, while the Saga's scope is still current. Axon Framework 4 deferred such a call to the innermost
+  unit of work, which is the command's. Within the Saga handler itself, a `DeadlineManager` parameter is bound to the
+  same context the Saga's scope carries, so the order changes nothing there.
 - The package-private `DeadlineManagerParameterResolverFactory` resolves a parameter declared as `DeadlineManager`.
   `DeadlineManagerParameterResolverFactoryConfigurationEnhancer` registers it with the configuration's
   `ParameterResolverFactory`, as Axon Framework 5's `CommandDispatcherParameterResolverFactoryConfigurationEnhancer`
@@ -110,7 +113,10 @@ a Saga invocation or a `DeadlineManager` handler parameter".
 - A failing entity command schedules and cancels nothing, and a succeeding one schedules its deadlines during its
   commit, after `PREPARE_COMMIT` and before `COMMIT`. The dispatch interceptors receive the command's context. This is
   pinned by `aFailingCommandSchedulesNoDeadline`, `aSucceedingCommandSchedulesItsDeadlineWhenItCommits` and
-  `theDispatchInterceptorsGetTheContextOfTheCommand`, for all five backends.
+  `theDispatchInterceptorsGetTheContextOfTheCommand`, for all five backends. A failing command a Saga handler sends
+  schedules nothing either, even when the Saga survives its failure. This is pinned by
+  `aFailingCommandSentFromASagaHandlerSchedulesNoDeadline` and
+  `theBoundContextWinsOverTheScopeOfAnEnclosingSagaHandler`.
 - The same applies to any handler that runs in a `ProcessingContext` and declares a `DeadlineManager` parameter, for
   example a plain `@CommandHandler` or `@EventHandler` component. This is pinned by
   `anEventHandlerComponentDefersItsDeadlineCallsToTheContextOfTheEvent` and
@@ -119,7 +125,8 @@ a Saga invocation or a `DeadlineManager` handler parameter".
   follow from this design, or from ADR 003, and are not forced by Axon Framework 5:
   - a `DeadlineManager` reached any other way than as a parameter declared as `DeadlineManager` is not bound. Examples
     are a field of a collaborator the handler delegates to and a parameter declared as an implementation type. Outside
-    a Saga handler, such a call still runs immediately. This is pinned by
+    a Saga handler, such a call still runs immediately. Within a command a Saga handler sends, it is deferred to the
+    Saga's context, not the command's. This is pinned by
     `aCollaboratorHoldingTheManagerSchedulesEvenWhenTheCommandFails` and by
     `aCallOnTheManagerItselfStillRunsImmediately`;
   - the `DeadlineManager` parameter is a view, not the configured instance. A cast to a backend type such as
