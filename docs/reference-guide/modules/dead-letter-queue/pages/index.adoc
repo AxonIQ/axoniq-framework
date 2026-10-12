@@ -6,6 +6,8 @@ When configuring xref:events:event-processors/index.adoc#error-handling[error ha
 Instead of either logging the error and continuing, or infinitely retrying the current event, a Dead-Letter Queue will park the event in the queue so you can decide to try and handle it again later.
 In addition, it will prevent handling of later events in the same sequence until the failed event is successfully processed, preserving correct event ordering.
 
+Note that the Dead-Letter Queue integration is part of Axoniq Framework and requires a xref:axoniq-platform-reference:ROOT:licensing/index.adoc[license] for production use.
+
 [NOTE]
 ====
 If your application uses multi-tenancy, see xref:multi-tenancy:tenant-dead-letter-queue.adoc[Tenant-aware dead-letter queues] for the routing model and the `TenantAwareSequencedDeadLetterQueueFactory` configuration.
