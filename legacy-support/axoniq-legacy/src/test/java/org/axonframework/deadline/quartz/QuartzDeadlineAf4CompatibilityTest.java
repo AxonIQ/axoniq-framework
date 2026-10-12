@@ -21,6 +21,7 @@ package org.axonframework.deadline.quartz;
 
 import com.thoughtworks.xstream.XStream;
 import org.axonframework.conversion.Converter;
+import org.axonframework.conversion.xstream.XStreamConverter;
 import org.axonframework.deadline.AxonFramework4;
 import org.axonframework.deadline.AxonFramework4.CompatScope;
 import org.axonframework.deadline.AxonFramework4.Flavor;
@@ -28,7 +29,6 @@ import org.axonframework.deadline.AxonFramework4.Payloads.CompatPayload;
 import org.axonframework.deadline.DeadlineMessage;
 import org.axonframework.deadline.GenericDeadlineMessage;
 import org.axonframework.deadline.StoredDeadlineConverter;
-import org.axonframework.deadline.UnknownDeadlinePayload;
 import org.axonframework.messaging.ScopeDescriptor;
 import org.axonframework.messaging.core.GenericMessage;
 import org.axonframework.messaging.core.MessageType;
@@ -122,29 +122,30 @@ class QuartzDeadlineAf4CompatibilityTest {
     }
 
     /**
-     * Axon Framework 4 stores an aliased payload class under its alias, which Axon Framework 5 does not resolve.
+     * Axon Framework 4 stores an aliased payload class under its alias, which Axon Framework 5 resolves through
+     * the same alias on the {@link XStream} instance of its {@link XStreamConverter}.
      */
     @Test
-    void aJobOfAxonFramework4WithAnAliasedPayloadIsReadWithAnUnknownPayload() {
+    @SuppressWarnings("removal")
+    void aJobOfAxonFramework4WithAnAliasedPayloadIsReadThroughTheSameAlias() {
         // given
-        XStream xStream = new XStream();
-        xStream.alias("compatPayload", CompatPayload.class);
+        XStream af4XStream = new XStream();
+        af4XStream.alias("compatPayload", CompatPayload.class);
+        XStream af5XStream = new XStream();
+        af5XStream.alias("compatPayload", CompatPayload.class);
         JobDataMap jobData = (JobDataMap) axonFramework4.callStatic(
-                BINDER, "toJobData", axonFramework4.xStreamSerializer(xStream),
+                BINDER, "toJobData", axonFramework4.xStreamSerializer(af4XStream),
                 axonFramework4.deadlineMessage(DEADLINE_NAME, PAYLOAD, Map.of()),
                 CompatScope.SAGA.axonFramework4(axonFramework4)
         );
 
         // when
         DeadlineMessage result = DeadlineJob.DeadlineJobDataBinder.deadlineMessage(
-                new StoredDeadlineConverter(Flavor.XSTREAM.axonFramework5Converter()), jobData
+                new StoredDeadlineConverter(new XStreamConverter(af5XStream)), jobData
         );
 
         // then
-        assertThat(result.payload()).isInstanceOfSatisfying(
-                UnknownDeadlinePayload.class,
-                unknown -> assertThat(unknown.typeName()).isEqualTo("compatPayload")
-        );
+        assertThat(result.payload()).isEqualTo(PAYLOAD);
     }
 
     @ParameterizedTest

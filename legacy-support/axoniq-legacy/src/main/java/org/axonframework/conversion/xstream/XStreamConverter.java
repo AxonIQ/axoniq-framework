@@ -26,7 +26,9 @@ import com.thoughtworks.xstream.converters.UnmarshallingContext;
 import com.thoughtworks.xstream.converters.collections.MapConverter;
 import com.thoughtworks.xstream.io.HierarchicalStreamReader;
 import com.thoughtworks.xstream.io.HierarchicalStreamWriter;
+import com.thoughtworks.xstream.mapper.CannotResolveClassException;
 import com.thoughtworks.xstream.mapper.Mapper;
+import org.axonframework.common.ReflectionUtils;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.conversion.ChainingContentTypeConverter;
@@ -41,6 +43,7 @@ import java.lang.reflect.Type;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -195,6 +198,35 @@ public class XStreamConverter implements Converter {
                     "Exception while trying to convert object of type [" + sourceType.getName() + "] to ["
                             + targetClass.getName() + "] through XStream.", e
             );
+        }
+    }
+
+    /**
+     * Resolves a type name that Axon Framework 4's {@code XStreamSerializer} stored next to a serialized object, to the
+     * class it names, through the mapper of this converter's {@link XStream} instance, as that serializer did.
+     * <p>
+     * Axon Framework 4 stored the name XStream's mapper gives a class: its alias if it has one, such as XStream's
+     * built-in {@code uuid}, {@code int} or {@code long}, or one the application registered, and its class name
+     * otherwise. Resolving through the same mapper turns either back into the class. A primitive type resolves to its
+     * wrapper class, as a stored value is always an object.
+     * <p>
+     * This method is internal, as it only serves the legacy components that store a type name next to the data they
+     * convert with this converter, such as the deadline managers.
+     *
+     * @param typeName the stored type name, an alias or a class name
+     * @return the class the given {@code typeName} names, or an empty {@code Optional} if it names none
+     */
+    @Internal
+    public Optional<Class<?>> resolveStoredType(String typeName) {
+        Objects.requireNonNull(typeName, "The type name may not be null.");
+        try {
+            Class<?> type = xStream.getMapper().realClass(typeName);
+            return Optional.ofNullable(type)
+                           .map(resolved -> resolved.isPrimitive()
+                                   ? ReflectionUtils.resolvePrimitiveWrapperType(resolved)
+                                   : resolved);
+        } catch (CannotResolveClassException e) {
+            return Optional.empty();
         }
     }
 
