@@ -78,6 +78,7 @@
         <module>build/parent</module>
         <module>axoniq-framework-bom</module>
 
+        <module>connector/axoniq-kafka</module>
         <module>connector/axoniq-postgresql</module>
         <module>connector/axon-server-connector</module>
         <module>connector/axoniq-springcloud</module>

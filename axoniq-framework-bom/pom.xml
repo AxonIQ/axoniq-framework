@@ -63,6 +63,11 @@
             <!-- Axoniq Framework: Connectors -->
             <dependency>
                 <groupId>io.axoniq.framework</groupId>
+                <artifactId>axoniq-kafka</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.axoniq.framework</groupId>
                 <artifactId>axoniq-postgresql</artifactId>
                 <version>${project.version}</version>
             </dependency>
