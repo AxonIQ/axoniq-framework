@@ -19,9 +19,9 @@ updates:
           - "major"
 
   - package-ecosystem: maven
-    directories:
-      - "/"
-      - "!/legacy-support/axoniq-legacy"
+    directory: "/"
+    exclude-paths:
+      - "legacy-support/axoniq-legacy/**"
     schedule:
       interval: weekly
       day: "sunday"
