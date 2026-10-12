@@ -57,9 +57,9 @@ import java.util.function.Supplier;
  * throughout the system.
  * <p>
  * Axon Framework 4 found that moment through the ambient unit of work. Axon Framework 5 has none, so a call is deferred
- * when it is made while a {@link ContextAwareScope} is current, which is the case while a Saga handler method runs, or when it is made through a {@code DeadlineManager} handler parameter, which is bound to the
- * {@link ProcessingContext} of the handler. A
- * call made anywhere else runs immediately.
+ * when it is made while a {@link ContextAwareScope} is current, which is the case while a Saga handler method runs, or
+ * when it is made through a {@code DeadlineManager} handler parameter, which is bound to the {@link ProcessingContext}
+ * of the handler. A call made anywhere else runs immediately.
  *
  * @author Steven van Beelen
  * @since 3.3
@@ -104,27 +104,26 @@ public abstract class AbstractDeadlineManager implements DeadlineManager {
      * through a {@link #forContext(ProcessingContext) context-bound view} of this manager is deferred to the context
      * the view was made for. Any other call is deferred to the context carried by the current
      * {@link ContextAwareScope}, if one is active. That phase runs after the Saga write and before the context commits.
-     * This is required as the DeadlineManager schedules messages which we want to happen in order with
-     * other messages
+     * This is required as the DeadlineManager schedules messages which we want to happen in order with other messages
      * being handled.
      * <p>
      * The view's context wins over the scope's, as it is the innermost one: a command a Saga handler sends can run on
      * the Saga's thread, in a context of its own, while the Saga's scope is still current. Axon Framework 4 deferred
-     * such a call to the command's unit of work, so a failing command scheduled nothing even when the Saga survived
-     * its failure. Within the Saga handler itself, the view and the scope carry the same context.
+     * such a call to the command's unit of work, so a failing command scheduled nothing even when the Saga survived its
+     * failure. Within the Saga handler itself, the view and the scope carry the same context.
      * <p>
      * Deferred calls run in the order they were made, also across Sagas sharing the same {@link ProcessingContext}, as
      * they did in the prepare-commit phase of an Axon Framework 4 unit of work. They never run when the context rolls
      * back before reaching that phase.
      * <p>
      * The call is handed the {@link ProcessingContext} it was deferred to, or {@code null} when it runs immediately.
-     * Concrete deadline managers pass it on to {@link #processDispatchInterceptors(DeadlineMessage,
-     * ProcessingContext)}, so that the dispatch interceptors of a deferred deadline see the context it was deferred
-     * to. The call cannot look that context up itself: by the time a deferred call runs, the scope or the view that
-     * provided it is no longer current.
+     * Concrete deadline managers pass it on to
+     * {@link #processDispatchInterceptors(DeadlineMessage, ProcessingContext)}, so that the dispatch interceptors of a
+     * deferred deadline see the context it was deferred to. The call cannot look that context up itself: by the time a
+     * deferred call runs, the scope or the view that provided it is no longer current.
      *
-     * @param deadlineCall the call to be executed now, or when the {@link ProcessingContext} it is deferred to
-     *                     prepares its commit, receiving that context or {@code null}
+     * @param deadlineCall the call to be executed now, or when the {@link ProcessingContext} it is deferred to prepares
+     *                     its commit, receiving that context or {@code null}
      * @throws IllegalStateException if the calls deferred to that {@link ProcessingContext} already ran, as nothing
      *                               would run the given {@code deadlineCall} anymore
      */
@@ -144,8 +143,8 @@ public abstract class AbstractDeadlineManager implements DeadlineManager {
 
     /**
      * Returns a view of this deadline manager bound to the given {@code context}. A call made through the view is
-     * deferred to that context by {@link #runOnPrepareCommitOrNow(Consumer)}, also when a {@link ContextAwareScope}
-     * is current, and otherwise behaves as the same call made on this manager.
+     * deferred to that context by {@link #runOnPrepareCommitOrNow(Consumer)}, also when a {@link ContextAwareScope} is
+     * current, and otherwise behaves as the same call made on this manager.
      * <p>
      * The {@link DeadlineManagerParameterResolverFactory} hands this view to a handler that declares a
      * {@link DeadlineManager} parameter. That is how a handler that runs in a {@link ProcessingContext} but in no
@@ -330,8 +329,8 @@ public abstract class AbstractDeadlineManager implements DeadlineManager {
      * delegates, as returned by {@link #forContext(ProcessingContext)}.
      * <p>
      * Every method is delegated to the same method of the manager, including the default ones, so a backend that
-     * overrides a default method keeps its own behaviour. The overloads without a {@link ScopeDescriptor} still ask
-     * for the current {@link org.axonframework.messaging.Scope}, as binding a context does not describe a scope.
+     * overrides a default method keeps its own behaviour. The overloads without a {@link ScopeDescriptor} still ask for
+     * the current {@link org.axonframework.messaging.Scope}, as binding a context does not describe a scope.
      */
     private static final class ContextBoundDeadlineManager implements DeadlineManager {
 
