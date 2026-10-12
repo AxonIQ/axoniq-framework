@@ -42,6 +42,11 @@ class SimpleDeadlineManagerIT extends AbstractDeadlineManagerTestSuite {
                                     .build();
     }
 
+    @Override
+    protected boolean keepsTheTimestampOfTheScheduledMessage() {
+        return false;
+    }
+
     @Test
     void aFailingDeliveryIsNotRetried() {
         // given
