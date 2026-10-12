@@ -178,7 +178,7 @@ public class DeadlineJob implements Job {
          *                        to
          * @return a {@link JobDataMap} containing the {@code deadlineMessage} and {@code deadlineScope}
          */
-        public static JobDataMap toJobData(StoredDeadlineConverter converter,
+        static JobDataMap toJobData(StoredDeadlineConverter converter,
                                            DeadlineMessage deadlineMessage,
                                            ScopeDescriptor deadlineScope) {
             JobDataMap jobData = new JobDataMap();
@@ -218,7 +218,7 @@ public class DeadlineJob implements Job {
          * @return the {@link DeadlineMessage} pulled from the {@code jobDataMap}
          * @throws DeadlineException if the job was stored in the format of Axon Framework 3.3, which is not read
          */
-        public static DeadlineMessage deadlineMessage(StoredDeadlineConverter converter, JobDataMap jobDataMap) {
+        static DeadlineMessage deadlineMessage(StoredDeadlineConverter converter, JobDataMap jobDataMap) {
             if (jobDataMap.containsKey(AXON_3_3_SERIALIZED_DEADLINE_MESSAGE)) {
                 throw new DeadlineException(
                         "The deadline job was stored in the format of Axon Framework 3.3, which is not supported. "
@@ -254,7 +254,7 @@ public class DeadlineJob implements Job {
          * @return the {@link ScopeDescriptor} describing the deadline {@link Scope}, pulled from provided
          * {@code jobDataMap}
          */
-        public static ScopeDescriptor deadlineScope(StoredDeadlineConverter converter, JobDataMap jobDataMap) {
+        static ScopeDescriptor deadlineScope(StoredDeadlineConverter converter, JobDataMap jobDataMap) {
             return converter.scope((String) jobDataMap.get(SERIALIZED_DEADLINE_SCOPE_CLASS_NAME),
                                    jobDataMap.get(SERIALIZED_DEADLINE_SCOPE));
         }

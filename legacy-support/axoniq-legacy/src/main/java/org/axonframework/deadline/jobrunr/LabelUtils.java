@@ -67,7 +67,7 @@ public abstract class LabelUtils {
      * @param scope        the {@link ScopeDescriptor} of the deadline
      * @return the label combining the deadline name and the scope
      */
-    public static String getCombinedLabel(StoredDeadlineConverter converter, String deadlineName,
+    static String getCombinedLabel(StoredDeadlineConverter converter, String deadlineName,
                                           ScopeDescriptor scope) {
         String scopeLabel = getScopeLabel(converter, scope);
         return getLabel(deadlineName + scopeLabel);
