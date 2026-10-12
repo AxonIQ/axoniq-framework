@@ -1,6 +1,8 @@
 name: axon-workflow-getting-started
 title: Getting Started with Axoniq's Workflow Engine
-version: ~
+version:
+  axoniq-(?<version>+({0..9}).+({0..9})).*: $<version>
+  '*': development
 
 asciidoc:
   attributes:
