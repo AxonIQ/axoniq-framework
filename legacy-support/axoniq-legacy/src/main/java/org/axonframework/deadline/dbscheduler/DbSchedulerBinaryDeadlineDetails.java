@@ -188,7 +188,7 @@ public class DbSchedulerBinaryDeadlineDetails implements Serializable {
      * @param converter the converter used to convert the stored payload and metadata
      * @return the {@link GenericDeadlineMessage} described by these details
      */
-    public GenericDeadlineMessage asDeadLineMessage(StoredDeadlineConverter converter) {
+    GenericDeadlineMessage asDeadLineMessage(StoredDeadlineConverter converter) {
         Object payload = converter.payload(pc == null ? StoredDeadlineConverter.EMPTY_TYPE : pc, r, p);
         return new GenericDeadlineMessage(d,
                                           StoredDeadlineConverter.messageTypeOf(payload),
@@ -202,7 +202,7 @@ public class DbSchedulerBinaryDeadlineDetails implements Serializable {
      * @param converter the converter used to convert the stored {@link ScopeDescriptor}
      * @return the {@link ScopeDescriptor} described by these details
      */
-    public ScopeDescriptor getDeserializedScopeDescriptor(StoredDeadlineConverter converter) {
+    ScopeDescriptor getDeserializedScopeDescriptor(StoredDeadlineConverter converter) {
         return converter.scope(sc, s);
     }
 

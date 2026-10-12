@@ -155,6 +155,14 @@
             <artifactId>spring-boot-autoconfigure</artifactId>
             <optional>true</optional>
         </dependency>
+        <!-- For ConditionalOnMissingQualifiedBean, so the db-scheduler task backs off on a qualified bean as in Axon
+             Framework 4. Optional: every Spring Boot application has it through axoniq-spring-boot-autoconfigure. -->
+        <dependency>
+            <groupId>org.axonframework.extensions.spring</groupId>
+            <artifactId>axon-spring-boot-autoconfigure</artifactId>
+            <version>${axon-framework.version}</version>
+            <optional>true</optional>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-autoconfigure-processor</artifactId>

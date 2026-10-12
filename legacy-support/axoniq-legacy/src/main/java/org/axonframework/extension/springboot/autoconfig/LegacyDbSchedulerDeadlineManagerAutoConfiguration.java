@@ -25,6 +25,7 @@ import org.axonframework.common.configuration.Configuration;
 import org.axonframework.deadline.DeadlineManager;
 import org.axonframework.deadline.dbscheduler.DbSchedulerBinaryDeadlineDetails;
 import org.axonframework.deadline.dbscheduler.DbSchedulerDeadlineManager;
+import org.axonframework.extension.springboot.util.ConditionalOnMissingQualifiedBean;
 import org.axonframework.messaging.ScopeAwareProvider;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.conversion.EventConverter;
@@ -66,13 +67,14 @@ public class LegacyDbSchedulerDeadlineManagerAutoConfiguration {
 
     /**
      * Creates the task executing the deadlines the {@link DbSchedulerDeadlineManager} stores, unless the application
-     * defines a bean named {@code deadlineDetailsTask}. The task resolves the manager when a deadline fires.
+     * defines a {@link Task} bean named or qualified {@code deadlineDetailsTask}, as Axon Framework 4 applications
+     * overriding this task did. The task resolves the manager when a deadline fires.
      *
      * @param context the application context to resolve the {@link DbSchedulerDeadlineManager} from
      * @return the task executing deadlines
      */
     @Bean(name = "deadlineDetailsTask")
-    @ConditionalOnMissingBean(name = "deadlineDetailsTask")
+    @ConditionalOnMissingQualifiedBean(beanClass = Task.class, qualifier = "deadlineDetailsTask")
     public Task<DbSchedulerBinaryDeadlineDetails> dbSchedulerDeadlineDetailsTask(ApplicationContext context) {
         return DbSchedulerDeadlineManager.binaryTask(() -> context.getBean(DbSchedulerDeadlineManager.class));
     }
