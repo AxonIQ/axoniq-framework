@@ -3,6 +3,153 @@
 
 All the enhancements and features which have been introduced to our major releases of the Axoniq Framework are noted here.
 
+[#release_5_4]
+== Release 5.4
+
+=== Features
+
+- Multitenancy Data Protection support (link:https://github.com/AxonIQ/extension-data-protection/issues/8[#8], link:https://github.com/AxonIQ/axoniq-framework/pull/346[PR #346], by link:https://github.com/jangalinski[@jangalinski])
+- Aggregate-based event storage engine: per-tenant support (link:https://github.com/AxonIQ/axoniq-framework/pull/352[PR #352], by link:https://github.com/jangalinski[@jangalinski])
+- Dead Letter Queue: tenant-aware DLQ support (link:https://github.com/AxonIQ/axoniq-framework/pull/353[PR #353], by link:https://github.com/jangalinski[@jangalinski])
+- Make `AxonServerEventStorageEngine` a `SnapshotStore` (link:https://github.com/AxonIQ/axoniq-framework/pull/397[PR #397], by link:https://github.com/smcvb[@smcvb])
+- Spring Cloud connector: distribute commands without Axon Server (link:https://github.com/AxonIQ/axoniq-framework/pull/399[PR #399], by link:https://github.com/abuijze[@abuijze])
+- Spring Cloud connector: distribute queries (link:https://github.com/AxonIQ/axoniq-framework/pull/400[PR #400], by link:https://github.com/abuijze[@abuijze])
+- Spring Cloud connector: distribute subscription queries (link:https://github.com/AxonIQ/axoniq-framework/pull/401[PR #401], by link:https://github.com/abuijze[@abuijze])
+- Move extension-workflow to axoniq-framework/workflow (link:https://github.com/AxonIQ/axoniq-framework/pull/449[PR #449], by link:https://github.com/jangalinski[@jangalinski])
+- Implement Workflow Manager (ADR-018)- #303 (link:https://github.com/AxonIQ/axoniq-framework/issues/443[#443], link:https://github.com/AxonIQ/axoniq-framework/issues/492[#492], link:https://github.com/AxonIQ/axoniq-framework/pull/452[PR #452], by link:https://github.com/zambrovski[@zambrovski])
+- Per-tenant sequencing policy (link:https://github.com/AxonIQ/axoniq-framework/pull/458[PR #458], by link:https://github.com/jangalinski[@jangalinski])
+- Introduce WorkflowContext#publish primitive (link:https://github.com/AxonIQ/axoniq-framework/issues/415[#415], link:https://github.com/AxonIQ/axoniq-framework/pull/488[PR #488], by link:https://github.com/schananas[@schananas])
+- Allow to statically specify intended tenants via framework configuration (link:https://github.com/AxonIQ/axoniq-framework/pull/526[PR #526], by link:https://github.com/jangalinski[@jangalinski])
+- Port scope-routing and DeadlineManager core into axoniq-legacy (link:https://github.com/AxonIQ/axoniq-framework/pull/563[PR #563], by link:https://github.com/hatzlj[@hatzlj])
+- Reuse the ambient connection for reads when already active (link:https://github.com/AxonIQ/axoniq-framework/pull/576[PR #576], by link:https://github.com/hjohn[@hjohn])
+- Introduce Legacy `XStreamConverter` (link:https://github.com/AxonIQ/axoniq-framework/issues/592[#592], link:https://github.com/AxonIQ/axoniq-framework/pull/594[PR #594], by link:https://github.com/smcvb[@smcvb])
+- Port `DeadlineManager` Backends to `axoniq-legacy` (link:https://github.com/AxonIQ/AxonFramework/issues/5005[#5005], link:https://github.com/AxonIQ/axoniq-framework/issues/595[#595], link:https://github.com/AxonIQ/axoniq-framework/pull/598[PR #598], by link:https://github.com/hatzlj[@hatzlj])
+- Document / Test Saga state with XStream (link:https://github.com/AxonIQ/axoniq-framework/pull/610[PR #610], by link:https://github.com/hatzlj[@hatzlj])
+- Aggregate-based `ScopeAware` implementation rewriting deadlines to commands (link:https://github.com/AxonIQ/AxonFramework/issues/5004[#5004], link:https://github.com/AxonIQ/axoniq-framework/pull/614[PR #614], by link:https://github.com/smcvb[@smcvb])
+- Deliver Saga deadlines without wiring (link:https://github.com/AxonIQ/axoniq-framework/issues/564[#564], link:https://github.com/AxonIQ/axoniq-framework/issues/565[#565], link:https://github.com/AxonIQ/axoniq-framework/pull/615[PR #615], by link:https://github.com/hatzlj[@hatzlj])
+- Port deadline test-fixture support into axoniq-legacy-test (link:https://github.com/AxonIQ/AxonFramework/issues/5006[#5006], link:https://github.com/AxonIQ/axoniq-framework/pull/619[PR #619], by link:https://github.com/MateuszNaKodach[@MateuszNaKodach])
+- Defer deadlines an entity command handler schedules to its commit (link:https://github.com/AxonIQ/axoniq-framework/pull/620[PR #620], by link:https://github.com/MateuszNaKodach[@MateuszNaKodach])
+- Carry the correlation data of the handled message on a deadline (link:https://github.com/AxonIQ/axoniq-framework/pull/621[PR #621], by link:https://github.com/MateuszNaKodach[@MateuszNaKodach])
+
+=== Enhancements
+
+- Local dispatch shortcut for command and query buses (link:https://github.com/AxonIQ/axoniq-framework/pull/270[PR #270], by link:https://github.com/abuijze[@abuijze])
+- chore: move to io.axoniq.framework.integrationtests.tracing package (link:https://github.com/AxonIQ/axoniq-framework/pull/340[PR #340], by link:https://github.com/jangalinski[@jangalinski])
+- Include `TrackingToken` on `Checkpointing.onSegmentClaimed` | Warn on a checkpoint past the consumed position (link:https://github.com/AxonIQ/axoniq-framework/issues/350[#350], link:https://github.com/AxonIQ/axoniq-framework/pull/351[PR #351], by link:https://github.com/schananas[@schananas])
+- Ensure the GHA build actually finishes (link:https://github.com/AxonIQ/axoniq-framework/pull/355[PR #355], by link:https://github.com/jangalinski[@jangalinski])
+- avoid real Axon Server client connections in tests (link:https://github.com/AxonIQ/axoniq-framework/pull/378[PR #378], by link:https://github.com/jangalinski[@jangalinski])
+- Add tags to AppendEventsTransactionRejectedException (link:https://github.com/AxonIQ/axoniq-framework/pull/383[PR #383], by link:https://github.com/hjohn[@hjohn])
+- chore(305): clean up multi-tenant PoC leftovers (link:https://github.com/AxonIQ/axoniq-framework/issues/305[#305], link:https://github.com/AxonIQ/axoniq-framework/pull/395[PR #395], by link:https://github.com/jangalinski[@jangalinski])
+- Add Maven build cache extension to skip unchanged reactor modules (link:https://github.com/AxonIQ/axoniq-framework/pull/396[PR #396], by link:https://github.com/hjohn[@hjohn])
+- Provide solution for tenant based SequenceDeadLetterProcessor (link:https://github.com/AxonIQ/axoniq-framework/pull/446[PR #446], by link:https://github.com/jangalinski[@jangalinski])
+- Make SNAPSHOT fingerprinting tolerant of newly added, unpublished modules (link:https://github.com/AxonIQ/axoniq-framework/pull/451[PR #451], by link:https://github.com/hjohn[@hjohn])
+- Make the build cache opt-in locally, enabled only in CI (link:https://github.com/AxonIQ/axoniq-framework/pull/453[PR #453], by link:https://github.com/hjohn[@hjohn])
+- Post a per-module build status comment on pull requests (link:https://github.com/AxonIQ/axoniq-framework/pull/462[PR #462], by link:https://github.com/hjohn[@hjohn])
+- Split/integrationtests modules (link:https://github.com/AxonIQ/axoniq-framework/pull/464[PR #464], by link:https://github.com/hjohn[@hjohn])
+- Add Automatic-Module-Name manifest entries to all published Axoniq JAR modules (link:https://github.com/AxonIQ/axoniq-framework/pull/469[PR #469], by link:https://github.com/jangalinski[@jangalinski])
+- Provide connector test for cancelling registration (link:https://github.com/AxonIQ/axoniq-framework/pull/471[PR #471], by link:https://github.com/jangalinski[@jangalinski])
+- Remove the #<version> suffix from workflow ids (link:https://github.com/AxonIQ/axoniq-framework/issues/411[#411], link:https://github.com/AxonIQ/axoniq-framework/pull/475[PR #475], by link:https://github.com/schananas[@schananas])
+- chore(464): integration test pom hierarchy (link:https://github.com/AxonIQ/axoniq-framework/issues/480[#480], link:https://github.com/AxonIQ/axoniq-framework/pull/485[PR #485], by link:https://github.com/jangalinski[@jangalinski])
+- Put failure detail in a full-width row, not a wide column (link:https://github.com/AxonIQ/axoniq-framework/pull/486[PR #486], by link:https://github.com/hjohn[@hjohn])
+- Set `AXONIQ_LICENSE` variable in GHA (link:https://github.com/AxonIQ/axoniq-framework/pull/487[PR #487], by link:https://github.com/smcvb[@smcvb])
+- chore(464): remove multi-tenancy from integration tests support (link:https://github.com/AxonIQ/axoniq-framework/pull/491[PR #491], by link:https://github.com/jangalinski[@jangalinski])
+- `@Workflow` and `@WorkflowStatusChangeListener` `HandlerDefintions` and Parameter Resolver support (link:https://github.com/AxonIQ/axoniq-framework/issues/412[#412], link:https://github.com/AxonIQ/axoniq-framework/issues/413[#413], link:https://github.com/AxonIQ/axoniq-framework/pull/496[PR #496], by link:https://github.com/smcvb[@smcvb])
+- Fine-tune `WorkflowModule` configuration (link:https://github.com/AxonIQ/axoniq-framework/issues/410[#410], link:https://github.com/AxonIQ/axoniq-framework/issues/557[#557], link:https://github.com/AxonIQ/axoniq-framework/pull/498[PR #498], by link:https://github.com/smcvb[@smcvb])
+- Always run flatten-maven-plugin, even on a build cache hit (link:https://github.com/AxonIQ/axoniq-framework/pull/502[PR #502], by link:https://github.com/CodeDrivenMitch[@CodeDrivenMitch])
+- Consolidate Axon Server test containers to cut CI build time (link:https://github.com/AxonIQ/axoniq-framework/pull/503[PR #503], by link:https://github.com/hjohn[@hjohn])
+- Stop wastefully purging contexts multi-tenancy tests never use (link:https://github.com/AxonIQ/axoniq-framework/pull/510[PR #510], by link:https://github.com/hjohn[@hjohn])
+- Add SchemaInitialization option to PostgresqlEventStorageEngine (link:https://github.com/AxonIQ/axoniq-framework/pull/511[PR #511], by link:https://github.com/hjohn[@hjohn])
+- Workflow api segregation (link:https://github.com/AxonIQ/axoniq-framework/issues/421[#421], link:https://github.com/AxonIQ/axoniq-framework/pull/516[PR #516], by link:https://github.com/zambrovski[@zambrovski])
+- Tune Axon Server container timeouts and cap CI JVM memory (link:https://github.com/AxonIQ/axoniq-framework/pull/518[PR #518], by link:https://github.com/hjohn[@hjohn])
+- Cut multitenancy IT time by building the app once per class, not per test (link:https://github.com/AxonIQ/axoniq-framework/pull/519[PR #519], by link:https://github.com/hjohn[@hjohn])
+- Fix Postgres finalizer advisory lock and executor sharing (link:https://github.com/AxonIQ/axoniq-framework/pull/538[PR #538], by link:https://github.com/hjohn[@hjohn])
+- Remove SonarQube/SonarCloud from the build (link:https://github.com/AxonIQ/axoniq-framework/pull/548[PR #548], by link:https://github.com/hjohn[@hjohn])
+- Improve Workflow Context / DSL configuration (link:https://github.com/AxonIQ/axoniq-framework/issues/549[#549], link:https://github.com/AxonIQ/axoniq-framework/pull/552[PR #552], by link:https://github.com/zambrovski[@zambrovski])
+- Move the legacy module to Axoniq Framework (link:https://github.com/AxonIQ/AxonFramework/issues/5074[#5074], link:https://github.com/AxonIQ/axoniq-framework/pull/554[PR #554], by link:https://github.com/hatzlj[@hatzlj])
+- Resolve the TODO and FIXME markers in the workflow modules (link:https://github.com/AxonIQ/axoniq-framework/issues/425[#425], link:https://github.com/AxonIQ/axoniq-framework/pull/558[PR #558], by link:https://github.com/schananas[@schananas])
+- Integrate workflow into spring boot autoconfig (link:https://github.com/AxonIQ/axoniq-framework/issues/463[#463], link:https://github.com/AxonIQ/axoniq-framework/pull/559[PR #559], by link:https://github.com/zambrovski[@zambrovski])
+- Manage the protobuf-java version explicitly in the axoniq-framework-bom (link:https://github.com/AxonIQ/axoniq-framework/issues/524[#524], link:https://github.com/AxonIQ/axoniq-framework/pull/560[PR #560], by link:https://github.com/hatzlj[@hatzlj])
+- Fix main CI: slim Oracle/PostgreSQL test images and stop Spring Boot ITs sharing a container (link:https://github.com/AxonIQ/axoniq-framework/pull/562[PR #562], by link:https://github.com/MateuszNaKodach[@MateuszNaKodach])
+- Pin testcontainers version everywhere, enforce it, raise container logging to INFO (link:https://github.com/AxonIQ/axoniq-framework/pull/566[PR #566], by link:https://github.com/hjohn[@hjohn])
+- Spring Cloud connector: split command and query sides into dedicated packages (link:https://github.com/AxonIQ/axoniq-framework/pull/568[PR #568], by link:https://github.com/MateuszNaKodach[@MateuszNaKodach])
+- Fix SharedAxonServerContainer creating duplicate containers under concurrent forks (link:https://github.com/AxonIQ/axoniq-framework/pull/573[PR #573], by link:https://github.com/hjohn[@hjohn])
+- Fix Axon Server test-container races and connection exhaustion (link:https://github.com/AxonIQ/axoniq-framework/pull/574[PR #574], by link:https://github.com/hjohn[@hjohn])
+- Add automatic module-name manifest entry for the springcloud module (link:https://github.com/AxonIQ/axoniq-framework/pull/579[PR #579], by link:https://github.com/hatzlj[@hatzlj])
+- Legacy Saga Spring Boot tests (link:https://github.com/AxonIQ/axoniq-framework/pull/585[PR #585], by link:https://github.com/smcvb[@smcvb])
+- Register the Legacy Support addon with the entitlement system (link:https://github.com/AxonIQ/axoniq-framework/pull/608[PR #608], by link:https://github.com/MateuszNaKodach[@MateuszNaKodach])
+- Split SpringCloudMemberRegistry into discovery and registry (link:https://github.com/AxonIQ/axoniq-framework/pull/612[PR #612], by link:https://github.com/abuijze[@abuijze])
+- Split event handling components (link:https://github.com/AxonIQ/axoniq-framework/issues/609[#609], link:https://github.com/AxonIQ/axoniq-framework/pull/613[PR #613], by link:https://github.com/zambrovski[@zambrovski])
+- Deliver aggregate deadlines to entities with non-String identifiers (link:https://github.com/AxonIQ/axoniq-framework/pull/617[PR #617], by link:https://github.com/MateuszNaKodach[@MateuszNaKodach])
+- Deadline review follow-ups: internal converter signatures and the qualified db-scheduler task (link:https://github.com/AxonIQ/axoniq-framework/pull/626[PR #626], by link:https://github.com/hatzlj[@hatzlj])
+- Resolve XStream-aliased deadline type names through the XStreamConverter (link:https://github.com/AxonIQ/axoniq-framework/pull/627[PR #627], by link:https://github.com/hatzlj[@hatzlj])
+
+=== Bug fixes
+
+- Distinguish a rejected append from an undetermined one (link:https://github.com/AxonIQ/axoniq-framework/issues/299[#299], link:https://github.com/AxonIQ/axoniq-framework/pull/300[PR #300], by link:https://github.com/schananas[@schananas])
+- Collect `QueryResponseMessages` when `clientSupportsStreaming` is false to support list-queries from AF4 into AF5 (link:https://github.com/AxonIQ/axoniq-framework/pull/358[PR #358], by link:https://github.com/smcvb[@smcvb])
+- Use repeatable read isolation for query with 2 statements (link:https://github.com/AxonIQ/axoniq-framework/pull/369[PR #369], by link:https://github.com/hjohn[@hjohn])
+- Ensure `DistributedQueryBus` adheres to `ProcessingContext` lifecycle for subscription query operations (link:https://github.com/AxonIQ/axoniq-framework/issues/317[#317], link:https://github.com/AxonIQ/axoniq-framework/pull/375[PR #375], by link:https://github.com/smcvb[@smcvb])
+- Don't assume autocommit is `false` (link:https://github.com/AxonIQ/axoniq-framework/pull/382[PR #382], by link:https://github.com/hjohn[@hjohn])
+- Multi-tenant `QueryBus` closes subscription query streams upon tenant removal (link:https://github.com/AxonIQ/axoniq-framework/pull/385[PR #385], by link:https://github.com/smcvb[@smcvb])
+- fix(connector): subscribe a command or query name exactly once (link:https://github.com/AxonIQ/axoniq-framework/pull/389[PR #389], by link:https://github.com/abuijze[@abuijze])
+- Process entire batch in `PersistentStreamConnection` regardless of closed `PersistentStreamSegment` (link:https://github.com/AxonIQ/axoniq-framework/pull/392[PR #392], by link:https://github.com/smcvb[@smcvb])
+- Fix silently-skipped *IntegrationTest.java tests; rely on Surefire/Failsafe defaults (link:https://github.com/AxonIQ/axoniq-framework/pull/459[PR #459], by link:https://github.com/hjohn[@hjohn])
+- Fix time parsing and false SUCCESS on timeout (link:https://github.com/AxonIQ/axoniq-framework/pull/465[PR #465], by link:https://github.com/hjohn[@hjohn])
+- Fix Axon Server test license CI path after integrationtests split (link:https://github.com/AxonIQ/axoniq-framework/pull/470[PR #470], by link:https://github.com/hjohn[@hjohn])
+- Gate retry attempts behind an accepted RETRY_STARTED append (link:https://github.com/AxonIQ/axoniq-framework/issues/408[#408], link:https://github.com/AxonIQ/axoniq-framework/pull/472[PR #472], by link:https://github.com/schananas[@schananas])
+- fix(407): StepIndeterminateException keeps its type across the durable round-trip (link:https://github.com/AxonIQ/axoniq-framework/issues/407[#407], link:https://github.com/AxonIQ/axoniq-framework/pull/474[PR #474], by link:https://github.com/schananas[@schananas])
+- Fix memory leak in AxonServerCommandBusConnector (link:https://github.com/AxonIQ/axoniq-framework/issues/476[#476], link:https://github.com/AxonIQ/axoniq-framework/pull/477[PR #477], by link:https://github.com/hatzlj[@hatzlj])
+- ServiceLoader for DeadLetterMultiTenancyConfigurationEnhancer fails when multi-tenancy is used without the DLQ module (link:https://github.com/AxonIQ/axoniq-framework/issues/480[#480], link:https://github.com/AxonIQ/axoniq-framework/pull/495[PR #495], by link:https://github.com/jangalinski[@jangalinski])
+- fix persistent streams autoconfig ordering after optional dead... (link:https://github.com/AxonIQ/axoniq-framework/issues/504[#504], link:https://github.com/AxonIQ/axoniq-framework/pull/505[PR #505], by link:https://github.com/hatzlj[@hatzlj])
+- Workflow: start the engine processor at the head of the stream, use the engine Clock for step events (link:https://github.com/AxonIQ/axoniq-framework/pull/512[PR #512], by link:https://github.com/schananas[@schananas])
+- Don't fail fingerprint script when reactor has zero SNAPSHOT deps (link:https://github.com/AxonIQ/axoniq-framework/pull/514[PR #514], by link:https://github.com/hjohn[@hjohn])
+- Fix decorator spy test double and re-enable snapshotter IT tests (link:https://github.com/AxonIQ/axoniq-framework/pull/525[PR #525], by link:https://github.com/hjohn[@hjohn])
+- Fix dead letter processor resolution for multiply decorated event handling components (link:https://github.com/AxonIQ/axoniq-framework/issues/531[#531], link:https://github.com/AxonIQ/axoniq-framework/pull/533[PR #533], by link:https://github.com/hatzlj[@hatzlj])
+- Keep a workflow instance registered when its body stops without ending (link:https://github.com/AxonIQ/axoniq-framework/issues/479[#479], link:https://github.com/AxonIQ/axoniq-framework/pull/534[PR #534], by link:https://github.com/schananas[@schananas])
+- Harmonized API between WorkflowState and WorkflowContext (link:https://github.com/AxonIQ/axoniq-framework/issues/539[#539], link:https://github.com/AxonIQ/axoniq-framework/pull/540[PR #540], by link:https://github.com/zambrovski[@zambrovski])
+- Re-enable SpringBootJdbcDeadLetteringIT and SpringBootJpaDeadLetteringIT (link:https://github.com/AxonIQ/axoniq-framework/issues/460[#460], link:https://github.com/AxonIQ/axoniq-framework/pull/543[PR #543], by link:https://github.com/hjohn[@hjohn])
+- Hold the workflow checkpoint until a wake's completion is durable (link:https://github.com/AxonIQ/axoniq-framework/issues/551[#551], link:https://github.com/AxonIQ/axoniq-framework/pull/553[PR #553], by link:https://github.com/schananas[@schananas])
+- Allow null values in the workflow payload snapshot (link:https://github.com/AxonIQ/axoniq-framework/issues/536[#536], link:https://github.com/AxonIQ/axoniq-framework/pull/555[PR #555], by link:https://github.com/schananas[@schananas])
+- Spring Cloud connector: fix lost and dropped subscription query updates (link:https://github.com/AxonIQ/axoniq-framework/pull/570[PR #570], by link:https://github.com/MateuszNaKodach[@MateuszNaKodach])
+- Ensure all Persistent Stream events are actually read (link:https://github.com/AxonIQ/axoniq-framework/pull/571[PR #571], by link:https://github.com/smcvb[@smcvb])
+- Enable and finalize `WorkflowConfigurerTest` (link:https://github.com/AxonIQ/axoniq-framework/issues/427[#427], link:https://github.com/AxonIQ/axoniq-framework/pull/580[PR #580], by link:https://github.com/smcvb[@smcvb])
+- Make the Spring Boot starter depend on the Axon Server connector (link:https://github.com/AxonIQ/axoniq-framework/pull/591[PR #591], by link:https://github.com/abuijze[@abuijze])
+- Spring Cloud connector: identify members by node id, support Kubernetes discovery (link:https://github.com/AxonIQ/axoniq-framework/issues/577[#577], link:https://github.com/AxonIQ/axoniq-framework/pull/600[PR #600], by link:https://github.com/abuijze[@abuijze])
+- Spring Cloud connector: announce leaving on subscription queries at a clean shutdown (link:https://github.com/AxonIQ/axoniq-framework/issues/586[#586], link:https://github.com/AxonIQ/axoniq-framework/pull/602[PR #602], by link:https://github.com/abuijze[@abuijze])
+- DLQ `Metadata` conversion - read as `HashMap` i.o. `Map` (link:https://github.com/AxonIQ/axoniq-framework/issues/601[#601], link:https://github.com/AxonIQ/axoniq-framework/pull/605[PR #605], by link:https://github.com/smcvb[@smcvb])
+- Save workflow checkpoints inside the Spring transaction (link:https://github.com/AxonIQ/axoniq-framework/issues/587[#587], link:https://github.com/AxonIQ/axoniq-framework/pull/606[PR #606], by link:https://github.com/schananas[@schananas])
+
+=== Documentation
+
+- Add 5.3.0 release notes (link:https://github.com/AxonIQ/axoniq-framework/pull/344[PR #344], by link:https://github.com/smcvb[@smcvb])
+- Update Framework Comparison table (link:https://github.com/AxonIQ/axoniq-framework/pull/356[PR #356], by link:https://github.com/smcvb[@smcvb])
+- Add 5.3.1 release notes (link:https://github.com/AxonIQ/axoniq-framework/pull/362[PR #362], by link:https://github.com/smcvb[@smcvb])
+- Document dead-letter queue capacity and overflow impact (link:https://github.com/AxonIQ/axoniq-framework/pull/367[PR #367], by link:https://github.com/abuijze[@abuijze])
+- Make the workflow getting started guide a separate antora component (link:https://github.com/AxonIQ/axoniq-framework/pull/468[PR #468], by link:https://github.com/hatzlj[@hatzlj])
+- chore(464): use `docs/_samples` for `tracing/examples` (link:https://github.com/AxonIQ/axoniq-framework/pull/481[PR #481], by link:https://github.com/jangalinski[@jangalinski])
+- Axoniq Framework 5.3.2 release notes (link:https://github.com/AxonIQ/axoniq-framework/pull/489[PR #489], by link:https://github.com/smcvb[@smcvb])
+- Update `README.md`, the License, and include add Code of Conduct (link:https://github.com/AxonIQ/axoniq-framework/pull/493[PR #493], by link:https://github.com/smcvb[@smcvb])
+- Fix documentation for retrieving a DeadLetterProcessor (link:https://github.com/AxonIQ/axoniq-framework/pull/532[PR #532], by link:https://github.com/hatzlj[@hatzlj])
+- Sync workflow docs with the current engine (link:https://github.com/AxonIQ/axoniq-framework/pull/567[PR #567], by link:https://github.com/schananas[@schananas])
+- Fix spring-cloud cross references (link:https://github.com/AxonIQ/axoniq-framework/pull/575[PR #575], by link:https://github.com/hatzlj[@hatzlj])
+- Axoniq Framework 5.3.3 Release notes (link:https://github.com/AxonIQ/axoniq-framework/pull/581[PR #581], by link:https://github.com/smcvb[@smcvb])
+- Drop Workflow preview marker from docs (link:https://github.com/AxonIQ/axoniq-framework/pull/590[PR #590], by link:https://github.com/smcvb[@smcvb])
+- Add Deadline Migration path (link:https://github.com/AxonIQ/axoniq-framework/pull/618[PR #618], by link:https://github.com/smcvb[@smcvb])
+
+=== Contributors
+
+A heartfelt thank you to all contributors who worked on this section:
+
+- link:https://github.com/abuijze[@abuijze]
+- link:https://github.com/CodeDrivenMitch[@CodeDrivenMitch]
+- link:https://github.com/hatzlj[@hatzlj]
+- link:https://github.com/hjohn[@hjohn]
+- link:https://github.com/jangalinski[@jangalinski]
+- link:https://github.com/MateuszNaKodach[@MateuszNaKodach]
+- link:https://github.com/schananas[@schananas]
+- link:https://github.com/smcvb[@smcvb]
+- link:https://github.com/zambrovski[@zambrovski]
+
 [#release_5_3]
 == Release 5.3
 
