@@ -29,7 +29,7 @@ Axon Framework modules are marked with `org.axonframework`, whereas Axoniq Frame
 Axon Framework being Apache 2.0 means you can use it whenever, wherever.
 Axoniq Framework modules, however, validate a license at startup and fall under the link:https://www.axoniq.io/legal/terms-of-service[Axoniq Terms of Service].
 
-For everything on obtaining a license, configuring credentials, evaluating for free, feature entitlement, message throughput limits, and what happens when a subscription changes or lapses, see the xref:axoniq-platform-reference:ROOT:licensing/index.adoc[Axoniq Platform licensing reference].
+For everything on obtaining a license, configuring credentials, evaluating, feature entitlement, message throughput limits, and what happens when a subscription changes or lapses, see the xref:axoniq-platform-reference:ROOT:licensing/index.adoc[Axoniq Platform licensing reference].
 
 [#feature_comparison]
 == Feature comparison
