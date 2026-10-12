@@ -189,9 +189,9 @@ public class DbSchedulerDeadlineManager extends AbstractDeadlineManager {
      * {@link Scheduler}. To be able to execute the task, this should be added to the task list, used to create the
      * scheduler.
      *
-     * @param deadlineManagerSupplier a {@link Supplier} of a {@link DbSchedulerDeadlineManager}. Preferably a method
-     *                                involving dependency injection is used. When those are not available the
-     *                                {@link DbSchedulerDeadlineManagerSupplier} can be used instead.
+     * @param deadlineManagerSupplier a {@link Supplier} of a {@link DbSchedulerDeadlineManager}, preferably one using
+     *                                dependency injection, or a {@link DbSchedulerDeadlineManagerSupplier} where that is
+     *                                not available
      * @return a {@link Task} to execute a deadline
      */
     public static Task<DbSchedulerBinaryDeadlineDetails> binaryTask(
@@ -212,9 +212,9 @@ public class DbSchedulerDeadlineManager extends AbstractDeadlineManager {
      * {@link Scheduler}. To be able to execute the task, this should be added to the task list, used to create the
      * scheduler.
      *
-     * @param deadlineManagerSupplier a {@link Supplier} of a {@link DbSchedulerDeadlineManager}. Preferably a method
-     *                                involving dependency injection is used. When those are not available the
-     *                                {@link DbSchedulerDeadlineManagerSupplier} can be used instead.
+     * @param deadlineManagerSupplier a {@link Supplier} of a {@link DbSchedulerDeadlineManager}, preferably one using
+     *                                dependency injection, or a {@link DbSchedulerDeadlineManagerSupplier} where that is
+     *                                not available
      * @return a {@link Task} to execute a deadline
      */
     public static Task<DbSchedulerHumanReadableDeadlineDetails> humanReadableTask(
@@ -370,7 +370,7 @@ public class DbSchedulerDeadlineManager extends AbstractDeadlineManager {
         }
         SchedulerState state = scheduler.getSchedulerState();
         if (state.isShuttingDown()) {
-            logger.warn("Scheduler is shutting down - will not attempting to start");
+            logger.warn("Scheduler is shutting down - will not attempt to start");
             return;
         }
         if (state.isStarted()) {
