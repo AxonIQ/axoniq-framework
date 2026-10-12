@@ -85,7 +85,7 @@ public class FixtureRegisteringMethodEnhancementsTest {
         );
     }
 
-//    TODO #5006
+//    TODO #3104
 //    @Test
 //    void createHandlerMethodIsCalledForRegisteredCustomHandlerDefinition() {
 //        AtomicBoolean handlerDefinitionReached = new AtomicBoolean(false);
@@ -98,7 +98,7 @@ public class FixtureRegisteringMethodEnhancementsTest {
 //        assertTrue(handlerDefinitionReached.get());
 //    }
 //
-//    TODO #5006
+//    TODO #3104
 //    @Test
 //    void wrapHandlerMethodIsCalledForRegisteredCustomHandlerEnhancerDefinition() {
 //        AtomicBoolean handlerEnhancerReached = new AtomicBoolean(false);

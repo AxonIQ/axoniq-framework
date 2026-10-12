@@ -23,8 +23,9 @@ package org.axonframework.test.saga;
  * The failures reported by the parts of the Axon Framework 4 saga fixture that are declared but not yet backed by
  * anything.
  * <p>
- * The declarations are kept so an Axon Framework 4 test suite still compiles, and so the day deadlines are ported the
- * change is to the bodies rather than to the API. Each of those bodies holds the Axon Framework 4 source as a comment.
+ * The declarations are kept so an Axon Framework 4 test suite still compiles, and so the day the event scheduler is
+ * ported the change is to the bodies rather than to the API. Each of those bodies holds the Axon Framework 4 source as
+ * a comment.
  *
  * @author Mateusz Nowak
  * @since 5.4.0
@@ -36,16 +37,17 @@ final class NotPorted {
     }
 
     /**
-     * Reports that the given {@code method} depends on deadlines or the event scheduler, neither of which
-     * {@code axon-legacy} carries yet.
+     * Reports that the given {@code method} depends on the event scheduler, which {@code axoniq-legacy} does not carry
+     * yet.
      *
      * @param method the name of the method that was called
      * @return the exception to throw
      */
-    static UnsupportedOperationException deadlines(String method) {
+    static UnsupportedOperationException eventScheduler(String method) {
         return new UnsupportedOperationException(
-                "[" + method + "] is not supported: deadlines and the event scheduler have not been ported into "
-                        + "axon-legacy yet, see #5006. Everything else the Axon Framework 4 saga fixture offered works."
+                "[" + method + "] is not supported: the event scheduler has not been ported into axoniq-legacy yet, "
+                        + "see AxonIQ/AxonFramework#3104. Everything else the Axon Framework 4 saga fixture offered, "
+                        + "deadlines included, works."
         );
     }
 }
