@@ -100,7 +100,7 @@ public class DeadlineJob implements Job {
 
         try {
             delivery.deliver(deadlineMessage, deadlineScope);
-        } catch (Exception exceptionResult) {
+        } catch (Exception | Error exceptionResult) {
             @SuppressWarnings("unchecked")
             Predicate<Throwable> refirePolicy = (Predicate<Throwable>) schedulerContext.get(REFIRE_IMMEDIATELY_POLICY);
             if (refirePolicy.test(exceptionResult)) {
