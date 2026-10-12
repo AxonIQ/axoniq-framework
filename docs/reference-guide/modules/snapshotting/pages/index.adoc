@@ -79,6 +79,8 @@ Useful when combining Axon Server for snapshots with a different event storage b
 * *`PostgresqlEventStorageEngine`* - Stores both events and snapshots in PostgreSQL.
 When no other `SnapshotStore` is configured, it registers itself as the `SnapshotStore` as well, enabling the single round-trip optimisation described above.
 
+Note that the Axon Server and PostgreSQL-backed implementations are part of Axoniq Framework and require a xref:axoniq-platform-reference:ROOT:licensing/index.adoc[license] for production use.
+
 Each snapshot contains the entity identifier, payload, position, version, timestamp, and optional metadata. By default, only a single snapshot per entity is retained; new snapshots overwrite the previous one. Future versions of the framework may allow storing multiple snapshots per entity, enabling scenarios such as rollbacks or retaining older snapshot versions.
 
 A suitable `SnapshotStore` is typically registered automatically by Axon Framework, but may be overridden when required. For example, to register a custom Axon Server-based snapshot store:
