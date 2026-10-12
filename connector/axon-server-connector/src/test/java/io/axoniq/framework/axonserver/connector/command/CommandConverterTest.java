@@ -205,6 +205,96 @@ class CommandConverterTest {
         }
 
         @Test
+        void convertsCommandResponseWithoutPayloadToEmptyResultPreservingIdentifierAndMetadata() {
+            // given
+            var response = CommandResponse.newBuilder()
+                                          .setMessageIdentifier(messageIdentifier)
+                                          .putMetaData("m", MetaDataValue.newBuilder().setTextValue("v").build())
+                                          .build();
+
+            // when
+            var resultMessage = CommandConverter.convertCommandResponse(response, converter, fallbackResultType)
+                                                .orTimeout(1, TimeUnit.SECONDS)
+                                                .join();
+
+            // then
+            assertThat(resultMessage.payload()).isNull();
+            assertThat(resultMessage.identifier()).isEqualTo(messageIdentifier);
+            assertThat(resultMessage.metadata()).containsEntry("m", "v");
+        }
+
+        @Test
+        void convertsCommandResponseWithVoidPayloadTypeWithoutDataToEmptyResultKeepingVoidType() {
+            // given a response as sent for an empty result by handlers that describe it through a Void typed payload
+            var response = CommandResponse.newBuilder()
+                                          .setMessageIdentifier(messageIdentifier)
+                                          .setPayload(SerializedObject.newBuilder()
+                                                                      .setType("java.lang.Void")
+                                                                      .setRevision("0.0.1")
+                                                                      .setData(ByteString.EMPTY)
+                                                                      .build())
+                                          .putMetaData("m", MetaDataValue.newBuilder().setTextValue("v").build())
+                                          .build();
+
+            // when
+            var resultMessage = CommandConverter.convertCommandResponse(response, converter, fallbackResultType)
+                                                .orTimeout(1, TimeUnit.SECONDS)
+                                                .join();
+
+            // then the empty data is not handed to the converter as if it were a serialized payload
+            assertThat(resultMessage.payload()).isNull();
+            assertThat(resultMessage.type()).isEqualTo(new MessageType("java.lang.Void", "0.0.1"));
+            assertThat(resultMessage.identifier()).isEqualTo(messageIdentifier);
+            assertThat(resultMessage.metadata()).containsEntry("m", "v");
+            assertThat(resultMessage.<Void>payloadAs(Void.class)).isNull();
+        }
+
+        @Test
+        void convertsCommandResponseWithVoidPayloadTypeAndDataToByteArrayPayload() {
+            // given
+            var response = CommandResponse.newBuilder()
+                                          .setMessageIdentifier(messageIdentifier)
+                                          .setPayload(SerializedObject.newBuilder()
+                                                                      .setType("java.lang.Void")
+                                                                      .setData(ByteString.copyFrom(payload))
+                                                                      .build())
+                                          .build();
+
+            // when
+            var resultMessage = CommandConverter.convertCommandResponse(response, converter, fallbackResultType)
+                                                .orTimeout(1, TimeUnit.SECONDS)
+                                                .join();
+
+            // then only the absence of data marks a Void typed payload as an empty result
+            assertThat(resultMessage.payload()).isEqualTo(payload);
+            assertThat(resultMessage.type().name()).isEqualTo("java.lang.Void");
+        }
+
+        @Test
+        void convertsCommandResponseWithNonVoidPayloadTypeAndEmptyDataToEmptyByteArrayPayload() {
+            // given an empty String result, which converts to empty data
+            var response = CommandResponse.newBuilder()
+                                          .setMessageIdentifier(messageIdentifier)
+                                          .setPayload(SerializedObject.newBuilder()
+                                                                      .setType("java.lang.String")
+                                                                      .setData(ByteString.EMPTY)
+                                                                      .build())
+                                          .build();
+
+            // when
+            var resultMessage = CommandConverter.convertCommandResponse(response, converter, fallbackResultType)
+                                                .orTimeout(1, TimeUnit.SECONDS)
+                                                .join();
+
+            // then the empty data is a payload of its own, not an absent result
+            assertThat(resultMessage.payload()).isEqualTo(new byte[0]);
+            assertThat(resultMessage.type().name()).isEqualTo("java.lang.String");
+            assertThat(resultMessage.<String>payloadAs(String.class)).isEmpty();
+
+            verify(converter).convert(resultMessage.payload(), (Type) String.class);
+        }
+
+        @Test
         void convertsErrorCommandResponseToFailedFuture() {
             // given
             var response = CommandResponse.newBuilder()
@@ -396,17 +486,23 @@ class CommandConverterTest {
         }
 
         @Test
-        void convertsResultMessageWithNullPayloadToEmptyPayloadData() {
-            // given
-            var resultMessage =
-                    new GenericCommandResultMessage(new MessageType("java.lang.String", "1"), (Object) null);
+        void convertsResultMessageWithNullPayloadToResponseWithPayloadOfResultTypeWithoutData() {
+            // given the result message the command bus produces for a handler that returns nothing
+            var resultMessage = new GenericCommandResultMessage(
+                    new GenericMessage(messageIdentifier, new MessageType(Void.class), null, Map.of("m", "v"))
+            );
 
             // when
             var response = CommandConverter.convertResultMessage(resultMessage, "req-1");
 
-            // then
-            assertThat(response.getPayload().getType()).isEqualTo("java.lang.String");
-            assertThat(response.getPayload().getData().isEmpty()).isTrue();
+            // then the payload is typed as Void without data, as released versions send an empty result
+            assertThat(response.hasPayload()).isTrue();
+            assertThat(response.getPayload().getType()).isEqualTo("java.lang.Void");
+            assertThat(response.getPayload().getRevision()).isEqualTo(MessageType.DEFAULT_VERSION);
+            assertThat(response.getPayload().getData()).isEmpty();
+            assertThat(response.getMessageIdentifier()).isEqualTo(messageIdentifier);
+            assertThat(response.getRequestIdentifier()).isEqualTo("req-1");
+            assertThat(response.getMetaDataMap().get("m").getTextValue()).isEqualTo("v");
         }
 
         @Test
@@ -419,6 +515,67 @@ class CommandConverterTest {
             assertThatThrownBy(() -> CommandConverter.convertResultMessage(resultMessage, "req-1"))
                     .isInstanceOf(IllegalArgumentException.class)
                     .hasMessageContaining("Payload must be of type byte[]");
+        }
+    }
+
+    @Nested
+    class ResultMessageRoundTrip {
+
+        @Test
+        void roundTripsVoidResultMessageWithNullPayloadToResultMessageWithNullPayload() {
+            // given a result message as produced by the command bus for a command handler that returns nothing
+            var resultMessage = new GenericCommandResultMessage(
+                    new GenericMessage(messageIdentifier, new MessageType(Void.class), null, Map.of("m", "v"))
+            );
+
+            // when the handling side response is parsed again on the dispatching side
+            var response = CommandConverter.convertResultMessage(resultMessage, "req-1");
+            var result = CommandConverter.convertCommandResponse(response, converter, fallbackResultType)
+                                         .orTimeout(1, TimeUnit.SECONDS)
+                                         .join();
+
+            // then reading the result as Void, as the command gateway does, does not fail
+            assertThat(result.<Void>payloadAs(Void.class)).isNull();
+            assertThat(result.payload()).isNull();
+            assertThat(result.type()).isEqualTo(new MessageType(Void.class));
+            assertThat(result.identifier()).isEqualTo(messageIdentifier);
+            assertThat(result.metadata()).containsEntry("m", "v");
+        }
+
+        @Test
+        void roundTripsResultMessageWithByteArrayPayloadPreservingTypeIdentifierAndMetadata() {
+            // given
+            var resultMessage = new GenericCommandResultMessage(
+                    new GenericMessage(messageIdentifier, new MessageType("ResultType", "2"), payload, Map.of("m", "v"))
+            );
+
+            // when
+            var response = CommandConverter.convertResultMessage(resultMessage, "req-1");
+            var result = CommandConverter.convertCommandResponse(response, converter, fallbackResultType)
+                                         .orTimeout(1, TimeUnit.SECONDS)
+                                         .join();
+
+            // then
+            assertThat(result.payload()).isEqualTo(payload);
+            assertThat(result.type()).isEqualTo(new MessageType("ResultType", "2"));
+            assertThat(result.identifier()).isEqualTo(messageIdentifier);
+            assertThat(result.metadata()).containsEntry("m", "v");
+        }
+
+        @Test
+        void roundTripsResultMessageWithEmptyByteArrayPayloadToEmptyByteArrayPayload() {
+            // given
+            var resultMessage = new GenericCommandResultMessage(new MessageType("ResultType", "2"), new byte[0]);
+
+            // when
+            var response = CommandConverter.convertResultMessage(resultMessage, "req-1");
+            var result = CommandConverter.convertCommandResponse(response, converter, fallbackResultType)
+                                         .orTimeout(1, TimeUnit.SECONDS)
+                                         .join();
+
+            // then
+            assertThat(result.payload()).isEqualTo(new byte[0]);
+            assertThat(result.type()).isEqualTo(new MessageType("ResultType", "2"));
         }
     }
 }
