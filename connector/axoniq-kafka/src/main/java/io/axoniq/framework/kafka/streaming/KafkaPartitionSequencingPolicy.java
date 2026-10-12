@@ -40,8 +40,8 @@ import java.util.Optional;
  * as the framework does by default: per aggregate, and otherwise one at a time.
  * <p>
  * Events from Kafka carry no aggregate identifier, so without this policy, a processor handles them strictly one at a
- * time. Use {@link KafkaPartitionSequencing @KafkaPartitionSequencing} on an event handler method, or configure the
- * policy for an event handling component:
+ * time. Use {@link KafkaPartitionSequencing @KafkaPartitionSequencing} on an event handler method or class, or
+ * configure the policy for an event handling component:
  * <pre>{@code
  * SimpleEventHandlingComponent.create("parcel-projection", KafkaPartitionSequencingPolicy.INSTANCE);
  * }</pre>

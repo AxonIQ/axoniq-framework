@@ -218,7 +218,7 @@ Without further configuration, a processor therefore handles them one at a time.
 ----
 include::example$connector/kafka/ParcelProjection.java[tag=projection,indent=0]
 ----
-<1> Processes events of the same partition in order. On a class, use `@SequencingPolicy(type = KafkaPartitionSequencingPolicy.class)` instead.
+<1> Processes events of the same partition in order. On a class, it applies to all event handlers of that class.
 <2> Every event carries the `KafkaResources` of the record it came from: topic and partition, offset, key and timestamp.
 
 A sequencing policy on a property of the event, such as the property the publisher uses as record key, works as well.

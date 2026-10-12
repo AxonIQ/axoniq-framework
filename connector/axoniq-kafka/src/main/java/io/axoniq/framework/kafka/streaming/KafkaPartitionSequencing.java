@@ -28,8 +28,10 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * Processes the events an event handler method receives from Kafka per partition: in order within a partition, and
+ * Processes the events an event handler receives from Kafka per partition: in order within a partition, and
  * concurrently across partitions. See {@link KafkaPartitionSequencingPolicy}.
+ * <p>
+ * Place it on an event handler method, or on a class to apply it to all its event handler methods.
  * <pre>{@code
  * @KafkaPartitionSequencing
  * @EventHandler
@@ -37,13 +39,11 @@ import java.lang.annotation.Target;
  *     // ...
  * }
  * }</pre>
- * On a class, use {@code @SequencingPolicy(type = KafkaPartitionSequencingPolicy.class)} instead: class-level
- * sequencing policies are only recognized when declared directly.
  *
  * @author Allard Buijze
  * @since 5.5.0
  */
-@Target({ElementType.METHOD, ElementType.ANNOTATION_TYPE})
+@Target({ElementType.METHOD, ElementType.TYPE, ElementType.ANNOTATION_TYPE})
 @Retention(RetentionPolicy.RUNTIME)
 @Documented
 @SequencingPolicy(type = KafkaPartitionSequencingPolicy.class)
