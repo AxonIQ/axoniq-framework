@@ -41,12 +41,12 @@
         <!-- Loaded in an isolated class loader by Af4SerializerCompatibilityTest and the deadline compatibility tests.
              Keeping the AF4 artifacts out of the dependency graph prevents their org.axonframework classes from
              colliding with the reactor's AF5 classes. -->
-        <axon4.serializer.version>4.13.2</axon4.serializer.version>
+        <axon4.serializer.version>5.3.3</axon4.serializer.version>
         <!-- The deadline managers' scheduler libraries. Only this module uses them, so it manages their versions. Axon
              Framework 4 nodes share the libraries' stores during a rolling upgrade, so keep the major versions equal
              to Axon Framework 4.13's. -->
         <quartz.version>2.5.2</quartz.version>
-        <jobrunr.version>8.8.2</jobrunr.version>
+        <jobrunr.version>9.0.1</jobrunr.version>
         <db-scheduler.version>16.12.0</db-scheduler.version>
     </properties>
 
