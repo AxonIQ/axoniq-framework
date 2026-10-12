@@ -46,6 +46,7 @@ import org.jobrunr.storage.InMemoryStorageProvider;
 import org.jobrunr.utils.mapper.jackson3.Jackson3JsonMapper;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.*;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.autoconfigure.data.jpa.JpaRepositoriesAutoConfiguration;
 import org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration;
@@ -183,6 +184,30 @@ class LegacyDeadlineManagerAutoConfigurationTest {
                        .run(context -> assertThat(context).hasSingleBean(DeadlineManager.class)
                                                           .doesNotHaveBean(DbSchedulerDeadlineManager.class));
         }
+
+        @Test
+        void aTaskOfTheApplicationNamedDeadlineDetailsTaskWins() {
+            testContext.withUserConfiguration(DbSchedulerContext.class, NamedDeadlineTaskContext.class)
+                       .run(context -> {
+                           assertThat(context).hasNotFailed();
+                           assertThat(context.getBeansOfType(Task.class)).containsOnlyKeys("deadlineDetailsTask")
+                                                                         .containsValue(NamedDeadlineTaskContext.TASK);
+                       });
+        }
+
+        /**
+         * Axon Framework 4 applications replaced the task with a bean qualified {@code deadlineDetailsTask} under
+         * another name. Configuring the default task next to it would register two tasks named {@code AxonDeadline},
+         * which db-scheduler rejects.
+         */
+        @Test
+        void aTaskOfTheApplicationQualifiedDeadlineDetailsTaskWins() {
+            testContext.withUserConfiguration(DbSchedulerContext.class, QualifiedDeadlineTaskContext.class)
+                       .run(context -> {
+                           assertThat(context).hasNotFailed();
+                           assertThat(context.getBeansOfType(Task.class)).containsOnlyKeys("customDeadlineTask");
+                       });
+        }
     }
 
     @Nested
@@ -317,6 +342,27 @@ class LegacyDeadlineManagerAutoConfigurationTest {
                                         .scopeAwareProvider(scopeAwareProvider)
                                         .unitOfWorkFactory(UnitOfWorkTestUtils.SIMPLE_FACTORY)
                                         .build();
+        }
+    }
+
+    @Configuration
+    static class NamedDeadlineTaskContext {
+
+        static final Task<?> TASK = DbSchedulerDeadlineManager.binaryTask(() -> null);
+
+        @Bean
+        public Task<?> deadlineDetailsTask() {
+            return TASK;
+        }
+    }
+
+    @Configuration
+    static class QualifiedDeadlineTaskContext {
+
+        @Bean
+        @Qualifier("deadlineDetailsTask")
+        public Task<?> customDeadlineTask() {
+            return DbSchedulerDeadlineManager.binaryTask(() -> null);
         }
     }
 
