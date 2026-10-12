@@ -39,7 +39,7 @@ import java.util.function.Function;
  * @author Jakob Hatzl
  * @since 5.4.0
  */
-@Internal final class XStreamStoredTypeNames {
+final class XStreamStoredTypeNames {
 
     private XStreamStoredTypeNames() {
         // Utility class
@@ -53,7 +53,7 @@ import java.util.function.Function;
      * {@link DelegatingMessageConverter} or {@link DelegatingEventConverter}, as an application registering it as its
      * general or event converter passes it on.
      *
-     * @param converter the converter the deadlines are stored with^
+     * @param converter the converter the deadlines are stored with
      * @return the lookup of stored type names
      */
     @SuppressWarnings("removal")
