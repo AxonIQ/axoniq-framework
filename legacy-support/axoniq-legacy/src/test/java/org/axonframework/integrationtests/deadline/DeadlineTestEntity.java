@@ -97,6 +97,15 @@ public class DeadlineTestEntity {
     }
 
     @CommandHandler
+    void handle(ScheduleDeadlineThroughCollaboratorThenFail command, DeadlineCollaborator collaborator) {
+        collaborator.schedule(Duration.ofMillis(command.triggerMillis()),
+                              command.deadlineName(),
+                              command.payload(),
+                              scope());
+        throw new IllegalStateException("The command fails after its collaborator scheduled its deadline");
+    }
+
+    @CommandHandler
     void handle(CancelDeadline command, DeadlineManager deadlineManager) {
         deadlineManager.cancelSchedule(command.deadlineName(), command.scheduleId());
     }
@@ -165,6 +174,13 @@ public class DeadlineTestEntity {
 
     }
 
+    public record ScheduleDeadlineThroughCollaboratorThenFail(@TargetEntityId String entityId,
+                                                              String deadlineName,
+                                                              @Nullable Object payload,
+                                                              long triggerMillis) {
+
+    }
+
     public record CancelDeadline(@TargetEntityId String entityId, String deadlineName, String scheduleId) {
 
     }
@@ -220,6 +236,22 @@ public class DeadlineTestEntity {
                                    String detail,
                                    @Nullable String origin) {
 
+    }
+
+    /**
+     * A component the entity delegates to, holding the configured {@link DeadlineManager} itself instead of receiving
+     * it as a handler parameter.
+     *
+     * @param deadlineManager the configured deadline manager
+     */
+    public record DeadlineCollaborator(DeadlineManager deadlineManager) {
+
+        void schedule(Duration triggerDuration,
+                      String deadlineName,
+                      @Nullable Object payload,
+                      AggregateScopeDescriptor scope) {
+            deadlineManager.schedule(triggerDuration, deadlineName, payload, scope);
+        }
     }
 
     private static final class HandlingFailure extends AxonNonTransientException {

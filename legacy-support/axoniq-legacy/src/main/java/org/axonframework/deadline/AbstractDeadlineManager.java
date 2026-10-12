@@ -24,6 +24,7 @@ import io.axoniq.license.entitlement.EntitlementManager;
 import org.axonframework.common.FutureUtils;
 import org.axonframework.common.Registration;
 import org.axonframework.messaging.ContextAwareScope;
+import org.axonframework.messaging.ScopeDescriptor;
 import org.axonframework.messaging.core.Context;
 import org.axonframework.messaging.core.DefaultMessageDispatchInterceptorChain;
 import org.axonframework.messaging.core.Message;
@@ -36,6 +37,7 @@ import org.axonframework.messaging.core.unitofwork.ProcessingLifecycle;
 import org.axonframework.modelling.saga.repository.AnnotatedSagaRepository;
 import org.jspecify.annotations.Nullable;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -45,6 +47,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 /**
  * Abstract implementation of the {@link DeadlineManager} to be implemented by concrete solutions for the
@@ -54,8 +57,9 @@ import java.util.function.Consumer;
  * throughout the system.
  * <p>
  * Axon Framework 4 found that moment through the ambient unit of work. Axon Framework 5 has none, so a call is deferred
- * when it is made while a {@link ContextAwareScope} is current, which is the case while a Saga handler method runs. A
- * call made anywhere else runs immediately.
+ * when it is made while a {@link ContextAwareScope} is current, which is the case while a Saga handler method runs, or
+ * when it is made through a {@code DeadlineManager} handler parameter, which is bound to the {@link ProcessingContext}
+ * of the handler. A call made anywhere else runs immediately.
  *
  * @author Steven van Beelen
  * @since 3.3
@@ -85,6 +89,7 @@ public abstract class AbstractDeadlineManager implements DeadlineManager {
             new CopyOnWriteArrayList<>();
     private final Context.ResourceKey<DeferredCalls> deferredCallsKey =
             Context.ResourceKey.withLabel("deferredDeadlineCalls");
+    private final ThreadLocal<ProcessingContext> boundContext = new ThreadLocal<>();
 
     /**
      * Instantiate an {@code AbstractDeadlineManager}, registering the {@link LegacySupportAxoniqAddon} with the license
@@ -95,32 +100,37 @@ public abstract class AbstractDeadlineManager implements DeadlineManager {
     }
 
     /**
-     * Run a given {@code deadlineCall} immediately, or defer it to a phase of the {@link ProcessingContext} carried by
-     * the current {@link ContextAwareScope}, if one is active. That phase runs after the Saga write and before the
-     * context commits. This is required as the DeadlineManager schedules messages which we want to happen in order with
-     * other messages being handled.
+     * Run a given {@code deadlineCall} immediately, or defer it to a phase of a {@link ProcessingContext}. A call made
+     * through a {@link #forContext(ProcessingContext) context-bound view} of this manager is deferred to the context
+     * the view was made for. Any other call is deferred to the context carried by the current
+     * {@link ContextAwareScope}, if one is active. That phase runs after the Saga write and before the context commits.
+     * This is required as the DeadlineManager schedules messages which we want to happen in order with other messages
+     * being handled.
+     * <p>
+     * The view's context wins over the scope's, as it is the innermost one: a command a Saga handler sends can run on
+     * the Saga's thread, in a context of its own, while the Saga's scope is still current. Axon Framework 4 deferred
+     * such a call to the command's unit of work, so a failing command scheduled nothing even when the Saga survived its
+     * failure. Within the Saga handler itself, the view and the scope carry the same context.
      * <p>
      * Deferred calls run in the order they were made, also across Sagas sharing the same {@link ProcessingContext}, as
      * they did in the prepare-commit phase of an Axon Framework 4 unit of work. They never run when the context rolls
      * back before reaching that phase.
      * <p>
-     * The call is handed the {@link ProcessingContext} of the scope it was made in, or {@code null} when it runs
-     * immediately. Concrete deadline managers pass it on to
+     * The call is handed the {@link ProcessingContext} it was deferred to, or {@code null} when it runs immediately.
+     * Concrete deadline managers pass it on to
      * {@link #processDispatchInterceptors(DeadlineMessage, ProcessingContext)}, so that the dispatch interceptors of a
-     * deadline scheduled by a Saga see the Saga's context. The call cannot look that context up itself: by the time a
-     * deferred call runs, the Saga's scope is no longer current. That context is not simply the shared unit of work:
-     * several Sagas handling different messages of one batch share a unit of work, yet each sees that unit of work
-     * through its own resource-overriding view, carrying the resources of the message it handles, such as that
-     * message's correlation data.
+     * deferred deadline see the context it was deferred to. The call cannot look that context up itself: by the time a
+     * deferred call runs, the scope or the view that provided it is no longer current.
      *
-     * @param deadlineCall the call to be executed now, or when the {@link ProcessingContext} of the current scope
-     *                     prepares its commit, receiving that context or {@code null}
-     * @throws IllegalStateException if the calls deferred to the {@link ProcessingContext} of the current scope already
-     *                               ran, as nothing would run the given {@code deadlineCall} anymore
+     * @param deadlineCall the call to be executed now, or when the {@link ProcessingContext} it is deferred to prepares
+     *                     its commit, receiving that context or {@code null}
+     * @throws IllegalStateException if the calls deferred to that {@link ProcessingContext} already ran, as nothing
+     *                               would run the given {@code deadlineCall} anymore
      */
     protected void runOnPrepareCommitOrNow(Consumer<@Nullable ProcessingContext> deadlineCall) {
         Objects.requireNonNull(deadlineCall, "The deadline call may not be null.");
-        Optional<ProcessingContext> context = ContextAwareScope.currentProcessingContext();
+        Optional<ProcessingContext> context = Optional.ofNullable(boundContext.get())
+                                                      .or(ContextAwareScope::currentProcessingContext);
         if (context.isEmpty()) {
             deadlineCall.accept(null);
             return;
@@ -128,6 +138,42 @@ public abstract class AbstractDeadlineManager implements DeadlineManager {
         ProcessingContext deferringContext = context.get();
         if (!deferredCalls(deferringContext).offer(() -> deadlineCall.accept(deferringContext))) {
             throw new IllegalStateException(TOO_LATE_TO_DEFER);
+        }
+    }
+
+    /**
+     * Returns a view of this deadline manager bound to the given {@code context}. A call made through the view is
+     * deferred to that context by {@link #runOnPrepareCommitOrNow(Consumer)}, also when a {@link ContextAwareScope} is
+     * current, and otherwise behaves as the same call made on this manager.
+     * <p>
+     * The {@link DeadlineManagerParameterResolverFactory} hands this view to a handler that declares a
+     * {@link DeadlineManager} parameter. That is how a handler that runs in a {@link ProcessingContext} but in no
+     * scope, such as the command handler of an entity, defers its calls as Axon Framework 4 did through its current
+     * unit of work.
+     *
+     * @param context the context the calls made through the view are deferred to
+     * @return a view of this deadline manager that defers its calls to the given {@code context}
+     */
+    DeadlineManager forContext(ProcessingContext context) {
+        return new ContextBoundDeadlineManager(this, Objects.requireNonNull(context, "The context may not be null."));
+    }
+
+    /**
+     * Runs the given {@code call} while {@code context} is the context {@link #runOnPrepareCommitOrNow(Consumer)}
+     * defers to, ahead of the context of the current scope. The binding lasts for this synchronous call only, and
+     * restores the previous binding afterwards.
+     */
+    private <R> R withBoundContext(ProcessingContext context, Supplier<R> call) {
+        ProcessingContext previous = boundContext.get();
+        boundContext.set(context);
+        try {
+            return call.get();
+        } finally {
+            if (previous == null) {
+                boundContext.remove();
+            } else {
+                boundContext.set(previous);
+            }
         }
     }
 
@@ -276,6 +322,112 @@ public abstract class AbstractDeadlineManager implements DeadlineManager {
                                                 @Nullable Object messageOrPayload,
                                                 Instant expiryTime) {
         return GenericDeadlineMessage.asDeadlineMessage(deadlineName, messageOrPayload, expiryTime);
+    }
+
+    /**
+     * A view of an {@link AbstractDeadlineManager} that binds a {@link ProcessingContext} around each call it
+     * delegates, as returned by {@link #forContext(ProcessingContext)}.
+     * <p>
+     * Every method is delegated to the same method of the manager, including the default ones, so a backend that
+     * overrides a default method keeps its own behaviour. The overloads without a {@link ScopeDescriptor} still ask for
+     * the current {@link org.axonframework.messaging.Scope}, as binding a context does not describe a scope.
+     */
+    private static final class ContextBoundDeadlineManager implements DeadlineManager {
+
+        private final AbstractDeadlineManager manager;
+        private final ProcessingContext context;
+
+        private ContextBoundDeadlineManager(AbstractDeadlineManager manager, ProcessingContext context) {
+            this.manager = manager;
+            this.context = context;
+        }
+
+        @SuppressWarnings("deprecation")
+        @Override
+        public String schedule(Instant triggerDateTime, String deadlineName) {
+            return manager.withBoundContext(context, () -> manager.schedule(triggerDateTime, deadlineName));
+        }
+
+        @SuppressWarnings("deprecation")
+        @Override
+        public String schedule(Instant triggerDateTime, String deadlineName, @Nullable Object messageOrPayload) {
+            return manager.withBoundContext(
+                    context, () -> manager.schedule(triggerDateTime, deadlineName, messageOrPayload)
+            );
+        }
+
+        @SuppressWarnings("deprecation")
+        @Override
+        public String schedule(Instant triggerDateTime,
+                               String deadlineName,
+                               @Nullable Object messageOrPayload,
+                               ScopeDescriptor deadlineScope) {
+            return manager.withBoundContext(
+                    context, () -> manager.schedule(triggerDateTime, deadlineName, messageOrPayload, deadlineScope)
+            );
+        }
+
+        @SuppressWarnings("deprecation")
+        @Override
+        public String schedule(Duration triggerDuration, String deadlineName) {
+            return manager.withBoundContext(context, () -> manager.schedule(triggerDuration, deadlineName));
+        }
+
+        @SuppressWarnings("deprecation")
+        @Override
+        public String schedule(Duration triggerDuration, String deadlineName, @Nullable Object messageOrPayload) {
+            return manager.withBoundContext(
+                    context, () -> manager.schedule(triggerDuration, deadlineName, messageOrPayload)
+            );
+        }
+
+        @SuppressWarnings("deprecation")
+        @Override
+        public String schedule(Duration triggerDuration,
+                               String deadlineName,
+                               @Nullable Object messageOrPayload,
+                               ScopeDescriptor deadlineScope) {
+            return manager.withBoundContext(
+                    context, () -> manager.schedule(triggerDuration, deadlineName, messageOrPayload, deadlineScope)
+            );
+        }
+
+        @Override
+        public void cancelSchedule(String deadlineName, String scheduleId) {
+            manager.withBoundContext(context, () -> {
+                manager.cancelSchedule(deadlineName, scheduleId);
+                return null;
+            });
+        }
+
+        @Override
+        public void cancelAll(String deadlineName) {
+            manager.withBoundContext(context, () -> {
+                manager.cancelAll(deadlineName);
+                return null;
+            });
+        }
+
+        @Override
+        public void cancelAllWithinScope(String deadlineName) {
+            manager.withBoundContext(context, () -> {
+                manager.cancelAllWithinScope(deadlineName);
+                return null;
+            });
+        }
+
+        @Override
+        public void cancelAllWithinScope(String deadlineName, ScopeDescriptor scope) {
+            manager.withBoundContext(context, () -> {
+                manager.cancelAllWithinScope(deadlineName, scope);
+                return null;
+            });
+        }
+
+        @Override
+        public void shutdown() {
+            manager.shutdown();
+        }
     }
 
     /**
