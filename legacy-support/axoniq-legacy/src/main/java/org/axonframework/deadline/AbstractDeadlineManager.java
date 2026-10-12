@@ -230,6 +230,7 @@ public abstract class AbstractDeadlineManager implements DeadlineManager {
      * @return the intercepted message, never {@code null}
      * @throws IllegalStateException if an interceptor ended the chain without a message
      */
+    @SuppressWarnings("DataFlowIssue")
     protected DeadlineMessage processDispatchInterceptors(DeadlineMessage message,
                                                           @Nullable ProcessingContext context) {
         Objects.requireNonNull(message, "The deadline message may not be null.");
