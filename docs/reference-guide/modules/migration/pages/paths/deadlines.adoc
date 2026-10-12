@@ -11,7 +11,7 @@ However, we are aware you have perhaps already scheduled deadlines and want to m
 The deadline support has moved over into `axoniq-legacy`, and takes a slightly different turn whether the deadline was scheduled in a <<saga-deadlines,saga>> or in an <<aggregate-deadlines,aggregate>>.
 Please check the respective sections for details on either.
 
-But first, let's take a look at the general approach to migrate your deadlines into Axon Framework 5:
+First, let's take a look at the general approach to migrate your deadlines into Axon Framework 5:
 
 . *Add draining support*.
 To allow you to drain your Axon Framework 4 deadlines into For Axon Framework 5, add the `axoniq-legacy` dependency.
