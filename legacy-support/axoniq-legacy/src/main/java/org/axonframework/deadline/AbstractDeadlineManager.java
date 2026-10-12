@@ -30,6 +30,8 @@ import org.axonframework.messaging.core.DefaultMessageDispatchInterceptorChain;
 import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.MessageDispatchInterceptor;
 import org.axonframework.messaging.core.MessageHandlerInterceptor;
+import org.axonframework.messaging.core.Metadata;
+import org.axonframework.messaging.core.interception.CorrelationDataInterceptor;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.ProcessingLifecycle;
 import org.axonframework.modelling.saga.repository.AnnotatedSagaRepository;
@@ -40,6 +42,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -50,13 +53,13 @@ import java.util.function.Supplier;
  * Abstract implementation of the {@link DeadlineManager} to be implemented by concrete solutions for the
  * DeadlineManager. Provides functionality to perform a call to the DeadlineManager when the {@link ProcessingContext}
  * of the current invocation prepares its commit. This {@link #runOnPrepareCommitOrNow(Consumer)} functionality is
- * required, as the DeadlineManager schedules a Message which needs to happen in order with the other messages
- * published throughout the system.
+ * required, as the DeadlineManager schedules a Message which needs to happen in order with the other messages published
+ * throughout the system.
  * <p>
- * Axon Framework 4 found that moment through the ambient unit of work. Axon Framework 5 has none, so a call is
- * deferred when it is made while a {@link ContextAwareScope} is current, which is the case while a Saga handler
- * method runs, or when it is made through a {@code DeadlineManager} handler parameter, which is bound to the
- * {@link ProcessingContext} of the handler. A call made anywhere else runs immediately.
+ * Axon Framework 4 found that moment through the ambient unit of work. Axon Framework 5 has none, so a call is deferred
+ * when it is made while a {@link ContextAwareScope} is current, which is the case while a Saga handler method runs, or when it is made through a {@code DeadlineManager} handler parameter, which is bound to the
+ * {@link ProcessingContext} of the handler. A
+ * call made anywhere else runs immediately.
  *
  * @author Steven van Beelen
  * @since 3.3
@@ -89,8 +92,8 @@ public abstract class AbstractDeadlineManager implements DeadlineManager {
     private final ThreadLocal<ProcessingContext> boundContext = new ThreadLocal<>();
 
     /**
-     * Instantiate an {@link AbstractDeadlineManager}, registering the {@link LegacySupportAxoniqAddon} with the
-     * license entitlement system.
+     * Instantiate an {@code AbstractDeadlineManager}, registering the {@link LegacySupportAxoniqAddon} with the license
+     * entitlement system.
      */
     protected AbstractDeadlineManager() {
         EntitlementManager.INSTANCE.registerAddon(LegacySupportAxoniqAddon.class);
@@ -101,7 +104,8 @@ public abstract class AbstractDeadlineManager implements DeadlineManager {
      * through a {@link #forContext(ProcessingContext) context-bound view} of this manager is deferred to the context
      * the view was made for. Any other call is deferred to the context carried by the current
      * {@link ContextAwareScope}, if one is active. That phase runs after the Saga write and before the context commits.
-     * This is required as the DeadlineManager schedules messages which we want to happen in order with other messages
+     * This is required as the DeadlineManager schedules messages which we want to happen in order with
+     * other messages
      * being handled.
      * <p>
      * The view's context wins over the scope's, as it is the innermost one: a command a Saga handler sends can run on
@@ -132,7 +136,8 @@ public abstract class AbstractDeadlineManager implements DeadlineManager {
             deadlineCall.accept(null);
             return;
         }
-        if (!deferredCalls(context.get()).offer(deadlineCall)) {
+        ProcessingContext deferringContext = context.get();
+        if (!deferredCalls(deferringContext).offer(() -> deadlineCall.accept(deferringContext))) {
             throw new IllegalStateException(TOO_LATE_TO_DEFER);
         }
     }
@@ -186,7 +191,7 @@ public abstract class AbstractDeadlineManager implements DeadlineManager {
         return context.computeResourceIfAbsent(deferredCallsKey, () -> {
             DeferredCalls calls = new DeferredCalls();
             try {
-                context.runOn(RUN_DEADLINE_CALLS, phaseContext -> calls.drain().forEach(call -> call.accept(context)));
+                context.runOn(RUN_DEADLINE_CALLS, phaseContext -> calls.drain().forEach(Runnable::run));
             } catch (IllegalStateException e) {
                 throw new IllegalStateException(TOO_LATE_TO_DEFER, e);
             }
@@ -240,8 +245,8 @@ public abstract class AbstractDeadlineManager implements DeadlineManager {
     }
 
     /**
-     * Provides a list of registered handler interceptors. Do note that this list is not modifiable, and that changes
-     * in the internal structure for handler interceptors will be reflected in this list.
+     * Provides a list of registered handler interceptors. Do note that this list is not modifiable, and that changes in
+     * the internal structure for handler interceptors will be reflected in this list.
      *
      * @return a list of handler interceptors
      */
@@ -253,7 +258,15 @@ public abstract class AbstractDeadlineManager implements DeadlineManager {
      * Applies registered {@link MessageDispatchInterceptor}s to the given {@code message}, handing them the given
      * {@code context}.
      * <p>
-     * The {@code context} is the one a deadline call was deferred to, as handed out by
+     * Before the interceptors run, the correlation data the {@code context} carries, as put there by a
+     * {@link CorrelationDataInterceptor} around the handler that made the deadline call, is added to the message's
+     * metadata. Metadata the message already holds under the same key is kept. A deadline thereby carries the
+     * correlation data of the message whose handling scheduled it, with the precedence of Axon Framework 4, which
+     * created a message with the correlation data of the current unit of work beneath its own metadata. This
+     * deliberately differs from a message dispatched through a bus, on which the {@link CorrelationDataInterceptor}
+     * lets the correlation data replace the message's own metadata under the same key.
+     * <p>
+     * The {@code context} is the one of the scope a deadline call was made in, as handed out by
      * {@link #runOnPrepareCommitOrNow(Consumer)}, or {@code null} for a call that runs immediately, outside any
      * {@link ProcessingContext}. A failing interceptor fails this call with the interceptor's own exception, and an
      * interceptor that ends the chain without a message fails it with an {@link IllegalStateException}, instead of
@@ -264,12 +277,13 @@ public abstract class AbstractDeadlineManager implements DeadlineManager {
      * @return the intercepted message, never {@code null}
      * @throws IllegalStateException if an interceptor ended the chain without a message
      */
+    @SuppressWarnings("DataFlowIssue")
     protected DeadlineMessage processDispatchInterceptors(DeadlineMessage message,
                                                           @Nullable ProcessingContext context) {
         Objects.requireNonNull(message, "The deadline message may not be null.");
         return FutureUtils.joinAndUnwrap(
                 new DefaultMessageDispatchInterceptorChain<>(dispatchInterceptors())
-                        .proceed(message, context)
+                        .proceed(withCorrelationData(message, context), context)
                         .first()
                         .<DeadlineMessage>cast()
                         .asCompletableFuture()
@@ -282,6 +296,15 @@ public abstract class AbstractDeadlineManager implements DeadlineManager {
                             return entry.message();
                         })
         );
+    }
+
+    private static DeadlineMessage withCorrelationData(DeadlineMessage message, @Nullable ProcessingContext context) {
+        @Nullable Map<String, String> correlationData =
+                context == null ? null : context.getResource(CorrelationDataInterceptor.CORRELATION_DATA);
+        if (correlationData == null || correlationData.isEmpty()) {
+            return message;
+        }
+        return message.withMetadata(Metadata.from(correlationData).mergedWith(message.metadata()));
     }
 
     /**
@@ -409,19 +432,20 @@ public abstract class AbstractDeadlineManager implements DeadlineManager {
     }
 
     /**
-     * The calls deferred to a single {@link ProcessingContext}, in the order they were made.
+     * The calls deferred to a single {@link ProcessingContext}, in the order they were made, each already bound to the
+     * context of the scope it was made in.
      * <p>
      * Offering a call and draining all calls exclude each other. A call is therefore either part of the drained calls
      * or rejected, but never accepted after the drained calls were taken, where nothing would run it. A call can arrive
-     * while the calls are drained when a context with a multithreaded work scheduler invokes a Saga from another
-     * action of the {@link #RUN_DEADLINE_CALLS} phase.
+     * while the calls are drained when a context with a multithreaded work scheduler invokes a Saga from another action
+     * of the {@link #RUN_DEADLINE_CALLS} phase.
      */
     private static final class DeferredCalls {
 
-        private final List<Consumer<@Nullable ProcessingContext>> calls = new ArrayList<>();
+        private final List<Runnable> calls = new ArrayList<>();
         private boolean drained;
 
-        private synchronized boolean offer(Consumer<@Nullable ProcessingContext> call) {
+        private synchronized boolean offer(Runnable call) {
             if (drained) {
                 return false;
             }
@@ -429,7 +453,7 @@ public abstract class AbstractDeadlineManager implements DeadlineManager {
             return true;
         }
 
-        private synchronized List<Consumer<@Nullable ProcessingContext>> drain() {
+        private synchronized List<Runnable> drain() {
             drained = true;
             return List.copyOf(calls);
         }
