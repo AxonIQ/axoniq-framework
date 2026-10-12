@@ -50,12 +50,12 @@ import java.util.function.Consumer;
  * Abstract implementation of the {@link DeadlineManager} to be implemented by concrete solutions for the
  * DeadlineManager. Provides functionality to perform a call to the DeadlineManager when the {@link ProcessingContext}
  * of the current invocation prepares its commit. This {@link #runOnPrepareCommitOrNow(Consumer)} functionality is
- * required, as the DeadlineManager schedules a Message which needs to happen in order with the other messages
- * published throughout the system.
+ * required, as the DeadlineManager schedules a Message which needs to happen in order with the other messages published
+ * throughout the system.
  * <p>
- * Axon Framework 4 found that moment through the ambient unit of work. Axon Framework 5 has none, so a call is
- * deferred when it is made while a {@link ContextAwareScope} is current, which is the case while a Saga handler
- * method runs. A call made anywhere else runs immediately.
+ * Axon Framework 4 found that moment through the ambient unit of work. Axon Framework 5 has none, so a call is deferred
+ * when it is made while a {@link ContextAwareScope} is current, which is the case while a Saga handler method runs. A
+ * call made anywhere else runs immediately.
  *
  * @author Steven van Beelen
  * @since 3.3
@@ -87,8 +87,8 @@ public abstract class AbstractDeadlineManager implements DeadlineManager {
             Context.ResourceKey.withLabel("deferredDeadlineCalls");
 
     /**
-     * Instantiate an {@link AbstractDeadlineManager}, registering the {@link LegacySupportAxoniqAddon} with the
-     * license entitlement system.
+     * Instantiate an {@code AbstractDeadlineManager}, registering the {@link LegacySupportAxoniqAddon} with the license
+     * entitlement system.
      */
     protected AbstractDeadlineManager() {
         EntitlementManager.INSTANCE.registerAddon(LegacySupportAxoniqAddon.class);
@@ -97,20 +97,21 @@ public abstract class AbstractDeadlineManager implements DeadlineManager {
     /**
      * Run a given {@code deadlineCall} immediately, or defer it to a phase of the {@link ProcessingContext} carried by
      * the current {@link ContextAwareScope}, if one is active. That phase runs after the Saga write and before the
-     * context commits. This is required as the DeadlineManager schedules messages which we want to happen in order
-     * with other messages being handled.
+     * context commits. This is required as the DeadlineManager schedules messages which we want to happen in order with
+     * other messages being handled.
      * <p>
      * Deferred calls run in the order they were made, also across Sagas sharing the same {@link ProcessingContext}, as
      * they did in the prepare-commit phase of an Axon Framework 4 unit of work. They never run when the context rolls
      * back before reaching that phase.
      * <p>
      * The call is handed the {@link ProcessingContext} of the scope it was made in, or {@code null} when it runs
-     * immediately. Concrete deadline managers pass it on to {@link #processDispatchInterceptors(DeadlineMessage,
-     * ProcessingContext)}, so that the dispatch interceptors of a deadline scheduled by a Saga see the Saga's context.
-     * The call cannot look that context up itself: by the time a deferred call runs, the Saga's scope is no longer
-     * current. That context is not simply the shared unit of work: several Sagas handling different messages of one
-     * batch share a unit of work, yet each sees that unit of work through its own resource-overriding view, carrying
-     * the resources of the message it handles, such as that message's correlation data.
+     * immediately. Concrete deadline managers pass it on to
+     * {@link #processDispatchInterceptors(DeadlineMessage, ProcessingContext)}, so that the dispatch interceptors of a
+     * deadline scheduled by a Saga see the Saga's context. The call cannot look that context up itself: by the time a
+     * deferred call runs, the Saga's scope is no longer current. That context is not simply the shared unit of work:
+     * several Sagas handling different messages of one batch share a unit of work, yet each sees that unit of work
+     * through its own resource-overriding view, carrying the resources of the message it handles, such as that
+     * message's correlation data.
      *
      * @param deadlineCall the call to be executed now, or when the {@link ProcessingContext} of the current scope
      *                     prepares its commit, receiving that context or {@code null}
@@ -197,8 +198,8 @@ public abstract class AbstractDeadlineManager implements DeadlineManager {
     }
 
     /**
-     * Provides a list of registered handler interceptors. Do note that this list is not modifiable, and that changes
-     * in the internal structure for handler interceptors will be reflected in this list.
+     * Provides a list of registered handler interceptors. Do note that this list is not modifiable, and that changes in
+     * the internal structure for handler interceptors will be reflected in this list.
      *
      * @return a list of handler interceptors
      */
@@ -282,8 +283,8 @@ public abstract class AbstractDeadlineManager implements DeadlineManager {
      * <p>
      * Offering a call and draining all calls exclude each other. A call is therefore either part of the drained calls
      * or rejected, but never accepted after the drained calls were taken, where nothing would run it. A call can arrive
-     * while the calls are drained when a context with a multithreaded work scheduler invokes a Saga from another
-     * action of the {@link #RUN_DEADLINE_CALLS} phase.
+     * while the calls are drained when a context with a multithreaded work scheduler invokes a Saga from another action
+     * of the {@link #RUN_DEADLINE_CALLS} phase.
      */
     private static final class DeferredCalls {
 
