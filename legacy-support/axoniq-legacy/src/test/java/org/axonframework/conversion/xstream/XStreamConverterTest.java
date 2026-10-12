@@ -32,6 +32,8 @@ import java.lang.reflect.Type;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.*;
 
@@ -246,6 +248,67 @@ class XStreamConverterTest {
                     .isInstanceOf(ConversionException.class)
                     .hasMessageContaining(Metadata.class.getName())
                     .hasMessageContaining(StubSaga.class.getName());
+        }
+    }
+
+    @Nested
+    class StoredTypeResolution {
+
+        @Test
+        void xStreamsBuiltInAliasesResolveToTheirClasses() {
+            // given
+            XStreamConverter converter = new XStreamConverter(xStream);
+
+            // when / then
+            assertThat(converter.resolveStoredType("uuid")).contains(UUID.class);
+            assertThat(converter.resolveStoredType("long")).contains(Long.class);
+            assertThat(converter.resolveStoredType("string")).contains(String.class);
+        }
+
+        @Test
+        void anAliasOfAPrimitiveTypeResolvesToItsWrapperClass() {
+            // given
+            XStreamConverter converter = new XStreamConverter(xStream);
+
+            // when / then
+            assertThat(converter.resolveStoredType("int")).contains(Integer.class);
+        }
+
+        @Test
+        void anAliasOfTheApplicationResolvesToItsClass() {
+            // given
+            xStream.alias("stubSaga", StubSaga.class);
+            XStreamConverter converter = new XStreamConverter(xStream);
+
+            // when
+            Optional<Class<?>> result = converter.resolveStoredType("stubSaga");
+
+            // then
+            assertThat(result).contains(StubSaga.class);
+        }
+
+        @Test
+        void aClassNameResolvesToItsClass() {
+            // given
+            XStreamConverter converter = new XStreamConverter(xStream);
+
+            // when
+            Optional<Class<?>> result = converter.resolveStoredType(StubSaga.class.getName());
+
+            // then
+            assertThat(result).contains(StubSaga.class);
+        }
+
+        @Test
+        void aNameOfNoClassResolvesToNothing() {
+            // given
+            XStreamConverter converter = new XStreamConverter(xStream);
+
+            // when
+            Optional<Class<?>> result = converter.resolveStoredType("com.example.NoSuchPayload");
+
+            // then
+            assertThat(result).isEmpty();
         }
     }
 }

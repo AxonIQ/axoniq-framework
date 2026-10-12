@@ -43,6 +43,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Function;
 
 /**
  * Converts the parts of a deadline that the persistent deadline managers store, its payload, metadata and scope
@@ -54,6 +55,12 @@ import java.util.Optional;
  * resolves to no class yields an {@link UnknownDeadlinePayload} instead of a failure, as Axon Framework 4's
  * {@code UnknownSerializedType} did.
  * <p>
+ * With an {@link org.axonframework.conversion.xstream.XStreamConverter}, a type name is first resolved through the
+ * mapper of its {@code XStream} instance, as Axon Framework 4's {@code XStreamSerializer} did. That serializer stored a
+ * type's XStream alias instead of its class name, for XStream's built-in aliases such as {@code uuid}, {@code int} or
+ * {@code long}, and for aliases the application registered. Such a payload or scope descriptor resolves when the
+ * converter's {@code XStream} instance has the same aliases as the one Axon Framework 4 used.
+ * <p>
  * A {@code String} or {@code byte[]} payload is stored the way Axon Framework 4's serializers stored it: as a JSON
  * string, Base64-encoded for a {@code byte[]}, or as an XStream {@code <string>} or {@code <byte-array>} element. A
  * {@link Converter} treats a {@code String} or {@code byte[]} as content that is already in its stored form, so it
@@ -62,8 +69,8 @@ import java.util.Optional;
  * JSON writer and parser, and the XStream element with XStream itself, so that both match what Axon Framework 4
  * wrote. A converter
  * that writes neither JSON nor XStream XML cannot store such a payload, and scheduling one fails. Reading follows the
- * stored form, and also accepts the type names {@code string} and {@code byte-array}, under which Axon Framework 4's
- * {@code XStreamSerializer} stored these payloads.
+ * stored form; the type names {@code string} and {@code byte-array}, under which Axon Framework 4's
+ * {@code XStreamSerializer} stored these payloads, are XStream aliases and resolve as described above.
  * <p>
  * Metadata is read untyped, into a {@code Map<String, Object>}, and each value is turned into a {@code String}: Axon
  * Framework 4 metadata could hold any value, while Axon Framework 5 metadata holds strings only. Strings stay as they
@@ -112,15 +119,10 @@ public final class StoredDeadlineConverter {
     private static final JsonFactory JSON_FACTORY = JsonFactory.builder().build();
     private static final String INVALID_JSON_STRING = "The stored payload is no valid JSON string";
     private static final String XSTREAM_CLASS_NAME = "com.thoughtworks.xstream.XStream";
-    /**
-     * The type names Axon Framework 4's {@code XStreamSerializer} stored a {@code String} and a {@code byte[]} payload
-     * under: XStream's built-in aliases of these types, instead of their class names.
-     */
-    private static final Map<String, Class<?>> XSTREAM_TYPE_NAMES =
-            Map.of("string", String.class, "byte-array", byte[].class);
 
     private final Converter converter;
     private final StoredFormat storedFormat;
+    private final Function<String, Optional<Class<?>>> storedTypeLookup;
 
     /**
      * Creates a {@code StoredDeadlineConverter} converting with the given {@code converter}.
@@ -130,6 +132,9 @@ public final class StoredDeadlineConverter {
     public StoredDeadlineConverter(Converter converter) {
         this.converter = Objects.requireNonNull(converter, "The Converter may not be null.");
         this.storedFormat = StoredFormat.of(converter);
+        this.storedTypeLookup = storedFormat == StoredFormat.XSTREAM
+                ? XStreamStoredTypeNames.lookupFor(converter)
+                : typeName -> Optional.empty();
     }
 
     /**
@@ -224,8 +229,7 @@ public final class StoredDeadlineConverter {
         if (EMPTY_TYPE.equals(typeName)) {
             return null;
         }
-        Optional<Class<?>> payloadType = Optional.<Class<?>>ofNullable(XSTREAM_TYPE_NAMES.get(typeName))
-                                                 .or(() -> resolve(typeName));
+        Optional<Class<?>> payloadType = resolve(typeName);
         if (payloadType.isEmpty()) {
             return new UnknownDeadlinePayload(typeName, revision, data);
         }
@@ -315,10 +319,14 @@ public final class StoredDeadlineConverter {
     }
 
     /**
-     * The single point resolving a stored type or class name to a class, so that resolving names a converter maps
-     * differently stays in one place.
+     * The single point resolving a stored type or class name to a class: through the converter's own lookup first, so
+     * that names the converter maps differently, such as XStream aliases, resolve, and as a class name otherwise.
      */
-    private static Optional<Class<?>> resolve(String typeName) {
+    private Optional<Class<?>> resolve(String typeName) {
+        return storedTypeLookup.apply(typeName).or(() -> loadClass(typeName));
+    }
+
+    private static Optional<Class<?>> loadClass(String typeName) {
         ClassLoader contextClassLoader = Thread.currentThread().getContextClassLoader();
         ClassLoader classLoader = contextClassLoader != null
                 ? contextClassLoader

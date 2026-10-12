@@ -21,6 +21,7 @@ package org.axonframework.deadline.dbscheduler;
 
 import com.thoughtworks.xstream.XStream;
 import org.axonframework.conversion.Converter;
+import org.axonframework.conversion.xstream.XStreamConverter;
 import org.axonframework.deadline.AxonFramework4;
 import org.axonframework.deadline.AxonFramework4.CompatScope;
 import org.axonframework.deadline.AxonFramework4.Flavor;
@@ -28,7 +29,6 @@ import org.axonframework.deadline.AxonFramework4.Payloads.CompatPayload;
 import org.axonframework.deadline.DeadlineMessage;
 import org.axonframework.deadline.GenericDeadlineMessage;
 import org.axonframework.deadline.StoredDeadlineConverter;
-import org.axonframework.deadline.UnknownDeadlinePayload;
 import org.axonframework.messaging.ScopeDescriptor;
 import org.axonframework.messaging.core.GenericMessage;
 import org.axonframework.messaging.core.MessageType;
@@ -123,19 +123,23 @@ class DbSchedulerHumanReadableDeadlineDetailsAf4CompatibilityTest {
     }
 
     /**
-     * Axon Framework 4 stores an aliased payload class under its alias, which Axon Framework 5 does not resolve.
+     * Axon Framework 4 stores an aliased payload class under its alias, which Axon Framework 5 resolves through
+     * the same alias on the {@link XStream} instance of its {@link XStreamConverter}.
      */
     @Test
-    void detailsOfAxonFramework4WithAnAliasedPayloadAreReadWithAnUnknownPayload() {
+    @SuppressWarnings("removal")
+    void detailsOfAxonFramework4WithAnAliasedPayloadAreReadThroughTheSameAlias() {
         // given
-        XStream xStream = new XStream();
-        xStream.alias("compatPayload", CompatPayload.class);
+        XStream af4XStream = new XStream();
+        af4XStream.alias("compatPayload", CompatPayload.class);
+        XStream af5XStream = new XStream();
+        af5XStream.alias("compatPayload", CompatPayload.class);
         Object af4Details = axonFramework4.callStatic(
                 DETAILS, "serialized", DEADLINE_NAME, CompatScope.SAGA.axonFramework4(axonFramework4),
                 axonFramework4.deadlineMessage(DEADLINE_NAME, PAYLOAD, Map.of()),
-                axonFramework4.xStreamSerializer(xStream)
+                axonFramework4.xStreamSerializer(af4XStream)
         );
-        StoredDeadlineConverter converter = new StoredDeadlineConverter(Flavor.XSTREAM.axonFramework5Converter());
+        StoredDeadlineConverter converter = new StoredDeadlineConverter(new XStreamConverter(af5XStream));
 
         // when
         DbSchedulerHumanReadableDeadlineDetails details = (DbSchedulerHumanReadableDeadlineDetails)
@@ -143,10 +147,7 @@ class DbSchedulerHumanReadableDeadlineDetailsAf4CompatibilityTest {
         DeadlineMessage result = details.asDeadLineMessage(converter);
 
         // then
-        assertThat(result.payload()).isInstanceOfSatisfying(
-                UnknownDeadlinePayload.class,
-                unknown -> assertThat(unknown.typeName()).isEqualTo("compatPayload")
-        );
+        assertThat(result.payload()).isEqualTo(PAYLOAD);
     }
 
     @ParameterizedTest

@@ -68,3 +68,8 @@ JpaSagaStore sagaStore = JpaSagaStore.builder()
 
 NOTE: A saga store matches the saga type column against the saga class name.
 If an Axon Framework 4 application mapped its saga classes to some other type name, an XStream alias being the usual way, rewrite that column to the class name before using it with a legacy saga store; see the `JpaSagaStore`/`JdbcSagaStore`/`MongoSagaStore` class Javadoc for details.
+
+NOTE: Deadlines are different: an Axon Framework 4 `XStreamSerializer` stored a deadline payload or scope descriptor under the type name XStream gives its class, which is an alias where one exists.
+That includes XStream's built-in aliases, such as `uuid` for a `UUID` or `int` for an `Integer`, and aliases your application registered.
+The legacy deadline managers resolve such a type name through the `XStream` instance of their `XStreamConverter`, as the `XStreamSerializer` did, so register the same aliases on it.
+A deadline whose payload type still resolves to no class fires with an `UnknownDeadlinePayload`, which only deadline handlers without a payload parameter receive, and the deadline manager logs a warning naming the deadline and the stored type.
