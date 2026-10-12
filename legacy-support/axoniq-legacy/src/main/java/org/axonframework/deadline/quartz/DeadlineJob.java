@@ -233,7 +233,8 @@ public class DeadlineJob implements Job {
             if (jobDataMap.containsKey(AXON_3_3_SERIALIZED_DEADLINE_MESSAGE)) {
                 throw new DeadlineException(
                         "The deadline job was stored in the format of Axon Framework 3.3, which is not supported. "
-                                + "Reschedule the deadline."
+                                + "Let such jobs fire on an Axon Framework 4 node, or reschedule their deadlines "
+                                + "from Axon Framework 4, before upgrading to Axon Framework 5."
                 );
             }
             Object payload = converter.payload((String) jobDataMap.get(MESSAGE_TYPE),
