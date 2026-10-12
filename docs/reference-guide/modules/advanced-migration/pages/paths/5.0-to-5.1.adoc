@@ -118,7 +118,7 @@ implementation 'io.axoniq.framework:axoniq-spring-boot-starter'
 The Axoniq Framework features are commercial offerings requiring a license for production use.
 Licenses can be obtained through the https://platform.axoniq.io[AxonIQ Platform].
 
-For configuring credentials, evaluating for free, feature entitlement, message throughput limits, and pricing, see the
+For configuring credentials, evaluating, feature entitlement, message throughput limits, and pricing, see the
 xref:axoniq-platform-reference:ROOT:licensing/index.adoc[Axoniq Platform licensing reference].
 
 
