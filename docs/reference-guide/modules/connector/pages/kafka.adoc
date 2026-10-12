@@ -1,0 +1,758 @@
+[.axoniq-feature]
+[#kafka]
+= Kafka
+
+The Kafka connector publishes events to Apache Kafka topics and lets event processors consume events from Kafka topics.
+It uses the plain Kafka clients, so it works with and without Spring.
+
+[#events_inside_outside]
+== Events on the inside and events on the outside
+
+An application works with two kinds of events, and the Kafka connector keeps them apart.
+
+* *Events on the inside* are the events an application sources its state from and builds its projections from.
+They live in the event store, and their shape evolves together with the application.
+They are never exposed by default.
+* *Events on the outside* are a published contract between systems.
+Kafka topics usually carry these.
+They are shaped deliberately, versioned, and kept stable, because other teams depend on them.
+
+Nothing reaches a Kafka topic unless the application publishes it explicitly.
+The usual pattern is an event handler that reacts to an event on the inside, decides whether something should go out, and publishes an event on the outside through a `KafkaEventSink`.
+
+[source,java]
+----
+include::example$connector/kafka/ParcelEvents.java[tag=events,indent=0]
+----
+
+To use the connector, add the `axoniq-kafka` dependency:
+
+[source,xml]
+----
+<dependency>
+    <groupId>io.axoniq.framework</groupId>
+    <artifactId>axoniq-kafka</artifactId>
+</dependency>
+----
+
+[#publishing]
+== Publishing events
+
+A `KafkaEventSink` is an `EventSink` that publishes to Kafka.
+It is not the application's own event sink: events that the application publishes to its event bus or event store stay there.
+The connector registers every sink as an `EventSink` component under the sink's name, so that the framework's decorators of event sinks, such as tracing, apply to it.
+Because a sink may be decorated, code depends on the `EventSink` type, not on `KafkaEventSink`.
+
+The handling component obtains the sink by its name, and its handler passes the `ProcessingContext` along, so that publishing becomes part of handling the event.
+With the Configuration API, obtain the sink with `config.getComponent(EventSink.class, "<name>")` when building the handling component, as the sample below does.
+In Spring, inject an `EventSink` qualified with the sink's name into the handling component, through its constructor or a field: `ParcelPublisher(@Qualifier("outbound") EventSink kafka)`.
+An `EventSink` without a qualifier remains the application's own event bus or event store, also as a handler parameter.
+
+[WARNING]
+====
+Do not put `@Qualifier` on an `EventSink` parameter of an event handler method.
+The parameter is resolved by type in the configuration of the handler's event processor, which ignores the qualifier, so the handler receives the application's own event sink, and its events never reach Kafka.
+Inject the qualified sink into the handling component instead, as shown above.
+====
+
+[source,java]
+----
+include::example$connector/kafka/ParcelPublisher.java[tag=publisher,indent=0]
+----
+
+`EventSinks.publishPayloads` takes payloads, and resolves their message type with the given `MessageTypeResolver`, typically the application's own, which a handler receives as a parameter. The `@Event` annotation on a payload class then decides the name and version of the published event.
+It works with any `EventSink`.
+To publish with metadata, build an `EventMessage` whose type comes from that same `MessageTypeResolver`, and pass it to `publish` or `publishPayloads`.
+Do not derive a `MessageType` from the payload class yourself: that ignores `@Event`, and consumers that expect the annotated type never receive the event.
+
+For every event, the sink resolves the topic with its `TopicResolver`.
+When the resolver returns no topic, the event is not published, so a resolver can also filter.
+The sink then resolves the record key with its `RecordKeyResolver`, and encodes the event as a record with its codec.
+
+[#record_keys]
+=== Record keys and ordering
+
+The record key decides the partition a record is written to.
+Kafka only guarantees the order of records within a partition.
+Events that consumers must see in order therefore need the same key, such as the identifier of the parcel or order they concern.
+Without a key, Kafka spreads records over the partitions, and consumers may see related events in any order.
+
+`RecordKeyResolver.fromMetadata("parcelId")` uses a metadata entry as the key.
+Any lambda that derives a key from the event works as well.
+
+[#confirmation_modes]
+=== Confirmation modes
+
+The `ConfirmationMode` of a sink decides how it confirms that events reached Kafka, and how publishing relates to the processing context:
+
+[cols="1,3"]
+|===
+|Mode |Behavior
+
+|`NONE`
+|Sends records right away and does not wait for Kafka. Failures are logged. The fastest mode, and the only one that may lose events.
+
+|`WAIT_FOR_ACK` (default)
+|Sends records right away, and waits for Kafka's acknowledgements before the processing context commits. A record that is not acknowledged within the acknowledgement timeout fails the processing context. Records sent before a failure are not withdrawn.
+
+|`TRANSACTIONAL`
+|Sends the records of a processing context in one Kafka transaction. The transaction commits while the processing context prepares to commit, and aborts when the processing context fails before that. Consumers that read with `isolation.level=read_committed` only see events whose Kafka transaction committed. Requires a transactional identifier prefix that is unique to each application instance and stable across its restarts.
+|===
+
+Outside a processing context, the sink sends right away, and the returned future completes when the chosen mode has confirmed the events.
+Within a processing context, publish before the context starts to commit: a publication from a commit or after-commit step is rejected with an `IllegalStateException`, before anything is sent.
+Failures to publish are reported as a `KafkaPublicationException`, in both confirming modes, including failures to create a producer or to begin a Kafka transaction.
+Once the application shuts the sink down, it rejects publications with an `IllegalStateException`.
+
+A `TRANSACTIONAL` sink guarantees that events reach `read_committed` consumers only if the Kafka transaction committed.
+It does not make the Kafka transaction and the rest of the processing context atomic.
+The Kafka transaction commits alongside the context's other preparations, such as a processor storing its progress, and before resources such as a database transaction commit.
+A failure later in the commit can therefore leave the events published, and the context is retried: delivery is at least once.
+
+The acknowledgement timeout only covers waiting for acknowledgements.
+How long sending, and beginning or committing a Kafka transaction, may block is bounded by the producer's `max.block.ms` setting, for example while the broker is unreachable.
+A commit that times out is ambiguous: the transaction may still commit on the broker.
+The processing context fails anyway, so a processor that retries it may publish the events twice.
+Committing a Kafka transaction blocks the thread that commits the processing context until the broker answers.
+To free that thread, give the sink an executor for its commits with `withCommitExecutor`, for example `Executors.newVirtualThreadPerTaskExecutor()`.
+
+Kafka fences off a producer when another one initializes with the same transactional identifier.
+A sink numbers the transactional identifiers of its producers from its prefix, and reuses the lowest free number first.
+A restarted instance with the same prefix therefore fences off the producers it left behind, as far as it uses their numbers again; open transactions of the other numbers expire after the producer's `transaction.timeout.ms`, and hold back `read_committed` consumers until then.
+Instances that share a prefix fence off each other's producers continually, so give every instance a prefix of its own.
+
+[#delivery_semantics]
+=== Delivery semantics
+
+Publish from the handler of a pooled streaming event processor.
+In the `WAIT_FOR_ACK` and `TRANSACTIONAL` modes, the sink confirms the events while the processing context prepares to commit, alongside the processor storing its progress.
+The stored progress only becomes durable when the context's transaction commits, after the confirmation, so a failed confirmation rolls it back and the events are published again: events are delivered at least once.
+This requires a token store that takes part in the processing context's transaction, such as the JPA or JDBC token store of a processor with a transaction manager.
+With a token store that does not, a failed confirmation does not undo the stored progress, and the events of that context may never reach Kafka.
+The processor's error handling and dead-letter queue apply to failed publications.
+
+Publishing from a subscribing processor ties the availability of Kafka to the processing that published the original event.
+
+[#exposing_events]
+=== Exposing events as they are
+
+Sometimes an event on the inside genuinely is the contract with other systems.
+For those events, the connector can configure a pooled streaming processor that reads them from the event store and publishes them as they are.
+Name the events by their payload class, and the application's `MessageTypeResolver` resolves their names, honoring `@Event`:
+
+[source,java]
+----
+include::example$connector/kafka/KafkaConfig.java[tag=expose,indent=0]
+----
+
+Events without a payload class in the application can be named by their `QualifiedName` instead, with the `exposeEvents` variant that takes a set of names.
+
+The processor starts at the end of the event store, as it is when the processor first starts, so enabling exposure on an existing application publishes only the events stored from then on.
+The same holds for a fresh deployment: events that the application stores before the exposure processor has initialized its position, for example while the application is still starting, are not exposed.
+Once the processor has stored its position, it continues from there after a restart.
+To publish the events stored before as well, pass a customization of the processor's configuration that starts at the beginning of the event store, which can also set, for example, its segment count:
+
+[source,java]
+----
+connector.exposeEvents("parcel-exposure", "outbound",
+                       (config, processor) -> processor.initialToken(source -> source.firstToken(null)),
+                       ParcelDispatched.class);
+----
+
+The processor cannot be reset, because a replay would publish every event again.
+Prefer an explicit publishing handler for every event that is not meant as a contract.
+
+Exposed events are keyed by the identifier of the aggregate they belong to, when the event store provides one, so that the events of an aggregate land in the same partition and consumers see them in order.
+Other exposed events, such as those of a tag-based event store, and the events that handlers publish to the same sink, are keyed by the sink's `RecordKeyResolver`.
+
+The connector registers the exposure processor itself.
+In Spring Boot, the processor settings under `axon.eventhandling.processors` therefore do not apply to it; adjust it with the customization of `exposeEvents` instead.
+
+[#consuming]
+== Consuming events
+
+The connector offers two event sources.
+They differ in who decides how the work is spread over threads and application instances.
+
+[cols="1,2,2"]
+|===
+| |Streamable source |Subscribable source
+
+|Processor
+|Pooled streaming event processor
+|Subscribing event processor
+
+|Spreads the work
+|The processor, with its segments and sequencing policy
+|Kafka, by assigning partitions to the members of a consumer group
+
+|Progress
+|A `KafkaTrackingToken` in the processor's token store
+|Committed offsets in Kafka
+
+|Replays, split and merge, dead-letter queue
+|Supported
+|Not applicable
+
+|Reads
+|Every partition, in every processor instance
+|The partitions Kafka assigns to the instance
+|===
+
+Choose the streamable source when the processor should work as it does on the event store, for example to replay a projection.
+Choose the subscribable source for high-volume topics read by many application instances, where every instance should only read its share of the partitions.
+
+[#streamable_source]
+=== Streamable source
+
+A `KafkaStreamableEventSource` reads every partition of the subscribed topics without joining a consumer group.
+The processor stores its progress as a `KafkaTrackingToken` and distributes the events over its segments with its sequencing policy.
+Partitions added to a topic later, and topics created later that match a subscription pattern, are read from their beginning once the source discovers them.
+A pattern also matches the dead-letter topics that subscribable sources write to, when their names match: exclude those in the pattern, for example `orders\.(?!.*\.DLT$).*`.
+
+Events from Kafka carry no aggregate identifier.
+Without further configuration, a processor therefore handles them one at a time.
+`@KafkaPartitionSequencing` processes the events of each partition in order, and events of different partitions concurrently, matching Kafka's own ordering guarantee:
+
+[source,java]
+----
+include::example$connector/kafka/ParcelProjection.java[tag=projection,indent=0]
+----
+<1> Processes events of the same partition in order. On a class, use `@SequencingPolicy(type = KafkaPartitionSequencingPolicy.class)` instead.
+<2> Every event carries the `KafkaResources` of the record it came from: topic and partition, offset, key and timestamp.
+
+A sequencing policy on a property of the event, such as the property the publisher uses as record key, works as well.
+Segments are assigned by hash, so with fewer partitions than segments, some segments stay idle.
+
+[IMPORTANT]
+====
+*A `KafkaTrackingToken` holds the offset of the next record to read*, not the offset of the last record that was read.
+After the record at offset 41 of partition `parcels-0` is processed, the token holds `parcels-0 = 42`.
+This is Kafka's own convention for consumer positions and committed offsets.
+A partition that the token does not mention is read from its earliest available record.
+A partition that it mentions is read from the token's offset, also when that is 0.
+====
+
+When Kafka has deleted the records at a processor's position under the topic's retention settings, the `RetentionGapPolicy` decides what happens.
+That includes a position of 0 in a partition whose first records Kafka has deleted since the token was created, for example when a processor that started at the end of an empty partition was down for longer than the topic's retention.
+This check covers the position of each segment on its own.
+When a processor reads several segments together, or merges segments, a partition that only some of their tokens mention is read from its earliest available record.
+Records of that partition that Kafka deleted before those segments read them are then skipped without the policy applying, for example when all instances were down for longer than the topic's retention.
+Records that still exist are never skipped.
+`FAIL`, the default, fails the event stream, so that the processor reports the problem and retries according to its error handling.
+`RESET_TO_EARLIEST` continues from the earliest available record and logs a warning; choose it to have such partitions start at their earliest available record without failing the stream.
+A position beyond the end of a partition always fails the event stream, whatever the policy: the partition holds fewer records than the processor has read, for example because the topic was deleted and created again.
+Reset the processor to read such a topic anew.
+
+The source reads with `isolation.level=read_committed`: records of aborted Kafka transactions are skipped, and reading stops before the records of open ones.
+To read uncommitted records, set `isolation.level` in the source's own consumer properties, with `withConsumerProperties` or the source's `properties.isolation.level` property in Spring Boot.
+An `isolation.level` in the settings for all clients, given to `KafkaConnector.create` or under `axon.kafka.properties`, does not change it: the source's default takes precedence over those.
+`firstToken`, `latestToken` and `tokenAt` use the same isolation level.
+
+Events are delivered at least once.
+Records that a processor skips, because they carry no event or do not match the processor's criteria, advance the token only together with the next event the processor handles.
+A processor whose criteria match few events may therefore read skipped records again after a restart, and report a larger lag than it has.
+In particular, skipped records at the end of a partition are read, and skipped, again after every restart, until an event that the processor handles follows them.
+When the processor reopens its stream from the lowest position of its segments, a segment that was further ahead receives some events again.
+
+`tokenAt` positions a processor at the first record of every partition with a timestamp at or after the given time.
+The sink sets the record timestamp to the event's timestamp, unless the topic is configured to use the time the broker appended the record.
+
+A streamable source combines with other sources, such as the event store, in a `MultiStreamableEventSource`, see xref:events:event-processors/streaming.adoc#_multiple_event_sources[Multiple event sources].
+
+[#subscribable_source]
+=== Subscribable source
+
+A `KafkaSubscribableEventSource` joins a consumer group.
+Kafka assigns the partitions of the subscribed topics to the members of the group, and moves them when members join or leave.
+Events of a partition are processed in order, and partitions are processed concurrently.
+Every event is processed in a processing context of its own.
+The source commits offsets per batch: once all records of a partition that one poll returned have been processed, it commits the offset after the last of them, together with those of the other batches that finished in the meantime.
+When a record fails and is retried, it commits the offset of the failed record, keeping the progress of the records before it.
+A crash before a commit processes the records of the batch again.
+
+A slow handler does not get its consumer evicted from the group: while the events of a partition are processed, the partition is paused and the consumer keeps polling.
+
+The source processes events on virtual threads.
+On JDK 21 to 23, a virtual thread that blocks inside `synchronized` code, as some JDBC drivers and other libraries do, pins the platform thread that carries it; with more such partitions busy than there are processor cores, processing stalls.
+To process events on threads of your choice instead, give the source an executor with `withExecutor(executor)`, or, in Spring Boot, define an `Executor` bean qualified with the source's name, for example `@Qualifier("parcel-group")`.
+The application owns that executor: the source does not shut it down when it stops.
+An executor with fewer threads than the partitions a consumer processes at once makes partitions wait for each other.
+A record whose task the executor rejects, for example because its queue is full, is retried after the retry backoff, without applying the failed-record policy, as its event never ran.
+The executor must run every task it is given, or reject it by throwing a `RejectedExecutionException`: one that discards tasks silently, such as a `ThreadPoolExecutor` with `DiscardPolicy` or `DiscardOldestPolicy`, leaves the record's partition paused, without reporting it as stopped, until Kafka assigns the partition anew.
+
+The source reads with `isolation.level=read_committed`: records of aborted Kafka transactions are skipped, and consumption stops before the records of open ones.
+To read uncommitted records, set `isolation.level` in the source's own consumer properties, with `withConsumerProperties` or the source's `properties.isolation.level` property in Spring Boot.
+An `isolation.level` in the settings for all clients, given to `KafkaConnector.create` or under `axon.kafka.properties`, does not change it: the source's default takes precedence over those.
+
+A source belongs to one processor.
+A second processor on the same topics needs a source, and a consumer group, of its own.
+A source that subscribes to a topic pattern leaves out the topics whose names end in its dead-letter topic suffix, so that it never consumes its own dead-letter records.
+To consume dead-letter topics, for example to reprocess them, give that source a different `dead-letter-topic-suffix`; the source logs a warning when its pattern only matches names that end in its suffix.
+
+The source joins the consumer group it is configured with and commits offsets itself, so a `group.id` or `enable.auto.commit` in its consumer properties is not used, and the source logs a warning.
+A `group.instance.id` in its consumer properties enables static membership.
+Every consumer needs an identifier of its own, so with more than one consumer per instance, the source suffixes it with each consumer's index: `<group.instance.id>-0`, `<group.instance.id>-1`, and so on.
+Every application instance needs identifiers of its own too: instances configured with the same `group.instance.id` keep fencing each other off, which the source logs as an error naming that cause while it keeps retrying.
+
+The `FailedRecordPolicy` decides what happens to an event that fails.
+It only sees the failures that the subscribing processor's error handler propagates, as the default `PropagatingErrorHandler` does.
+With an error handler that logs failures instead, the event counts as processed: its offset is committed, and the policy never applies.
+
+[cols="1,3"]
+|===
+|Policy |Behavior
+
+|`RETRY` (default)
+|Processes the record again after a delay that grows with every attempt. Only the record's partition waits.
+
+|`SKIP`
+|Logs a warning and continues with the next record.
+
+|`DEAD_LETTER_TOPIC`
+|Publishes the original record, with headers describing the failure, to a dead-letter topic named after the original topic with a `.DLT` suffix, and continues with the next record. When publishing to the dead-letter topic fails, the record is retried instead. The dead-letter producer's `max.block.ms` defaults to 10 seconds, as it sends from the consumer's polling thread. Records that carry no event, or cannot be deserialized or decoded, never go to the dead-letter topic: the `UndecodableRecordPolicy` deals with them, see <<undecodable_records>>.
+|===
+
+A dead-letter record keeps the key, value, timestamp and headers of the original record, and adds headers describing the failure, with UTF-8 encoded string values.
+The `DeadLetterHeaders` class holds their names, for applications that consume dead-letter topics:
+
+[cols="2,3"]
+|===
+|Header |Value
+
+|`axon-dlt-exception-class` (`DeadLetterHeaders.EXCEPTION_CLASS`)
+|The class name of the exception that failed the original record.
+
+|`axon-dlt-exception-message` (`DeadLetterHeaders.EXCEPTION_MESSAGE`)
+|The message of that exception; absent when it has none.
+
+|`axon-dlt-original-topic` (`DeadLetterHeaders.ORIGINAL_TOPIC`)
+|The topic of the original record.
+
+|`axon-dlt-original-partition` (`DeadLetterHeaders.ORIGINAL_PARTITION`)
+|The partition of the original record.
+
+|`axon-dlt-original-offset` (`DeadLetterHeaders.ORIGINAL_OFFSET`)
+|The offset of the original record within its partition.
+|===
+
+A failed offset commit, for example during a rebalance, is logged as a warning: the records it covers are delivered again, to the same or to another member of the group.
+When Kafka takes a partition away while its records are processed, the source stops processing that partition's records after the record in progress, waiting at most the revocation timeout for it, and commits the progress.
+A consumer that fails unexpectedly, for example because the broker is unreachable or its host name does not resolve yet, rejoins the group with a new Kafka consumer, after a delay that grows with consecutive failures.
+A failure that retrying cannot resolve, such as invalid client settings or failed authentication or authorization, stops all consumers of the source instead, also with several consumers per instance: the source logs the failure once, as an error, and reports it through its status, see <<source_status>>.
+
+A new consumer group starts at the earliest record of every partition, and so does a partition that is added to a topic later.
+To process only the records published from then on, set the initial position to `LATEST`, with `withInitialPosition(InitialPosition.LATEST)` or `axon.kafka.subscribing-sources.<source>.initial-position=latest`.
+A partition added to a topic later then also starts at its end, once the group first picks it up, so records published to it before then are not processed.
+The source commits that end position right away, so a rebalance or restart before the first record arrives does not skip the records published in the meantime.
+A group that resumes continues from its committed offsets, whatever the initial position.
+When Kafka has deleted the records at a committed offset under the topic's retention settings, the `RetentionGapPolicy` decides what happens.
+`FAIL`, the default, logs an error and stops consuming that partition without committing, until the group's offsets are reset, for example with Kafka's `kafka-consumer-groups` tool while the application is stopped.
+The partition hits the gap again whenever Kafka assigns it again.
+`RESET_TO_EARLIEST` continues from the earliest available record and logs a warning.
+The initial position and the policy are independent of each other, and both rely on the consumer's `auto.offset.reset` setting being `none`, which is the source's default.
+Setting `auto.offset.reset` in the source's consumer properties replaces both with Kafka's own reset.
+In Spring Boot, combining it with an `initial-position` or `retention-gap-policy` other than the default on the same source fails the application at startup.
+Prefer the initial position over `auto.offset.reset=latest`: the latter also applies to retention gaps, which then silently skip to the end of the partition.
+
+When the application stops, the source gives events in progress the revocation timeout to finish, counted from the stop request, and commits their offsets.
+It writes no more records to dead-letter topics once it stops; the next owner of their partitions processes those records again.
+Stopping takes at most the revocation timeout plus 15 seconds, including closing the dead-letter producer, and the application's lifecycle must give the phase in which subscribable sources stop at least that long.
+That bound assumes the dead-letter producer's `max.block.ms`, 10 seconds by default, does not exceed the revocation timeout plus 10 seconds: a dead-letter record that is being handed to the producer when the application stops can block the consumer's thread that long.
+Otherwise, it moves on to close the sinks and connections that handlers of events in progress may still use; their offsets are then not committed, and the events are delivered again.
+Spring Boot gives every lifecycle phase 30 seconds by default, which covers the default revocation timeout of 10 seconds; raise `spring.lifecycle.timeout-per-shutdown-phase` along with a longer revocation timeout.
+Without Spring, the lifecycle gives every phase 5 seconds by default; raise it with `registerLifecyclePhaseTimeout`:
+
+[source,java]
+----
+MessagingConfigurer.create()
+                   .lifecycleRegistry(lifecycle -> lifecycle.registerLifecyclePhaseTimeout(30, TimeUnit.SECONDS));
+----
+
+A consumer that does not poll within `max.poll.interval.ms`, five minutes by default, leaves the group.
+Besides polling, the consumer's thread writes records to dead-letter topics, one record between two polls, each for at most the dead-letter producer's `max.block.ms` plus 20 seconds for the acknowledgement, and waits for the revocation timeout when Kafka takes partitions away.
+Keep those well below `max.poll.interval.ms`.
+
+[#source_status]
+=== Source status and health
+
+A subscribable source deals with failed events itself, so the subscribing processor that reads it does not report an error when the source stops.
+The `KafkaConnectorStatus` component, which the connector registers, reports the status of every subscribable source by name instead: `Running`, `Stopped`, or `Failed` with the failure that stopped its consumers, such as failed authentication or an error on a consumer's thread.
+It reports the source itself, also when an event transformation decorates it.
+
+[source,java]
+----
+KafkaConnectorStatus status = configuration.getComponent(KafkaConnectorStatus.class);
+if (status.source("parcel-group").orElseThrow() instanceof KafkaSourceStatus.Failed failed) {
+    // alert, using failed.cause()
+}
+----
+
+A failed source stays failed until it starts consuming again, for example after the application restarts.
+Transient failures, such as an unreachable broker, are retried and leave the source running.
+
+A running source may still not progress on single partitions.
+`Running.stoppedPartitions()` lists them, with the offset and the reason:
+
+* `UNDECODABLE_RECORD`: the `FAIL` undecodable-record policy rejected the record at that offset, see <<undecodable_records>>.
+* `RETENTION_GAP`: the committed offset no longer exists, and the `FAIL` retention gap policy applies.
+* `RETRYING`: the `RETRY` failed-record policy retries the record at that offset, with the number of failed attempts and the last failure. A failed write to the dead-letter topic has the same effect.
+
+A partition leaves the list once it progresses again, or once Kafka assigns it to another consumer, which then reports it.
+Each application instance reports the partitions its own consumers own.
+
+`KafkaSourceStatus` is not sealed: a `switch` over it needs a `default` branch.
+
+In Spring Boot, with Spring Boot Actuator on the classpath, the `kafkaConnector` health indicator reports `DOWN` while a subscribable source has failed, with the status of every source and the cause of each failure in its details, and `UP` otherwise.
+The details of a running source also list its stopped partitions.
+Those leave the indicator `UP`: restarting the application does not resolve them, so they call for an alert rather than a restart.
+The details include the messages of the exceptions that stopped a source or failed a retried record, which can carry data of the events involved.
+Spring Boot shows health details only as far as `management.endpoint.health.show-details` allows, which is `never` by default; keep it restricted, for example to `when-authorized`, where that data must not leak.
+Disable the indicator with `management.health.kafka-connector.enabled=false`.
+
+A source that failed, for example because authentication failed, stays stopped until the application restarts.
+To have the platform restart the application, include the indicator in the liveness group of Spring Boot's health endpoint, which Kubernetes liveness probes use:
+
+[source,text]
+----
+management.endpoint.health.probes.enabled=true
+management.endpoint.health.group.liveness.include=livenessState,kafkaConnector
+----
+
+Spring Boot recommends keeping external systems out of liveness checks, because their outage would restart every instance at once.
+The `kafkaConnector` indicator only reports `DOWN` for failures that retrying cannot resolve, not while Kafka is unreachable, so an outage of Kafka does not restart the application.
+
+Streamable sources are not part of this status: a failure of a streamable source fails the event stream of the pooled streaming processor that reads it, and the processor reports it as an error and retries it according to its error handling.
+
+[#undecodable_records]
+=== Records that carry no event
+
+Topics are not always written by Axon applications alone.
+The `UndecodableRecordPolicy` decides what happens to a record that carries no event in the format of the configured codec.
+The same policy applies to malformed records: a record whose key or value cannot be deserialized, or that the codec fails to decode, whatever the exception it throws, such as a record with an unreadable timestamp header.
+`SKIP_AND_LOG`, the default, skips the record with a warning naming its position and, for a malformed record, the cause.
+A skipped record still counts as consumed.
+
+`FAIL` stops consumption at that record:
+
+* The streamable source fails the event stream with an `UndecodableRecordException`. The processor reports the problem, and when it retries, reopens the stream from its last stored position and hits the record again.
+* The subscribable source stops consuming the record's partition at that record, and logs an error. The `FailedRecordPolicy` does not apply, so the record is neither retried, skipped nor sent to the dead-letter topic: the partition stays paused, and its committed offset never moves past the record. Other partitions are not affected. The partition is consumed again from that record when Kafka assigns it again, for example after a restart.
+
+To get past such a record, fix the codec, or switch to `SKIP_AND_LOG`.
+For the subscribable source, moving the consumer group's offset past the record also works, for example with Kafka's `kafka-consumer-groups` tool while the application is stopped.
+
+[#transformation]
+=== Event transformations
+
+When the application configures an `EventTransformerChain`, see xref:message-transformation:index.adoc[], both sources apply it to the events they read, just as the event store does for its events.
+Events on the outside evolve too, and their consumers get the same tools.
+
+[#configuration]
+== Configuration
+
+[#configuration_api]
+=== Configuration API
+
+The `KafkaConnector` registers sinks and sources as named components:
+
+[source,java]
+----
+include::example$connector/kafka/KafkaConfig.java[tag=connector,indent=0]
+----
+<1> A sink named `outbound`, publishing to the `parcels` topic in Kafka transactions.
+<2> A source named `parcel-stream` for pooled streaming processors.
+<3> A source named `parcel-group` for a subscribing processor, consuming in the `billing` consumer group with four consumers per application instance.
+
+Register the connector, and select the sources by name for the processors:
+
+[source,java]
+----
+include::example$connector/kafka/KafkaConfig.java[tag=processors,indent=0]
+----
+<1> A projection reading the `parcel-stream` source.
+<2> A subscribing processor consuming the `parcel-group` source.
+<3> A processor on the event store, publishing through the sink.
+
+Besides the sinks and sources, the connector registers a `KafkaConnectorStatus`, and a `KafkaClientFactory` for the given client settings and the default codec, unless the application registers its own.
+Register one connector, with all sinks and sources: connecting to several Kafka clusters is not supported.
+A second connector that reaches the configuration, such as a second `KafkaConnector` bean in Spring, fails the application at startup; registering a second one with the same `ComponentRegistry` replaces the first, with a warning.
+Sinks close their producers when the application shuts down, and subscribable sources start consuming once the subscribing processors have started.
+
+[#client_identifiers]
+==== Client settings
+
+The client settings given to `KafkaConnector.create`, or under `axon.kafka.properties` in Spring Boot, apply to every Kafka client of the connector: the consumers of every source, the producers of every sink, including each producer of a transactional sink's pool, the dead-letter producers and the clients that look up positions.
+The settings of a sink or source take precedence over them.
+
+Every sink and source gives each of its clients a client identifier of its own, derived from the `client.id` among the shared settings, or `axon.kafka.client-id`, or from one in the sink's or source's own properties: `<client.id>-<name>-<n>`, where `<name>` is the name of the sink or source and `<n>` counts the clients it created, from 0.
+That keeps the metrics that Kafka registers per client identifier apart, and tells the clients apart in broker logs.
+With `axon.kafka.client-id=shipping`, the producer of sink `outbound` is `shipping-outbound-0`, and the clients of streamable source `parcel-stream` are `shipping-parcel-stream-0`, `shipping-parcel-stream-1` and so on.
+A client of these that is created anew, for example when a processor reopens its event stream after a failure, gets the next number.
+
+Long-lived clients keep their client identifier when they are created anew, so that their metric series and broker log entries continue under the same name: `<client.id>-<name>-<client>`.
+Each consumer of a subscribable source is named after its index, from 0, and its dead-letter producer is named `dlt`: with `axon.kafka.client-id=shipping`, the consumers of source `parcel-group` are `shipping-parcel-group-0`, `shipping-parcel-group-1` and so on, also after they reconnect, and its dead-letter producer is `shipping-parcel-group-dlt`.
+Each producer of a transactional sink's pool is named after the number in its transactional identifier: `shipping-outbound-tx-0`, `shipping-outbound-tx-1` and so on.
+When a subscribable source starts consuming again while its previous consumers are still stopping, for example after its processor was restarted, Kafka may briefly log a warning that it cannot register the metrics of a new consumer under an identifier that is still in use.
+
+Broker quotas that are configured for an exact client identifier no longer match these; configure quotas for the authenticated user, or for each client identifier.
+Without a `client.id`, Kafka generates one for every client.
+This applies to the `KafkaClientFactory` that the connector creates, and to one that `KafkaClientFactory.create` creates; another implementation decides itself, through `KafkaClientFactory.forComponent` and `KafkaClientFactory.forClient`.
+
+The shared settings must not set `group.instance.id`: consumers that share one fence each other off. Set it in the consumer properties of a subscribable source instead.
+
+The shared settings must not set `transactional.id`, and neither must the producer properties of a sink or the dead-letter producer properties of a source.
+A transactional sink gives each of its producers an identifier of its own, from its transactional identifier prefix; producers that share one fence each other off, and producers that are not transactional fail with one.
+
+[#spring_boot]
+=== Spring Boot
+
+With Spring Boot, the connector is configured with properties under `axon.kafka`.
+Every sink becomes a `KafkaEventSink`, registered as an `EventSink` that components inject with `@Qualifier("<sink>")`.
+Every source under `axon.kafka.streaming-sources` becomes a source for pooled streaming processors, and every source under `axon.kafka.subscribing-sources` one for subscribing processors, which a processor selects with its `source` property.
+For example:
+
+[source,text]
+----
+axon.kafka.bootstrap-servers=localhost:9092
+axon.kafka.properties.security.protocol=SSL
+
+axon.kafka.sinks.outbound.topic=parcels
+axon.kafka.sinks.outbound.record-key-metadata=parcelId
+axon.kafka.sinks.outbound.confirmation-mode=transactional
+axon.kafka.sinks.outbound.transactional-id-prefix=shipping-1-
+
+axon.kafka.streaming-sources.parcel-stream.topics=parcels
+
+axon.kafka.subscribing-sources.parcel-group.topics=parcels
+axon.kafka.subscribing-sources.parcel-group.group-id=billing
+axon.kafka.subscribing-sources.parcel-group.consumer-count=4
+axon.kafka.subscribing-sources.parcel-group.failed-record-policy=dead-letter-topic
+
+axon.eventhandling.processors.parcel-projection.source=parcel-stream
+axon.eventhandling.processors.billing.mode=subscribing
+axon.eventhandling.processors.billing.source=parcel-group
+----
+
+Sink and source names are unique across sinks and both kinds of sources; using a name twice fails the application at startup.
+Without sinks, nothing is published to Kafka.
+Settings that apply to all Kafka clients, such as security settings, go under `axon.kafka.properties`.
+The connector does not require Spring for Apache Kafka.
+
+The connector is active as soon as the `axoniq-kafka` module is on the classpath, also without any `axon.kafka` properties: it then connects to `localhost:9092`, but only once a sink or source is used.
+Set `axon.kafka.enabled=false` to disable it.
+
+[cols="2,1,3"]
+|===
+|Property |Default |Description
+
+|`axon.kafka.enabled`
+|`true`
+|Whether the connector is active.
+
+|`axon.kafka.bootstrap-servers`
+|`localhost:9092`
+|The brokers to connect to initially. Takes precedence over a `bootstrap.servers` entry under `axon.kafka.properties`.
+
+|`axon.kafka.client-id`
+|
+|The client identifier reported to the brokers. Every Kafka client of the connector reports it with a suffix of its own, see <<client_identifiers>>.
+
+|`axon.kafka.properties.*`
+|
+|Settings for all Kafka clients, using the property names of the Kafka clients, such as `security.protocol`.
+
+|`axon.kafka.codec`
+|`default`
+|The record format: `default`, or `legacy` to also read and write the headers of Axon Framework 4's Kafka extension.
+
+|`axon.kafka.sinks.<sink>.topic`
+|
+|The topic to publish to. Required, unless a `TopicResolver` bean is qualified with the sink's name.
+
+|`axon.kafka.sinks.<sink>.record-key-metadata`
+|
+|The metadata entry that holds the record key. Without it, records have no key.
+
+|`axon.kafka.sinks.<sink>.confirmation-mode`
+|`wait-for-ack`
+|`none`, `wait-for-ack` or `transactional`.
+
+|`axon.kafka.sinks.<sink>.transactional-id-prefix`
+|
+|The prefix of the transactional identifiers. Required for `transactional`, and unique to each application instance.
+
+|`axon.kafka.sinks.<sink>.ack-timeout`
+|`30s`
+|How long `wait-for-ack` waits for Kafka's acknowledgements.
+
+|`axon.kafka.sinks.<sink>.expose-events`
+|
+|The qualified names of the events to publish as they are, through a processor named `<sink>-exposure`, such as `parcels.ParcelDispatched`. These are event names, not class names: the name an `@Event` annotation gives, or the class name for a payload class without one.
+
+|`axon.kafka.sinks.<sink>.expose-from-beginning`
+|`false`
+|Whether the exposure processor starts at the beginning of the event store, rather than at its end, the first time it starts.
+
+|`axon.kafka.sinks.<sink>.properties.*`
+|
+|Producer settings for this sink.
+
+|`axon.kafka.streaming-sources.<source>.topics`
+|
+|The topics to read. Either this or `topic-pattern` is required; setting both fails the application context.
+
+|`axon.kafka.streaming-sources.<source>.topic-pattern`
+|
+|A regular expression matching the names of the topics to read. The source reads every matching topic, dead-letter topics included.
+
+|`axon.kafka.streaming-sources.<source>.undecodable-record-policy`
+|`skip-and-log`
+|What the source does with records that carry no event: `skip-and-log` or `fail`.
+
+|`axon.kafka.streaming-sources.<source>.retention-gap-policy`
+|`fail`
+|What the source does when Kafka deleted the records at its position: `fail` or `reset-to-earliest`.
+
+|`axon.kafka.streaming-sources.<source>.poll-timeout`
+|`500ms`
+|The longest time a single poll waits for records.
+
+|`axon.kafka.streaming-sources.<source>.buffer-size`
+|`1024`
+|The number of events buffered between the consumer and the processor.
+
+|`axon.kafka.streaming-sources.<source>.metadata-refresh-interval`
+|`30s`
+|How often the source looks for new partitions, and for new topics matching its pattern. A source with named topics describes only those; one with a topic pattern lists all topics of the cluster. Looking up partitions never creates topics.
+
+|`axon.kafka.streaming-sources.<source>.properties.*`
+|
+|Consumer settings for this source.
+
+|`axon.kafka.subscribing-sources.<source>.topics`
+|
+|The topics to consume. Either this or `topic-pattern` is required; setting both fails the application context.
+
+|`axon.kafka.subscribing-sources.<source>.topic-pattern`
+|
+|A regular expression matching the names of the topics to consume. The source leaves out the topics whose names end in its dead-letter topic suffix.
+
+|`axon.kafka.subscribing-sources.<source>.group-id`
+|
+|Required: the consumer group to join.
+
+|`axon.kafka.subscribing-sources.<source>.consumer-count`
+|`1`
+|The number of consumers each application instance runs in the group.
+
+|`axon.kafka.subscribing-sources.<source>.failed-record-policy`
+|`retry`
+|`retry`, `skip` or `dead-letter-topic`.
+
+|`axon.kafka.subscribing-sources.<source>.undecodable-record-policy`
+|`skip-and-log`
+|What the source does with records that carry no event: `skip-and-log` or `fail`.
+
+|`axon.kafka.subscribing-sources.<source>.initial-position`
+|`earliest`
+|Where the source starts a partition for which its consumer group has no committed offset, such as every partition of a new group: `earliest` or `latest`.
+
+|`axon.kafka.subscribing-sources.<source>.retention-gap-policy`
+|`fail`
+|What the source does when Kafka deleted the records at its committed offset: `fail` or `reset-to-earliest`.
+
+|`axon.kafka.subscribing-sources.<source>.poll-timeout`
+|`100ms`
+|The longest time a single poll waits for records.
+
+|`axon.kafka.subscribing-sources.<source>.retry-initial-backoff`
+|`100ms`
+|The delay before the first retry of a failed record. Must not exceed `retry-max-backoff`.
+
+|`axon.kafka.subscribing-sources.<source>.retry-max-backoff`
+|`30s`
+|The longest delay between retries of a failed record.
+
+|`axon.kafka.subscribing-sources.<source>.dead-letter-topic-suffix`
+|`.DLT`
+|The suffix that names a topic's dead-letter topic.
+
+|`axon.kafka.subscribing-sources.<source>.revocation-timeout`
+|`10s`
+|How long the source waits for events in progress when Kafka takes partitions away, or when it stops. Above 15 seconds, also raise `spring.lifecycle.timeout-per-shutdown-phase`.
+
+|`axon.kafka.subscribing-sources.<source>.properties.*`
+|
+|Consumer settings for this source.
+
+|`axon.kafka.subscribing-sources.<source>.producer-properties.*`
+|
+|Settings of the producer that writes to dead-letter topics.
+|===
+
+Beans of the application take part as well:
+
+* A `KafkaClientFactory` bean creates all Kafka clients. `axon.kafka.bootstrap-servers`, `axon.kafka.client-id` and `axon.kafka.properties` are then not used, and a warning says so when they are set.
+* A `KafkaEventCodec` bean replaces the default codec. `axon.kafka.codec` is then not used, and a warning says so when it is set to `legacy`. Several codec beans fail the application at startup, unless one of them is `@Primary`.
+* A `TopicResolver` or `RecordKeyResolver` bean qualified with a sink's name, for example `@Qualifier("outbound")`, replaces the sink's `topic` or `record-key-metadata` property, for topics or keys that properties cannot express.
+* An `Executor` bean qualified with the name of a subscribing source processes that source's events, instead of virtual threads. The source does not shut it down.
+* A `KafkaConnector` bean replaces the autoconfigured connector, and none of the `axon.kafka` properties are used. Declare that bean with return type `KafkaConnector`; declared as a `ConfigurationEnhancer`, it is not recognized, and the autoconfigured connector is registered as well.
+
+[#wire_format]
+== Record format
+
+Publishers and consumers of a topic agree on a `KafkaEventCodec`.
+The default codec writes the event's payload as the record value, converted to bytes by the application's event converter.
+Everything else about the event travels in record headers, as UTF-8 text, so that tools and consumers that do not use Axon can read them:
+
+[cols="1,2"]
+|===
+|Header |Value
+
+|`axon-id`
+|The event's identifier
+
+|`axon-type`
+|The qualified name of the event's type
+
+|`axon-version`
+|The version of the event's type
+
+|`axon-timestamp`
+|The event's timestamp, in ISO-8601 format
+
+|`axon-metadata-<key>`
+|One header per metadata entry
+
+|`axon-tag-<key>`
+|One header per tag, when the application has a tag resolver
+|===
+
+Decoding does not convert the payload.
+A handler receives the payload in the type it asks for, converted when it is handled.
+
+[#codecs]
+=== Other formats
+
+`LegacyKafkaEventCodec` adds the headers of the Kafka extension of Axon Framework 4 to every record, and reads records that only carry those headers.
+Use it while applications on Axon Framework 4 share topics with applications on Axoniq Framework, see xref:migration:paths/kafka.adoc[]:
+
+[source,java]
+----
+include::example$connector/kafka/KafkaConfig.java[tag=legacy,indent=0]
+----
+
+With Spring Boot, set `axon.kafka.codec=legacy`.
+
+`CloudEventKafkaEventCodec` writes and reads events as https://cloudevents.io[CloudEvents], in the binary content mode of the CloudEvents Kafka binding.
+Records in the structured content mode, which carry the whole CloudEvent in their value, are only read when a CloudEvents event format for their content type, such as `io.cloudevents:cloudevents-json-jackson`, is on the classpath; without one, they count as records that carry no event.
+The codec writes and reads no tags, so a processor's event criteria cannot select events from such a topic by tag.
+It requires the `io.cloudevents:cloudevents-kafka` library.
+Register it as the codec component:
+
+[source,java]
+----
+include::example$connector/kafka/KafkaConfig.java[tag=cloudevents,indent=0]
+----
+
+With Spring Boot, define a `KafkaEventCodec` bean.
