@@ -86,6 +86,10 @@
         <findbugs-jsr305.version>3.0.2</findbugs-jsr305.version>
         <javassist.version>3.33.0-GA</javassist.version>
         <eaio-uuid.version>3.2</eaio-uuid.version>
+        <kafka-clients.version>4.3.1</kafka-clients.version>
+        <cloudevents.version>5.0.0</cloudevents.version>
+        <!-- kafka-clients brings lz4-java 1.10.2, which has known vulnerabilities (CVE-2026-59949 and others). -->
+        <lz4-java.version>1.12.0</lz4-java.version>
         <!-- Reactive -->
         <projectreactor.version>3.8.7</projectreactor.version>
         <reactive.streams.spec.version>1.0.4</reactive.streams.spec.version>
@@ -425,6 +429,24 @@
                 <groupId>com.eaio.uuid</groupId>
                 <artifactId>uuid</artifactId>
                 <version>${eaio-uuid.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.kafka</groupId>
+                <artifactId>kafka-clients</artifactId>
+                <version>${kafka-clients.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>io.cloudevents</groupId>
+                <artifactId>cloudevents-kafka</artifactId>
+                <version>${cloudevents.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>at.yawk.lz4</groupId>
+                <artifactId>lz4-java</artifactId>
+                <version>${lz4-java.version}</version>
             </dependency>
 
             <!-- Reactive -->

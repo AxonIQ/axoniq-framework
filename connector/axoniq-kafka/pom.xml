@@ -1,0 +1,142 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!--
+  ~ Copyright (c) 2010-2026. AxonIQ B.V.
+  ~
+  ~ Licensed under the AXONIQ TERMS OF SERVICE,
+  ~ Version 29 April 2026 (the "License");
+  ~
+  ~ The software is available for evaluation use without registration.
+  ~ Continued use beyond the evaluation period requires registration
+  ~ and a commercial license. See the License for the specific language
+  ~ governing permissions and limitations under the License.
+  ~ You may not use this file except in compliance with the License.
+  ~
+  ~ You may obtain a copy of the License at:
+  ~  https://www.axoniq.io/legal/terms-of-service
+  ~
+  ~ For licensing information and to register, visit:
+  ~  https://www.axoniq.io/pricing
+  -->
+
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>io.axoniq.framework</groupId>
+        <artifactId>axoniq-framework-parent</artifactId>
+        <version>${revision}</version>
+        <relativePath>../../build/parent/pom.xml</relativePath>
+    </parent>
+
+    <artifactId>axoniq-kafka</artifactId>
+
+    <name>Axoniq Framework - Kafka</name>
+    <description>
+        Connector module for Axoniq Framework publishing events to, and consuming events from, Apache Kafka topics.
+    </description>
+
+    <dependencies>
+        <dependency>
+            <groupId>io.axoniq.license</groupId>
+            <artifactId>entitlement-manager</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.axonframework</groupId>
+            <artifactId>axon-messaging</artifactId>
+        </dependency>
+        <dependency>
+            <!-- Provides the TagResolver and EventTypeResolver the codec uses to write tags and resolve event types. -->
+            <groupId>org.axonframework</groupId>
+            <artifactId>axon-eventsourcing</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.kafka</groupId>
+            <artifactId>kafka-clients</artifactId>
+        </dependency>
+        <dependency>
+            <!-- Declared so that applications get the fixed version rather than the vulnerable one kafka-clients names. -->
+            <groupId>at.yawk.lz4</groupId>
+            <artifactId>lz4-java</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <!-- Only needed for the CloudEvents codec. -->
+            <groupId>io.cloudevents</groupId>
+            <artifactId>cloudevents-kafka</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <!-- The Kafka tracking tokens use Jackson annotations, so that token stores can read and write them. -->
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-annotations</artifactId>
+        </dependency>
+        <dependency>
+            <!-- When present, configured event transformations also apply to events read from Kafka. -->
+            <groupId>io.axoniq.framework</groupId>
+            <artifactId>axoniq-message-transformation</artifactId>
+            <version>${project.version}</version>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- Test -->
+        <dependency>
+            <groupId>org.axonframework</groupId>
+            <artifactId>axon-common</artifactId>
+            <type>test-jar</type>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.axonframework</groupId>
+            <artifactId>axon-messaging</artifactId>
+            <type>test-jar</type>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.axoniq.framework</groupId>
+            <artifactId>axoniq-event-streaming</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>testcontainers</artifactId>
+            <version>${testcontainers.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>testcontainers-kafka</artifactId>
+            <version>${testcontainers.version}</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <profiles>
+        <profile>
+            <!--
+                Builds and tests the module against the kafka-clients 3.9 line, which Spring Boot 3 applications use:
+                ./mvnw -Pkafka-clients-3.9 -Pintegration-test -pl connector/axoniq-kafka verify
+            -->
+            <id>kafka-clients-3.9</id>
+            <properties>
+                <kafka-clients.version>3.9.2</kafka-clients.version>
+            </properties>
+        </profile>
+    </profiles>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <configuration>
+                    <archive>
+                        <manifestEntries>
+                            <Automatic-Module-Name>io.axoniq.framework.kafka</Automatic-Module-Name>
+                        </manifestEntries>
+                    </archive>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>
