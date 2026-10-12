@@ -69,6 +69,10 @@ updates:
     ignore:
       - dependency-name: "org.axonframework:axon-messaging"
         versions: [ "[5.0.0,)" ]
+      - dependency-name: "org.axonframework:axon-modelling"
+        versions: [ "[5.0.0,)" ]
+      - dependency-name: "org.jobrunr:jobrunr"
+        versions: [ "[9.0.0,)" ]
 
   - package-ecosystem: npm
     directory: "/docs/_playbook"
