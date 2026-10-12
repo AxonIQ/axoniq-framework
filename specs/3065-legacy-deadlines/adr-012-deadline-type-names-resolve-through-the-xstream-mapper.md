@@ -1,4 +1,4 @@
-# ADR 011: Stored deadline type names resolve through the `XStreamConverter`'s mapper (review of [#598](https://github.com/AxonIQ/axoniq-framework/pull/598))
+# ADR 012: Stored deadline type names resolve through the `XStreamConverter`'s mapper
 
 Date: 2026-10-12
 Status: accepted
