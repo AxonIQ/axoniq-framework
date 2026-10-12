@@ -1,3 +1,4 @@
+[.axoniq-feature]
 = Saga Migration
 :navtitle: Sagas
 :reftext: Saga migration
