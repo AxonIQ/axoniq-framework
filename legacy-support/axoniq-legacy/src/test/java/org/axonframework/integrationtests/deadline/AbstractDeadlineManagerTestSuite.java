@@ -45,6 +45,7 @@ import org.axonframework.messaging.ScopeDescriptor;
 import org.axonframework.messaging.core.GenericMessage;
 import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.MessageType;
+import org.axonframework.messaging.core.interception.CorrelationDataInterceptor;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkTestUtils;
@@ -180,6 +181,30 @@ public abstract class AbstractDeadlineManagerTestSuite {
             // then
             Delivery delivery = awaitSingleDelivery();
             assertThat(Message.fromContext(delivery.context())).isEqualTo(delivery.message());
+        }
+
+        @Test
+        void aDeadlineScheduledWhileHandlingAMessageFiresWithTheCorrelationDataOfThatMessage() {
+            // given
+            Map<String, String> correlationData =
+                    Map.of("correlationId", "correlation-of-the-handled-message", "causationId", "handled-message-id");
+
+            // when
+            UnitOfWorkTestUtils.aUnitOfWork()
+                               .executeWithResult(context -> {
+                                   ProcessingContext handlerContext = context.withResource(
+                                           CorrelationDataInterceptor.CORRELATION_DATA, correlationData
+                                   );
+                                   new TestScope(handlerContext).run(() -> deadlineManager.schedule(
+                                           TRIGGER_DURATION, DEADLINE_NAME, "payload", SAGA_SCOPE
+                                   ));
+                                   return CompletableFuture.completedFuture(null);
+                               })
+                               .orTimeout(5, TimeUnit.SECONDS)
+                               .join();
+
+            // then
+            assertThat(awaitSingleDelivery().message().metadata()).containsAllEntriesOf(correlationData);
         }
     }
 

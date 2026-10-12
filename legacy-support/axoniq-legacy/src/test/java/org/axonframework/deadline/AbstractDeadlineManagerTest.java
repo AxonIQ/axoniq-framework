@@ -22,10 +22,12 @@ package org.axonframework.deadline;
 import org.axonframework.deadline.RecordingDeadlineManager.ScheduledCall;
 import org.axonframework.messaging.ContextAwareScope;
 import org.axonframework.messaging.ScopeDescriptor;
+import org.axonframework.messaging.core.Context;
 import org.axonframework.messaging.core.GenericMessage;
 import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
+import org.axonframework.messaging.core.interception.CorrelationDataInterceptor;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWork;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkTestUtils;
@@ -469,6 +471,30 @@ class AbstractDeadlineManagerTest {
         }
 
         @Test
+        void interceptorsOfEachDeferredCallGetTheContextOfTheHandlerThatMadeIt() {
+            // given
+            Context.ResourceKey<String> handledMessage = Context.ResourceKey.withLabel("handledMessage");
+            List<String> interceptedFor = new CopyOnWriteArrayList<>();
+            testSubject.registerDispatchInterceptor((message, context, chain) -> {
+                interceptedFor.add(context.getResource(handledMessage));
+                return chain.proceed(message, context);
+            });
+
+            // when
+            // Each Saga handler sees the batch's unit of work through its own resource-overriding view, so two
+            // handlers in one unit of work defer their calls from two different contexts.
+            runInUnitOfWork(context -> {
+                new TestScope(context.withResource(handledMessage, "first event")).run(
+                        () -> testSubject.schedule(Instant.now(), "first", "payload", EXPLICIT_SCOPE));
+                new TestScope(context.withResource(handledMessage, "second event")).run(
+                        () -> testSubject.schedule(Instant.now(), "second", "payload", EXPLICIT_SCOPE));
+            });
+
+            // then
+            assertThat(interceptedFor).containsExactly("first event", "second event");
+        }
+
+        @Test
         void interceptorsOfAnImmediateCallGetNoContext() {
             // given
             List<Optional<ProcessingContext>> interceptionContexts = new CopyOnWriteArrayList<>();
@@ -551,6 +577,80 @@ class AbstractDeadlineManagerTest {
                                                  assertThat(message.payload()).isNull();
                                                  assertThat(message.timestamp()).isEqualTo(TRIGGER_DATE_TIME);
                                              });
+        }
+    }
+
+    @Nested
+    class CorrelationData {
+
+        private static final Map<String, String> CORRELATION_DATA =
+                Map.of("traceId", "trace-of-the-handled-message", "correlationId", "id-of-the-handled-message");
+
+        @Test
+        void aDeadlineScheduledWithinAContextCarriesTheCorrelationDataOfThatContext() {
+            // when
+            runInUnitOfWork(context -> new TestScope(withCorrelationData(context)).run(
+                    () -> testSubject.schedule(Instant.now(), "deadlineName", "payload", EXPLICIT_SCOPE)
+            ));
+
+            // then
+            assertThat(testSubject.scheduled).singleElement()
+                                             .extracting(call -> call.message().metadata())
+                                             .isEqualTo(CORRELATION_DATA);
+        }
+
+        @Test
+        void theMetadataOfAGivenMessageWinsOverCorrelationDataUnderTheSameKey() {
+            // given
+            Message original = new GenericMessage(new MessageType("test.Reminder"),
+                                                  "reminder",
+                                                  Map.of("correlationId", "chosen-by-the-handler"));
+
+            // when
+            runInUnitOfWork(context -> new TestScope(withCorrelationData(context)).run(
+                    () -> testSubject.schedule(Instant.now(), "deadlineName", original, EXPLICIT_SCOPE)
+            ));
+
+            // then
+            assertThat(testSubject.scheduled).singleElement()
+                                             .extracting(call -> call.message().metadata())
+                                             .isEqualTo(Map.of("traceId", "trace-of-the-handled-message",
+                                                               "correlationId", "chosen-by-the-handler"));
+        }
+
+        @Test
+        void theDispatchInterceptorsAlreadySeeTheCorrelationData() {
+            // given
+            List<Map<String, String>> interceptedMetadata = new CopyOnWriteArrayList<>();
+            testSubject.registerDispatchInterceptor((message, context, chain) -> {
+                interceptedMetadata.add(message.metadata());
+                return chain.proceed(message, context);
+            });
+
+            // when
+            runInUnitOfWork(context -> new TestScope(withCorrelationData(context)).run(
+                    () -> testSubject.schedule(Instant.now(), "deadlineName", "payload", EXPLICIT_SCOPE)
+            ));
+
+            // then
+            assertThat(interceptedMetadata).containsExactly(CORRELATION_DATA);
+        }
+
+        @Test
+        void aDeadlineScheduledWithinAContextWithoutCorrelationDataGetsNone() {
+            // when
+            runInUnitOfWork(context -> new TestScope(context).run(
+                    () -> testSubject.schedule(Instant.now(), "deadlineName", "payload", EXPLICIT_SCOPE)
+            ));
+
+            // then
+            assertThat(testSubject.scheduled).singleElement()
+                                             .extracting(call -> call.message().metadata())
+                                             .isEqualTo(Map.of());
+        }
+
+        private static ProcessingContext withCorrelationData(ProcessingContext context) {
+            return context.withResource(CorrelationDataInterceptor.CORRELATION_DATA, CORRELATION_DATA);
         }
     }
 
