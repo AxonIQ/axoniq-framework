@@ -46,7 +46,7 @@
              Framework 4 nodes share the libraries' stores during a rolling upgrade, so keep the major versions equal
              to Axon Framework 4.13's. -->
         <quartz.version>2.5.2</quartz.version>
-        <jobrunr.version>9.0.1</jobrunr.version>
+        <jobrunr.version>8.8.2</jobrunr.version>
         <db-scheduler.version>16.12.0</db-scheduler.version>
     </properties>
 
