@@ -41,6 +41,10 @@
         <axonserver-connector-java.version>2026.1.0</axonserver-connector-java.version>
         <!-- gRPC -->
         <protobuf-java.version>4.36.2</protobuf-java.version>
+        <!-- Must match build/parent/pom.xml's testcontainers.version: the apidocs profile below adds a
+             direct dependency on org.testcontainers:testcontainers to this project, and the reactor-wide
+             enforce-testcontainers-version rule needs this property to resolve to check it. -->
+        <testcontainers.version>2.0.5</testcontainers.version>
 
         <java.version>21</java.version>
         <maven.compiler.source>${java.version}</maven.compiler.source>
@@ -594,6 +598,14 @@
                                 <dependencySourceInclude>org.axonframework.extensions.reactor:*
                                 </dependencySourceInclude>
                             </dependencySourceIncludes>
+                            <!--
+                              Exclude duplicate package-infos originating from duplicated packages in axoniq-legacy.
+                            -->
+                            <sourceFileExcludes>
+                                <sourceFileExclude>**/org/axonframework/extension/springboot/package-info.java</sourceFileExclude>
+                                <sourceFileExclude>**/org/axonframework/extension/springboot/autoconfig/package-info.java</sourceFileExclude>
+                                <sourceFileExclude>**/org/axonframework/extension/spring/config/package-info.java</sourceFileExclude>
+                            </sourceFileExcludes>
                             <tags>
                                 <tag>
                                     <name>apiNote</name>
