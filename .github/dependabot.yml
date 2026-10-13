@@ -51,6 +51,8 @@ updates:
         versions: [ "[2025.0.0,)" ]
       - dependency-name: "org.apache.maven:apache-maven"
         versions: [ "3.10.0" ]
+      - dependency-name: "org.jobrunr:jobrunr"
+        versions: [ "[9.0.0,)" ]
 
   - package-ecosystem: maven
     directory: "/legacy-support/axoniq-legacy"
