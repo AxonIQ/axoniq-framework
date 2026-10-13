@@ -49,6 +49,8 @@ updates:
         versions: [ "[3.0.0,)" ]
       - dependency-name: "org.springframework.data:*"
         versions: [ "[2025.0.0,)" ]
+      - dependency-name: "org.apache.maven:apache-maven"
+        versions: [ "3.10.0" ]
 
   - package-ecosystem: maven
     directory: "/legacy-support/axoniq-legacy"
