@@ -91,10 +91,10 @@ public class JobRunrDeadlineManager extends AbstractDeadlineManager {
      */
     protected static final String DELETE_REASON = "Deleted via Axon DeadlineManager API";
     private static final String NOT_SUPPORTED_MSG =
-            "The '%s' method is not supported without using JobRunrPro with the JobRunrProDeadlineManager.\n"
-                    + "Move to the pro version and the extension or use 'cancelSchedule' method instead.\n"
-                    + "Using 'cancelSchedule' requires keeping track of the returned 'scheduleId' "
-                    + "from invoking 'schedule'.";
+            "The '%s' method is not supported by the JobRunr deadline manager; in Axon Framework 4, only the "
+                    + "JobRunr Pro deadline manager supported it.\n"
+                    + "Use the 'cancelSchedule' method instead, which requires keeping track of the 'scheduleId' "
+                    + "returned by 'schedule'.";
 
     private final JobScheduler jobScheduler;
     private final StoredDeadlineConverter converter;

@@ -20,7 +20,10 @@
 package org.axonframework.deadline.dbscheduler;
 
 import com.github.kagkarlsson.scheduler.Scheduler;
-import com.github.kagkarlsson.scheduler.task.Execution;
+import com.github.kagkarlsson.scheduler.SchedulerBuilder;
+import com.github.kagkarlsson.scheduler.event.AbstractSchedulerListener;
+import com.github.kagkarlsson.scheduler.task.ExecutionComplete;
+import com.github.kagkarlsson.scheduler.task.Task;
 import com.github.kagkarlsson.scheduler.task.TaskInstance;
 import org.hsqldb.jdbc.JDBCDataSource;
 import org.junit.jupiter.api.*;
@@ -34,10 +37,10 @@ import org.springframework.test.context.junit.jupiter.SpringExtension;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 import javax.sql.DataSource;
 
 import static org.awaitility.Awaitility.await;
-import static org.axonframework.common.util.DbSchedulerTestUtil.getScheduler;
 import static org.axonframework.common.util.DbSchedulerTestUtil.reCreateTable;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -54,44 +57,53 @@ class DbSchedulerDeadlineManagerTest {
     }
 
     @Test
-    void binaryShouldFailWhenNotinitialized() {
+    void aBinaryTaskFailsWithDeadlineManagerNotSuppliedExceptionWhenNoManagerWasSupplied() {
+        // given
         DbSchedulerDeadlineManagerSupplier supplier = new DbSchedulerDeadlineManagerSupplier();
-        Scheduler scheduler = getScheduler(dataSource, DbSchedulerDeadlineManager.binaryTask(supplier));
-        scheduler.start();
-        try {
-            TaskInstance<DbSchedulerBinaryDeadlineDetails> instance =
-                    DbSchedulerDeadlineManager.binaryTask(supplier)
-                                              .instance("id", new DbSchedulerBinaryDeadlineDetails());
-            scheduler.schedule(instance, Instant.now());
-            await().atMost(Duration.ofSeconds(1L)).untilAsserted(
-                    () -> {
-                        List<Execution> failures = scheduler.getFailingExecutions(Duration.ofHours(1L));
-                        assertThat(failures).singleElement()
-                                            .satisfies(failure -> assertThat(failure.lastFailure).isNotNull());
-                    }
-            );
-        } finally {
-            scheduler.stop();
-        }
+        Task<DbSchedulerBinaryDeadlineDetails> task = DbSchedulerDeadlineManager.binaryTask(supplier);
+
+        // when
+        List<Throwable> failures = runOnce(task, task.instance("id", new DbSchedulerBinaryDeadlineDetails()));
+
+        // then
+        assertThat(failures).singleElement().isInstanceOf(DeadlineManagerNotSuppliedException.class);
     }
 
     @Test
-    void humanReadableShouldFailWhenNotinitialized() {
+    void aHumanReadableTaskFailsWithDeadlineManagerNotSuppliedExceptionWhenNoManagerWasSupplied() {
+        // given
         DbSchedulerDeadlineManagerSupplier supplier = new DbSchedulerDeadlineManagerSupplier();
-        Scheduler scheduler = getScheduler(dataSource, DbSchedulerDeadlineManager.humanReadableTask(supplier));
+        Task<DbSchedulerHumanReadableDeadlineDetails> task = DbSchedulerDeadlineManager.humanReadableTask(supplier);
+
+        // when
+        List<Throwable> failures =
+                runOnce(task, task.instance("id", new DbSchedulerHumanReadableDeadlineDetails()));
+
+        // then
+        assertThat(failures).singleElement().isInstanceOf(DeadlineManagerNotSuppliedException.class);
+    }
+
+    /**
+     * Schedules the given {@code instance} to run now on a scheduler with only the given {@code task}, and returns
+     * the causes of its failed executions once one failed.
+     */
+    private <T> List<Throwable> runOnce(Task<T> task, TaskInstance<T> instance) {
+        List<Throwable> failures = new CopyOnWriteArrayList<>();
+        Scheduler scheduler = new SchedulerBuilder(dataSource, List.of(task))
+                .threads(2)
+                .pollingInterval(Duration.ofMillis(50L))
+                .addSchedulerListener(new AbstractSchedulerListener() {
+                    @Override
+                    public void onExecutionComplete(ExecutionComplete executionComplete) {
+                        executionComplete.getCause().ifPresent(failures::add);
+                    }
+                })
+                .build();
         scheduler.start();
         try {
-            TaskInstance<DbSchedulerHumanReadableDeadlineDetails> instance =
-                    DbSchedulerDeadlineManager.humanReadableTask(supplier)
-                                              .instance("id", new DbSchedulerHumanReadableDeadlineDetails());
             scheduler.schedule(instance, Instant.now());
-            await().atMost(Duration.ofSeconds(1L)).untilAsserted(
-                    () -> {
-                        List<Execution> failures = scheduler.getFailingExecutions(Duration.ofHours(1L));
-                        assertThat(failures).singleElement()
-                                            .satisfies(failure -> assertThat(failure.lastFailure).isNotNull());
-                    }
-            );
+            await().atMost(Duration.ofSeconds(5L)).until(() -> !failures.isEmpty());
+            return failures;
         } finally {
             scheduler.stop();
         }

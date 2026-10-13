@@ -39,7 +39,7 @@ public class DbSchedulerDeadlineToken implements TaskInstanceId {
     /**
      * Initialize a token for the given {@code id}.
      *
-     * @param id The identifier used when registering the job with DbScheduler.
+     * @param id the identifier used when registering the job with db-scheduler
      */
     public DbSchedulerDeadlineToken(String id) {
         this.id = id;

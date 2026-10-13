@@ -297,12 +297,6 @@
                                     <version>${axon4.serializer.version}</version>
                                     <destFileName>axon-modelling-af4.jar</destFileName>
                                 </artifactItem>
-                                <artifactItem>
-                                    <groupId>org.axonframework</groupId>
-                                    <artifactId>axon-modelling</artifactId>
-                                    <version>${axon4.serializer.version}</version>
-                                    <destFileName>axon-modelling-af4.jar</destFileName>
-                                </artifactItem>
                             </artifactItems>
                         </configuration>
                     </execution>

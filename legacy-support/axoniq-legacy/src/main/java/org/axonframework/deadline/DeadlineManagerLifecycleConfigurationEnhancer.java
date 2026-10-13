@@ -35,7 +35,8 @@ import org.axonframework.deadline.dbscheduler.DbSchedulerDeadlineManager;
  * stop firing before the components that handle them shut down. In the same start phase, it calls
  * {@link DbSchedulerDeadlineManager#start()} on a {@link DbSchedulerDeadlineManager}, which starts its scheduler unless
  * {@link DbSchedulerDeadlineManager.Builder#startScheduler(boolean) startScheduler} leaves that to the application. The
- * decorator applies to every component that is a {@code DeadlineManager}, under whichever type it is registered.
+ * decorator applies to every component that is a {@code DeadlineManager}, under whichever type it is registered. It
+ * runs before every other decorator, so it sees the manager itself rather than a wrapper of it.
  * <p>
  * Applications therefore do not start or shut down a {@code DeadlineManager} of the configuration themselves. A
  * {@code DeadlineManager} may still be shut down more than once, for example when Spring calls the
@@ -58,6 +59,7 @@ public class DeadlineManagerLifecycleConfigurationEnhancer implements Configurat
         registry.registerDecorator(
                 DecoratorDefinition.forType(DeadlineManager.class)
                                    .with((config, name, deadlineManager) -> deadlineManager)
+                                   .order(Integer.MIN_VALUE)
                                    .onStart(Phase.INBOUND_EVENT_CONNECTORS, deadlineManager -> {
                                        if (deadlineManager instanceof DbSchedulerDeadlineManager dbScheduler) {
                                            dbScheduler.start();
