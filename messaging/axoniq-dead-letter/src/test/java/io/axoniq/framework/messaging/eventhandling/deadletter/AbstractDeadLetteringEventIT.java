@@ -46,12 +46,15 @@ import org.axonframework.messaging.eventhandling.configuration.EventProcessorCon
 import org.axonframework.messaging.eventhandling.processing.streaming.StreamingEventProcessor;
 import org.axonframework.messaging.eventhandling.processing.streaming.pooled.PooledStreamingEventProcessor;
 import org.axonframework.messaging.eventhandling.processing.streaming.pooled.PooledStreamingEventProcessorConfiguration;
+import org.axonframework.messaging.eventhandling.processing.streaming.token.GlobalSequenceTrackingToken;
+import org.axonframework.messaging.eventhandling.processing.streaming.token.ReplayToken;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.store.inmemory.InMemoryTokenStore;
 import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.*;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
@@ -544,6 +547,87 @@ public abstract class AbstractDeadLetteringEventIT {
             // proving that the context captured during streaming was preserved through the DLQ round-trip
             assertWithin(1, TimeUnit.SECONDS,
                          () -> assertThat(eventHandler.tokenInContextOnRetryCount(aggregateId)).isEqualTo(3));
+        }
+    }
+
+    @Nested
+    class WhenReplaying {
+
+        private static final long TOKEN_AT_RESET = 100;
+
+        @Test
+        void replayedEventsPrecedingTheHeadLetterAreNotAppendedToTheSequence() {
+            // given
+            String aggregateId = UUID.randomUUID().toString();
+            EventMessage head = asEventMessage(new DeadLetterableEvent(aggregateId, FAIL, SUCCEED_RETRY));
+            handleLive(head, 5);
+            EventMessage precedingEvent = asEventMessage(new DeadLetterableEvent(aggregateId, SUCCEED));
+
+            // when
+            handleReplayed(precedingEvent, 3);
+
+            // then
+            assertThat(identifiersInSequence(aggregateId)).containsExactly(head.identifier());
+        }
+
+        @Test
+        void replayedEventAlreadyPresentInTheSequenceIsNotDuplicated() {
+            // given
+            String aggregateId = UUID.randomUUID().toString();
+            EventMessage head = asEventMessage(new DeadLetterableEvent(aggregateId, FAIL, SUCCEED_RETRY));
+            handleLive(head, 5);
+
+            // when
+            handleReplayed(head, 5);
+
+            // then
+            assertThat(identifiersInSequence(aggregateId)).containsExactly(head.identifier());
+        }
+
+        @Test
+        void replayedEventFailingBeforeTheHeadLetterIsEnqueuedInPositionOrder() {
+            // given
+            String aggregateId = UUID.randomUUID().toString();
+            EventMessage head = asEventMessage(new DeadLetterableEvent(aggregateId, FAIL, SUCCEED_RETRY));
+            EventMessage tail = asEventMessage(new DeadLetterableEvent(aggregateId, SUCCEED, SUCCEED_RETRY));
+            handleLive(head, 5);
+            handleLive(tail, 9);
+            EventMessage failingReplayed = asEventMessage(new DeadLetterableEvent(aggregateId, FAIL, FAIL_RETRY));
+
+            // when
+            handleReplayed(failingReplayed, 3);
+
+            // then
+            assertThat(identifiersInSequence(aggregateId))
+                    .containsExactly(failingReplayed.identifier(), head.identifier(), tail.identifier());
+        }
+
+        private void handleLive(EventMessage event, long position) {
+            handle(event, new GlobalSequenceTrackingToken(position));
+        }
+
+        private void handleReplayed(EventMessage event, long position) {
+            TrackingToken replayToken =
+                    ((ReplayToken) ReplayToken.createReplayToken(new GlobalSequenceTrackingToken(TOKEN_AT_RESET)))
+                            .advancedTo(new GlobalSequenceTrackingToken(position));
+            handle(event, replayToken);
+        }
+
+        private void handle(EventMessage event, TrackingToken token) {
+            buildUnitOfWorkFactory().create().executeWithResult(context -> {
+                context.putResource(TrackingToken.RESOURCE_KEY, token);
+                return deadLetteringComponent.handle(event, context)
+                                             .first()
+                                             .asCompletableFuture()
+                                             .thenApply(entry -> (Void) null);
+            }).join();
+        }
+
+        private List<String> identifiersInSequence(String aggregateId) {
+            List<String> identifiers = new ArrayList<>();
+            deadLetterQueue.deadLetterSequence(aggregateId, null).join()
+                           .forEach(letter -> identifiers.add(letter.message().identifier()));
+            return identifiers;
         }
     }
 
