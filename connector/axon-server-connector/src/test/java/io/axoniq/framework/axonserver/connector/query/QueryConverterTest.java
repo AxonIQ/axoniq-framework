@@ -29,6 +29,7 @@ import io.axoniq.framework.axonserver.connector.shared.ErrorCode;
 import io.axoniq.framework.axonserver.connector.shared.ExceptionConverter;
 import org.axonframework.common.AxonException;
 import org.axonframework.conversion.Converter;
+import org.axonframework.conversion.jackson.JacksonConverter;
 import org.axonframework.messaging.core.GenericMessage;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.Metadata;
@@ -421,5 +422,113 @@ class QueryConverterTest {
         assertThatThrownBy(() -> QueryConverter.convertQueryResponse(response, converter))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("contained an error");
+    }
+
+    @Nested
+    class EmptyResults {
+
+        private final Converter jacksonConverter = new JacksonConverter();
+
+        @Test
+        void queryUpdateEmittedAsNullIsReadWithNullPayload() {
+            // given an update emitted as null, which the QueryUpdateEmitter types as Void
+            var emittedUpdate = new GenericSubscriptionQueryUpdateMessage(
+                    new GenericMessage(messageIdentifier, new MessageType(Void.class), null, Map.of("m", "v"))
+            );
+            QueryUpdate queryUpdate = QueryConverter.convertQueryUpdate(emittedUpdate);
+
+            // when
+            var result = QueryConverter.convertQueryUpdate(queryUpdate, jacksonConverter);
+
+            // then
+            assertThat(result.payload()).isNull();
+            assertThat(result.payloadAs(Void.class)).isNull();
+            assertThat(result.payloadAs(String.class)).isNull();
+            assertThat(result.type()).isEqualTo(new MessageType(Void.class));
+            assertThat(result.identifier()).isEqualTo(messageIdentifier);
+            assertThat(result.metadata()).containsEntry("m", "v");
+        }
+
+        @Test
+        void queryUpdateMarkedWithEmptyPayloadTypeIsReadWithNullPayload() {
+            // given an update as sent by an Axon Framework 4 handler for a null update, carrying serialized JSON null
+            var queryUpdate = QueryUpdate.newBuilder()
+                                         .setMessageIdentifier(messageIdentifier)
+                                         .setPayload(SerializedObject.newBuilder()
+                                                                     .setType(QueryConverter.EMPTY_PAYLOAD_TYPE)
+                                                                     .setData(ByteString.copyFromUtf8("null"))
+                                                                     .build())
+                                         .build();
+
+            // when
+            var result = QueryConverter.convertQueryUpdate(queryUpdate, jacksonConverter);
+
+            // then
+            assertThat(result.payload()).isNull();
+            assertThat(result.payloadAs(String.class)).isNull();
+        }
+
+        @Test
+        void queryUpdateWithEmptyDataOfAnotherTypeKeepsItsPayload() {
+            // given an update that legitimately converts to empty data, like an empty String
+            var emittedUpdate = new GenericSubscriptionQueryUpdateMessage(
+                    new MessageType(String.class), new byte[0]
+            );
+            QueryUpdate queryUpdate = QueryConverter.convertQueryUpdate(emittedUpdate);
+
+            // when
+            var result = QueryConverter.convertQueryUpdate(queryUpdate, jacksonConverter);
+
+            // then
+            assertThat(result.payload()).isEqualTo(new byte[0]);
+            assertThat(result.type()).isEqualTo(new MessageType(String.class));
+        }
+
+        @Test
+        void queryResponseWithNullPayloadIsReadWithNullPayload() {
+            // given a response with a null payload, which is typed as Void
+            var responseMessage = new GenericQueryResponseMessage(
+                    new GenericMessage(messageIdentifier, new MessageType(Void.class), null, Map.of("m", "v"))
+            );
+            var queryResponse = QueryConverter.convertQueryResponseMessage("req-1", responseMessage);
+
+            // when
+            var result = QueryConverter.convertQueryResponse(queryResponse, jacksonConverter);
+
+            // then
+            assertThat(result.payload()).isNull();
+            assertThat(result.payloadAs(Void.class)).isNull();
+            assertThat(result.payloadAs(String.class)).isNull();
+            assertThat(result.type()).isEqualTo(new MessageType(Void.class));
+            assertThat(result.identifier()).isEqualTo(messageIdentifier);
+            assertThat(result.metadata()).containsEntry("m", "v");
+        }
+
+        @Test
+        void queryResponseMarkedWithEmptyPayloadTypeIsReadWithNullPayload() {
+            // given
+            var queryResponse = QueryConverter.emptyQueryResponse("req-1");
+
+            // when
+            var result = QueryConverter.convertQueryResponse(queryResponse, jacksonConverter);
+
+            // then
+            assertThat(result.payload()).isNull();
+            assertThat(result.payloadAs(String.class)).isNull();
+        }
+
+        @Test
+        void queryResponseWithEmptyDataOfAnotherTypeKeepsItsPayload() {
+            // given a response that legitimately converts to empty data, like an empty String
+            var responseMessage = new GenericQueryResponseMessage(new MessageType(String.class), new byte[0]);
+            var queryResponse = QueryConverter.convertQueryResponseMessage("req-1", responseMessage);
+
+            // when
+            var result = QueryConverter.convertQueryResponse(queryResponse, jacksonConverter);
+
+            // then
+            assertThat(result.payload()).isEqualTo(new byte[0]);
+            assertThat(result.type()).isEqualTo(new MessageType(String.class));
+        }
     }
 }
