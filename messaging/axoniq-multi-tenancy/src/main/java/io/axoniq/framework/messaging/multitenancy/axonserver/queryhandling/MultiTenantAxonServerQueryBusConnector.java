@@ -398,6 +398,12 @@ public class MultiTenantAxonServerQueryBusConnector
         }
 
         @Override
+        protected FetchResult<Entry<QueryResponseMessage>> terminalState() {
+            Throwable error = forcedError;
+            return error != null ? FetchResult.error(error) : terminalStateOf(delegate);
+        }
+
+        @Override
         protected void onCompleted() {
             delegate.close();
             onTerminated.accept(this);
