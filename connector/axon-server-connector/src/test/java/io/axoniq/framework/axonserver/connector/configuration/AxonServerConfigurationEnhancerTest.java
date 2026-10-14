@@ -19,6 +19,7 @@
 
 package io.axoniq.framework.axonserver.connector.configuration;
 
+import io.axoniq.axonserver.connector.control.ControlChannel;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
 import io.axoniq.framework.axonserver.connector.command.AxonServerCommandBusConnector;
@@ -241,6 +242,42 @@ class AxonServerConfigurationEnhancerTest {
         await().pollDelay(Duration.ofMillis(50))
                .atMost(Duration.ofMillis(500))
                .untilAsserted(() -> verify(connectionManager, atLeastOnce()).getConnection());
+    }
+
+    @Test
+    void everyRegisteredTopologyChangeListenerIsRegisteredWithTheControlChannel() {
+        // given
+        AxonServerConnectionManager connectionManager = mock(AxonServerConnectionManager.class, RETURNS_DEEP_STUBS);
+        ControlChannel controlChannel = connectionManager.getConnection().controlChannel();
+        TopologyChangeListener listenerOne = mock(TopologyChangeListener.class);
+        TopologyChangeListener listenerTwo = mock(TopologyChangeListener.class);
+        AxonConfiguration result =
+                EventSourcingConfigurer.create()
+                                       .componentRegistry(ComponentRegistry::disableEnhancerScanning)
+                                       .componentRegistry(cr -> testSubject.enhance(cr))
+                                       .lifecycleRegistry(registry -> registry.registerLifecyclePhaseTimeout(
+                                               25, TimeUnit.MILLISECONDS
+                                       ))
+                                       .componentRegistry(registry -> registry.registerDecorator(
+                                               AxonServerConnectionManager.class,
+                                               Integer.MIN_VALUE,
+                                               (config, name, delegate) -> connectionManager
+                                       ))
+                                       .componentRegistry(registry -> registry
+                                               .registerComponent(TopologyChangeListener.class, "listenerOne",
+                                                                  c -> listenerOne)
+                                               .registerComponent(TopologyChangeListener.class, "listenerTwo",
+                                                                  c -> listenerTwo))
+                                       .build();
+
+        // when
+        result.start();
+
+        // then
+        await().atMost(Duration.ofMillis(500)).untilAsserted(() -> {
+            verify(controlChannel).registerTopologyChangeHandler(listenerOne);
+            verify(controlChannel).registerTopologyChangeHandler(listenerTwo);
+        });
     }
 
     @Nested
