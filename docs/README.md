@@ -8,8 +8,6 @@ following [Antora Components](https://docs.antora.org/antora/latest/component-na
 folders:
 
 - [
-  `./deadlines-guide/`](deadlines-guide): Legacy Deadlines Guide, currently not actively linked in the reference
-- [
   `./reference-guide/`](reference-guide) : [The Axon Framework reference guide](https://docs.axoniq.io/axon-framework-reference/latest)
 
 ## Distributed content
