@@ -232,3 +232,13 @@ void handle(PayOrder command, DeadlineManager deadlineManager) {
     // ...
 }
 ----
+
+=== Delivery of a slow command
+
+A fired aggregate deadline waits for its command's result for 30 seconds at most.
+When that wait times out, the delivery fails, and the deadline manager retries the deadline as it retries any failed
+delivery.
+With a distributed command bus, the command may still be running on another node at that moment.
+The retry then sends the command again, while the first one may still commit, so the entity handles the deadline
+twice.
+Keep the command handlers of migrated deadlines well within this time, or make them idempotent.
