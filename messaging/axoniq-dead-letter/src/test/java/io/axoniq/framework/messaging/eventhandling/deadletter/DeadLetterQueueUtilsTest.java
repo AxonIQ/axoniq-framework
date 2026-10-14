@@ -20,6 +20,7 @@
 package io.axoniq.framework.messaging.eventhandling.deadletter;
 
 import io.axoniq.framework.messaging.deadletter.DeadLetter;
+import io.axoniq.framework.messaging.deadletter.DeadLetterQueueOverflowException;
 import io.axoniq.framework.messaging.deadletter.GenericDeadLetter;
 import io.axoniq.framework.messaging.deadletter.InMemorySequencedDeadLetterQueue;
 import io.axoniq.framework.messaging.deadletter.SequencedDeadLetterQueue;
@@ -518,6 +519,44 @@ class DeadLetterQueueUtilsTest {
                      .join()
         ).extracting(letter -> letter.message().payload())
          .containsExactly("later");
+    }
+
+    @Test
+    void failsWithoutEvictingAnythingWhenTheSequenceIsFull() {
+        // given
+        queue = InMemorySequencedDeadLetterQueue.<EventMessage>builder().maxSequenceSize(2).build();
+        DeadLetter<EventMessage> first = new GenericDeadLetter<>(
+                SEQUENCE_ID, EventTestUtils.asEventMessage("first"), null,
+                Context.with(TrackingToken.RESOURCE_KEY, new GlobalSequenceTrackingToken(5L))
+        );
+        DeadLetter<EventMessage> second = new GenericDeadLetter<>(
+                SEQUENCE_ID, EventTestUtils.asEventMessage("second"), null,
+                Context.with(TrackingToken.RESOURCE_KEY, new GlobalSequenceTrackingToken(9L))
+        );
+        queue.enqueue(SEQUENCE_ID, first, context)
+             .orTimeout(2, TimeUnit.MILLISECONDS)
+             .join();
+        queue.enqueue(SEQUENCE_ID, second, context)
+             .orTimeout(2, TimeUnit.MILLISECONDS)
+             .join();
+        DeadLetter<EventMessage> newLetter = new GenericDeadLetter<>(
+                SEQUENCE_ID, EventTestUtils.asEventMessage("new"), null,
+                Context.with(TrackingToken.RESOURCE_KEY, new GlobalSequenceTrackingToken(3L))
+        );
+
+        // when
+        CompletableFuture<Void> result = DeadLetterQueueUtils.enqueueInOrder(queue, SEQUENCE_ID, newLetter, context);
+
+        // then
+        assertThatThrownBy(() -> result.orTimeout(2, TimeUnit.MILLISECONDS).join())
+                .isInstanceOf(CompletionException.class)
+                .hasCauseInstanceOf(DeadLetterQueueOverflowException.class);
+        assertThat(
+                queue.deadLetterSequence(SEQUENCE_ID, null)
+                     .orTimeout(2, TimeUnit.MILLISECONDS)
+                     .join()
+        ).extracting(letter -> letter.message().payload())
+         .containsExactly("first", "second");
     }
 
     @Test

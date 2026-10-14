@@ -20,6 +20,7 @@
 package io.axoniq.framework.messaging.eventhandling.deadletter;
 
 import io.axoniq.framework.messaging.deadletter.DeadLetter;
+import io.axoniq.framework.messaging.deadletter.DeadLetterQueueOverflowException;
 import io.axoniq.framework.messaging.deadletter.SequencedDeadLetterQueue;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
@@ -45,6 +46,10 @@ final class DeadLetterQueueUtils {
      * {@link SequencedDeadLetterQueue} methods only. This touches every later letter of a given sequence, which is
      * potentially a costly operation. It is thus strongly recommended only to use this when strictly necessary.
      * <p>
+     * The capacity of the sequence is verified up front, as a full queue would otherwise fail on re-enqueueing the
+     * moved letters after they were evicted. The returned future completes exceptionally with a
+     * {@link DeadLetterQueueOverflowException} when the {@code queue} {@link SequencedDeadLetterQueue#isFull is full}.
+     * <p>
      * Falls back to a regular {@link SequencedDeadLetterQueue#enqueue(Object, DeadLetter, ProcessingContext) enqueue}
      * when the position of the letter is unknown.
      *
@@ -64,9 +69,22 @@ final class DeadLetterQueueUtils {
             return queue.enqueue(sequenceId, letter, context);
         }
 
+        return queue.isFull(sequenceId, context)
+                    .thenCompose(
+                            full -> full
+                                    ? CompletableFuture.failedFuture(new DeadLetterQueueOverflowException(sequenceId))
+                                    : moveAndEnqueue(queue, sequenceId, letter, context, position.getAsLong())
+                    );
+    }
+
+    private static CompletableFuture<Void> moveAndEnqueue(SequencedDeadLetterQueue<EventMessage> queue,
+                                                          Object sequenceId,
+                                                          DeadLetter<? extends EventMessage> letter,
+                                                          ProcessingContext context,
+                                                          long position) {
         return queue.deadLetterSequence(sequenceId, context).thenCompose(sequence -> {
             CompletableFuture<Void> result = CompletableFuture.completedFuture(null);
-            List<DeadLetter<? extends EventMessage>> lettersToMove = getLettersToMove(sequence, position.getAsLong());
+            List<DeadLetter<? extends EventMessage>> lettersToMove = getLettersToMove(sequence, position);
 
             // 1. Evict all the letters that should move a spot
             for (DeadLetter<? extends EventMessage> moved : lettersToMove) {
