@@ -43,13 +43,14 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.lang.invoke.MethodHandles;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Spliterator;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.function.Predicate;
+import java.util.stream.StreamSupport;
 
 /**
  * An {@link EventHandlingComponent} decorator that uses a {@link SequencedDeadLetterQueue} to enqueue
@@ -142,20 +143,19 @@ public class DeadLetteringEventHandlingComponent extends DelegatingEventHandling
                                                                      ProcessingContext context,
                                                                      Object sequenceId) {
         return queue.deadLetterSequence(sequenceId, context)
-                    .thenCompose(sequence -> {
-                        List<DeadLetter<? extends EventMessage>> letters = new ArrayList<>();
-                        sequence.forEach(letters::add);
-                        return letters.isEmpty()
-                                ? CompletableFuture.completedFuture(handle(event, context, sequenceId, false))
-                                : decideAndHandle(event, context, sequenceId, letters);
-                    });
+                    .thenCompose(sequence -> sequence.iterator().hasNext()
+                            ? decideAndHandle(event, context, sequenceId, sequence.spliterator())
+                            : CompletableFuture.completedFuture(handle(event, context, sequenceId, false)));
     }
 
-    private CompletionStage<MessageStream<Message>> decideAndHandle(EventMessage event,
-                                                                    ProcessingContext context,
-                                                                    Object sequenceId,
-                                                                    List<DeadLetter<? extends EventMessage>> letters) {
-        return switch (ReplayHandleDecision.decide(event, context, letters)) {
+    private CompletionStage<MessageStream<Message>> decideAndHandle(
+            EventMessage event,
+            ProcessingContext context,
+            Object sequenceId,
+            Spliterator<DeadLetter<? extends EventMessage>> letters
+    ) {
+        List<DeadLetter<? extends EventMessage>> letterList = StreamSupport.stream(letters, false).toList();
+        return switch (ReplayHandleDecision.decide(event, context, letterList)) {
             case HANDLE -> {
                 if (logger.isDebugEnabled()) {
                     logger.debug("Replayed event [{}] precedes the dead letters of sequence [{}]. "
