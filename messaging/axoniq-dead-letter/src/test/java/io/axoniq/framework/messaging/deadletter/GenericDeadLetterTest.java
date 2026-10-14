@@ -19,17 +19,22 @@
 
 package io.axoniq.framework.messaging.deadletter;
 
+import org.axonframework.messaging.core.Context;
+import org.axonframework.messaging.core.Metadata;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.EventTestUtils;
-import org.axonframework.messaging.core.Metadata;
+import org.axonframework.messaging.eventhandling.processing.streaming.token.GlobalSequenceTrackingToken;
+import org.axonframework.messaging.eventhandling.processing.streaming.token.ReplayToken;
+import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.junit.jupiter.api.*;
 
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.util.Optional;
+import java.util.OptionalLong;
 
-import static org.assertj.core.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Test class validating the {@link GenericDeadLetter}.
@@ -241,5 +246,56 @@ class GenericDeadLetterTest {
         assertThat(result.enqueuedAt()).isEqualTo(testSubject.enqueuedAt());
         assertThat(result.lastTouched()).isEqualTo(testSubject.lastTouched());
         assertThat(result.diagnostics()).isEqualTo(expectedDiagnostics);
+    }
+
+    @Nested
+    class Position {
+
+        @Test
+        void returnsPositionOfTrackingTokenInContext() {
+            // given
+            DeadLetter<EventMessage> testSubject = new GenericDeadLetter<>(
+                    SEQUENCE_IDENTIFIER, EventTestUtils.asEventMessage("payload"), null,
+                    Context.with(TrackingToken.RESOURCE_KEY, new GlobalSequenceTrackingToken(7))
+            );
+
+            // when
+            OptionalLong result = testSubject.position();
+
+            // then
+            assertThat(result).hasValue(7);
+        }
+
+        @Test
+        void returnsPositionOfEventUnderlyingReplayToken() {
+            // given
+            TrackingToken replayToken =
+                    ((ReplayToken) ReplayToken.createReplayToken(new GlobalSequenceTrackingToken(100)))
+                            .advancedTo(new GlobalSequenceTrackingToken(3));
+            DeadLetter<EventMessage> testSubject = new GenericDeadLetter<>(
+                    SEQUENCE_IDENTIFIER, EventTestUtils.asEventMessage("payload"), null,
+                    Context.with(TrackingToken.RESOURCE_KEY, replayToken)
+            );
+
+            // when
+            OptionalLong result = testSubject.position();
+
+            // then
+            assertThat(result).hasValue(3);
+        }
+
+        @Test
+        void returnsEmptyWhenContextHoldsNoTrackingToken() {
+            // given
+            DeadLetter<EventMessage> testSubject = new GenericDeadLetter<>(
+                    SEQUENCE_IDENTIFIER, EventTestUtils.asEventMessage("payload"), null, Context.empty()
+            );
+
+            // when
+            OptionalLong result = testSubject.position();
+
+            // then
+            assertThat(result).isEmpty();
+        }
     }
 }

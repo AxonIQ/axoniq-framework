@@ -22,6 +22,7 @@ package io.axoniq.framework.messaging.deadletter;
 import org.axonframework.messaging.core.Context;
 import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.Metadata;
+import org.jspecify.annotations.Nullable;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -48,6 +49,7 @@ public class GenericDeadLetter<M extends Message> implements DeadLetter<M> {
 
     private final Object sequenceIdentifier;
     private final M message;
+    @Nullable
     private final Cause cause;
     private final Instant enqueuedAt;
     private final Instant lastTouched;
@@ -55,40 +57,45 @@ public class GenericDeadLetter<M extends Message> implements DeadLetter<M> {
     private final Context context;
 
     /**
-     * Construct a {@link GenericDeadLetter} with the given {@code sequenceIdentifier} and {@code message}. The
+     * Construct a {@code GenericDeadLetter} with the given {@code sequenceIdentifier} and {@code message}. The
      * {@link #cause()} is left empty in this case. This method is typically used to construct a dead letter that's part
      * of a sequence.
      *
-     * @param sequenceIdentifier The sequence identifier of the {@link GenericDeadLetter} to build.
-     * @param message            The {@link Message} of type {@code M} of the {@link GenericDeadLetter} to build.
+     * @param sequenceIdentifier the sequence identifier of the {@code GenericDeadLetter} to build
+     * @param message            the {@link Message} of type {@code M} of the {@code GenericDeadLetter} to build
      */
     public GenericDeadLetter(Object sequenceIdentifier, M message) {
-        this(sequenceIdentifier, message, (Throwable) null, Context.empty());
+        this(sequenceIdentifier, message, null, Context.empty());
     }
 
     /**
-     * Construct a {@link GenericDeadLetter} with the given {@code sequenceIdentifier}, {@code message}, and
+     * Construct a {@code GenericDeadLetter} with the given {@code sequenceIdentifier}, {@code message}, and
      * {@code cause}. This method is typically used to construct the first dead letter entry for the given
      * {@code queueIdentifier}.
      *
-     * @param sequenceIdentifier The sequence identifier of the {@link GenericDeadLetter} to build.
-     * @param message            The {@link Message} of type {@code M} of the {@link GenericDeadLetter} to build.
-     * @param cause              The cause for the {@code message} to be dead lettered.
+     * @param sequenceIdentifier the sequence identifier of the {@code GenericDeadLetter} to build
+     * @param message            the {@link Message} of type {@code M} of the {@code GenericDeadLetter} to build
+     * @param cause              the cause for the {@code message} to be dead lettered
      */
-    public GenericDeadLetter(Object sequenceIdentifier, M message, Throwable cause) {
+    public GenericDeadLetter(Object sequenceIdentifier,
+                             M message,
+                             @Nullable Throwable cause) {
         this(sequenceIdentifier, message, cause, Context.empty());
     }
 
     /**
-     * Construct a {@link GenericDeadLetter} with the given {@code sequenceIdentifier}, {@code message}, {@code cause},
+     * Construct a {@code GenericDeadLetter} with the given {@code sequenceIdentifier}, {@code message}, {@code cause},
      * and associated {@link Context}.
      *
-     * @param sequenceIdentifier The sequence identifier of the {@link GenericDeadLetter} to build.
-     * @param message            The {@link Message} of type {@code M} of the {@link GenericDeadLetter} to build.
-     * @param cause              The cause for the {@code message} to be dead lettered.
-     * @param context            The {@link Context} associated with this dead letter.
+     * @param sequenceIdentifier the sequence identifier of the {@code GenericDeadLetter} to build
+     * @param message            the {@link Message} of type {@code M} of the {@code GenericDeadLetter} to build
+     * @param cause              the cause for the {@code message} to be dead lettered
+     * @param context            the {@link Context} associated with this dead letter
      */
-    public GenericDeadLetter(Object sequenceIdentifier, M message, Throwable cause, Context context) {
+    public GenericDeadLetter(Object sequenceIdentifier,
+                             M message,
+                             @Nullable Throwable cause,
+                             Context context) {
         this(sequenceIdentifier,
              message,
              cause != null ? new ThrowableCause(cause) : null,
@@ -98,7 +105,7 @@ public class GenericDeadLetter<M extends Message> implements DeadLetter<M> {
 
     private GenericDeadLetter(Object sequenceIdentifier,
                               M message,
-                              Cause cause,
+                              @Nullable Cause cause,
                               Supplier<Instant> timeSupplier,
                               Context context) {
         this(sequenceIdentifier,
@@ -110,7 +117,8 @@ public class GenericDeadLetter<M extends Message> implements DeadLetter<M> {
              context);
     }
 
-    private GenericDeadLetter(GenericDeadLetter<M> delegate, Instant touched) {
+    private GenericDeadLetter(GenericDeadLetter<M> delegate,
+                              Instant touched) {
         this(delegate.sequenceIdentifier,
              delegate.message(),
              delegate.cause().orElse(null),
@@ -120,7 +128,8 @@ public class GenericDeadLetter<M extends Message> implements DeadLetter<M> {
              delegate.context);
     }
 
-    private GenericDeadLetter(GenericDeadLetter<M> delegate, Metadata diagnostics) {
+    private GenericDeadLetter(GenericDeadLetter<M> delegate,
+                              Metadata diagnostics) {
         this(delegate.sequenceIdentifier,
              delegate.message(),
              delegate.cause().orElse(null),
@@ -130,7 +139,8 @@ public class GenericDeadLetter<M extends Message> implements DeadLetter<M> {
              delegate.context);
     }
 
-    private GenericDeadLetter(GenericDeadLetter<M> delegate, Throwable requeueCause) {
+    private GenericDeadLetter(GenericDeadLetter<M> delegate,
+                              @Nullable Throwable requeueCause) {
         this(delegate.sequenceIdentifier,
              delegate.message(),
              requeueCause != null ? ThrowableCause.asCause(requeueCause) : delegate.cause,
@@ -141,19 +151,19 @@ public class GenericDeadLetter<M extends Message> implements DeadLetter<M> {
     }
 
     /**
-     * Construct a {@link GenericDeadLetter} defining all the fields. The {@link Context} defaults to
+     * Construct a {@code GenericDeadLetter} defining all the fields. The {@link Context} defaults to
      * {@link Context#empty()}.
      *
-     * @param sequenceIdentifier The sequence identifier of the {@link GenericDeadLetter} to build.
-     * @param message            The {@link Message} of type {@code M} of the {@link GenericDeadLetter} to build.
-     * @param cause              The cause for the {@code message} to be dead lettered.
-     * @param enqueuedAt         The moment this dead letter is enqueued.
-     * @param lastTouched        The last time this dead letter was touched.
-     * @param diagnostics        The diagnostic {@link Metadata} of this dead letter.
+     * @param sequenceIdentifier the sequence identifier of the {@code GenericDeadLetter} to build
+     * @param message            the {@link Message} of type {@code M} of the {@code GenericDeadLetter} to build
+     * @param cause              the cause for the {@code message} to be dead lettered
+     * @param enqueuedAt         the moment this dead letter is enqueued
+     * @param lastTouched        the last time this dead letter was touched
+     * @param diagnostics        the diagnostic {@link Metadata} of this dead letter
      */
     public GenericDeadLetter(Object sequenceIdentifier,
                              M message,
-                             Cause cause,
+                             @Nullable Cause cause,
                              Instant enqueuedAt,
                              Instant lastTouched,
                              Metadata diagnostics) {
@@ -161,19 +171,19 @@ public class GenericDeadLetter<M extends Message> implements DeadLetter<M> {
     }
 
     /**
-     * Construct a {@link GenericDeadLetter} defining all the fields including the associated {@link Context}.
+     * Construct a {@code GenericDeadLetter} defining all the fields including the associated {@link Context}.
      *
-     * @param sequenceIdentifier The sequence identifier of the {@link GenericDeadLetter} to build.
-     * @param message            The {@link Message} of type {@code M} of the {@link GenericDeadLetter} to build.
-     * @param cause              The cause for the {@code message} to be dead lettered.
-     * @param enqueuedAt         The moment this dead letter is enqueued.
-     * @param lastTouched        The last time this dead letter was touched.
-     * @param diagnostics        The diagnostic {@link Metadata} of this dead letter.
-     * @param context            The {@link Context} associated with this dead letter.
+     * @param sequenceIdentifier the sequence identifier of the {@code GenericDeadLetter} to build
+     * @param message            the {@link Message} of type {@code M} of the {@code GenericDeadLetter} to build
+     * @param cause              the cause for the {@code message} to be dead lettered
+     * @param enqueuedAt         the moment this dead letter is enqueued
+     * @param lastTouched        the last time this dead letter was touched
+     * @param diagnostics        the diagnostic {@link Metadata} of this dead letter
+     * @param context            the {@link Context} associated with this dead letter
      */
     public GenericDeadLetter(Object sequenceIdentifier,
                              M message,
-                             Cause cause,
+                             @Nullable Cause cause,
                              Instant enqueuedAt,
                              Instant lastTouched,
                              Metadata diagnostics,
