@@ -45,6 +45,23 @@ This makes it so that existing `@DeadlineHandler` annotated methods in a saga ke
 However, as Sagas are deprecated, just as Deadlines, you are expected to migrate those as well.
 Checkout the xref:migration:paths/sagas.adoc[Saga Migration] for the full story, including what to do once every saga instance has drained and the legacy module is no longer needed.
 
+[#stored-deadline-format]
+== Reading deadlines stored by Axon Framework 4
+
+A persistent deadline manager (Quartz, db-scheduler or JobRunr) stores each pending deadline in serialized form.
+Axon Framework 4 wrote it with your `Serializer`.
+Axon Framework 5 reads it back with a `Converter`, and the formats must match:
+
+* The auto-configured db-scheduler and JobRunr deadline managers use the event `Converter`, which is Jackson-based by default.
+* A deadline manager you build yourself uses the `Converter` you pass to its `converter(..)` builder method.
+
+Check which serializer your Axon Framework 4 application used for deadlines.
+If it set no `axon.serializer.*` properties and built no serializer itself, that was XStream.
+Reading XStream data with Jackson fails with `Unexpected character ('<')` before the deadline handler runs, and the scheduler retries the deadline without ever delivering it.
+
+For XStream data, configure the xref:ROOT:conversion.adoc#xstream_converter[XStreamConverter] until the Axon Framework 4 deadlines have drained.
+For Jackson data, make sure your `Converter` uses the same `ObjectMapper` settings your `JacksonSerializer` had.
+
 [#aggregate-deadlines]
 == Aggregate deadlines
 
