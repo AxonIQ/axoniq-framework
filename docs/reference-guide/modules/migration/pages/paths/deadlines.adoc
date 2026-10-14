@@ -72,8 +72,9 @@ Going forward, what used to be "a deadline firing on an aggregate" becomes "a sc
 
 `axoniq-legacy` helps you make that transition: it automatically drains every deadline Axon Framework 4 already scheduled against an aggregate, by translating it into a command and dispatching it through the `CommandGateway`, so you do not need to re-schedule anything yourself.
 This changes what the migrated entity needs: replace the aggregate's `@DeadlineHandler` method with a
-`@CommandHandler` method, as shown below, first for a deadline scheduled with a payload, then for one scheduled
-without.
+`@CommandHandler` method named after the deadline, as shown below, first for a deadline scheduled with a payload, then
+for one scheduled without.
+Naming the command after the deadline keeps deadlines apart that share a payload type.
 
 [tabs]
 ====
@@ -94,7 +95,7 @@ Axon Framework 5::
 --
 [source,java]
 ----
-@CommandHandler
+@CommandHandler(commandName = "paymentDue")
 void handle(PaymentDueReminder command) {
     // ...
 }
@@ -129,6 +130,14 @@ void handle(Void command) {
 }
 ----
 --
+====
+
+[NOTE]
+====
+A handler migrated with `axoniq-legacy` 5.4.0 is named after the deadline's payload type, such as
+`@CommandHandler void handle(PaymentDueReminder command)`.
+When no handler exists for the deadline name, `axoniq-legacy` dispatches the deadline again under its payload type,
+so such a handler keeps receiving its deadlines, and logs a warning asking to rename it.
 ====
 
 [IMPORTANT]
