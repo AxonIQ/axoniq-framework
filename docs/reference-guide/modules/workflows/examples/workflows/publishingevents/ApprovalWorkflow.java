@@ -41,8 +41,8 @@ public class ApprovalWorkflow {
         String approvedBy = "alice";
 
         // tag::await-publish[]
-        workflowContext.awaitPublish("notifyApproved",                      // <1>
-                         new OrderApproved(orderId, approvedBy));                    // <2>
+        workflowContext.awaitPublish("notifyApproved",                  // <1>
+                                     new OrderApproved(orderId, approvedBy)); // <2>
         // end::await-publish[]
     }
 
