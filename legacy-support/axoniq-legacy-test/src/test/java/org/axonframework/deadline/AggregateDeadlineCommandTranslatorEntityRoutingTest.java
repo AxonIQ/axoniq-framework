@@ -74,11 +74,37 @@ class AggregateDeadlineCommandTranslatorEntityRoutingTest {
     }
 
     @Test
+    void firedDeadlinesSharingAPayloadTypeReachTheHandlersNamedAfterTheirDeadlines() {
+        // given
+        String entityId = "entity-3";
+        commandGateway.sendAndWait(new CreateDeadlineRoutingEntity(entityId));
+        AggregateScopeDescriptor scope = new AggregateScopeDescriptor("DeadlineRoutingEntity", entityId);
+        DeadlineMessage reminder = new GenericDeadlineMessage(
+                "reminderDue", new MessageType(SharedDeadlinePayload.class), new SharedDeadlinePayload("first")
+        );
+        DeadlineMessage escalation = new GenericDeadlineMessage(
+                "escalationDue", new MessageType(SharedDeadlinePayload.class), new SharedDeadlinePayload("second")
+        );
+
+        // when
+        fire(reminder, scope);
+        String effectAfterReminder = commandGateway.sendAndWait(new ReadDeadlineEffect(entityId), String.class);
+        fire(escalation, scope);
+        String effectAfterEscalation = commandGateway.sendAndWait(new ReadDeadlineEffect(entityId), String.class);
+
+        // then
+        assertThat(effectAfterReminder).isEqualTo("reminder: first");
+        assertThat(effectAfterEscalation).isEqualTo("escalation: second");
+    }
+
+    @Test
     void firedDeadlineReachesTheEntityNamedByTheAggregateScopeDescriptor() {
         // given
         String entityId = "entity-1";
         commandGateway.sendAndWait(new CreateDeadlineRoutingEntity(entityId));
 
+        // the entity has no handler for "paymentDue", only one named after the payload type, as migrated with an
+        // earlier version of the translator, so the deadline reaches it through the fallback
         ApplyDeadlineEffect command = new ApplyDeadlineEffect("triggered-by-deadline");
         DeadlineMessage deadline = new GenericDeadlineMessage(
                 "paymentDue", new MessageType(ApplyDeadlineEffect.class), command
@@ -128,6 +154,19 @@ class AggregateDeadlineCommandTranslatorEntityRoutingTest {
         assertThat(observedEffect).isEqualTo("no-payload-deadline-handled: accountExpired");
     }
 
+    private void fire(DeadlineMessage deadline, AggregateScopeDescriptor scope) {
+        UnitOfWorkFactory unitOfWorkFactory = configuration.getComponent(UnitOfWorkFactory.class);
+        CompletableFuture<Void> result = unitOfWorkFactory.create().executeWithResult(context -> {
+            try {
+                testSubject.send(deadline, context, scope);
+                return CompletableFuture.completedFuture(null);
+            } catch (Exception e) {
+                return CompletableFuture.failedFuture(e);
+            }
+        });
+        result.orTimeout(5, TimeUnit.SECONDS).join();
+    }
+
     @SuppressWarnings("unused")
     @EventSourcedEntity(tagKey = "entityId")
     public static class DeadlineRoutingEntity {
@@ -148,6 +187,16 @@ class AggregateDeadlineCommandTranslatorEntityRoutingTest {
         @CommandHandler
         void handle(ApplyDeadlineEffect command, EventAppender appender) {
             appender.append(new DeadlineEffectApplied(this.id, command.effect()));
+        }
+
+        @CommandHandler(commandName = "reminderDue")
+        void handleReminder(SharedDeadlinePayload payload, EventAppender appender) {
+            appender.append(new DeadlineEffectApplied(this.id, "reminder: " + payload.note()));
+        }
+
+        @CommandHandler(commandName = "escalationDue")
+        void handleEscalation(SharedDeadlinePayload payload, EventAppender appender) {
+            appender.append(new DeadlineEffectApplied(this.id, "escalation: " + payload.note()));
         }
 
         @CommandHandler(commandName = "accountExpired")
@@ -183,6 +232,13 @@ class AggregateDeadlineCommandTranslatorEntityRoutingTest {
      * identifier.
      */
     public record ApplyDeadlineEffect(String effect) {
+
+    }
+
+    /**
+     * The payload of two different deadlines, which reach different handlers as they are named after their deadlines.
+     */
+    public record SharedDeadlinePayload(String note) {
 
     }
 
