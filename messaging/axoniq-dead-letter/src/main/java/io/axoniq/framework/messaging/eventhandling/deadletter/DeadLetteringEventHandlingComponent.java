@@ -208,16 +208,17 @@ public class DeadLetteringEventHandlingComponent extends DelegatingEventHandling
     /**
      * Handles an event normally through the delegate, with dead-lettering on failure.
      *
-     * @param event      the event to handle
-     * @param context    the processing context
-     * @param sequenceId the sequence identifier
-     * @param replay     whether the {@code event} is part of a replay
+     * @param event          the event to handle
+     * @param context        the processing context
+     * @param sequenceId     the sequence identifier
+     * @param enqueueInOrder whether to enqueue this in the order of the event's stream position instead of at the
+     *                       end
      * @return a stream representing the handling result with error handling
      */
     private MessageStream<Message> handle(EventMessage event,
                                           ProcessingContext context,
                                           Object sequenceId,
-                                          boolean replay) {
+                                          boolean enqueueInOrder) {
         if (logger.isTraceEnabled()) {
             logger.trace("Event [{}] with sequence id [{}] is not present in the dead-letter queue. "
                                  + "Handle operation is delegated to the wrapped EventHandlingComponent.",
@@ -225,7 +226,7 @@ public class DeadLetteringEventHandlingComponent extends DelegatingEventHandling
         }
 
         return delegate.handle(event, context)
-                       .onErrorContinue(error -> handleError(event, context, sequenceId, error, replay));
+                       .onErrorContinue(error -> handleError(event, context, sequenceId, error, enqueueInOrder));
     }
 
     /**
@@ -235,24 +236,25 @@ public class DeadLetteringEventHandlingComponent extends DelegatingEventHandling
      * is considered "handled" by being dead-lettered or evicted, and is not propagated to the processor. This allows
      * the processor to continue with the next event rather than aborting the work package.
      *
-     * @param event      the event that failed
-     * @param sequenceId the sequence identifier
-     * @param error      the error that occurred
-     * @param replay     whether the {@code event} is part of a replay
+     * @param event          the event that failed
+     * @param sequenceId     the sequence identifier
+     * @param error          the error that occurred
+     * @param enqueueInOrder whether to enqueue this in the order of the event's stream position instead of at the
+     *                       end
      * @return a stream that completes after the error is handled (either enqueued or evicted)
      */
     private MessageStream<Message> handleError(EventMessage event,
                                                ProcessingContext context,
                                                Object sequenceId,
                                                Throwable error,
-                                               boolean replay) {
+                                               boolean enqueueInOrder) {
         DeadLetter<EventMessage> letter = new GenericDeadLetter<>(
                 sequenceId, event, error, captureContext(context)
         );
         EnqueueDecision<EventMessage> decision = enqueuePolicy.decide(letter, error);
 
         if (decision.shouldEnqueue()) {
-            return enqueueDeadLetter(event, context, sequenceId, error, letter, decision, replay);
+            return enqueueDeadLetter(event, context, sequenceId, error, letter, decision, enqueueInOrder);
         }
 
         if (logger.isInfoEnabled()) {
@@ -267,7 +269,7 @@ public class DeadLetteringEventHandlingComponent extends DelegatingEventHandling
                                                      Throwable error,
                                                      DeadLetter<EventMessage> letter,
                                                      EnqueueDecision<EventMessage> decision,
-                                                     boolean replay) {
+                                                     boolean enqueueInOrder) {
         Throwable cause = decision.enqueueCause().orElse(null);
         DeadLetter<? extends EventMessage> letterWithCause = cause != null ? letter.withCause(cause) : letter;
         DeadLetter<? extends EventMessage> letterToEnqueue = decision.withDiagnostics(letterWithCause);
@@ -277,7 +279,7 @@ public class DeadLetteringEventHandlingComponent extends DelegatingEventHandling
                         event.identifier(), error.getMessage());
         }
 
-        CompletableFuture<Void> enqueued = replay
+        CompletableFuture<Void> enqueued = enqueueInOrder
                 ? DeadLetterQueueUtils.enqueueInOrder(queue, sequenceId, letterToEnqueue, context)
                 : queue.enqueue(sequenceId, letterToEnqueue, context);
         CompletableFuture<MessageStream<Message>> enqueueFuture = enqueued.thenApply(v -> MessageStream.empty());
