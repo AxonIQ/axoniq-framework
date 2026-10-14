@@ -46,7 +46,8 @@ import java.util.OptionalLong;
 enum ReplayHandleDecision {
 
     /**
-     * The position of the replayed event or of the first dead letter is unknown, so they cannot be compared.
+     * The replayed event is not part of the sequence, and its position or that of the first dead letter is unknown, so
+     * they cannot be compared.
      * <p>
      * The event is handled as it would be outside a replay. Thus, enqueued behind the existing dead letters of its
      * sequence.
@@ -54,7 +55,8 @@ enum ReplayHandleDecision {
     REGULAR,
 
     /**
-     * The replayed event is positioned before the first dead letter of its sequence and should thus be handled.
+     * The replayed event is not part of the sequence, and is positioned before the first dead letter of its sequence.
+     * It should thus be handled.
      * <p>
      * Should handling fail, the resulting dead letter is enqueued at its position in the sequence, instead of at the
      * end.
@@ -62,13 +64,12 @@ enum ReplayHandleDecision {
     HANDLE,
 
     /**
-     * The replayed event is positioned at or after the first dead letter, and is already part of the sequence, hence
-     * should be skipped.
+     * The replayed event is already part of the sequence, hence should be skipped, regardless of its position.
      */
     SKIP,
 
     /**
-     * The replayed event is positioned at or after the first dead letter, and is not yet part of the sequence.
+     * The replayed event is not part of the sequence, and is positioned at or after the first dead letter.
      * <p>
      * The event is enqueued without being handled, at the position in the sequence matching its place in the event
      * stream. Enqueueing it behind the existing dead letters would break the ordering, as the sequence could already
@@ -91,15 +92,15 @@ enum ReplayHandleDecision {
      * Decides how to handle the given replayed {@code event}, given the {@code letters} that are currently enqueued for
      * its sequence.
      * <p>
-     * The position of the {@code event} is taken from the {@link TrackingToken} in the given {@code context}, and
-     * compared with the position of the first of the {@code letters}. The outcome is:
+     * An event that is already part of the sequence is skipped first, matched on its
+     * {@link EventMessage#identifier() identifier}. For the remaining events, the position is taken from the
+     * {@link TrackingToken} in the given {@code context}, and compared with the position of the first of the
+     * {@code letters}. The outcome is:
      * <ul>
+     *     <li>{@link #SKIP} when the identifier matches that of an enqueued letter,</li>
      *     <li>{@link #REGULAR} when either position is unknown,</li>
      *     <li>{@link #HANDLE} when the event is positioned before the first letter,</li>
-     *     <li>{@link #SKIP} when the event is positioned at or after the first letter, and its
-     *     {@link EventMessage#identifier() identifier} matches that of an enqueued letter,</li>
-     *     <li>{@link #ENQUEUE_IN_ORDER} when the event is positioned at or after the first letter, and is not
-     *     enqueued yet.</li>
+     *     <li>{@link #ENQUEUE_IN_ORDER} when the event is positioned at or after the first letter.</li>
      * </ul>
      *
      * @param event   the replayed event to decide on
@@ -112,6 +113,11 @@ enum ReplayHandleDecision {
     static ReplayHandleDecision decide(EventMessage event,
                                        ProcessingContext context,
                                        List<DeadLetter<? extends EventMessage>> letters) {
+        boolean alreadyPresent = letters.stream().anyMatch(l -> l.message().identifier().equals(event.identifier()));
+        if (alreadyPresent) {
+            return SKIP;
+        }
+
         OptionalLong eventPosition = TrackingToken.fromContext(context)
                                                   .map(token -> WrappedToken.unwrapLowerBound(token).position())
                                                   .orElse(OptionalLong.empty());
@@ -119,11 +125,6 @@ enum ReplayHandleDecision {
         if (eventPosition.isEmpty() || headPosition.isEmpty()) {
             return REGULAR;
         }
-        if (eventPosition.getAsLong() < headPosition.getAsLong()) {
-            return HANDLE;
-        }
-
-        boolean alreadyPresent = letters.stream().anyMatch(l -> l.message().identifier().equals(event.identifier()));
-        return alreadyPresent ? SKIP : ENQUEUE_IN_ORDER;
+        return eventPosition.getAsLong() < headPosition.getAsLong() ? HANDLE : ENQUEUE_IN_ORDER;
     }
 }

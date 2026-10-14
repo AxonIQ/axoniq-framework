@@ -207,32 +207,6 @@ class ReplayHandleDecisionTest {
         }
 
         @Test
-        void decidesHandleEvenWhenEventIsAlreadyPresentLaterInTheSequence() {
-            // given
-            EventMessage event = EventTestUtils.asEventMessage("event");
-            DeadLetter<EventMessage> head = new GenericDeadLetter<>(
-                    SEQUENCE_ID, EventTestUtils.asEventMessage("head"), null,
-                    Context.with(TrackingToken.RESOURCE_KEY, new GlobalSequenceTrackingToken(5L))
-            );
-            DeadLetter<EventMessage> present = new GenericDeadLetter<>(
-                    SEQUENCE_ID, event, null,
-                    Context.with(TrackingToken.RESOURCE_KEY, new GlobalSequenceTrackingToken(9L))
-            );
-            TrackingToken eventToken =
-                    ((ReplayToken) ReplayToken.createReplayToken(new GlobalSequenceTrackingToken(100L)))
-                            .advancedTo(new GlobalSequenceTrackingToken(3L));
-            ProcessingContext context = new StubProcessingContext()
-                    .withResource(TrackingToken.RESOURCE_KEY, eventToken);
-            List<DeadLetter<? extends EventMessage>> letters = List.of(head, present);
-
-            // when
-            ReplayHandleDecision result = ReplayHandleDecision.decide(event, context, letters);
-
-            // then
-            assertThat(result).isEqualTo(ReplayHandleDecision.HANDLE);
-        }
-
-        @Test
         void decidesHandleWhenHeadLetterWasEnqueuedDuringAReplay() {
             // given
             EventMessage event = EventTestUtils.asEventMessage("event");
@@ -260,6 +234,71 @@ class ReplayHandleDecisionTest {
 
     @Nested
     class WhenEventAlreadyPresent {
+
+        @Test
+        void decidesSkipWhenEventIsPositionedBeforeTheHeadLetter() {
+            // given
+            EventMessage event = EventTestUtils.asEventMessage("event");
+            DeadLetter<EventMessage> head = new GenericDeadLetter<>(
+                    SEQUENCE_ID, event, null,
+                    Context.with(TrackingToken.RESOURCE_KEY, new GlobalSequenceTrackingToken(5L))
+            );
+            TrackingToken eventToken =
+                    ((ReplayToken) ReplayToken.createReplayToken(new GlobalSequenceTrackingToken(100L)))
+                            .advancedTo(new GlobalSequenceTrackingToken(3L));
+            ProcessingContext context = new StubProcessingContext()
+                    .withResource(TrackingToken.RESOURCE_KEY, eventToken);
+            List<DeadLetter<? extends EventMessage>> letters = List.of(head);
+
+            // when
+            ReplayHandleDecision result = ReplayHandleDecision.decide(event, context, letters);
+
+            // then
+            assertThat(result).isEqualTo(ReplayHandleDecision.SKIP);
+        }
+
+        @Test
+        void decidesSkipWhenEventIsPositionedBeforeALetterBehindTheHeadLetter() {
+            // given
+            EventMessage event = EventTestUtils.asEventMessage("event");
+            DeadLetter<EventMessage> head = new GenericDeadLetter<>(
+                    SEQUENCE_ID, EventTestUtils.asEventMessage("head"), null,
+                    Context.with(TrackingToken.RESOURCE_KEY, new GlobalSequenceTrackingToken(5L))
+            );
+            DeadLetter<EventMessage> present = new GenericDeadLetter<>(
+                    SEQUENCE_ID, event, null,
+                    Context.with(TrackingToken.RESOURCE_KEY, new GlobalSequenceTrackingToken(9L))
+            );
+            TrackingToken eventToken =
+                    ((ReplayToken) ReplayToken.createReplayToken(new GlobalSequenceTrackingToken(100L)))
+                            .advancedTo(new GlobalSequenceTrackingToken(3L));
+            ProcessingContext context = new StubProcessingContext()
+                    .withResource(TrackingToken.RESOURCE_KEY, eventToken);
+            List<DeadLetter<? extends EventMessage>> letters = List.of(head, present);
+
+            // when
+            ReplayHandleDecision result = ReplayHandleDecision.decide(event, context, letters);
+
+            // then
+            assertThat(result).isEqualTo(ReplayHandleDecision.SKIP);
+        }
+
+        @Test
+        void decidesSkipWhenPositionsAreUnknown() {
+            // given
+            EventMessage event = EventTestUtils.asEventMessage("event");
+            DeadLetter<EventMessage> head = new GenericDeadLetter<>(
+                    SEQUENCE_ID, event, null, Context.empty()
+            );
+            ProcessingContext context = new StubProcessingContext();
+            List<DeadLetter<? extends EventMessage>> letters = List.of(head);
+
+            // when
+            ReplayHandleDecision result = ReplayHandleDecision.decide(event, context, letters);
+
+            // then
+            assertThat(result).isEqualTo(ReplayHandleDecision.SKIP);
+        }
 
         @Test
         void decidesSkipForTheHeadLetterItself() {
