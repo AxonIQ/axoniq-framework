@@ -48,6 +48,7 @@ import org.slf4j.LoggerFactory;
 import java.lang.invoke.MethodHandles;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Optional;
@@ -88,7 +89,9 @@ public class JpaSequencedDeadLetterQueue<M extends EventMessage> implements Sequ
 
     private static final String PROCESSING_GROUP_PARAM = "processingGroup";
     private static final String SEQUENCE_ID_PARAM = "sequenceIdentifier";
-    private static final TypeReference<Map<String, String>> DIAGNOSTICS_MAP_TYPE_REF = new TypeReference<>() {
+    // Concrete HashMap i.o. Map: with Jackson default typing, a non-concrete target type expects a type id,
+    // which writing a concrete Metadata never adds.
+    private static final TypeReference<HashMap<String, String>> DIAGNOSTICS_MAP_TYPE_REF = new TypeReference<>() {
     };
 
     private final String processingGroup;

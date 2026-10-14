@@ -23,6 +23,7 @@ import org.axonframework.messaging.core.QualifiedName;
 import org.junit.jupiter.api.*;
 
 import java.net.URI;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -42,6 +43,7 @@ class ConsistentHashTest {
     private static final QualifiedName CREATE_COURSE = new QualifiedName("university.CreateCourse");
     private static final QualifiedName RENAME_COURSE = new QualifiedName("university.RenameCourse");
     private static final QualifiedName SUBSCRIBE_STUDENT = new QualifiedName("university.SubscribeStudent");
+    private static final QualifiedName FIND_COURSE = new QualifiedName("university.FindCourse");
 
     private static Member member(String name) {
         return new Member(name, URI.create("http://" + name + ":8080"), false);
@@ -431,6 +433,53 @@ class ConsistentHashTest {
 
             // when / then
             assertThat(ring.memberFor("course-1", CREATE_COURSE)).isPresent();
+        }
+    }
+
+    @Nested
+    class ResolvingQueryHandlers {
+
+        @Test
+        void returnsEveryMemberHandlingTheQueryInNameOrder() {
+            // given
+            Member nodeA = member("node-a");
+            Member nodeB = member("node-b");
+            Member nodeC = member("node-c");
+            MemberCapabilities handlesFind = new MemberCapabilities(0, Set.of(), Set.of(FIND_COURSE));
+            ConsistentHash ring = new ConsistentHash().withOnly(Map.of(
+                    nodeC, handlesFind,
+                    nodeB, handling(100, CREATE_COURSE),
+                    nodeA, handlesFind
+            ));
+
+            // when
+            List<Member> handlers = ring.queryHandlers(FIND_COURSE);
+
+            // then — a stable order is what lets a caller rotate over the same sequence on every call
+            assertThat(handlers).containsExactly(nodeA, nodeC);
+        }
+
+        @Test
+        void returnsNoMembersWhenNoneHandlesTheQuery() {
+            // given
+            ConsistentHash ring = new ConsistentHash().with(member("node-a"), handling(100, CREATE_COURSE));
+
+            // when / then
+            assertThat(ring.queryHandlers(FIND_COURSE)).isEmpty();
+        }
+
+        @Test
+        void reflectsTheMembershipsOfTheRingItIsAskedOf() {
+            // given
+            Member nodeA = member("node-a");
+            ConsistentHash before = new ConsistentHash();
+            assertThat(before.queryHandlers(FIND_COURSE)).isEmpty();
+
+            // when
+            ConsistentHash after = before.with(nodeA, new MemberCapabilities(0, Set.of(), Set.of(FIND_COURSE)));
+
+            // then — what an earlier ring answered never leaks into a later one
+            assertThat(after.queryHandlers(FIND_COURSE)).containsExactly(nodeA);
         }
     }
 

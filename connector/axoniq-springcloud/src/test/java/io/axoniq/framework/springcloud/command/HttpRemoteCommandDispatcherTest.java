@@ -227,7 +227,7 @@ class HttpRemoteCommandDispatcherTest {
         @Test
         void reportsTheMemberAsUnreachableWhenItHasNoEndpoint() {
             // given
-            Member withoutEndpoint = Member.unregisteredLocalMember("UNIVERSITY[LOCAL]");
+            Member withoutEndpoint = Member.localMember("node-a");
 
             // when / then
             assertThatThrownBy(() -> testSubject.dispatch(withoutEndpoint, command()).join())

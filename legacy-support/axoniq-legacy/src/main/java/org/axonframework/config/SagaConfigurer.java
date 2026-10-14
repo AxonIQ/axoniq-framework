@@ -22,6 +22,8 @@ package org.axonframework.config;
 import org.axonframework.common.AxonConfigurationException;
 import org.axonframework.common.configuration.ComponentBuilder;
 import org.axonframework.common.configuration.Configuration;
+import org.axonframework.messaging.LegacyScopeAwareProvider;
+import org.axonframework.messaging.ScopeAwareProvider;
 import org.axonframework.messaging.core.annotation.HandlerDefinition;
 import org.axonframework.messaging.core.annotation.ParameterResolverFactory;
 import org.axonframework.messaging.eventhandling.EventHandlingComponent;
@@ -60,6 +62,9 @@ import static org.axonframework.common.BuilderUtils.assertNonNull;
  * configurer is therefore single-use and stays bound to the {@link Configuration} it was first built with: building it
  * a second time returns the manager assembled from the first, ignoring the {@code Configuration} passed in. Register a
  * separate configurer per Saga type, as Axon Framework 4's {@code SagaConfigurer#initialize(Configuration)} required.
+ * <p>
+ * The built manager registers itself with the configuration's {@link LegacyScopeAwareProvider}, so that the deadlines
+ * its Sagas schedule are delivered to it.
  * <p>
  * A custom manager replaces the complete default assembly. A custom repository replaces the default repository and
  * its store dependency. Consequently, lower-level settings are only used when this configurer builds that level.
@@ -173,6 +178,9 @@ public class SagaConfigurer<T> implements ComponentBuilder<EventHandlingComponen
      * Builds the Saga manager for this configuration. The first invocation fixes the configured builders; subsequent
      * invocations return the same manager, ignoring the {@code configuration} given to them.
      * <p>
+     * The first invocation also registers the manager with the configuration's {@link LegacyScopeAwareProvider}, if
+     * the configuration's {@link ScopeAwareProvider} is one, so that deadlines the Sagas schedule reach the manager.
+     * <p>
      * The configured builders are fixed before the manager is assembled, so a configurer whose assembly failed stays
      * fixed and cannot be reconfigured. This mirrors Axon Framework 4, where {@code initialize(Configuration)} likewise
      * fixed the configurer before the manager, repository, and store components were resolved.
@@ -190,8 +198,16 @@ public class SagaConfigurer<T> implements ComponentBuilder<EventHandlingComponen
             sagaManager = configuredManagerBuilder == null
                     ? buildDefaultManager(configuration)
                     : configuredManagerBuilder.apply(configuration);
+            registerWithScopeAwareProvider(configuration, sagaManager);
         }
         return sagaManager;
+    }
+
+    private static void registerWithScopeAwareProvider(Configuration configuration, AbstractSagaManager<?> manager) {
+        configuration.getOptionalComponent(ScopeAwareProvider.class)
+                     .filter(LegacyScopeAwareProvider.class::isInstance)
+                     .map(LegacyScopeAwareProvider.class::cast)
+                     .ifPresent(provider -> provider.register(manager));
     }
 
     private AbstractSagaManager<T> buildDefaultManager(Configuration configuration) {

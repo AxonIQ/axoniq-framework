@@ -27,6 +27,7 @@ import io.axoniq.framework.messaging.deadletter.Cause;
 
 import java.time.Instant;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.Objects;
 
 /**
@@ -251,7 +252,7 @@ public class DeadLetterEntry {
      * @param converter   The {@link Converter} to use for serialization.
      */
     public void setDiagnostics(Metadata diagnostics, Converter converter) {
-        this.diagnostics = converter.convert(diagnostics, byte[].class);
+        this.diagnostics = converter.convert(new HashMap<>(diagnostics), byte[].class);
     }
 
     /**

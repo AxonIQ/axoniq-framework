@@ -6,6 +6,8 @@ When configuring xref:events:event-processors/index.adoc#error-handling[error ha
 Instead of either logging the error and continuing, or infinitely retrying the current event, a Dead-Letter Queue will park the event in the queue so you can decide to try and handle it again later.
 In addition, it will prevent handling of later events in the same sequence until the failed event is successfully processed, preserving correct event ordering.
 
+Note that the Dead-Letter Queue integration is part of Axoniq Framework and requires a xref:axoniq-platform-reference:ROOT:licensing/index.adoc[license] for production use.
+
 [NOTE]
 ====
 If your application uses multi-tenancy, see xref:multi-tenancy:tenant-dead-letter-queue.adoc[Tenant-aware dead-letter queues] for the routing model and the `TenantAwareSequencedDeadLetterQueueFactory` configuration.
@@ -481,3 +483,28 @@ include::example$deadletterqueue/index/custompolicybean/ProcessorConfig.java[tag
 ----
 --
 ====
+
+== Resetting and replaying
+
+When you reset the tracking tokens of a processor, the Dead-Letter Queue is cleared by default.
+Events that were dead-lettered before the reset are then redelivered through the replay.
+Set `clearOnReset` to `false` on the `DeadLetterQueueConfiguration` to keep the dead letters across a reset.
+
+[WARNING]
+====
+Clearing the queue drops dead letters without handling them.
+A side effect that a dead-lettered event should have caused is not executed, unless the replay handles that event again.
+Resolve all dead letters before resetting, either by <<Processing sequences,processing>> them or by evicting them deliberately.
+====
+
+If you keep the dead letters, a replay treats each sequence that holds dead letters as follows:
+
+* Replayed events positioned before the first dead letter of the sequence are handled normally.
+They may rebuild the state that the dead letter depends on.
+* Replayed events that are already dead-lettered in the sequence are skipped, to prevent duplicates.
+* Replayed events positioned after the first dead letter that are not yet in the sequence are enqueued without being handled, at the position matching their place in the event stream.
+* A replayed event that fails while being handled is enqueued at the position matching its place in the event stream, rather than at the end of the sequence.
+
+Placing a dead letter at its position in the stream requires evicting and enqueuing every later dead letter of that sequence again.
+This is costly for long sequences, so we strongly recommend resolving all dead letters before you replay, either by processing or by evicting them.
+Treat the behavior described above as a safety net, not as the intended way to replay.

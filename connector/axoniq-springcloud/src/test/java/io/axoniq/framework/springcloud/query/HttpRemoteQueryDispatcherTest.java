@@ -35,6 +35,7 @@ import org.axonframework.messaging.queryhandling.GenericQueryMessage;
 import org.axonframework.messaging.queryhandling.NoHandlerForQueryException;
 import org.axonframework.messaging.queryhandling.QueryMessage;
 import org.axonframework.messaging.queryhandling.QueryResponseMessage;
+import org.axonframework.messaging.queryhandling.SubscriptionQueryUpdateMessage;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.*;
 import org.springframework.http.HttpHeaders;
@@ -373,6 +374,30 @@ class HttpRemoteQueryDispatcherTest {
         }
 
         @Test
+        void readsTheUpdatesTheMemberEmitsAsSubscriptionQueryUpdates() throws IOException {
+            // given
+            MessageStream<QueryResponseMessage> updates =
+                    dispatcher(1024).openSubscriptionQueryUpdateStream(MEMBER, query(), 16, NO_OP);
+
+            // when
+            body.write(updateEvent("update-1"));
+
+            // then an update is told apart from an initial result by its type, which is what a subscriber to the
+            // updates alone filters on
+            List<QueryResponseMessage> received = new ArrayList<>();
+            awaitUntil(() -> {
+                drainInto(updates, received);
+                return !received.isEmpty();
+            });
+            assertThat(received).singleElement().satisfies(update -> {
+                assertThat(update).isInstanceOf(SubscriptionQueryUpdateMessage.class);
+                assertThat(update.identifier()).isEqualTo("update-1");
+                assertThat(update.type()).isEqualTo(RESPONSE_TYPE);
+                assertThat(update.payloadAs(String.class)).isEqualTo(PAYLOAD);
+            });
+        }
+
+        @Test
         void reportsTheSubscriptionOverWhenTheMemberSaysSo() throws IOException {
             // given
             AtomicBoolean completed = new AtomicBoolean();
@@ -394,14 +419,15 @@ class HttpRemoteQueryDispatcherTest {
         }
 
         @Test
-        void saysNothingAboutTheSubscriptionWhenTheMemberJustStopsAnswering() throws IOException {
+        void endsOnlyThisMembersPartWhenTheMemberSaysItIsLeaving() throws IOException {
             // given
             AtomicBoolean completed = new AtomicBoolean();
             MessageStream<QueryResponseMessage> updates = dispatcher(1024)
                     .openSubscriptionQueryUpdateStream(MEMBER, query(), 16,
                                                        listening(new AtomicBoolean(), completed));
 
-            // when the member closes the stream without reporting the subscription over, as one shutting down does
+            // when the member announces it is leaving, as one shutting down cleanly does
+            body.write("event: " + QueryConverter.LEAVING_EVENT + "\ndata: query-1\n\n");
             body.end();
 
             // then this member's part is over, and nothing claims the subscription itself is
@@ -409,6 +435,28 @@ class HttpRemoteQueryDispatcherTest {
                 drainInto(updates, new ArrayList<>());
                 return updates.isCompleted();
             });
+            assertThat(updates.error()).isEmpty();
+            assertThat(completed).isFalse();
+        }
+
+        @Test
+        void failsTheSubscriptionWhenTheMemberEndsItWithoutSayingWhy() throws IOException {
+            // given
+            AtomicBoolean completed = new AtomicBoolean();
+            MessageStream<QueryResponseMessage> updates = dispatcher(1024)
+                    .openSubscriptionQueryUpdateStream(MEMBER, query(), 16,
+                                                       listening(new AtomicBoolean(), completed));
+
+            // when the stream ends without the member completing the subscription or announcing it is leaving
+            body.end();
+
+            // then the stream may have been cut short, so whatever the member emitted in the meantime may be lost
+            awaitUntil(() -> {
+                drainInto(updates, new ArrayList<>());
+                return updates.error().isPresent();
+            });
+            assertThat(updates.error().orElseThrow()).isInstanceOf(QueryDispatchException.class)
+                                                     .hasMessageContaining("Lost the subscription");
             assertThat(completed).isFalse();
         }
 
@@ -624,7 +672,7 @@ class HttpRemoteQueryDispatcherTest {
         @Test
         void reportsAMemberWithNoEndpointToSendTo() {
             // given a member discovery reported without a usable address
-            Member unreachable = Member.unregisteredLocalMember("node-c");
+            Member unreachable = Member.localMember("node-c");
 
             // when
             MessageStream<QueryResponseMessage> responses = dispatcher(1024).dispatch(unreachable, query());

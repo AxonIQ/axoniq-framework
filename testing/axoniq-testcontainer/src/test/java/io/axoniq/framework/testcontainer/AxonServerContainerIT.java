@@ -20,12 +20,12 @@
 package io.axoniq.framework.testcontainer;
 
 import org.junit.jupiter.api.*;
-import org.testcontainers.utility.DockerImageName;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Simple test class for {@link AxonServerContainer}.
+ * Tests {@link AxonServerContainer}'s actual startup/reuse behavior against a real container. Pure builder/
+ * configuration logic is covered without Docker by {@link AxonServerContainerTest}.
  *
  * @author Lucas Campos
  * @author Steven van Beelen
@@ -34,85 +34,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 @Tag("slow")
 @Tag("flaky")
 class AxonServerContainerIT {
-
-    @Test
-    void constructionThroughStringImageNameStartsAsExpected() {
-        String testName = "axoniq/axonserver";
-        try (
-                AxonServerContainer testSubject = new AxonServerContainer(testName)
-        ) {
-            testSubject.start();
-            assertThat(testSubject.isRunning()).isTrue();
-        }
-    }
-
-    @Test
-    void constructionWithDCBStartsAsExpected() {
-        String testName = "axoniq/axonserver";
-        try (
-                AxonServerContainer testSubject = new AxonServerContainer(testName)
-                        .withDcbContext(true)
-        ) {
-            testSubject.start();
-            assertThat(testSubject.isRunning()).isTrue();
-        }
-    }
-
-    @Test
-    void constructionThroughDockerImageNameStartsAsExpected() {
-        DockerImageName testName = DockerImageName.parse("axoniq/axonserver");
-        try (
-                AxonServerContainer testSubject = new AxonServerContainer(testName)
-        ) {
-            testSubject.start();
-            assertThat(testSubject.isRunning()).isTrue();
-            assertThat(testSubject.getAxonServerAddress()).isNotNull();
-            assertThat(testSubject.getGrpcPort()).isNotNull();
-            assertThat(testSubject.getHost()).isNotNull();
-            assertThat(testSubject.getExposedPorts()).contains(8024, 8124);
-        }
-    }
-
-    @Test
-    void fullyCustomizedAxonServerContainerStartsAsExpected() {
-        String testName = "axon-server-name";
-        String testHostName = "axon-server-hostname";
-        String testInternalHostName = "axon-server-internal-host-name";
-        boolean testDevMode = true;
-        try (
-                AxonServerContainer testSubject =
-                        new AxonServerContainer("axoniq/axonserver")
-                                .withAxonServerName(testName)
-                                .withAxonServerHostname(testHostName)
-                                .withAxonServerInternalHostname(testInternalHostName)
-                                .withDevMode(testDevMode)
-        ) {
-            testSubject.start();
-            assertThat(testSubject.isRunning()).isTrue();
-
-            assertThat(testSubject.getEnvMap().get("AXONIQ_AXONSERVER_NAME")).isEqualTo(testName);
-            assertThat(testSubject.getEnvMap().get("AXONIQ_AXONSERVER_INTERNAL_HOSTNAME")).isEqualTo(
-                    testInternalHostName);
-            assertThat(testSubject.getEnvMap().get("AXONIQ_AXONSERVER_HOSTNAME")).isEqualTo(testHostName);
-            assertThat(testSubject.getEnvMap().get("AXONIQ_AXONSERVER_DEVMODE_ENABLED")).isEqualTo(Boolean.toString(
-                    testDevMode));
-        }
-    }
-
-    @Test
-    void constructionThroughDefaultConstructorStartsAsExpected() {
-        try (AxonServerContainer testSubject = new AxonServerContainer()) {
-            testSubject.start();
-            assertThat(testSubject.isRunning()).isTrue();
-        }
-    }
-
-    @Test
-    void properlyConfiguredDefaultContainerLabel() {
-        try (AxonServerContainer testSubject = new AxonServerContainer()) {
-            assertThat(testSubject.getDockerImageName()).isEqualTo("docker.axoniq.io/axoniq/axonserver:latest");
-        }
-    }
 
     @Test
     void constructionWithReuseEnabledStartsMultipleTimesAsExpected() {

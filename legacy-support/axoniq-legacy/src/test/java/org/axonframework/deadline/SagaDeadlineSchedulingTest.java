@@ -40,10 +40,12 @@ import org.junit.jupiter.api.*;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.entry;
 import static org.axonframework.messaging.eventhandling.EventTestUtils.asEventMessage;
 
 /**
@@ -177,6 +179,52 @@ class SagaDeadlineSchedulingTest {
                                                  .extracting(ScheduledCall::scope)
                                                  .isEqualTo(new SagaScopeDescriptor("CollaboratingSaga", sagaId));
             assertThat(sagaStoredWhenScheduled).containsExactly(true);
+        }
+    }
+
+    /**
+     * Axon Framework 4 created every message within a unit of work with that unit of work's correlation data in its
+     * metadata, deadlines included. Axon Framework 5 keeps the correlation data of the handled message on the context
+     * of its handler, which is where a Saga's deadline picks it up.
+     */
+    @Nested
+    class CarryingCorrelationData {
+
+        @Test
+        void aDeadlineCarriesTheCorrelationDataOfTheEventWhoseHandlingScheduledIt() {
+            // given
+            startWith(SagaConfigurer.forType(ParameterSaga.class));
+            EventMessage event = asEventMessage(new OrderPlaced("order-1"))
+                    .andMetadata(Map.of("correlationId", "correlation-of-the-order-process"));
+
+            // when
+            publish(event);
+
+            // then
+            assertThat(deadlineManager.scheduled).singleElement()
+                                                 .extracting(scheduledCall -> scheduledCall.message().metadata())
+                                                 .satisfies(metadata -> assertThat(metadata).containsOnly(
+                                                         entry("correlationId", "correlation-of-the-order-process"),
+                                                         entry("causationId", event.identifier())
+                                                 ));
+        }
+
+        @Test
+        void eachDeadlineOfABatchCarriesTheCorrelationDataOfItsOwnEvent() {
+            // given
+            startWith(SagaConfigurer.forType(ParameterSaga.class));
+            EventMessage first = asEventMessage(new OrderPlaced("order-1"));
+            EventMessage second = asEventMessage(new OrderPlaced("order-2"));
+
+            // when
+            FutureUtils.joinAndUnwrap(
+                    configuration.getComponent(EventSink.class).publish(null, List.of(first, second)), TIMEOUT
+            );
+
+            // then
+            assertThat(deadlineManager.scheduled)
+                    .extracting(scheduledCall -> scheduledCall.message().metadata().get("causationId"))
+                    .containsExactly(first.identifier(), second.identifier());
         }
     }
 

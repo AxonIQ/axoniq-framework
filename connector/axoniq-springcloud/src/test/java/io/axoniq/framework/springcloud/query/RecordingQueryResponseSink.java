@@ -39,6 +39,7 @@ class RecordingQueryResponseSink implements QueryResponseSink {
     private volatile @Nullable QueryDispatchFailure error;
     private volatile boolean completed;
     private volatile @Nullable String subscriptionCompletedFor;
+    private final List<String> leaving = new CopyOnWriteArrayList<>();
     private volatile @Nullable RuntimeException failOnWrite;
 
     /**
@@ -110,6 +111,18 @@ class RecordingQueryResponseSink implements QueryResponseSink {
     public void subscriptionComplete(String requestIdentifier) {
         this.subscriptionCompletedFor = requestIdentifier;
         this.completed = true;
+    }
+
+    @Override
+    public void leaving(String requestIdentifier) {
+        leaving.add(requestIdentifier);
+    }
+
+    /**
+     * Returns the identifiers of the subscription queries this member reported leaving, once per report.
+     */
+    public List<String> leaving() {
+        return List.copyOf(leaving);
     }
 
     /**

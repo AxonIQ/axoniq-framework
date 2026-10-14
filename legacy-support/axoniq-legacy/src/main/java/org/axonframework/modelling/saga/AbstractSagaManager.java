@@ -19,10 +19,14 @@
 
 package org.axonframework.modelling.saga;
 
+import io.axoniq.framework.legacy.LegacySupportAxoniqAddon;
+import io.axoniq.license.entitlement.EntitlementManager;
 import org.axonframework.common.AxonConfigurationException;
 import org.axonframework.common.FutureUtils;
 import org.axonframework.common.IdentifierFactory;
 import org.axonframework.common.infra.ComponentDescriptor;
+import org.axonframework.deadline.DeadlineMessage;
+import org.axonframework.deadline.UnknownDeadlinePayload;
 import org.axonframework.messaging.ScopeAware;
 import org.axonframework.messaging.ScopeDescriptor;
 import org.axonframework.messaging.core.Message;
@@ -75,6 +79,7 @@ public abstract class AbstractSagaManager<T> implements EventHandlingComponent, 
         this.sagaRepository = builder.sagaRepository;
         this.sagaType = builder.sagaType;
         this.sagaFactory = builder.sagaFactory;
+        EntitlementManager.INSTANCE.registerAddon(LegacySupportAxoniqAddon.class);
     }
 
     /**
@@ -314,6 +319,13 @@ public abstract class AbstractSagaManager<T> implements EventHandlingComponent, 
         throw new ResetNotSupportedException("Sagas do no support resetting tokens");
     }
 
+    /**
+     * {@inheritDoc}
+     * <p>
+     * A deadline message whose stored payload type resolves to no class is sent with an {@link UnknownDeadlinePayload}.
+     * Its delivery logs a warning naming the deadline, the stored type and the scope, so that such a deadline is not
+     * lost unnoticed.
+     */
     @Override
     public void send(Message message, ProcessingContext context, ScopeDescriptor scopeDescription) throws Exception {
         if (!(message instanceof EventMessage eventMessage)) {
@@ -323,6 +335,16 @@ public abstract class AbstractSagaManager<T> implements EventHandlingComponent, 
                     getSagaType()
             );
             throw new IllegalArgumentException(exceptionMessage);
+        }
+        if (message instanceof DeadlineMessage deadlineMessage
+                && message.payload() instanceof UnknownDeadlinePayload unknownPayload) {
+            logger.warn(
+                    "Deadline [{}] fired with the stored payload type [{}], which resolves to no known class, "
+                            + "for scope [{}]. Only deadline handlers without a payload parameter receive it.",
+                    deadlineMessage.getDeadlineName(),
+                    unknownPayload.typeName(),
+                    scopeDescription.scopeDescription()
+            );
         }
 
         if (canResolve(scopeDescription)) {

@@ -34,12 +34,22 @@ import java.util.concurrent.CopyOnWriteArrayList;
 /**
  * A {@link CapabilityDiscoveryMode} for tests, answering with whatever a test configured per instance and recording
  * what it was asked.
+ * <p>
+ * Each instance answers as a node of its own, identified by {@link #nodeIdOf(ServiceInstance)}, unless a test makes it
+ * answer as another node, or as this application through {@link #answeringAsLocal(ServiceInstance)}.
  *
  * @author Allard Buijze
  */
 public class RecordingCapabilityDiscoveryMode implements CapabilityDiscoveryMode {
 
+    /**
+     * The node id this application answers with.
+     */
+    public static final String LOCAL_NODE_ID = "local-node";
+
     private final Map<ServiceInstanceKey, MemberCapabilities> answers = new LinkedHashMap<>();
+    private final Map<ServiceInstanceKey, String> nodeIds = new LinkedHashMap<>();
+    private final Set<ServiceInstanceKey> localInstances = new LinkedHashSet<>();
     private final Set<ServiceInstanceKey> clientErrors = new LinkedHashSet<>();
     private final Set<ServiceInstanceKey> unknown = new LinkedHashSet<>();
     // Recorded from the threads a discovery round fans out over, so this has to tolerate concurrent adds.
@@ -47,10 +57,37 @@ public class RecordingCapabilityDiscoveryMode implements CapabilityDiscoveryMode
     private final List<Set<ServiceInstanceKey>> retained = new ArrayList<>();
 
     private MemberCapabilities localCapabilities = MemberCapabilities.INCAPABLE;
-    private ServiceInstance localInstance;
+
+    /**
+     * Returns the node id the given {@code instance} answers with, unless a test made it answer as another node.
+     */
+    public static String nodeIdOf(ServiceInstance instance) {
+        return ServiceInstanceKey.of(instance).toString();
+    }
 
     public RecordingCapabilityDiscoveryMode answering(ServiceInstance instance, MemberCapabilities capabilities) {
-        answers.put(ServiceInstanceKey.of(instance), capabilities);
+        return answeringAs(instance, nodeIdOf(instance), capabilities);
+    }
+
+    /**
+     * Makes the given {@code instance} answer as the node with the given {@code nodeId}, as an application reported
+     * more than once would.
+     */
+    public RecordingCapabilityDiscoveryMode answeringAs(ServiceInstance instance,
+                                                       String nodeId,
+                                                       MemberCapabilities capabilities) {
+        ServiceInstanceKey key = ServiceInstanceKey.of(instance);
+        unknown.remove(key);
+        answers.put(key, capabilities);
+        nodeIds.put(key, nodeId);
+        return this;
+    }
+
+    /**
+     * Makes the given {@code instance} answer as this application, with whatever capabilities it last published.
+     */
+    public RecordingCapabilityDiscoveryMode answeringAsLocal(ServiceInstance instance) {
+        localInstances.add(ServiceInstanceKey.of(instance));
         return this;
     }
 
@@ -69,10 +106,8 @@ public class RecordingCapabilityDiscoveryMode implements CapabilityDiscoveryMode
      */
     public RecordingCapabilityDiscoveryMode recovering(ServiceInstance instance,
                                                        MemberCapabilities capabilities) {
-        ServiceInstanceKey key = ServiceInstanceKey.of(instance);
-        clientErrors.remove(key);
-        answers.put(key, capabilities);
-        return this;
+        clientErrors.remove(ServiceInstanceKey.of(instance));
+        return answering(instance, capabilities);
     }
 
     /**
@@ -91,19 +126,18 @@ public class RecordingCapabilityDiscoveryMode implements CapabilityDiscoveryMode
         return List.copyOf(retained);
     }
 
-    public ServiceInstance localInstance() {
-        return localInstance;
+    @Override
+    public String localNodeId() {
+        return LOCAL_NODE_ID;
     }
 
     @Override
-    public void updateLocalCapabilities(ServiceInstance localInstance, MemberCapabilities capabilities) {
-        this.localInstance = localInstance;
+    public void updateLocalCapabilities(MemberCapabilities capabilities) {
         this.localCapabilities = capabilities;
-        answers.put(ServiceInstanceKey.of(localInstance), capabilities);
     }
 
     @Override
-    public Optional<MemberCapabilities> capabilities(ServiceInstance serviceInstance) {
+    public Optional<MemberAdvertisement> discover(ServiceInstance serviceInstance) {
         ServiceInstanceKey key = ServiceInstanceKey.of(serviceInstance);
         asked.add(key);
         if (clientErrors.contains(key)) {
@@ -112,7 +146,11 @@ public class RecordingCapabilityDiscoveryMode implements CapabilityDiscoveryMode
         if (unknown.contains(key)) {
             return Optional.empty();
         }
-        return Optional.ofNullable(answers.get(key));
+        if (localInstances.contains(key)) {
+            return Optional.of(new MemberAdvertisement(LOCAL_NODE_ID, localCapabilities));
+        }
+        return Optional.ofNullable(answers.get(key))
+                       .map(capabilities -> new MemberAdvertisement(nodeIds.get(key), capabilities));
     }
 
     @Override

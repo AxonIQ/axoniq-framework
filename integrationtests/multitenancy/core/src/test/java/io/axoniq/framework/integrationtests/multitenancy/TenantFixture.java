@@ -47,9 +47,16 @@ final class TenantFixture {
         // utility class
     }
 
-    public static void connectOnlyCustomTenantsPredicate(ComponentRegistry registry) {
+    /**
+     * Registers a {@link TenantConnectPredicate} that only connects to tenants whose ID starts with the given
+     * {@code prefix}, on top of excluding the default and admin contexts. Scoped to a prefix rather than every
+     * custom context, because the shared Axon Server test container this runs against is also used concurrently by
+     * other test classes in this module, each creating their own, differently-prefixed custom contexts.
+     */
+    public static void connectOnlyCustomTenantsPredicate(ComponentRegistry registry, String prefix) {
         registry.registerComponent(
                 TenantConnectPredicate.class,
-                config -> CONNECT_ONLY_CUSTOM_TENANTS);
+                config -> descriptor -> CONNECT_ONLY_CUSTOM_TENANTS.test(descriptor)
+                                        && descriptor.tenantId().startsWith(prefix));
     }
 }

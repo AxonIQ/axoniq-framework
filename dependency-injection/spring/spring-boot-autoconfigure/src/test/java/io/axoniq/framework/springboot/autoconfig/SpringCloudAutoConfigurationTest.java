@@ -19,6 +19,10 @@
 
 package io.axoniq.framework.springboot.autoconfig;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.sun.net.httpserver.Headers;
+import com.sun.net.httpserver.HttpExchange;
+import com.sun.net.httpserver.HttpServer;
 import io.axoniq.framework.messaging.commandhandling.distributed.CommandBusConnector;
 import io.axoniq.framework.springboot.SpringCloudProperties;
 import io.axoniq.framework.springcloud.command.IncomingCommandInvoker;
@@ -28,12 +32,21 @@ import io.axoniq.framework.springcloud.discovery.CapabilityDiscoveryMode;
 import io.axoniq.framework.springcloud.discovery.MemberCapabilitiesController;
 import io.axoniq.framework.springcloud.discovery.RestCapabilityDiscoveryMode;
 import io.axoniq.framework.springcloud.query.IncomingQueryInvoker;
+import io.axoniq.framework.springcloud.query.QueryDispatchResponse;
 import io.axoniq.framework.springcloud.query.RemoteQueryDispatcher;
+import io.axoniq.framework.springcloud.query.RemoteQueryDispatcher.SubscriptionListener;
 import io.axoniq.framework.springcloud.query.SpringCloudQueryController;
-import io.axoniq.framework.springcloud.shared.SpringCloudMemberRegistry;
+import io.axoniq.framework.springcloud.routing.Member;
+import io.axoniq.framework.springcloud.shared.SpringCloudMemberDiscovery;
 import org.axonframework.conversion.jackson.JacksonConverter;
+import org.axonframework.messaging.core.GenericMessage;
+import org.axonframework.messaging.core.MessageStream;
+import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.conversion.DelegatingMessageConverter;
 import org.axonframework.messaging.core.conversion.MessageConverter;
+import org.axonframework.messaging.queryhandling.GenericQueryMessage;
+import org.axonframework.messaging.queryhandling.QueryMessage;
+import org.axonframework.messaging.queryhandling.QueryResponseMessage;
 import org.junit.jupiter.api.*;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
@@ -45,14 +58,26 @@ import org.springframework.cloud.client.discovery.DiscoveryClient;
 import org.springframework.cloud.client.serviceregistry.Registration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Import;
+import org.springframework.http.client.ClientHttpRequestFactory;
+import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
 
+import java.io.IOException;
+import java.io.OutputStream;
+import java.net.InetSocketAddress;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
 
 /**
  * Tests which beans {@link SpringCloudAutoConfiguration} contributes, and under which conditions.
@@ -91,7 +116,8 @@ class SpringCloudAutoConfigurationTest {
                                              "axon.springcloud.query-buffer-size=7",
                                              "axon.springcloud.capabilities-timeout=3s",
                                              "axon.springcloud.ignore-period=14s",
-                                             "axon.springcloud.context-root-metadata-property-name=root")
+                                             "axon.springcloud.context-root-metadata-property-name=root",
+                                             "axon.springcloud.capabilities-refresh-interval=15s")
                          // when / then each one reaches the properties the components are built from
                          .run(context -> {
                              SpringCloudProperties properties = context.getBean(SpringCloudProperties.class);
@@ -105,6 +131,8 @@ class SpringCloudAutoConfigurationTest {
                              assertThat(properties.getCapabilitiesTimeout()).isEqualTo(Duration.ofSeconds(3));
                              assertThat(properties.getIgnorePeriod()).isEqualTo(Duration.ofSeconds(14));
                              assertThat(properties.getContextRootMetadataPropertyName()).isEqualTo("root");
+                             assertThat(properties.getCapabilitiesRefreshInterval())
+                                     .isEqualTo(Duration.ofSeconds(15));
                          });
         }
 
@@ -126,6 +154,23 @@ class SpringCloudAutoConfigurationTest {
         }
 
         @Test
+        void refreshesCapabilitiesEveryThirtySecondsByDefault() {
+            // when
+            contextRunner.run(context -> assertThat(context.getBean(SpringCloudProperties.class)
+                                                           .getCapabilitiesRefreshInterval())
+                    .isEqualTo(Duration.ofSeconds(30)));
+        }
+
+        @Test
+        void bindsTheRefreshIntervalInWhicheverUnitItIsGivenIn() {
+            // when
+            contextRunner.withPropertyValues("axon.springcloud.capabilities-refresh-interval=1m")
+                         .run(context -> assertThat(context.getBean(SpringCloudProperties.class)
+                                                           .getCapabilitiesRefreshInterval())
+                                 .isEqualTo(Duration.ofSeconds(60)));
+        }
+
+        @Test
         void servesInstancesFromTheRootWhenNoContextRootPropertyIsNamed() {
             // when
             contextRunner.run(context -> assertThat(context.getBean(SpringCloudProperties.class)
@@ -140,7 +185,7 @@ class SpringCloudAutoConfigurationTest {
         void contributesTheConnectorsCollaborators() {
             contextRunner.run(context -> assertThat(context)
                     .hasSingleBean(CapabilityDiscoveryMode.class)
-                    .hasSingleBean(SpringCloudMemberRegistry.class)
+                    .hasSingleBean(SpringCloudMemberDiscovery.class)
                     .hasSingleBean(RemoteCommandDispatcher.class)
                     .hasSingleBean(IncomingCommandInvoker.class));
         }
@@ -189,13 +234,33 @@ class SpringCloudAutoConfigurationTest {
     }
 
     @Nested
+    class WithoutARegistration {
+
+        @Test
+        void startsWithADiscoveryImplementationThatDoesNotRegisterTheApplication() {
+            // given — a discovery implementation like Spring Cloud Kubernetes supplies a DiscoveryClient, but leaves
+            // registration to the platform
+            new WebApplicationContextRunner()
+                    .withConfiguration(AutoConfigurations.of(SpringCloudAutoConfiguration.class))
+                    .withUserConfiguration(DiscoveryClientConfiguration.class)
+                    .withBean(MessageConverter.class, () -> new DelegatingMessageConverter(new JacksonConverter()))
+                    .withPropertyValues("axon.springcloud.enabled=true")
+                    // when / then — members identify themselves through the capabilities endpoint instead
+                    .run(context -> assertThat(context)
+                            .hasNotFailed()
+                            .doesNotHaveBean(Registration.class)
+                            .hasSingleBean(SpringCloudMemberDiscovery.class));
+        }
+    }
+
+    @Nested
     class WhenSwitchedOff {
 
         @Test
         void contributesNoneOfTheConnectorsBeans() {
             contextRunner.withPropertyValues("axon.springcloud.enabled=false")
                          .run(context -> assertThat(context)
-                                 .doesNotHaveBean(SpringCloudMemberRegistry.class)
+                                 .doesNotHaveBean(SpringCloudMemberDiscovery.class)
                                  .doesNotHaveBean(SpringCloudCommandController.class)
                                  .doesNotHaveBean(MemberCapabilitiesController.class));
         }
@@ -223,11 +288,246 @@ class SpringCloudAutoConfigurationTest {
         }
 
         @Test
+        void runsDiscoveryOnAnApplicationsOwnExecutor() {
+            contextRunner.withBean(SpringCloudAutoConfiguration.DISCOVERY_EXECUTOR_BEAN,
+                                   ExecutorService.class,
+                                   () -> CustomDiscoveryExecutor.EXECUTOR)
+                         .run(context -> assertThat(context)
+                                 .getBean(SpringCloudAutoConfiguration.DISCOVERY_EXECUTOR_BEAN)
+                                 .isSameAs(CustomDiscoveryExecutor.EXECUTOR));
+        }
+
+        @Test
         void keepsAnApplicationsOwnRestClient() {
             contextRunner.withUserConfiguration(CustomRestClientConfiguration.class)
                          .run(context -> assertThat(context)
                                  .getBean(SpringCloudAutoConfiguration.REST_CLIENT_BEAN)
                                  .isSameAs(CustomRestClientConfiguration.APPLICATION_REST_CLIENT));
+        }
+
+        @Test
+        void keepsAnApplicationsOwnQueryRestClient() {
+            contextRunner.withUserConfiguration(CustomQueryRestClientConfiguration.class)
+                         .run(context -> assertThat(context)
+                                 .getBean(SpringCloudAutoConfiguration.QUERY_REST_CLIENT_BEAN)
+                                 .isSameAs(CustomQueryRestClientConfiguration.APPLICATION_QUERY_REST_CLIENT));
+        }
+    }
+
+    /**
+     * Queries and subscriptions stream their responses for as long as the answering member has some, which for a
+     * subscription is as long as the subscriber wants it. A client built for commands, with a read timeout and a
+     * bounded pool of connections, would cut those streams off and let them crowd out every other message.
+     */
+    @Nested
+    class StreamingQueriesToOtherMembers {
+
+        private static final Duration SHORT_READ_TIMEOUT = Duration.ofMillis(300);
+        private static final MessageType FIND_COURSE_TYPE = new MessageType("university.FindCourse", "1.0.0");
+        private static final String QUERY_PAYLOAD = "{\"id\":\"course-1\"}";
+
+        private final List<Headers> received = new CopyOnWriteArrayList<>();
+        private HttpServer otherMember;
+
+        @BeforeEach
+        void startAnotherMember() throws IOException {
+            otherMember = HttpServer.create(new InetSocketAddress("localhost", 0), 0);
+            otherMember.setExecutor(Executors.newVirtualThreadPerTaskExecutor());
+            otherMember.createContext(SpringCloudQueryController.DEFAULT_QUERY_ENDPOINT,
+                                      this::answerOnceTheReadTimeoutHasPassed);
+            otherMember.createContext(SpringCloudQueryController.DEFAULT_QUERY_ENDPOINT
+                                              + SpringCloudQueryController.SUBSCRIPTION_PATH,
+                                      this::keepTheSubscriptionAlive);
+            otherMember.start();
+        }
+
+        @AfterEach
+        void stopTheOtherMember() {
+            otherMember.stop(0);
+        }
+
+        @Test
+        void keepsASubscriptionOpenLongerThanTheCommandReplyTimeout() {
+            // given the connector's own client, which commands are given a reply timeout on
+            contextRunner.withPropertyValues("axon.springcloud.command-reply-timeout=" + SHORT_READ_TIMEOUT.toMillis()
+                                                     + "ms")
+                         // when / then
+                         .run(context -> assertSubscriptionOutlivesTheReadTimeout(
+                                 context.getBean(RemoteQueryDispatcher.class)
+                         ));
+        }
+
+        @Test
+        void keepsASubscriptionOpenLongerThanTheReadTimeoutOfTheApplicationsClient() {
+            // given an application client with a read timeout of its own
+            contextRunner.withBean(RestClient.Builder.class,
+                                   () -> RestClient.builder().requestFactory(readingFor(SHORT_READ_TIMEOUT)))
+                         // when / then
+                         .run(context -> assertSubscriptionOutlivesTheReadTimeout(
+                                 context.getBean(RemoteQueryDispatcher.class)
+                         ));
+        }
+
+        @Test
+        void answersAQueryThatTakesLongerThanTheCommandReplyTimeout() {
+            // given
+            contextRunner.withPropertyValues("axon.springcloud.command-reply-timeout=" + SHORT_READ_TIMEOUT.toMillis()
+                                                     + "ms")
+                         .run(context -> {
+                             // when a query whose answer takes longer than a command reply may
+                             MessageStream<QueryResponseMessage> responses =
+                                     context.getBean(RemoteQueryDispatcher.class).dispatch(otherMember(), query());
+
+                             try {
+                                 // then the query has its own deadline, so it is not cut off by the command's
+                                 await().atMost(Duration.ofSeconds(5))
+                                        .until(() -> responses.hasNextAvailable() || responses.error().isPresent());
+                                 assertThat(responses.error()).isEmpty();
+                                 assertThat(responses.next()).hasValueSatisfying(
+                                         entry -> assertThat(entry.message().identifier()).isEqualTo("response-1")
+                                 );
+                             } finally {
+                                 responses.close();
+                             }
+                         });
+        }
+
+        @Test
+        void opensSubscriptionsPastTheApplicationsConnectionPoolButThroughItsInterceptors() {
+            // given an application client whose transport has no connection left to lend, as a bounded pool held by
+            // open subscriptions has, and which adds a header every inter-member request must carry
+            ClientHttpRequestFactory exhaustedPool = (uri, method) -> {
+                throw new IOException("No connection left in the pool.");
+            };
+            contextRunner.withBean(RestClient.Builder.class,
+                                   () -> RestClient.builder()
+                                                   .requestFactory(exhaustedPool)
+                                                   .requestInterceptor((request, body, execution) -> {
+                                                       request.getHeaders().add("X-Member-Token", "secret");
+                                                       return execution.execute(request, body);
+                                                   }))
+                         .run(context -> {
+                             // when
+                             AtomicBoolean opened = new AtomicBoolean();
+                             MessageStream<QueryResponseMessage> updates =
+                                     context.getBean(RemoteQueryDispatcher.class)
+                                            .openSubscriptionQueryUpdateStream(otherMember(), query(), 16,
+                                                                               listeningFor(opened));
+
+                             try {
+                                 // then a subscription holds its connection for as long as it lasts, so it does not
+                                 // take one from the pool every other message is sent over
+                                 await().atMost(Duration.ofSeconds(5)).untilTrue(opened);
+                                 assertThat(received).singleElement().satisfies(
+                                         headers -> assertThat(headers.getFirst("X-Member-Token")).isEqualTo("secret")
+                                 );
+                             } finally {
+                                 updates.close();
+                             }
+                         });
+        }
+
+        private static byte[] event(String type, String identifier) throws IOException {
+            QueryDispatchResponse data = new QueryDispatchResponse(
+                    identifier, "query-1", new MessageType("university.Course", "1.0.0").toString(),
+                    "{\"name\":\"Axon 5\"}", Map.of()
+            );
+            return ("event: " + type + "\ndata: " + new ObjectMapper().writeValueAsString(data) + "\n\n")
+                    .getBytes(StandardCharsets.UTF_8);
+        }
+
+        private void assertSubscriptionOutlivesTheReadTimeout(RemoteQueryDispatcher dispatcher) {
+            MessageStream<QueryResponseMessage> updates = dispatcher.openSubscriptionQueryUpdateStream(
+                    otherMember(), query(), 16, listeningFor(new AtomicBoolean())
+            );
+            try {
+                // A subscription lasts as long as the subscriber wants it, and the keep-alives the member sends say
+                // it is still there: neither leaves a read timeout anything to measure. So an update the member
+                // emits well after that timeout still arrives.
+                await().atMost(Duration.ofSeconds(5))
+                       .until(() -> updates.hasNextAvailable() || updates.isCompleted());
+                assertThat(updates.error()).isEmpty();
+                assertThat(updates.next()).hasValueSatisfying(
+                        entry -> assertThat(entry.message().identifier()).isEqualTo("update-1")
+                );
+            } finally {
+                updates.close();
+            }
+        }
+
+        private Member otherMember() {
+            return new Member("node-b",
+                              URI.create("http://localhost:" + otherMember.getAddress().getPort()),
+                              false);
+        }
+
+        private static QueryMessage query() {
+            return new GenericQueryMessage(
+                    new GenericMessage("query-1", FIND_COURSE_TYPE, QUERY_PAYLOAD, Map.of()), null
+            );
+        }
+
+        private static ClientHttpRequestFactory readingFor(Duration readTimeout) {
+            JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory();
+            requestFactory.setReadTimeout(readTimeout);
+            return requestFactory;
+        }
+
+        private static SubscriptionListener listeningFor(AtomicBoolean opened) {
+            return new SubscriptionListener() {
+                @Override
+                public void opened() {
+                    opened.set(true);
+                }
+
+                @Override
+                public void completed() {
+                }
+            };
+        }
+
+        /**
+         * Answers a query with a single response, but only once a read timeout as short as
+         * {@link #SHORT_READ_TIMEOUT} would have given up on it.
+         */
+        private void answerOnceTheReadTimeoutHasPassed(HttpExchange exchange) throws IOException {
+            exchange.getRequestBody().readAllBytes();
+            exchange.getResponseHeaders().add("Content-Type", "text/event-stream");
+            exchange.sendResponseHeaders(200, 0);
+            try (OutputStream body = exchange.getResponseBody()) {
+                Thread.sleep(SHORT_READ_TIMEOUT.multipliedBy(3).toMillis());
+                body.write(event("response", "response-1"));
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
+
+        /**
+         * Holds a subscription open with a keep-alive well inside the read timeout, emitting one update once a read
+         * timeout as short as {@link #SHORT_READ_TIMEOUT} would have given up on the subscription.
+         */
+        private void keepTheSubscriptionAlive(HttpExchange exchange) throws IOException {
+            received.add(exchange.getRequestHeaders());
+            exchange.getRequestBody().readAllBytes();
+            exchange.getResponseHeaders().add("Content-Type", "text/event-stream");
+            exchange.sendResponseHeaders(200, 0);
+            long updateDue = System.nanoTime() + SHORT_READ_TIMEOUT.multipliedBy(4).toNanos();
+            boolean updated = false;
+            try (OutputStream body = exchange.getResponseBody()) {
+                while (!Thread.currentThread().isInterrupted()) {
+                    if (!updated && System.nanoTime() > updateDue) {
+                        body.write(event("update", "update-1"));
+                        updated = true;
+                    }
+                    body.write(":keep-alive\n\n".getBytes(StandardCharsets.UTF_8));
+                    body.flush();
+                    Thread.sleep(SHORT_READ_TIMEOUT.dividedBy(3).toMillis());
+                }
+            } catch (IOException e) {
+                // The subscriber released the subscription.
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
         }
     }
 
@@ -260,7 +560,7 @@ class SpringCloudAutoConfigurationTest {
                     .withPropertyValues("axon.springcloud.enabled=false")
                     .run(context -> assertThat(context)
                             .hasNotFailed()
-                            .doesNotHaveBean(SpringCloudMemberRegistry.class));
+                            .doesNotHaveBean(SpringCloudMemberDiscovery.class));
         }
     }
 
@@ -331,7 +631,7 @@ class SpringCloudAutoConfigurationTest {
     }
 
     @Configuration(proxyBeanMethods = false)
-    static class DiscoveryConfiguration {
+    static class DiscoveryClientConfiguration {
 
         private static final ServiceInstance INSTANCE =
                 new DefaultServiceInstance("university-8080", "university", "localhost", 8080, false, Map.of());
@@ -355,6 +655,16 @@ class SpringCloudAutoConfigurationTest {
                 }
             };
         }
+
+    }
+
+    /**
+     * A discovery implementation that registers the application, such as Eureka, supplying a {@link Registration}
+     * along with its {@link DiscoveryClient}.
+     */
+    @Configuration(proxyBeanMethods = false)
+    @Import(DiscoveryClientConfiguration.class)
+    static class DiscoveryConfiguration {
 
         @Bean
         Registration registration() {
@@ -410,5 +720,21 @@ class SpringCloudAutoConfigurationTest {
         RestClient axoniqSpringCloudRestClient() {
             return APPLICATION_REST_CLIENT;
         }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class CustomQueryRestClientConfiguration {
+
+        static final RestClient APPLICATION_QUERY_REST_CLIENT = RestClient.create();
+
+        @Bean(SpringCloudAutoConfiguration.QUERY_REST_CLIENT_BEAN)
+        RestClient axoniqSpringCloudQueryRestClient() {
+            return APPLICATION_QUERY_REST_CLIENT;
+        }
+    }
+
+    static class CustomDiscoveryExecutor {
+
+        static final ExecutorService EXECUTOR = Executors.newFixedThreadPool(4);
     }
 }

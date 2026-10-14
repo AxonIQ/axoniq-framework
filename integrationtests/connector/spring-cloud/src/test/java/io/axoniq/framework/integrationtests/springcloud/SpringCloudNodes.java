@@ -40,6 +40,7 @@ import org.springframework.stereotype.Component;
 
 import java.net.URI;
 import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -105,6 +106,16 @@ final class SpringCloudNodes {
     }
 
     /**
+     * A query every node handles, so that a subscription to it reaches more than the node answering its initial
+     * result.
+     *
+     * @param faculty the faculty whose course catalog to find
+     */
+    record FindCourseCatalog(String faculty) {
+
+    }
+
+    /**
      * The application each node runs.
      * <p>
      * Both nodes run the same application and handle the same command; which node handles a given command is decided
@@ -115,30 +126,42 @@ final class SpringCloudNodes {
 
         /**
          * Reports both nodes of the cluster to the connector, standing in for a discovery registry.
+         * <p>
+         * With {@code test.cluster.alias-service} set, every node is reported a second time, under that service id and
+         * at another address of the same host, as discovery reports an application selected by two services.
          *
-         * @param nodePorts the ports of every node in the cluster, comma-separated
+         * @param nodePorts    the ports of every node in the cluster, comma-separated
+         * @param aliasService the service id to report every node under a second time, or empty to report each once
          * @return a discovery client reporting every node in the cluster
          */
         @Bean
-        DiscoveryClient discoveryClient(@Value("${test.cluster.ports}") String nodePorts) {
-            List<ServiceInstance> instances =
-                    Arrays.stream(nodePorts.split(","))
-                                    .map(String::trim)
-                                    .map(port -> (ServiceInstance) new DefaultServiceInstance(
-                                            SERVICE_ID + "-" + port, SERVICE_ID, "localhost",
-                                            Integer.parseInt(port), false, Map.of()
-                                    ))
-                                    .toList();
+        DiscoveryClient discoveryClient(@Value("${test.cluster.ports}") String nodePorts,
+                                        @Value("${test.cluster.alias-service:}") String aliasService) {
+            List<Integer> ports = Arrays.stream(nodePorts.split(",")).map(String::trim).map(Integer::parseInt).toList();
+            Map<String, List<ServiceInstance>> instances = new LinkedHashMap<>();
+            instances.put(SERVICE_ID, ports.stream().map(port -> instance(SERVICE_ID, "localhost", port)).toList());
+            if (!aliasService.isEmpty()) {
+                instances.put(aliasService,
+                              ports.stream().map(port -> instance(aliasService, "127.0.0.1", port)).toList());
+            }
             return new ClusterDiscoveryClient(instances);
+        }
+
+        private static ServiceInstance instance(String serviceId, String host, int port) {
+            return new DefaultServiceInstance(serviceId + "-" + port, serviceId, host, port, false, Map.of());
         }
 
         /**
          * Identifies this node within the cluster, which is how the connector tells its own instance from the others.
+         * <p>
+         * Left out with {@code test.registration.enabled=false}, standing in for a discovery implementation such as
+         * Spring Cloud Kubernetes that does not register the application itself.
          *
          * @param port the port this node serves on
          * @return the registration representing this node
          */
         @Bean
+        @ConditionalOnProperty(name = "test.registration.enabled", havingValue = "true", matchIfMissing = true)
         Registration registration(@Value("${server.port}") int port) {
             return new NodeRegistration(new DefaultServiceInstance(
                     SERVICE_ID + "-" + port, SERVICE_ID, "localhost", port, false, Map.of()
@@ -186,7 +209,6 @@ final class SpringCloudNodes {
     static class FindCourseHandler {
 
         private final String nodeName;
-        private volatile boolean emittedUpdate;
 
         FindCourseHandler(@Value("${test.node.name}") String nodeName) {
             this.nodeName = nodeName;
@@ -199,16 +221,29 @@ final class SpringCloudNodes {
 
         @EventHandler
         void handle(CourseRenamed event, ProcessingContext context) {
-            emittedUpdate = true;
             QueryUpdateEmitter.forContext(context).emit(
                     FindCourse.class,
                     query -> query.courseId().equals(event.courseId()),
                     () -> nodeName + "-renamed"
             );
         }
+    }
 
-        boolean emittedUpdate() {
-            return emittedUpdate;
+    /**
+     * Handles {@link FindCourseCatalog} on every node, answering with that node's name.
+     */
+    @Component
+    static class FindCourseCatalogHandler {
+
+        private final String nodeName;
+
+        FindCourseCatalogHandler(@Value("${test.node.name}") String nodeName) {
+            this.nodeName = nodeName;
+        }
+
+        @QueryHandler
+        String handle(FindCourseCatalog query) {
+            return nodeName;
         }
     }
 
@@ -235,7 +270,7 @@ final class SpringCloudNodes {
     /**
      * Reports a fixed set of instances as the cluster.
      */
-    private record ClusterDiscoveryClient(List<ServiceInstance> instances) implements DiscoveryClient {
+    private record ClusterDiscoveryClient(Map<String, List<ServiceInstance>> instances) implements DiscoveryClient {
 
         @Override
         public String description() {
@@ -244,12 +279,12 @@ final class SpringCloudNodes {
 
         @Override
         public List<ServiceInstance> getInstances(String serviceId) {
-            return SERVICE_ID.equals(serviceId) ? instances : List.of();
+            return instances.getOrDefault(serviceId, List.of());
         }
 
         @Override
         public List<String> getServices() {
-            return List.of(SERVICE_ID);
+            return List.copyOf(instances.keySet());
         }
     }
 

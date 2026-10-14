@@ -28,9 +28,9 @@
  * {@code discovery} learns what each member handles.
  * <p>
  * {@link io.axoniq.framework.springcloud.command.SpringCloudCommandBusConnector} routes each command with the ring that
- * {@link io.axoniq.framework.springcloud.shared.SpringCloudMemberRegistry} maintains from the discovered service
+ * {@link io.axoniq.framework.springcloud.shared.SpringCloudMemberDiscovery} maintains from the discovered service
  * instances, while {@link io.axoniq.framework.springcloud.query.SpringCloudQueryBusConnector} rotates each query over
- * the members advertising its name. Both share that one registry, so each publishes what it handles without erasing
+ * the members advertising its name. Both share that one discovery, so each publishes what it handles without erasing
  * what the other published.
  */
 @NullMarked

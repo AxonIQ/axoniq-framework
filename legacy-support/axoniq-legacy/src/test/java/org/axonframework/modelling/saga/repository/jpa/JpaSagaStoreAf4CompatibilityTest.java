@@ -23,15 +23,18 @@ import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityManagerFactory;
 import jakarta.persistence.Persistence;
 import org.axonframework.common.jpa.SimpleEntityManagerProvider;
+import org.axonframework.conversion.Converter;
 import org.axonframework.conversion.jackson.JacksonConverter;
 import org.axonframework.modelling.saga.AssociationValue;
+import org.axonframework.modelling.saga.repository.Af4CompatibilityTestSuite;
 import org.axonframework.modelling.saga.repository.SagaStore;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.*;
 
 import java.nio.charset.StandardCharsets;
+import java.sql.Blob;
+import java.sql.SQLException;
 
-import org.axonframework.modelling.saga.repository.Af4CompatibilityTestSuite;
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Verifies that {@link JpaSagaStore} satisfies {@link Af4CompatibilityTestSuite} against an HSQLDB table in the Axon
@@ -115,5 +118,32 @@ class JpaSagaStoreAf4CompatibilityTest extends Af4CompatibilityTestSuite {
                                     .setParameter(1, sagaId)
                                     .getSingleResult();
         return value == null ? null : value.toString();
+    }
+
+    @Override
+    protected byte[] serializedSagaOf(String sagaId) {
+        entityManager.clear();
+        Object value = entityManager.createNativeQuery(
+                                            "SELECT serializedSaga FROM SagaEntry WHERE sagaId = ?")
+                                    .setParameter(1, sagaId)
+                                    .getSingleResult();
+        if (value instanceof byte[] bytes) {
+            return bytes;
+        }
+        // The @Lob column surfaces as a lazily-loaded Blob proxy rather than a byte[] through a native query.
+        try {
+            Blob blob = (Blob) value;
+            return blob.getBytes(1, (int) blob.length());
+        } catch (SQLException e) {
+            throw new IllegalStateException("Failed to read serializedSaga for " + sagaId, e);
+        }
+    }
+
+    @Override
+    protected SagaStore<Object> storeWith(Converter converter) {
+        return JpaSagaStore.builder()
+                           .entityManagerProvider(new SimpleEntityManagerProvider(entityManager))
+                           .converter(converter)
+                           .build();
     }
 }

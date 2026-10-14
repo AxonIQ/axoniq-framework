@@ -236,6 +236,11 @@ public interface DeadlineManager {
 
     /**
      * Shuts down this deadline manager.
+     * <p>
+     * The configuration calls this method for every {@code DeadlineManager} it holds when the application shuts down,
+     * through the {@link DeadlineManagerLifecycleConfigurationEnhancer}. As the method may be called more than once,
+     * for example by Spring as the destroy method it infers for a {@code @Bean}, implementations have to allow repeated
+     * calls: every call after the first has no effect.
      */
     default void shutdown() {
     }

@@ -25,6 +25,9 @@ import org.axonframework.messaging.ScopeDescriptor;
 import org.jspecify.annotations.Nullable;
 
 import java.beans.ConstructorProperties;
+import java.io.IOException;
+import java.io.ObjectOutputStream;
+import java.io.Serial;
 import java.util.Objects;
 import java.util.function.Supplier;
 
@@ -37,6 +40,9 @@ import static org.axonframework.common.Assert.notNull;
  * @since 3.3
  */
 public class AggregateScopeDescriptor implements ScopeDescriptor {
+
+    @Serial
+    private static final long serialVersionUID = 3584695571254668002L;
 
     private final String type;
     private @Nullable Object identifier;
@@ -95,6 +101,16 @@ public class AggregateScopeDescriptor implements ScopeDescriptor {
             identifier = identifierSupplier.get();
         }
         return identifier;
+    }
+
+    /**
+     * Resolves a lazily supplied identifier before the default serialization writes the fields, as the
+     * {@link Supplier} itself is not serialized.
+     */
+    @Serial
+    private void writeObject(ObjectOutputStream out) throws IOException {
+        getIdentifier();
+        out.defaultWriteObject();
     }
 
     @Override

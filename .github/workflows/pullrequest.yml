@@ -63,14 +63,14 @@ jobs:
           # account for the license file copy, so whichever module's JVM starts the shared container first
           # determines whether it ends up licensed. Without the license present everywhere, an unlicensed
           # module could "poison" the shared container for modules that need multi-context support.
-          for dir in integrationtests/support connector/axon-server-connector integrationtests/connector/axon-server integrationtests/conformance; do
+          for dir in integrationtests/support connector/axon-server-connector integrationtests/connector/axon-server integrationtests/conformance dependency-injection/spring/spring-boot-autoconfigure; do
             mkdir -p "$dir/src/test/resources"
             printf '%s' "$AXON_SERVER_LICENSE" > "$dir/src/test/resources/axon-server-test.license"
             echo "Axon Server test license written to $dir/src/test/resources/axon-server-test.license"
             echo "License file size: $(wc -c < "$dir/src/test/resources/axon-server-test.license") bytes"
           done
         env:
-          AXON_SERVER_LICENSE: ${{ secrets.AXON_SERVER_LICENSE }}
+          AXON_SERVER_LICENSE: ${{ secrets.AXONIQ_LICENSE }}
 
       - name: Enable Testcontainers reuse
         run: printf 'testcontainers.reuse.enable=true\n' > ~/.testcontainers.properties
@@ -82,7 +82,7 @@ jobs:
           -Dsurefire.rerunFailingTestsCount=5 -Dfailsafe.rerunFailingTestsCount=5 \
           -Dparallel=classes -DthreadCount=1 -DforkCount=2 -DforkedProcessTimeoutInSeconds=600 2>&1 | tee build.log
         env:
-          AXONIQ_LICENSE: ${{ secrets.AXON_SERVER_LICENSE }}
+          AXONIQ_LICENSE: ${{ secrets.AXONIQ_LICENSE }}
 
       - name: Generate build status report
         if: always()

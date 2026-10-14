@@ -26,6 +26,8 @@ import io.axoniq.framework.testcontainer.AxonServerContainerUtils;
 import io.axoniq.framework.testcontainer.SharedAxonServerContainer;
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.integrationtests.queryhandling.AbstractQueryInterceptorTestSuite;
+import org.axonframework.messaging.core.MessageStream;
+import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.configuration.MessagingConfigurer;
 import org.axonframework.messaging.queryhandling.QueryBus;
 import org.junit.jupiter.api.*;
@@ -33,6 +35,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.time.Duration;
+
+import static org.awaitility.Awaitility.await;
 
 /**
  * An {@link AbstractQueryInterceptorTestSuite} implementation validating query interceptor functionality with the
@@ -53,6 +58,8 @@ public class DistributedQueryBusInterceptorIT extends AbstractQueryInterceptorTe
 
     private static final AxonServerContainer container = SharedAxonServerContainer.INSTANCE;
 
+    private static AxonConfiguration config;
+
     @BeforeAll
     static void beforeAll() throws IOException {
         SharedAxonServerContainer.ensureStarted();
@@ -68,6 +75,14 @@ public class DistributedQueryBusInterceptorIT extends AbstractQueryInterceptorTe
                                                AxonServerContainerUtils.DCB_CONTEXT);
         logger.info("Using Axon Server for integration test. UI is available at http://localhost:{}",
                     container.getHttpPort());
+
+        // One connection shared by every test method in this class, rather than one per method: opening and
+        // tearing down a fresh Axon Server connection per test churns through client registrations faster than the
+        // server's async disconnect processing can keep up, which can transiently exceed a license's connection
+        // limit under CI load. Test query/handler names are already UUID-scoped, so sharing one connection across
+        // methods is safe.
+        config = buildConfigurer().build();
+        awaitQueryRoutingReady(config);
     }
 
     private static AxonServerConfiguration testContainerAxonServerConfiguration() {
@@ -77,7 +92,13 @@ public class DistributedQueryBusInterceptorIT extends AbstractQueryInterceptorTe
         return axonServerConfiguration;
     }
 
-    private AxonConfiguration config;
+    private static MessagingConfigurer buildConfigurer() {
+        return MessagingConfigurer.create()
+                                  .componentRegistry(cr -> cr.registerComponent(
+                                          AxonServerConfiguration.class,
+                                          c -> testContainerAxonServerConfiguration()
+                                  ));
+    }
 
     @Override
     public QueryBus queryBus() {
@@ -86,22 +107,28 @@ public class DistributedQueryBusInterceptorIT extends AbstractQueryInterceptorTe
 
     @Override
     protected MessagingConfigurer createMessagingConfigurer() {
-        return MessagingConfigurer.create()
-                                  .componentRegistry(cr -> cr.registerComponent(
-                                          AxonServerConfiguration.class,
-                                          c -> testContainerAxonServerConfiguration()
-                                  ));
+        return buildConfigurer();
     }
 
-    @BeforeEach
-    void setUp() {
-        config = createMessagingConfigurer().build();
+    /**
+     * A freshly-opened connection's query stream can briefly lag behind the connection itself becoming usable:
+     * {@code registerQueryHandler} always succeeds locally, but the server-side acknowledgment over the stream can
+     * silently fail if issued before the stream is actually up (only resolved later, asynchronously, when the
+     * connector reconnects and resubscribes). Test methods here don't know that and block on an untimed
+     * {@code join()} for a response that then never arrives. Retrying a throwaway registration on this same
+     * connection, and blocking until it stops failing, closes that race before any real test runs.
+     */
+    private static void awaitQueryRoutingReady(AxonConfiguration configuration) {
+        QueryBus queryBus = configuration.getComponent(QueryBus.class);
+        await().atMost(Duration.ofSeconds(30))
+               .pollInterval(Duration.ofMillis(500))
+               .ignoreExceptions()
+               .untilAsserted(() -> queryBus.subscribe(new QualifiedName("warmup"),
+                                                       (query, context) -> MessageStream.empty()));
     }
 
-    @AfterEach
-    void tearDown() {
-        if (config != null) {
-            config.shutdown();
-        }
+    @AfterAll
+    static void tearDown() {
+        config.shutdown();
     }
 }

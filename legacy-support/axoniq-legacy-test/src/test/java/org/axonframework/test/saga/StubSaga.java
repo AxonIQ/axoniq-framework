@@ -53,7 +53,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 public class StubSaga {
 
     private static final int TRIGGER_DURATION_MINUTES = 10;
-//    TODO #5006
+//    TODO #3104
 //    @Inject
 //    private transient EventScheduler scheduler;
 
@@ -73,7 +73,7 @@ public class StubSaga {
             associateWith(lifecycle, "extraIdentifier", extraIdentifier.toString());
         }
 
-//        TODO #5006
+//        TODO #3104
 //        timer = scheduler.schedule(
 //                message.timestamp().plus(TRIGGER_DURATION_MINUTES, ChronoUnit.MINUTES),
 //                new GenericEventMessage(
@@ -86,7 +86,7 @@ public class StubSaga {
     @SagaEventHandler(associationProperty = "identifier")
     public void handleForcedSagaStart(ForceTriggerSagaStartEvent event, @Timestamp Instant timestamp) {
         handledEvents.add(event);
-//        TODO #5006
+//        TODO #3104
 //        timer = scheduler.schedule(
 //                timestamp.plus(TRIGGER_DURATION_MINUTES, ChronoUnit.MINUTES),
 //                new GenericEventMessage(
@@ -140,7 +140,7 @@ public class StubSaga {
     @SagaEventHandler(associationProperty = "identifier")
     public void handleResetTriggerEvent(ResetTriggerEvent event) {
         handledEvents.add(event);
-//        TODO #5006
+//        TODO #3104
 //        scheduler.cancelSchedule(timer);
 //        timer = scheduler.schedule(
 //                Duration.ofMinutes(TRIGGER_DURATION_MINUTES),
@@ -155,7 +155,7 @@ public class StubSaga {
         handledEvents.add(event);
     }
 
-//    TODO #5006
+//    TODO #3104
 //    public EventScheduler getScheduler() {
 //        return scheduler;
 //    }

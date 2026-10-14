@@ -28,7 +28,8 @@ import org.axonframework.common.AxonException;
  * member's state changed and only reaches subscriptions that member holds a registration for. When a member starts
  * advertising the name after a subscription began, that subscription cannot be repaired by subscribing to the new
  * member: the updates it emitted between advertising the name and being subscribed to are already gone, and no
- * amount of catching up recovers them.
+ * amount of catching up recovers them. Likewise, when every member answering a subscription has left, nothing is left
+ * to emit its updates, and a member that starts handling the query afterwards is not subscribed to.
  * <p>
  * Failing is therefore the honest outcome. A subscriber that acts on this by establishing the subscription query
  * again gets a fresh initial result and a complete stream of updates from that point, where one that carried on

@@ -27,8 +27,9 @@ import java.util.Set;
 /**
  * The messages a {@link Member} is able to handle, and the relative share of command load it asks for.
  * <p>
- * Capabilities are published by each member and collected by every other member on each discovery heartbeat, so that
- * the {@link ConsistentHash} ring can route a command only to members that actually subscribed to its name.
+ * Capabilities are published by each member and collected by every other member when it joins and on every refresh
+ * after, so that the {@link ConsistentHash} ring can route a command only to members that actually subscribed to its
+ * name.
  * <p>
  * The {@code loadFactor} applies to {@link #commands() commands} only. Query subscriptions carry no load factor, as
  * a query name is served by whichever member advertises it rather than being hashed onto a ring position.

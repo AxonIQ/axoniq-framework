@@ -10,7 +10,7 @@ updates:
     labels:
       - "Type: Dependency Upgrade"
       - "Priority 1: Must"
-    milestone: 5
+    milestone: 6
     groups:
       github-dependencies:
         update-types:
@@ -19,9 +19,9 @@ updates:
           - "major"
 
   - package-ecosystem: maven
-    directories:
-      - "/"
-      - "!/legacy-support/axoniq-legacy"
+    directory: "/"
+    exclude-paths:
+      - "legacy-support/axoniq-legacy/**"
     schedule:
       interval: weekly
       day: "sunday"
@@ -29,7 +29,7 @@ updates:
     labels:
       - "Type: Dependency Upgrade"
       - "Priority 1: Must"
-    milestone: 5
+    milestone: 6
     groups:
       maven-dependencies:
         update-types:
@@ -49,6 +49,10 @@ updates:
         versions: [ "[3.0.0,)" ]
       - dependency-name: "org.springframework.data:*"
         versions: [ "[2025.0.0,)" ]
+      - dependency-name: "org.apache.maven:apache-maven"
+        versions: [ "3.10.0" ]
+      - dependency-name: "org.jobrunr:jobrunr"
+        versions: [ "[9.0.0,)" ]
 
   - package-ecosystem: maven
     directory: "/legacy-support/axoniq-legacy"
@@ -59,7 +63,7 @@ updates:
     labels:
       - "Type: Dependency Upgrade"
       - "Priority 1: Must"
-    milestone: 5
+    milestone: 6
     groups:
       maven-dependencies:
         update-types:
@@ -69,6 +73,10 @@ updates:
     ignore:
       - dependency-name: "org.axonframework:axon-messaging"
         versions: [ "[5.0.0,)" ]
+      - dependency-name: "org.axonframework:axon-modelling"
+        versions: [ "[5.0.0,)" ]
+      - dependency-name: "org.jobrunr:jobrunr"
+        versions: [ "[9.0.0,)" ]
 
   - package-ecosystem: npm
     directory: "/docs/_playbook"
@@ -79,7 +87,7 @@ updates:
     labels:
       - "Type: Dependency Upgrade"
       - "Priority 1: Must"
-    milestone: 5
+    milestone: 6
     groups:
       antora-dependencies:
         update-types:

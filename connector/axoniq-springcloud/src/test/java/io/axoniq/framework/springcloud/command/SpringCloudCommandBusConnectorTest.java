@@ -23,7 +23,7 @@ import io.axoniq.framework.springcloud.discovery.RecordingCapabilityDiscoveryMod
 import io.axoniq.framework.springcloud.routing.Member;
 import io.axoniq.framework.springcloud.routing.MemberCapabilities;
 import io.axoniq.framework.springcloud.shared.SpringCloudAxoniqAddon;
-import io.axoniq.framework.springcloud.shared.SpringCloudMemberRegistry;
+import io.axoniq.framework.springcloud.shared.SpringCloudMemberDiscovery;
 import io.axoniq.framework.springcloud.util.RecordingCommandHandler;
 import io.axoniq.framework.springcloud.util.RecordingDiscoveryClient;
 import io.axoniq.framework.springcloud.util.RecordingEntitlementManager;
@@ -39,7 +39,6 @@ import org.axonframework.messaging.core.GenericMessage;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
 import org.junit.jupiter.api.*;
-import org.springframework.cloud.client.discovery.event.InstanceRegisteredEvent;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
@@ -68,7 +67,7 @@ class SpringCloudCommandBusConnectorTest {
     private TestServiceInstance remoteInstance;
     private RecordingDiscoveryClient discoveryClient;
     private RecordingCapabilityDiscoveryMode discoveryMode;
-    private SpringCloudMemberRegistry registry;
+    private SpringCloudMemberDiscovery discovery;
     private RecordingCommandHandler handler;
     private RecordingRemoteCommandDispatcher dispatcher;
     private RecordingEntitlementManager entitlementManager;
@@ -79,12 +78,12 @@ class SpringCloudCommandBusConnectorTest {
         localInstance = TestServiceInstance.instance("university", "node-a", 8080);
         remoteInstance = TestServiceInstance.instance("university", "node-b", 8080);
         discoveryClient = new RecordingDiscoveryClient().register("university", localInstance);
-        discoveryMode = new RecordingCapabilityDiscoveryMode();
-        registry = new SpringCloudMemberRegistry(discoveryClient, localInstance, discoveryMode);
+        discoveryMode = new RecordingCapabilityDiscoveryMode().answeringAsLocal(localInstance);
+        discovery = new SpringCloudMemberDiscovery(discoveryClient, discoveryMode);
         handler = new RecordingCommandHandler();
         dispatcher = new RecordingRemoteCommandDispatcher();
         entitlementManager = new RecordingEntitlementManager();
-        testSubject = new SpringCloudCommandBusConnector(registry,
+        testSubject = new SpringCloudCommandBusConnector(discovery,
                                                          new IncomingCommandInvoker(() -> "node-a", null),
                                                          dispatcher,
                                                          null,
@@ -106,8 +105,8 @@ class SpringCloudCommandBusConnectorTest {
     private Member discoverRemoteMemberHandling(QualifiedName... commands) {
         discoveryClient.register("university", remoteInstance);
         discoveryMode.answering(remoteInstance, new MemberCapabilities(LOAD_FACTOR, Set.of(commands), Set.of()));
-        registry.onInstanceRegistered(new InstanceRegisteredEvent<>(this, localInstance));
-        return registry.ring().members().stream()
+        discovery.updateMemberships();
+        return discovery.members().stream()
                        .filter(member -> !member.local())
                        .findFirst()
                        .orElseThrow();
@@ -243,7 +242,7 @@ class SpringCloudCommandBusConnectorTest {
                     .isInstanceOf(CompletionException.class);
 
             // then
-            assertThat(registry.ring().members()).doesNotContain(remote);
+            assertThat(discovery.members()).doesNotContain(remote);
         }
 
         @Test
@@ -262,7 +261,7 @@ class SpringCloudCommandBusConnectorTest {
                     .isInstanceOf(CompletionException.class);
 
             // then
-            assertThat(registry.ring().members()).contains(remote);
+            assertThat(discovery.members()).contains(remote);
         }
 
         @Test
@@ -277,7 +276,7 @@ class SpringCloudCommandBusConnectorTest {
 
             // then — a failing handler says nothing about availability; removing the member would move a failing
             // command onto every other member in turn
-            assertThat(registry.ring().members()).contains(remote);
+            assertThat(discovery.members()).contains(remote);
         }
     }
 
@@ -502,10 +501,10 @@ class SpringCloudCommandBusConnectorTest {
                     null, invoker, dispatcher, null, entitlementManager
             )).isInstanceOf(NullPointerException.class);
             assertThatThrownBy(() -> new SpringCloudCommandBusConnector(
-                    registry, null, dispatcher, null, entitlementManager
+                    discovery, null, dispatcher, null, entitlementManager
             )).isInstanceOf(NullPointerException.class);
             assertThatThrownBy(() -> new SpringCloudCommandBusConnector(
-                    registry, invoker, null, null, entitlementManager
+                    discovery, invoker, null, null, entitlementManager
             )).isInstanceOf(NullPointerException.class);
         }
 

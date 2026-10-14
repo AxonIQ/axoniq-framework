@@ -24,6 +24,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import org.axonframework.messaging.ScopeDescriptor;
 
 import java.beans.ConstructorProperties;
+import java.io.Serial;
 import java.util.Objects;
 
 /**
@@ -33,6 +34,9 @@ import java.util.Objects;
  * @since 3.3
  */
 public class SagaScopeDescriptor implements ScopeDescriptor {
+
+    @Serial
+    private static final long serialVersionUID = 4162755498638204691L;
 
     private final String type;
     private final Object identifier;

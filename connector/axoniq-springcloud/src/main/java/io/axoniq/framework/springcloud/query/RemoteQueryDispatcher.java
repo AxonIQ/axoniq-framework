@@ -54,10 +54,15 @@ public interface RemoteQueryDispatcher {
      * emitting an update whenever the state the query reads changes, until it is released or the member reports a
      * failure. Closing the stream releases the subscription.
      * <p>
+     * The stream completes normally only when the member says why it ends: because the subscription is over, or
+     * because the member is leaving the cluster and has stopped emitting updates. A stream the member ends without
+     * saying either fails, as does a lost connection, since the subscriber cannot know which updates it missed.
+     * <p>
      * Carries updates alone. The initial result of a subscription query is a query like any other, asked for with
-     * {@link #dispatch(Member, QueryMessage)} once this member's update stream is open, so that an update emitted
-     * while that result is being produced still has somewhere to arrive. {@code onOpen} is what says when that is:
-     * it runs once the member has registered the subscription, and so before any update it emits.
+     * {@link #dispatch(Member, QueryMessage)} once the update stream of every member advertising the query is open,
+     * so that an update emitted while that result is being produced still has somewhere to arrive.
+     * {@link SubscriptionListener#opened()} is what says when that is for the given {@code member}: it runs once the
+     * member has registered the subscription, and so before any update it emits.
      *
      * @param member           the member to open the update stream on
      * @param query            the query to subscribe with
@@ -76,7 +81,7 @@ public interface RemoteQueryDispatcher {
      * <p>
      * Both are things the stream of updates cannot say for itself. It carries updates, and it ends; neither tells the
      * subscriber that the member has registered the subscription, nor whether the end means the subscription is over
-     * or merely that this member stopped answering.
+     * or that this member stopped answering.
      */
     interface SubscriptionListener {
 
@@ -90,8 +95,8 @@ public interface RemoteQueryDispatcher {
         /**
          * The member reported the subscription over: there will never be another update to it.
          * <p>
-         * Distinct from the stream ending, which a member leaving the cluster also does. That ends this member's part
-         * in the subscription; this ends the subscription.
+         * Distinct from the stream ending, which a member leaving the cluster cleanly also does. That ends this
+         * member's part in the subscription; this ends the subscription.
          */
         void completed();
     }

@@ -49,7 +49,6 @@ public interface ContinuedGivenState extends WhenState {
      *
      * @param elapsedTime The amount of time that will elapse
      * @return an object that allows registration of the actual events to send
-     * @throws UnsupportedOperationException always, until deadlines are ported into {@code axon-legacy}
      */
     ContinuedGivenState andThenTimeElapses(Duration elapsedTime);
 
@@ -59,7 +58,6 @@ public interface ContinuedGivenState extends WhenState {
      *
      * @param newDateTime The time to advance the clock to
      * @return an object that allows registration of the actual events to send
-     * @throws UnsupportedOperationException always, until deadlines are ported into {@code axon-legacy}
      */
     ContinuedGivenState andThenTimeAdvancesTo(Instant newDateTime);
 

@@ -168,7 +168,9 @@ public final class QueryConverter {
      *                      {@link QueryResponseMessage}.
      * @param converter     the converter to be used for payload conversion
      * @return A {@link QueryResponseMessage} representation of the provided {@link QueryResponse}. The returned message
-     * includes the processed payload, metadata, and any error information, if applicable.
+     * includes the processed payload, metadata, and any error information, if applicable. It carries a {@code null}
+     * payload when the response carries no result, which is the case when the response's payload is typed as
+     * {@link Void} without data, or marked with the {@link #EMPTY_PAYLOAD_TYPE} sentinel
      * @throws IllegalArgumentException if the provided {@link QueryResponse} contains an error, in which case we use
      *                                  {@link ExceptionConverter#convertToAxonException(String, ErrorMessage,
      *                                  SerializedObject, Converter)}.
@@ -183,7 +185,7 @@ public final class QueryConverter {
         var message = new GenericMessage(
                 queryResponse.getMessageIdentifier(),
                 new MessageType(responsePayload.getType(), revision),
-                responsePayload.getData().toByteArray(),
+                payloadOrNull(responsePayload),
                 MetadataConverter.convertMetadataValuesToGrpc(queryResponse.getMetaDataMap())
         );
 
@@ -326,6 +328,10 @@ public final class QueryConverter {
 
     /**
      * Converts a {@link QueryUpdate} object into a {@link SubscriptionQueryUpdateMessage}.
+     * <p>
+     * The resulting {@link SubscriptionQueryUpdateMessage} carries a {@code null} payload when the update carries no
+     * result, which is the case when the update's payload is typed as {@link Void} without data, as for an update
+     * emitted as {@code null}, or marked with the {@link #EMPTY_PAYLOAD_TYPE} sentinel.
      *
      * @param queryUpdate the {@link QueryUpdate} object to be converted; must not be null
      * @param converter   the converter to be used for payload conversion
@@ -338,7 +344,7 @@ public final class QueryConverter {
         var message = new GenericMessage(
                 queryUpdate.getMessageIdentifier(),
                 new MessageType(payload.getType(), revision),
-                payload.getData().toByteArray(),
+                payloadOrNull(payload),
                 MetadataConverter.convertMetadataValuesToGrpc(queryUpdate.getMetaDataMap())
         );
 
@@ -385,6 +391,25 @@ public final class QueryConverter {
                                                                        .setNumberValue(priority));
             builder.addProcessingInstructions(instruction);
         });
+    }
+
+    /**
+     * Returns the data of the given {@code payload}, or {@code null} when the {@code payload} describes an empty result.
+     * <p>
+     * That is the case when the {@code payload} is typed as {@link Void} without data, which is how handlers describe a
+     * {@code null} result, or when it is marked with the {@link #EMPTY_PAYLOAD_TYPE} sentinel, which is how Axon
+     * Framework 4 describes a {@code null} result. The type decides rather than the data alone, as results like an
+     * empty {@code String} legitimately convert to empty data.
+     *
+     * @param payload the {@link SerializedObject} of a {@link QueryResponse} or {@link QueryUpdate} to resolve the data
+     *                from
+     * @return the data of the {@code payload}, or {@code null} if the {@code payload} describes an empty result
+     */
+    private static byte @Nullable [] payloadOrNull(SerializedObject payload) {
+        String type = payload.getType();
+        boolean emptyResult = EMPTY_PAYLOAD_TYPE.equalsIgnoreCase(type)
+                || (Void.class.getName().equals(type) && payload.getData().isEmpty());
+        return emptyResult ? null : payload.getData().toByteArray();
     }
 
     /**

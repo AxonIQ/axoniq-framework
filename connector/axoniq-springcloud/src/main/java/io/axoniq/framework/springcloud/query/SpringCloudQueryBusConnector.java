@@ -23,7 +23,7 @@ import io.axoniq.framework.messaging.queryhandling.distributed.QueryBusConnector
 import io.axoniq.framework.springcloud.query.RemoteQueryDispatcher.SubscriptionListener;
 import io.axoniq.framework.springcloud.routing.Member;
 import io.axoniq.framework.springcloud.shared.SpringCloudAxoniqAddon;
-import io.axoniq.framework.springcloud.shared.SpringCloudMemberRegistry;
+import io.axoniq.framework.springcloud.shared.SpringCloudMemberDiscovery;
 import io.axoniq.license.entitlement.EntitlementManager;
 import io.axoniq.license.entitlement.EntitlementMessageType;
 import org.axonframework.common.FutureUtils;
@@ -42,7 +42,6 @@ import org.axonframework.messaging.core.QueueMessageStream;
 import org.axonframework.messaging.core.conversion.MessageConverter;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.queryhandling.GenericQueryMessage;
-import org.axonframework.messaging.queryhandling.GenericQueryResponseMessage;
 import org.axonframework.messaging.queryhandling.NoHandlerForQueryException;
 import org.axonframework.messaging.queryhandling.QueryMessage;
 import org.axonframework.messaging.queryhandling.QueryResponseMessage;
@@ -59,6 +58,7 @@ import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -75,8 +75,10 @@ import java.util.concurrent.atomic.AtomicInteger;
  * A subscription query reaches every member advertising its name, not just the one a plain query would route to: an
  * update is emitted on whichever member's state changed, and only reaches subscriptions that member holds a
  * registration for. One of them answers the initial result as well, so a subscriber gets one initial result and the
- * updates of the whole cluster. A member that starts advertising the query while a subscription is active fails that
- * subscription rather than joining it late; see {@link SubscriptionQueryMembersChangedException}.
+ * updates of the whole cluster. The initial result is asked for only once every one of those members has registered
+ * the subscription, so that an update emitted in the meantime reaches the subscriber rather than nobody. A member that
+ * starts advertising the query while a subscription is active fails that subscription rather than joining it late;
+ * see {@link SubscriptionQueryMembersChangedException}.
  *
  * @author Allard Buijze
  * @since 5.4.0
@@ -85,7 +87,7 @@ public class SpringCloudQueryBusConnector implements QueryBusConnector {
 
     private static final Logger logger = LoggerFactory.getLogger(SpringCloudQueryBusConnector.class);
 
-    private final SpringCloudMemberRegistry registry;
+    private final SpringCloudMemberDiscovery discovery;
     private final IncomingQueryInvoker invoker;
     private final RemoteQueryDispatcher dispatcher;
     private final @Nullable MessageConverter converter;
@@ -97,20 +99,20 @@ public class SpringCloudQueryBusConnector implements QueryBusConnector {
     private volatile @Nullable Handler incomingHandler;
 
     /**
-     * Constructs a {@code SpringCloudQueryBusConnector} routing with the given {@code registry}.
+     * Constructs a {@code SpringCloudQueryBusConnector} routing with the given {@code discovery}.
      *
-     * @param registry   the registry reporting which members handle which queries
+     * @param discovery  the discovery reporting which members handle which queries
      * @param invoker    the invoker queries arriving from other members are handled through
      * @param dispatcher the dispatcher sending queries to other members
      * @param converter  the converter attached to queries routed to this application, so that a locally routed query
      *                   carries the same conversion capability as one that travelled over the wire, or {@code null}
      *                   when none is available.
      */
-    public SpringCloudQueryBusConnector(SpringCloudMemberRegistry registry,
+    public SpringCloudQueryBusConnector(SpringCloudMemberDiscovery discovery,
                                         IncomingQueryInvoker invoker,
                                         RemoteQueryDispatcher dispatcher,
                                         @Nullable MessageConverter converter) {
-        this(registry, invoker, dispatcher, converter, EntitlementManager.INSTANCE);
+        this(discovery, invoker, dispatcher, converter, EntitlementManager.INSTANCE);
         EntitlementManager.INSTANCE.registerAddon(SpringCloudAxoniqAddon.class);
     }
 
@@ -118,11 +120,11 @@ public class SpringCloudQueryBusConnector implements QueryBusConnector {
      * Package-private constructor allowing an alternative {@link EntitlementManager} to be injected.
      * <p>
      * Marked {@link Internal} because production code must use
-     * {@link #SpringCloudQueryBusConnector(SpringCloudMemberRegistry, IncomingQueryInvoker, RemoteQueryDispatcher,
+     * {@link #SpringCloudQueryBusConnector(SpringCloudMemberDiscovery, IncomingQueryInvoker, RemoteQueryDispatcher,
      * MessageConverter)}, which registers the addon and claims against {@link EntitlementManager#INSTANCE}. This
      * constructor exists so tests need not touch that singleton.
      *
-     * @param registry           the registry reporting which members handle which queries
+     * @param discovery          the discovery reporting which members handle which queries
      * @param invoker            the invoker queries arriving from other members are handled through
      * @param dispatcher         the dispatcher sending queries to other members
      * @param converter          the converter attached to queries routed to this application, or {@code null} when
@@ -130,12 +132,12 @@ public class SpringCloudQueryBusConnector implements QueryBusConnector {
      * @param entitlementManager the manager each dispatched query is claimed against
      */
     @Internal
-    SpringCloudQueryBusConnector(SpringCloudMemberRegistry registry,
+    SpringCloudQueryBusConnector(SpringCloudMemberDiscovery discovery,
                                  IncomingQueryInvoker invoker,
                                  RemoteQueryDispatcher dispatcher,
                                  @Nullable MessageConverter converter,
                                  EntitlementManager entitlementManager) {
-        this.registry = Objects.requireNonNull(registry, "The registry must not be null.");
+        this.discovery = Objects.requireNonNull(discovery, "The discovery must not be null.");
         this.invoker = Objects.requireNonNull(invoker, "The invoker must not be null.");
         this.dispatcher = Objects.requireNonNull(dispatcher, "The dispatcher must not be null.");
         this.converter = converter;
@@ -154,7 +156,7 @@ public class SpringCloudQueryBusConnector implements QueryBusConnector {
         }
 
         QualifiedName queryName = query.type().qualifiedName();
-        Optional<Member> destination = registry.findQueryDestination(queryName);
+        Optional<Member> destination = discovery.findQueryDestination(queryName);
         if (destination.isEmpty()) {
             return MessageStream.failed(new NoHandlerForQueryException(
                     "No member of the cluster handles queries of type [" + query.type() + "]."
@@ -194,28 +196,28 @@ public class SpringCloudQueryBusConnector implements QueryBusConnector {
      * than interleaved by any rule.
      * <p>
      * A member failing fails the whole subscription. Carrying on with the rest would leave the subscriber receiving
-     * some of the updates and believing it received all of them.
+     * some of the updates and believing it received all of them. A member leaving the cluster cleanly ends only its own
+     * part, as it has said it stopped emitting updates; once the last member has left, though, nothing is left to emit
+     * them, and the subscription fails so that the subscriber establishes it again with the members there are by then.
      */
     private static final class SubscriptionUpdates {
 
         private final QueryMessage query;
         private final QueueMessageStream<QueryResponseMessage> merged;
         private final List<Source> sources = new CopyOnWriteArrayList<>();
+        // Failed alongside the merged updates, so that a subscription one of whose members could not be reached
+        // does not leave the initial result waiting on an opening that will never come.
+        private final CompletableFuture<Void> everyMemberOpen;
         private final AtomicInteger openSources;
-        // Failed alongside the merged updates, so that a subscription whose answering member could not be reached
-        // does not leave the initial result waiting on a stream that will never open.
-        private final CompletableFuture<Void> answeringMemberOpen;
 
         private SubscriptionUpdates(QueryMessage query,
                                     int updateBufferSize,
                                     int memberCount,
-                                    CompletableFuture<Void> answeringMemberOpen) {
+                                    CompletableFuture<Void> everyMemberOpen) {
             this.query = query;
-            this.answeringMemberOpen = answeringMemberOpen;
-            this.merged = new QueueMessageStream<>(new ArrayBlockingQueue<>(updateBufferSize));
-            // Counted up front rather than as members are added: members are subscribed to concurrently, and one
-            // completing before the next is added would otherwise look like the last of them.
             this.openSources = new AtomicInteger(memberCount);
+            this.everyMemberOpen = everyMemberOpen;
+            this.merged = new QueueMessageStream<>(new ArrayBlockingQueue<>(updateBufferSize));
         }
 
         private void add(Member member, MessageStream<QueryResponseMessage> updates) {
@@ -252,6 +254,9 @@ public class SpringCloudQueryBusConnector implements QueryBusConnector {
                         }
                     }
                     if (!source.stream.hasNextAvailable() && source.stream.isCompleted()) {
+                        // A stream that ends without a failure is one whose member said it is leaving: the
+                        // dispatcher fails a stream that ends without saying why. A member reporting the subscription
+                        // over has already ended the merged updates, so counting it changes nothing.
                         end(source, () -> source.stream.error().ifPresentOrElse(this::fail, this::sourceCompleted));
                     }
                 } catch (Exception e) {
@@ -280,17 +285,33 @@ public class SpringCloudQueryBusConnector implements QueryBusConnector {
         /**
          * Ends the subscription because a member reported it over, however many members still hold one.
          * <p>
-         * A member saying so means there will never be another update, which is not what a member merely ceasing to
-         * answer means. Waiting for the rest would leave the subscriber holding a subscription that has run its
-         * course.
+         * A member saying so means there will never be another update. Waiting for the rest would leave the
+         * subscriber holding a subscription that has run its course. The initial result is asked for at once if it
+         * has not been yet: no member left to register can emit an update that matters any more, so the result is
+         * the subscription's final state, and the subscriber receives it followed by the completion. Leaving the
+         * wait in place would instead let the completing member's stream ending read as it having stopped
+         * answering, failing the initial result of a subscription that completed.
          */
         private void completeAll() {
             merged.seal();
+            everyMemberOpen.complete(null);
         }
 
+        /**
+         * Accounts for a member having left the subscription cleanly, failing it once no member is left.
+         * <p>
+         * Failing rather than completing, because no member said the subscription has run its course: it only has
+         * nobody left to emit its updates. A member that starts handling the query later is not subscribed to, so
+         * the subscriber would wait on updates that never arrive. When a member did complete the subscription, the
+         * merged updates are already sealed and failing them changes nothing.
+         */
         private void sourceCompleted() {
             if (openSources.decrementAndGet() == 0) {
-                merged.seal();
+                fail(new SubscriptionQueryMembersChangedException(
+                        ("Every member answering subscription query [%s] has left. Establish the subscription query "
+                                + "again to receive updates from the members handling it now.")
+                                .formatted(query.type())
+                ));
             }
         }
 
@@ -302,7 +323,7 @@ public class SpringCloudQueryBusConnector implements QueryBusConnector {
          */
         private void fail(Throwable cause) {
             merged.sealExceptionally(cause);
-            answeringMemberOpen.completeExceptionally(cause);
+            everyMemberOpen.completeExceptionally(cause);
         }
 
         /**
@@ -353,7 +374,8 @@ public class SpringCloudQueryBusConnector implements QueryBusConnector {
 
         @Override
         public CompletableFuture<Void> sendUpdate(SubscriptionQueryUpdateMessage update) {
-            if (!updates.offer(new GenericQueryResponseMessage(update), Context.empty())) {
+            // Offered as it is: its type is what tells an update apart from the initial result to the subscriber.
+            if (!updates.offer(update, Context.empty())) {
                 IllegalStateException cause = new IllegalStateException(
                         ("This member produced more updates to query [%s] than the subscriber consumed. Consume them "
                                 + "sooner, or raise the update buffer size.").formatted(query.type())
@@ -396,38 +418,43 @@ public class SpringCloudQueryBusConnector implements QueryBusConnector {
     private void suspectWhenUnreachable(Member member, MessageStream<QueryResponseMessage> responses) {
         responses.error()
                  .filter(cause -> cause instanceof QueryDispatchException)
-                 .ifPresent(cause -> registry.markUnreachable(member));
+                 .ifPresent(cause -> discovery.markUnreachable(member));
     }
 
     /**
-     * Prepares this connector for dispatching queries, after a previous {@link #shutdownDispatching()} if any.
+     * Prepares this connector for dispatching queries, after a previous {@link #shutdownDispatching()} if any, and
+     * for answering subscriptions again, after a previous {@link #disconnect()} if any.
      * <p>
      * Performed in the {@link Phase#INBOUND_QUERY_CONNECTOR} phase.
      */
     public void start() {
         shutdownLatch.initialize();
+        invoker.rejoin();
         logger.debug("The SpringCloudQueryBusConnector started.");
     }
 
     /**
-     * Stops advertising the queries this member handles, and ends the subscriptions it is still answering.
+     * Stops advertising the queries this member handles, and tells the subscribers it is still answering that it is
+     * leaving.
      * <p>
      * Performed in the {@link Phase#INBOUND_QUERY_CONNECTOR} phase, before dispatching is shut down, so that other
      * members learn this member is leaving while it can still answer what is already in flight.
      * <p>
-     * Ending the open subscriptions here is safe because shutdown reaches {@link Phase#INBOUND_EVENT_CONNECTORS},
-     * where event processors are stopped, before it reaches this phase. Nothing is left that could emit an update
-     * onto a subscription by the time they are ended, so no side effect is cut short.
+     * Announcing it here is safe because shutdown reaches {@link Phase#INBOUND_EVENT_CONNECTORS}, where event
+     * processors are stopped, before it reaches this phase. Nothing is left that could emit an update onto a
+     * subscription by the time they are ended, so no subscriber misses one. Where a web server would cut the
+     * subscriptions' streams before this phase, as Spring Boot's does, the announcement has to be made earlier; it is
+     * only made once, so the announcement here then finds nothing left to end.
      *
      * @return a future that completes once this member no longer advertises any query, and answers no subscription
      */
     public CompletableFuture<Void> disconnect() {
         logger.debug("Disconnecting the SpringCloudQueryBusConnector.");
         subscriptions.clear();
-        registry.publishLocalQueries(Set.of());
-        // Safe to end here: event processors are stopped in the INBOUND_EVENT_CONNECTORS phase, which shutdown
+        discovery.publishLocalQueries(Set.of());
+        // Safe to leave here: event processors are stopped in the INBOUND_EVENT_CONNECTORS phase, which shutdown
         // reaches before this one, so nothing is left that could still emit an update onto these subscriptions.
-        invoker.endOpenSubscriptions();
+        invoker.leave();
         return FutureUtils.emptyCompletedFuture();
     }
 
@@ -462,16 +489,16 @@ public class SpringCloudQueryBusConnector implements QueryBusConnector {
         QualifiedName queryName = query.type().qualifiedName();
         // Every member advertising the name, not just the one a plain query would route to: an update is emitted on
         // whichever member's state changed, and only reaches subscriptions that member holds a registration for.
-        List<Member> members = registry.findAllQueryDestinations(queryName);
+        List<Member> members = discovery.findAllQueryDestinations(queryName);
         if (members.isEmpty()) {
             return MessageStream.failed(new NoHandlerForQueryException(
                     "No member of the cluster handles queries of type [" + query.type() + "]."
             ));
         }
-        // Resolved against the members already snapshotted, rather than taken as whatever the registry answers now.
-        // A ring change between the two reads would otherwise name a member no update stream is opened on, leaving
-        // the initial result waiting on an opening that never comes.
-        Member answering = registry.findQueryDestination(queryName)
+        // Resolved against the members already snapshotted, rather than taken as whatever the discovery answers now.
+        // A ring change between the two reads would otherwise name a member no update stream is opened on, asking it
+        // for an initial result while the updates it emits reach nobody.
+        Member answering = discovery.findQueryDestination(queryName)
                                    .filter(members::contains)
                                    .orElseGet(members::getFirst);
 
@@ -493,21 +520,20 @@ public class SpringCloudQueryBusConnector implements QueryBusConnector {
                                                                  List<Member> members,
                                                                  Member answering,
                                                                  int updateBufferSize) {
-        // Two activities, in this order. Opening the update streams comes first, and the initial result waits for
-        // the answering member's to be open, so that an update emitted while that result is being produced still has
-        // somewhere to arrive. Only the answering member is waited for: no other member is asked for a result, so
-        // there is nothing its updates could arrive ahead of.
-        CompletableFuture<Void> answeringMemberOpen = new CompletableFuture<>();
+        // Every member's update stream is opened before the initial result is asked for, so no update falls between
+        // the two. A member reporting the subscription over ends that wait early.
+        CompletableFuture<Void> everyMemberOpen = new CompletableFuture<>();
+        AtomicInteger unopened = new AtomicInteger(members.size());
         SubscriptionUpdates updates =
-                new SubscriptionUpdates(query, updateBufferSize, members.size(), answeringMemberOpen);
+                new SubscriptionUpdates(query, updateBufferSize, members.size(), everyMemberOpen);
         for (Member member : members) {
-            // Only the answering member's opening is waited on; every member's completion ends the subscription.
-            boolean answersInitialResult = member.equals(answering);
+            AtomicBoolean opened = new AtomicBoolean();
             SubscriptionListener listener = new SubscriptionListener() {
                 @Override
                 public void opened() {
-                    if (answersInitialResult) {
-                        answeringMemberOpen.complete(null);
+                    // Counted once per member, so that one member reporting twice cannot stand in for another.
+                    if (opened.compareAndSet(false, true) && unopened.decrementAndGet() == 0) {
+                        everyMemberOpen.complete(null);
                     }
                 }
 
@@ -519,7 +545,7 @@ public class SpringCloudQueryBusConnector implements QueryBusConnector {
             updates.add(member, updateStreamOn(member, query, updateBufferSize, listener));
         }
         MessageStream<QueryResponseMessage> initialResult = DelayedMessageStream.create(
-                answeringMemberOpen.thenApply(open -> initialResultFrom(answering, query))
+                everyMemberOpen.thenApply(open -> initialResultFrom(answering, query))
         );
 
         Registration watch = watchMembership(query, queryName, members, updates);
@@ -586,7 +612,7 @@ public class SpringCloudQueryBusConnector implements QueryBusConnector {
                                          SubscriptionUpdates updates) {
         Set<Member> known = Set.copyOf(subscribedTo);
         Registration watch =
-                registry.onMembershipChanged(ring -> failWhenAMemberJoined(query, queryName, known, updates));
+                discovery.onMembershipChanged(ring -> failWhenAMemberJoined(query, queryName, known, updates));
         // Checked once more now that the watch is in place. Opening a subscription on every member takes as long as
         // reaching them all does, and a member that started advertising the query in that time changed the ring
         // before there was a listener to hear it -- so the watch alone would never report it.
@@ -604,7 +630,7 @@ public class SpringCloudQueryBusConnector implements QueryBusConnector {
                                        QualifiedName queryName,
                                        Set<Member> known,
                                        SubscriptionUpdates updates) {
-        List<Member> current = registry.findAllQueryDestinations(queryName);
+        List<Member> current = discovery.findAllQueryDestinations(queryName);
         for (Member member : current) {
             if (!known.contains(member)) {
                 logger.info("Member [{}] started handling query [{}] while a subscription for it was active; "
@@ -653,7 +679,7 @@ public class SpringCloudQueryBusConnector implements QueryBusConnector {
         Objects.requireNonNull(queryName, "The queryName must not be null.");
         logger.debug("Subscribing to query [{}].", queryName);
         subscriptions.add(queryName);
-        registry.publishLocalQueries(Set.copyOf(subscriptions));
+        discovery.publishLocalQueries(Set.copyOf(subscriptions));
         return FutureUtils.emptyCompletedFuture();
     }
 
@@ -664,7 +690,7 @@ public class SpringCloudQueryBusConnector implements QueryBusConnector {
             return false;
         }
         logger.debug("Unsubscribing from query [{}].", queryName);
-        registry.publishLocalQueries(Set.copyOf(subscriptions));
+        discovery.publishLocalQueries(Set.copyOf(subscriptions));
         return true;
     }
 
@@ -677,7 +703,7 @@ public class SpringCloudQueryBusConnector implements QueryBusConnector {
 
     @Override
     public void describeTo(ComponentDescriptor descriptor) {
-        descriptor.describeProperty("registry", registry);
+        descriptor.describeProperty("discovery", discovery);
         descriptor.describeProperty("dispatcher", dispatcher);
         descriptor.describeProperty("subscriptions",
                                     subscriptions.stream().map(QualifiedName::toString).sorted().toList());

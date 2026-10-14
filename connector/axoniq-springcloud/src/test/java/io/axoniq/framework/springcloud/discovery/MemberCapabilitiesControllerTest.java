@@ -20,7 +20,6 @@
 package io.axoniq.framework.springcloud.discovery;
 
 import io.axoniq.framework.springcloud.routing.MemberCapabilities;
-import io.axoniq.framework.springcloud.util.TestServiceInstance;
 import org.axonframework.messaging.core.QualifiedName;
 import org.junit.jupiter.api.*;
 import org.springframework.http.HttpStatus;
@@ -49,10 +48,7 @@ class MemberCapabilitiesControllerTest {
     @BeforeEach
     void setUp() {
         discoveryMode = new RecordingCapabilityDiscoveryMode();
-        discoveryMode.updateLocalCapabilities(
-                TestServiceInstance.instance("university", "localhost", 8080),
-                new MemberCapabilities(100, Set.of(CREATE_COURSE), Set.of())
-        );
+        discoveryMode.updateLocalCapabilities(new MemberCapabilities(100, Set.of(CREATE_COURSE), Set.of()));
         testSubject = new MemberCapabilitiesController(discoveryMode);
     }
 
@@ -67,6 +63,7 @@ class MemberCapabilitiesControllerTest {
             // then
             assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
             assertThat(response.getBody()).isNotNull();
+            assertThat(response.getBody().nodeId()).isEqualTo(RecordingCapabilityDiscoveryMode.LOCAL_NODE_ID);
             assertThat(response.getBody().commands()).containsExactly(CREATE_COURSE.name());
             assertThat(response.getBody().loadFactor()).isEqualTo(100);
             assertThat(response.getHeaders().getETag()).isNotBlank();
@@ -108,7 +105,6 @@ class MemberCapabilitiesControllerTest {
             // given
             String entityTag = testSubject.localMemberCapabilities(null).getHeaders().getETag();
             discoveryMode.updateLocalCapabilities(
-                    TestServiceInstance.instance("university", "localhost", 8080),
                     new MemberCapabilities(100, Set.of(CREATE_COURSE, RENAME_COURSE), Set.of())
             );
 

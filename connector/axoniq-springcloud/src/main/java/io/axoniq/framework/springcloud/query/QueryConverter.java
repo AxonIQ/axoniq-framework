@@ -30,10 +30,12 @@ import org.axonframework.messaging.core.RemoteHandlingException;
 import org.axonframework.messaging.core.RemoteNonTransientHandlingException;
 import org.axonframework.messaging.queryhandling.GenericQueryMessage;
 import org.axonframework.messaging.queryhandling.GenericQueryResponseMessage;
+import org.axonframework.messaging.queryhandling.GenericSubscriptionQueryUpdateMessage;
 import org.axonframework.messaging.queryhandling.NoHandlerForQueryException;
 import org.axonframework.messaging.queryhandling.QueryExecutionException;
 import org.axonframework.messaging.queryhandling.QueryMessage;
 import org.axonframework.messaging.queryhandling.QueryResponseMessage;
+import org.axonframework.messaging.queryhandling.SubscriptionQueryUpdateMessage;
 import org.jspecify.annotations.Nullable;
 
 import java.util.List;
@@ -47,6 +49,10 @@ import static io.axoniq.framework.springcloud.shared.WireCodec.*;
  * A query is sent as one request and answered with a stream of events, because a query may be answered any number of
  * times. Each response is one {@link #RESPONSE_EVENT} event; a failure ending the stream is one {@link #ERROR_EVENT}
  * event. A stream that ends without an error event completed normally, however many responses it carried.
+ * <p>
+ * The update stream of a subscription query is held to more than that, because it has no natural end. It ends with a
+ * {@link #COMPLETE_EVENT}, a {@link #LEAVING_EVENT} or an {@link #ERROR_EVENT}; one that ends without any of them was
+ * cut short, and the subscriber cannot know what it missed.
  * <p>
  * A payload travels as the text its {@link org.axonframework.messaging.core.conversion.MessageConverter} writes it
  * as, which is what the {@code PayloadConvertingQueryBusConnector} wrapped around the connector converts it to before
@@ -73,18 +79,29 @@ final class QueryConverter {
      * The event type carrying one update to a subscription query.
      * <p>
      * Told apart from a {@link #RESPONSE_EVENT} because the two mean different things to the subscriber even though
-     * they carry the same shape: a response is part of the initial result, an update is a change after it.
+     * they carry the same shape: a response is part of the initial result, an update is a change after it. Read back
+     * with {@link #convertUpdate(QueryDispatchResponse, Converter)}, so the subscriber can tell them apart too.
      */
     public static final String UPDATE_EVENT = "update";
 
     /**
      * The event type reporting that a subscription query is over: there will never be another update to it.
      * <p>
-     * Written rather than left to the stream simply ending, because the two mean different things. A member that
-     * shuts down or is partitioned away ends the stream as well, and that says only that this member has stopped
-     * answering, not that the subscription has run its course.
+     * Written rather than left to the stream simply ending, because the two mean different things. A member that loses
+     * its connection ends the stream as well, which fails the subscription rather than completing it, and a member
+     * leaving the cluster writes a {@link #LEAVING_EVENT}, which ends only its own part.
      */
     public static final String COMPLETE_EVENT = "complete";
+
+    /**
+     * The event type reporting that the member answering a subscription query is leaving the cluster, and has stopped
+     * emitting updates to it.
+     * <p>
+     * Ends only that member's part in the subscription, unlike a {@link #COMPLETE_EVENT}, which ends it for every
+     * member. Written rather than left to the stream simply ending, because a stream that ends without saying why may
+     * have been cut short while the member was still emitting updates, which makes the subscription unreliable.
+     */
+    public static final String LEAVING_EVENT = "leaving";
 
     private static final boolean WRITABLE_STACK_TRACE = false;
 
@@ -203,6 +220,28 @@ final class QueryConverter {
                 MessageType.fromString(response.type()),
                 response.payload(),
                 response.metadata()
+        )).withConverter(converter);
+    }
+
+    /**
+     * Converts the given {@code update}, received from a member holding a subscription, into an update message.
+     * <p>
+     * Rebuilt as a {@link SubscriptionQueryUpdateMessage} rather than as a plain response, because that type is what
+     * tells an update apart from the initial result on the subscriber's side: a subscriber to the updates alone keeps
+     * only the messages of that type.
+     *
+     * @param update    one update received from a member holding a subscription
+     * @param converter the converter to attach to the update for inline payload conversion, or {@code null} when none
+     *                  is available
+     * @return the update the given {@code update} represents
+     */
+    public static SubscriptionQueryUpdateMessage convertUpdate(QueryDispatchResponse update,
+                                                               @Nullable Converter converter) {
+        return new GenericSubscriptionQueryUpdateMessage(new GenericMessage(
+                update.identifier(),
+                MessageType.fromString(update.type()),
+                update.payload(),
+                update.metadata()
         )).withConverter(converter);
     }
 

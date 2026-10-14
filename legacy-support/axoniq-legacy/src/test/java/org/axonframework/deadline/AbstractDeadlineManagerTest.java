@@ -22,10 +22,12 @@ package org.axonframework.deadline;
 import org.axonframework.deadline.RecordingDeadlineManager.ScheduledCall;
 import org.axonframework.messaging.ContextAwareScope;
 import org.axonframework.messaging.ScopeDescriptor;
+import org.axonframework.messaging.core.Context;
 import org.axonframework.messaging.core.GenericMessage;
 import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
+import org.axonframework.messaging.core.interception.CorrelationDataInterceptor;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWork;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkTestUtils;
@@ -35,21 +37,23 @@ import org.junit.jupiter.api.*;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * Test class validating {@link AbstractDeadlineManager#runOnPrepareCommitOrNow(Runnable)} and
- * {@link AbstractDeadlineManager#processDispatchInterceptors(DeadlineMessage)}, driven through a recording subclass
- * shaped like the Axon Framework 4 {@code SimpleDeadlineManager}: it creates the message and schedule id up front and
- * defers the interception and the actual call.
+ * Test class validating {@link AbstractDeadlineManager#runOnPrepareCommitOrNow(Consumer)} and
+ * {@link AbstractDeadlineManager#processDispatchInterceptors(DeadlineMessage, ProcessingContext)}, driven through a
+ * recording subclass shaped like the Axon Framework 4 {@code SimpleDeadlineManager}: it creates the message and
+ * schedule id up front and defers the interception and the actual call.
  */
 class AbstractDeadlineManagerTest {
 
@@ -113,7 +117,8 @@ class AbstractDeadlineManagerTest {
 
         /**
          * Axon Framework 4 deferred whenever a unit of work was active. Axon Framework 5 has no ambient one, so
-         * without a scope carrying the context there is nothing to defer to, even while a context is running.
+         * without a scope carrying the context, or a view bound to it, there is nothing to defer to, even while a
+         * context is running.
          */
         @Test
         void aCallMadeWhileAContextRunsButNoScopeIsActiveRunsImmediately() {
@@ -297,6 +302,147 @@ class AbstractDeadlineManagerTest {
     }
 
     /**
+     * A view bound to a context stands in for the {@code DeadlineManager} parameter of a handler that runs in that
+     * context but in no scope, such as the command handler of an entity. Axon Framework 4 deferred such calls to the
+     * prepare-commit phase of the current unit of work.
+     */
+    @Nested
+    class ThroughAViewBoundToAContext {
+
+        @Test
+        void callsAreDeferredUntilTheContextPreparesItsCommit() {
+            // given
+            AtomicInteger callsDuringInvocation = new AtomicInteger(-1);
+
+            // when
+            runInUnitOfWork(context -> {
+                DeadlineManager boundManager = testSubject.forContext(context);
+                boundManager.schedule(Instant.now(), "deadlineName", "payload", EXPLICIT_SCOPE);
+                boundManager.cancelSchedule("deadlineName", "scheduleId");
+                boundManager.cancelAll("deadlineName");
+                boundManager.cancelAllWithinScope("deadlineName", EXPLICIT_SCOPE);
+                callsDuringInvocation.set(timeline.size());
+            });
+
+            // then
+            assertThat(callsDuringInvocation).hasValue(0);
+            assertThat(timeline).containsExactly("manager:schedule deadlineName",
+                                                 "manager:cancelSchedule deadlineName/scheduleId",
+                                                 "manager:cancelAll deadlineName",
+                                                 "manager:cancelAllWithinScope deadlineName@explicitScope");
+        }
+
+        @Test
+        void scheduleReturnsTheIdentifierOfTheDeadlineItDefers() {
+            // given
+            AtomicReference<String> scheduleId = new AtomicReference<>();
+
+            // when
+            runInUnitOfWork(context -> scheduleId.set(
+                    testSubject.forContext(context).schedule(Instant.now(), "deadlineName", "payload", EXPLICIT_SCOPE)
+            ));
+
+            // then
+            assertThat(testSubject.scheduled).singleElement()
+                                             .extracting(call -> call.message().identifier())
+                                             .isEqualTo(scheduleId.get());
+        }
+
+        @Test
+        void deferredCallsNeverRunWhenTheContextRollsBack() {
+            // when
+            CompletableFuture<Object> result = UnitOfWorkTestUtils.aUnitOfWork().executeWithResult(context -> {
+                testSubject.forContext(context).schedule(Instant.now(), "deadlineName", "payload", EXPLICIT_SCOPE);
+                return CompletableFuture.failedFuture(new IllegalStateException("handler failure"));
+            });
+
+            // then
+            assertThatThrownBy(() -> result.orTimeout(1, TimeUnit.SECONDS).join())
+                    .hasRootCauseInstanceOf(IllegalStateException.class);
+            assertThat(testSubject.scheduled).isEmpty();
+        }
+
+        @Test
+        void theDispatchInterceptorsGetTheBoundContext() {
+            // given
+            List<Optional<ProcessingContext>> interceptionContexts = new CopyOnWriteArrayList<>();
+            testSubject.registerDispatchInterceptor((message, context, chain) -> {
+                interceptionContexts.add(Optional.ofNullable(context));
+                return chain.proceed(message, context);
+            });
+            AtomicReference<ProcessingContext> boundContext = new AtomicReference<>();
+
+            // when
+            runInUnitOfWork(context -> {
+                boundContext.set(context);
+                testSubject.forContext(context).schedule(Instant.now(), "deadlineName", "payload", EXPLICIT_SCOPE);
+            });
+
+            // then
+            assertThat(interceptionContexts).singleElement()
+                                            .satisfies(context -> assertThat(context).containsSame(
+                                                    boundContext.get()
+                                            ));
+        }
+
+        /**
+         * The view binds the context for the duration of its own calls only. A collaborator holding the manager
+         * itself, outside any handler parameter, has nothing to defer to.
+         */
+        @Test
+        void aCallOnTheManagerItselfStillRunsImmediately() {
+            // given
+            AtomicInteger scheduledDuringInvocation = new AtomicInteger(-1);
+
+            // when
+            runInUnitOfWork(context -> {
+                testSubject.forContext(context).cancelAll("deadlineName");
+                testSubject.schedule(Instant.now(), "deadlineName", "payload", EXPLICIT_SCOPE);
+                scheduledDuringInvocation.set(testSubject.scheduled.size());
+            });
+
+            // then
+            assertThat(scheduledDuringInvocation).hasValue(1);
+            assertThat(timeline).containsExactly("manager:schedule deadlineName", "manager:cancelAll deadlineName");
+        }
+
+        /**
+         * Axon Framework 5 starts no scope around the command handler of an entity, so binding a context does not
+         * describe one.
+         */
+        @Test
+        void scheduleWithoutAScopeDescriptorStillThrows() {
+            // when / then
+            runInUnitOfWork(context -> assertThatThrownBy(
+                    () -> testSubject.forContext(context).schedule(Instant.now(), "deadlineName", "payload")
+            ).isInstanceOf(IllegalStateException.class)
+             .hasMessage("Cannot request current Scope if none is active"));
+            assertThat(testSubject.scheduled).isEmpty();
+        }
+
+        /**
+         * A command a Saga handler sends can run in a unit of work of its own while the Saga's scope is still current.
+         * Axon Framework 4 deferred a call to the innermost unit of work, which is the command's, so a failing command
+         * stored nothing even when the Saga survived its failure.
+         */
+        @Test
+        void theBoundContextWinsOverTheScopeOfAnEnclosingSagaHandler() {
+            // when
+            runInUnitOfWork(sagaContext -> new TestScope(sagaContext).run(() -> {
+                CompletableFuture<Object> command = UnitOfWorkTestUtils.aUnitOfWork().executeWithResult(context -> {
+                    testSubject.forContext(context).schedule(Instant.now(), "deadlineName", "payload", EXPLICIT_SCOPE);
+                    return CompletableFuture.failedFuture(new IllegalStateException("command failure"));
+                });
+                assertThatThrownBy(() -> command.orTimeout(1, TimeUnit.SECONDS).join())
+                        .hasRootCauseInstanceOf(IllegalStateException.class);
+            }));
+
+            // then
+            assertThat(testSubject.scheduled).isEmpty();
+        }
+    }
+
+    /**
      * A call that reaches a context once the {@link AbstractDeadlineManager#RUN_DEADLINE_CALLS} phase started has
      * nothing left to run it. It must fail loudly instead of being dropped, whether or not earlier calls were deferred.
      */
@@ -447,6 +593,66 @@ class AbstractDeadlineManagerTest {
         }
 
         @Test
+        void interceptorsOfADeferredCallGetTheContextTheCallWasDeferredTo() {
+            // given
+            List<ProcessingContext> interceptionContexts = new CopyOnWriteArrayList<>();
+            testSubject.registerDispatchInterceptor((message, context, chain) -> {
+                interceptionContexts.add(context);
+                return chain.proceed(message, context);
+            });
+            AtomicReference<ProcessingContext> deferringContext = new AtomicReference<>();
+
+            // when
+            runInUnitOfWork(context -> new TestScope(context).run(() -> {
+                deferringContext.set(context);
+                testSubject.schedule(Instant.now(), "deadlineName", "payload", EXPLICIT_SCOPE);
+            }));
+
+            // then
+            assertThat(interceptionContexts).singleElement().isSameAs(deferringContext.get());
+        }
+
+        @Test
+        void interceptorsOfEachDeferredCallGetTheContextOfTheHandlerThatMadeIt() {
+            // given
+            Context.ResourceKey<String> handledMessage = Context.ResourceKey.withLabel("handledMessage");
+            List<String> interceptedFor = new CopyOnWriteArrayList<>();
+            testSubject.registerDispatchInterceptor((message, context, chain) -> {
+                interceptedFor.add(context.getResource(handledMessage));
+                return chain.proceed(message, context);
+            });
+
+            // when
+            // Each Saga handler sees the batch's unit of work through its own resource-overriding view, so two
+            // handlers in one unit of work defer their calls from two different contexts.
+            runInUnitOfWork(context -> {
+                new TestScope(context.withResource(handledMessage, "first event")).run(
+                        () -> testSubject.schedule(Instant.now(), "first", "payload", EXPLICIT_SCOPE));
+                new TestScope(context.withResource(handledMessage, "second event")).run(
+                        () -> testSubject.schedule(Instant.now(), "second", "payload", EXPLICIT_SCOPE));
+            });
+
+            // then
+            assertThat(interceptedFor).containsExactly("first event", "second event");
+        }
+
+        @Test
+        void interceptorsOfAnImmediateCallGetNoContext() {
+            // given
+            List<Optional<ProcessingContext>> interceptionContexts = new CopyOnWriteArrayList<>();
+            testSubject.registerDispatchInterceptor((message, context, chain) -> {
+                interceptionContexts.add(Optional.ofNullable(context));
+                return chain.proceed(message, context);
+            });
+
+            // when
+            testSubject.schedule(Instant.now(), "deadlineName", "payload", EXPLICIT_SCOPE);
+
+            // then
+            assertThat(interceptionContexts).containsExactly(Optional.empty());
+        }
+
+        @Test
         void anInterceptorEndingTheChainWithoutAMessageFailsTheCall() {
             // given
             testSubject.registerDispatchInterceptor((message, context, chain) -> MessageStream.empty());
@@ -513,6 +719,80 @@ class AbstractDeadlineManagerTest {
                                                  assertThat(message.payload()).isNull();
                                                  assertThat(message.timestamp()).isEqualTo(TRIGGER_DATE_TIME);
                                              });
+        }
+    }
+
+    @Nested
+    class CorrelationData {
+
+        private static final Map<String, String> CORRELATION_DATA =
+                Map.of("traceId", "trace-of-the-handled-message", "correlationId", "id-of-the-handled-message");
+
+        @Test
+        void aDeadlineScheduledWithinAContextCarriesTheCorrelationDataOfThatContext() {
+            // when
+            runInUnitOfWork(context -> new TestScope(withCorrelationData(context)).run(
+                    () -> testSubject.schedule(Instant.now(), "deadlineName", "payload", EXPLICIT_SCOPE)
+            ));
+
+            // then
+            assertThat(testSubject.scheduled).singleElement()
+                                             .extracting(call -> call.message().metadata())
+                                             .isEqualTo(CORRELATION_DATA);
+        }
+
+        @Test
+        void theMetadataOfAGivenMessageWinsOverCorrelationDataUnderTheSameKey() {
+            // given
+            Message original = new GenericMessage(new MessageType("test.Reminder"),
+                                                  "reminder",
+                                                  Map.of("correlationId", "chosen-by-the-handler"));
+
+            // when
+            runInUnitOfWork(context -> new TestScope(withCorrelationData(context)).run(
+                    () -> testSubject.schedule(Instant.now(), "deadlineName", original, EXPLICIT_SCOPE)
+            ));
+
+            // then
+            assertThat(testSubject.scheduled).singleElement()
+                                             .extracting(call -> call.message().metadata())
+                                             .isEqualTo(Map.of("traceId", "trace-of-the-handled-message",
+                                                               "correlationId", "chosen-by-the-handler"));
+        }
+
+        @Test
+        void theDispatchInterceptorsAlreadySeeTheCorrelationData() {
+            // given
+            List<Map<String, String>> interceptedMetadata = new CopyOnWriteArrayList<>();
+            testSubject.registerDispatchInterceptor((message, context, chain) -> {
+                interceptedMetadata.add(message.metadata());
+                return chain.proceed(message, context);
+            });
+
+            // when
+            runInUnitOfWork(context -> new TestScope(withCorrelationData(context)).run(
+                    () -> testSubject.schedule(Instant.now(), "deadlineName", "payload", EXPLICIT_SCOPE)
+            ));
+
+            // then
+            assertThat(interceptedMetadata).containsExactly(CORRELATION_DATA);
+        }
+
+        @Test
+        void aDeadlineScheduledWithinAContextWithoutCorrelationDataGetsNone() {
+            // when
+            runInUnitOfWork(context -> new TestScope(context).run(
+                    () -> testSubject.schedule(Instant.now(), "deadlineName", "payload", EXPLICIT_SCOPE)
+            ));
+
+            // then
+            assertThat(testSubject.scheduled).singleElement()
+                                             .extracting(call -> call.message().metadata())
+                                             .isEqualTo(Map.of());
+        }
+
+        private static ProcessingContext withCorrelationData(ProcessingContext context) {
+            return context.withResource(CorrelationDataInterceptor.CORRELATION_DATA, CORRELATION_DATA);
         }
     }
 

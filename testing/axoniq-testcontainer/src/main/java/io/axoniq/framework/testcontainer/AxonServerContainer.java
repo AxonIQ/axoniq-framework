@@ -302,6 +302,15 @@ public class AxonServerContainer extends GenericContainer<AxonServerContainer> {
     }
 
     /**
+     * Returns whether this container was configured with DCB context support.
+     *
+     * @return {@code true} if DCB context support is enabled, {@code false} otherwise
+     */
+    public boolean isDcbContext() {
+        return dcbContext;
+    }
+
+    /**
      * Returns the mapped Http port used by this Axon Server container.
      *
      * @return The mapped Http port used by this Axon Server container.

@@ -297,13 +297,40 @@ public class AxonServerContainerUtils {
     /**
      * Calls the API of Axon Server at the given {@code hostname} and (http) {@code port} to delete the given
      * {@code context}.
+     * <p>
+     * Concurrent context-mutating calls (create or delete, for any context) against the same Axon Server instance
+     * can race each other on its single Raft-backed admin replication group, the same way concurrent cluster-init
+     * calls do (see {@link #initCluster}): a request arriving while the admin group is mid-operation for another
+     * context can be rejected with a transient non-2xx response that clears up moments later. This retries on any
+     * such response for up to 30 seconds, except a 404 -- that means the context genuinely doesn't exist, which
+     * callers commonly rely on failing fast for (e.g. deleting a context that may or may not be there yet, ignoring
+     * the failure) -- so a 404 is thrown immediately instead of retried.
      *
      * @param hostname The hostname where Axon Server can be reached.
      * @param port     The HTTP port Axon Server listens to for API calls.
      * @param context  The context to delete.
-     * @throws IOException When an error occurs communicating with Axon Server.
+     * @throws IOException When the context does not exist (HTTP 404), or deletion did not succeed within 30 seconds
+     *                     of retrying.
      */
     public static void deleteContext(String hostname, int port, String context) throws IOException {
+        try {
+            await().atMost(Duration.ofSeconds(30))
+                   .pollInterval(500, TimeUnit.MILLISECONDS)
+                   .until(() -> tryDeleteContext(hostname, port, context));
+        } catch (ConditionTimeoutException e) {
+            throw new IOException(
+                    "Failed to delete context [" + context + "] in Axon Server within 30 seconds of retrying", e
+            );
+        }
+        waitForContextsCondition(hostname, port, contexts -> !contexts.contains(context));
+    }
+
+    /**
+     * Attempts a single context-delete call, returning whether it succeeded.
+     *
+     * @throws IOException if the context does not exist (HTTP 404)
+     */
+    private static boolean tryDeleteContext(String hostname, int port, String context) throws IOException {
         URL url = URI.create(String.format("http://%s:%d/v1/context/%s", hostname, port, context)).toURL();
         HttpURLConnection connection = null;
         try {
@@ -311,14 +338,17 @@ public class AxonServerContainerUtils {
             connection.setDoOutput(true);
             connection.setRequestMethod("DELETE");
             connection.getInputStream().close();
-            int responseCode = connection.getResponseCode();
-            Assert.isTrue(202 == responseCode, () -> "The response code [" + responseCode + "] did not match 202.");
+            return 202 == connection.getResponseCode();
+        } catch (IOException e) {
+            if (connection != null && connection.getResponseCode() == 404) {
+                throw e;
+            }
+            return false;
         } finally {
             if (connection != null) {
                 connection.disconnect();
             }
         }
-        waitForContextsCondition(hostname, port, contexts -> !contexts.contains(context));
     }
 
     /**
@@ -341,19 +371,42 @@ public class AxonServerContainerUtils {
      * Calls the API of Axon Server at the given {@code hostname} and (http) {@code port} to create a context with the
      * given {@code context} name. The {@code dcbContext} dictates whether the context to be created support DCB, yes or
      * no.
+     * <p>
+     * Concurrent context-mutating calls (create or delete, for any context) against the same Axon Server instance
+     * can race each other on its single Raft-backed admin replication group, the same way concurrent cluster-init
+     * calls do (see {@link #initCluster}): a request arriving while the admin group is mid-operation for another
+     * context can be rejected with a transient non-2xx response that clears up moments later. This retries on any
+     * such response for up to 30 seconds.
      *
      * @param hostname         The hostname where Axon Server can be reached.
      * @param port             The HTTP port Axon Server listens to for API calls.
      * @param context          The context to create.
      * @param dcbContext       A {@code boolean} stating whether a DCB or non-DCB context is being created.
      * @param replicationGroup The replication group to be used.
-     * @throws IOException When an error occurs communicating with Axon Server.
+     * @throws IOException When creation did not succeed within 30 seconds of retrying.
      */
     public static void createContext(String hostname, int port, String context, boolean dcbContext,
                                      String replicationGroup) throws IOException {
-        URL url = URI.create(String.format("http://%s:%d/v1/context", hostname, port)).toURL();
+        try {
+            await().atMost(Duration.ofSeconds(30))
+                   .pollInterval(500, TimeUnit.MILLISECONDS)
+                   .until(() -> tryCreateContext(hostname, port, context, dcbContext, replicationGroup));
+        } catch (ConditionTimeoutException e) {
+            throw new IOException(
+                    "Failed to create context [" + context + "] in Axon Server within 30 seconds of retrying", e
+            );
+        }
+        waitForContextsCondition(hostname, port, contexts -> contexts.contains(context));
+    }
+
+    /**
+     * Attempts a single context-create call, returning whether it succeeded.
+     */
+    private static boolean tryCreateContext(String hostname, int port, String context, boolean dcbContext,
+                                            String replicationGroup) {
         HttpURLConnection connection = null;
         try {
+            URL url = URI.create(String.format("http://%s:%d/v1/context", hostname, port)).toURL();
             String jsonRequest = String.format(
                     "{\"context\": \"%s\", \"dcbContext\": %b, \"replicationGroup\": \"%s\", \"roles\": [{ \"node\": \"axonserver\", \"role\": \"PRIMARY\" }]}",
                     context,
@@ -370,14 +423,14 @@ public class AxonServerContainerUtils {
                 os.write(input, 0, input.length);
             }
             connection.getInputStream().close();
-            int responseCode = connection.getResponseCode();
-            Assert.isTrue(202 == responseCode, () -> "The response code [" + responseCode + "] did not match 202.");
+            return 202 == connection.getResponseCode();
+        } catch (IOException e) {
+            return false;
         } finally {
             if (connection != null) {
                 connection.disconnect();
             }
         }
-        waitForContextsCondition(hostname, port, contexts -> contexts.contains(context));
     }
 
     /**

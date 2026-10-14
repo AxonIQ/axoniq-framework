@@ -19,10 +19,12 @@
 
 package io.axoniq.framework.springcloud.query;
 
+import io.axoniq.framework.messaging.queryhandling.distributed.DistributedQueryBus;
+import io.axoniq.framework.messaging.queryhandling.distributed.DistributedQueryBusConfiguration;
 import io.axoniq.framework.springcloud.discovery.RecordingCapabilityDiscoveryMode;
 import io.axoniq.framework.springcloud.routing.Member;
 import io.axoniq.framework.springcloud.routing.MemberCapabilities;
-import io.axoniq.framework.springcloud.shared.SpringCloudMemberRegistry;
+import io.axoniq.framework.springcloud.shared.SpringCloudMemberDiscovery;
 import io.axoniq.framework.springcloud.util.RecordingDiscoveryClient;
 import io.axoniq.framework.springcloud.util.RecordingEntitlementManager;
 import io.axoniq.framework.springcloud.util.RecordingQueryHandler;
@@ -31,10 +33,12 @@ import io.axoniq.license.entitlement.EntitlementMessageType;
 import org.axonframework.common.lifecycle.ShutdownInProgressException;
 import org.axonframework.messaging.core.Context;
 import org.axonframework.messaging.core.GenericMessage;
+import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.QueueMessageStream;
+import org.axonframework.messaging.core.unitofwork.UnitOfWorkTestUtils;
 import org.axonframework.messaging.queryhandling.GenericQueryMessage;
 import org.axonframework.messaging.queryhandling.GenericQueryResponseMessage;
 import org.axonframework.messaging.queryhandling.GenericSubscriptionQueryUpdateMessage;
@@ -42,20 +46,24 @@ import org.axonframework.messaging.queryhandling.NoHandlerForQueryException;
 import org.axonframework.messaging.queryhandling.QueryExecutionException;
 import org.axonframework.messaging.queryhandling.QueryMessage;
 import org.axonframework.messaging.queryhandling.QueryResponseMessage;
+import org.axonframework.messaging.queryhandling.SimpleQueryBus;
 import org.axonframework.messaging.queryhandling.SubscriptionQueryUpdateMessage;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.*;
 
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.awaitility.Awaitility.await;
 
 /**
  * Tests how {@link SpringCloudQueryBusConnector} routes queries across the cluster and reports what it cannot carry.
@@ -74,7 +82,7 @@ class SpringCloudQueryBusConnectorTest {
     private TestServiceInstance remoteInstance;
     private RecordingDiscoveryClient discoveryClient;
     private RecordingCapabilityDiscoveryMode discoveryMode;
-    private SpringCloudMemberRegistry registry;
+    private SpringCloudMemberDiscovery discovery;
     private RecordingQueryHandler handler;
     private RecordingRemoteQueryDispatcher dispatcher;
     private RecordingEntitlementManager entitlementManager;
@@ -86,13 +94,13 @@ class SpringCloudQueryBusConnectorTest {
         localInstance = TestServiceInstance.instance("university", "node-a", 8080);
         remoteInstance = TestServiceInstance.instance("university", "node-b", 8080);
         discoveryClient = new RecordingDiscoveryClient().register("university", localInstance);
-        discoveryMode = new RecordingCapabilityDiscoveryMode();
-        registry = new SpringCloudMemberRegistry(discoveryClient, localInstance, discoveryMode);
+        discoveryMode = new RecordingCapabilityDiscoveryMode().answeringAsLocal(localInstance);
+        discovery = new SpringCloudMemberDiscovery(discoveryClient, discoveryMode);
         handler = new RecordingQueryHandler();
         dispatcher = new RecordingRemoteQueryDispatcher();
         entitlementManager = new RecordingEntitlementManager();
         invoker = new IncomingQueryInvoker(() -> "node-a", null);
-        testSubject = new SpringCloudQueryBusConnector(registry,
+        testSubject = new SpringCloudQueryBusConnector(discovery,
                                                        invoker,
                                                        dispatcher,
                                                        null,
@@ -110,8 +118,8 @@ class SpringCloudQueryBusConnectorTest {
         );
     }
 
-    private static List<QueryResponseMessage> drain(MessageStream<QueryResponseMessage> stream) {
-        List<QueryResponseMessage> collected = new ArrayList<>();
+    private static <M extends Message> List<M> drain(MessageStream<M> stream) {
+        List<M> collected = new ArrayList<>();
         while (stream.hasNextAvailable()) {
             stream.next().ifPresent(entry -> collected.add(entry.message()));
         }
@@ -125,7 +133,7 @@ class SpringCloudQueryBusConnectorTest {
     }
 
     private Member remoteMember() {
-        return registry.ring().members().stream()
+        return discovery.members().stream()
                        .filter(member -> !member.local())
                        .filter(member -> member.name().contains("node-b"))
                        .findFirst()
@@ -133,11 +141,30 @@ class SpringCloudQueryBusConnectorTest {
     }
 
     private Member otherRemoteMember() {
-        return registry.ring().members().stream()
+        return discovery.members().stream()
                        .filter(member -> !member.local())
                        .filter(member -> member.name().contains("node-c"))
                        .findFirst()
                        .orElseThrow();
+    }
+
+    private Member localMember() {
+        return discovery.members().stream()
+                       .filter(Member::local)
+                       .findFirst()
+                       .orElseThrow();
+    }
+
+    /**
+     * Advances the rotation over the members advertising the query until the given {@code answering} member is the
+     * one the next subscription query asks for its initial result. With two candidates the rotation alternates, so
+     * the read returning the other member leaves the given one next.
+     */
+    private void rotateSoThatTheNextInitialResultComesFrom(Member answering) {
+        Member next;
+        do {
+            next = discovery.findQueryDestination(FIND_COURSE).orElseThrow();
+        } while (next.equals(answering));
     }
 
     /**
@@ -148,21 +175,20 @@ class SpringCloudQueryBusConnectorTest {
         discoveryClient.register("university", localInstance, remoteInstance, other);
         discoveryMode.answering(remoteInstance, new MemberCapabilities(0, Set.of(), Set.of(FIND_COURSE)));
         discoveryMode.answering(other, new MemberCapabilities(0, Set.of(), Set.of(FIND_COURSE)));
-        registry.updateMemberships();
+        discovery.updateMemberships();
     }
 
     /**
-     * A registry that lets a member join in the instant between the two reads opening a subscription makes: the one
+     * A discovery that lets a member join in the instant between the two reads opening a subscription makes: the one
      * resolving every member advertising the query, and the one resolving which of them answers the initial result.
      */
-    private static final class JoiningBetweenResolutions extends SpringCloudMemberRegistry {
+    private static final class JoiningBetweenResolutions extends SpringCloudMemberDiscovery {
 
         private final AtomicReference<@Nullable Runnable> pending = new AtomicReference<>();
 
         private JoiningBetweenResolutions(RecordingDiscoveryClient discoveryClient,
-                                          TestServiceInstance localInstance,
                                           RecordingCapabilityDiscoveryMode discoveryMode) {
-            super(discoveryClient, localInstance, discoveryMode);
+            super(discoveryClient, discoveryMode);
         }
 
         /**
@@ -189,7 +215,7 @@ class SpringCloudQueryBusConnectorTest {
     private void remoteMemberHandlesTheQuery() {
         discoveryClient.register("university", localInstance, remoteInstance);
         discoveryMode.answering(remoteInstance, new MemberCapabilities(0, Set.of(), Set.of(FIND_COURSE)));
-        registry.updateMemberships();
+        discovery.updateMemberships();
     }
 
     @Nested
@@ -261,7 +287,7 @@ class SpringCloudQueryBusConnectorTest {
         void reportsNoHandlerWhenTheConnectorHasNoneYet() {
             // given a member advertising the query before its handler was registered on the connector
             SpringCloudQueryBusConnector unbound = new SpringCloudQueryBusConnector(
-                    registry, new IncomingQueryInvoker(() -> "node-a", null), dispatcher, null, entitlementManager
+                    discovery, new IncomingQueryInvoker(() -> "node-a", null), dispatcher, null, entitlementManager
             );
             unbound.subscribe(FIND_COURSE);
 
@@ -392,6 +418,147 @@ class SpringCloudQueryBusConnectorTest {
             assertThat(drain(responses)).extracting(QueryResponseMessage::identifier).containsExactly("initial-1");
         }
 
+        /**
+         * The initial result reflects state that every member advertising the query changes, not only the member
+         * answering it: segments of one event processor spread over the members all write the same read model. An
+         * update a member emits before it registered the subscription reaches nobody, so the initial result may only
+         * be asked for once no member can emit such an update any more.
+         */
+        @Nested
+        class AskingForTheInitialResult {
+
+            @Test
+            void waitsForEveryMembersSubscriptionBeforeAskingForTheInitialResult() {
+                // given two members, neither of which has registered the subscription yet
+                twoRemoteMembersHandleTheQuery();
+                dispatcher.openingOnDemand().answeringWith(response("initial-1"));
+                rotateSoThatTheNextInitialResultComesFrom(remoteMember());
+
+                // when only the member answering the initial result reports the subscription registered
+                MessageStream<QueryResponseMessage> responses = testSubject.subscriptionQuery(query(), null, 16);
+                dispatcher.open(remoteMember());
+
+                // then asking now would lose an update the other member emits after the initial result was read,
+                // but before it registered the subscription
+                assertThat(dispatcher.dispatches()).isEmpty();
+
+                // when the other member reports the subscription registered as well
+                dispatcher.open(otherRemoteMember());
+
+                // then
+                assertThat(dispatcher.dispatches()).singleElement()
+                                                   .extracting(RecordingRemoteQueryDispatcher.Dispatch::member)
+                                                   .isEqualTo(remoteMember());
+                assertThat(drain(responses)).extracting(QueryResponseMessage::identifier)
+                                            .containsExactly("initial-1");
+            }
+
+            @Test
+            void waitsForAnotherMembersSubscriptionEvenWhenThisMemberAnswersTheInitialResult() {
+                // given this member and another both handle the query, and this member answers the initial result
+                testSubject.subscribe(FIND_COURSE);
+                remoteMemberHandlesTheQuery();
+                dispatcher.openingOnDemand();
+                handler.answeringWith(response("initial-1"));
+                rotateSoThatTheNextInitialResultComesFrom(localMember());
+
+                // when
+                MessageStream<QueryResponseMessage> responses = testSubject.subscriptionQuery(query(), null, 16);
+
+                // then this member registers at once, but the other member could still emit an update the initial
+                // result would miss
+                assertThat(handler.subscriptions()).hasSize(1);
+                assertThat(handler.queries()).isEmpty();
+
+                // when
+                dispatcher.open(remoteMember());
+
+                // then
+                assertThat(handler.queries()).hasSize(1);
+                assertThat(drain(responses)).extracting(QueryResponseMessage::identifier)
+                                            .containsExactly("initial-1");
+            }
+
+            @Test
+            void countsAMemberReportingItsSubscriptionRegisteredMoreThanOnceOnlyOnce() {
+                // given
+                twoRemoteMembersHandleTheQuery();
+                dispatcher.openingOnDemand().answeringWith(response("initial-1"));
+                rotateSoThatTheNextInitialResultComesFrom(remoteMember());
+
+                // when the same member reports its subscription registered twice
+                testSubject.subscriptionQuery(query(), null, 16);
+                dispatcher.open(remoteMember());
+                dispatcher.open(remoteMember());
+
+                // then that still says nothing about the other member
+                assertThat(dispatcher.dispatches()).isEmpty();
+            }
+
+            @Test
+            void failsWithoutAskingForTheInitialResultWhenAnotherMembersSubscriptionCannotBeOpened() {
+                // given the member answering the initial result has registered the subscription
+                twoRemoteMembersHandleTheQuery();
+                dispatcher.openingOnDemand().answeringWith(response("initial-1"));
+                rotateSoThatTheNextInitialResultComesFrom(remoteMember());
+                MessageStream<QueryResponseMessage> responses = testSubject.subscriptionQuery(query(), null, 16);
+                dispatcher.open(remoteMember());
+
+                // when the other member fails before it registered the subscription
+                dispatcher.fail(otherRemoteMember(),
+                                new QueryExecutionException("node-c is unreachable.", null));
+
+                // then the subscription could never be complete, so no initial result is asked for
+                drain(responses);
+                assertThat(dispatcher.dispatches()).isEmpty();
+                assertThat(responses.error()).isPresent();
+                assertThat(responses.error().orElseThrow()).hasMessageContaining("node-c is unreachable.");
+            }
+
+            @Test
+            void deliversAnUpdateEmittedWhileTheInitialResultIsProducedAfterThatResult() {
+                // given every member has registered the subscription, and the initial result is still being produced
+                twoRemoteMembersHandleTheQuery();
+                QueueMessageStream<QueryResponseMessage> initialResult = new QueueMessageStream<>();
+                dispatcher.answeringWith(initialResult);
+                rotateSoThatTheNextInitialResultComesFrom(remoteMember());
+                MessageStream<QueryResponseMessage> responses = testSubject.subscriptionQuery(query(), null, 16);
+                List<QueryResponseMessage> received = new ArrayList<>(drain(responses));
+
+                // when the member not answering the initial result changes the shared state in the meantime
+                dispatcher.emit(otherRemoteMember(), response("update-from-c"));
+                received.addAll(drain(responses));
+                initialResult.offer(response("initial-1"), Context.empty());
+                initialResult.seal();
+                received.addAll(drain(responses));
+
+                // then the update is not lost, and arrives after the initial result it may or may not be part of
+                assertThat(received).extracting(QueryResponseMessage::identifier)
+                                    .containsExactly("initial-1", "update-from-c");
+            }
+
+            @Test
+            void asksForTheInitialResultAndCompletesWhenAMemberReportsItOverBeforeEveryMemberRegistered() {
+                // given the member answering the initial result has registered the subscription, and the other
+                // has not
+                twoRemoteMembersHandleTheQuery();
+                dispatcher.openingOnDemand().answeringWith(response("initial-1"));
+                rotateSoThatTheNextInitialResultComesFrom(remoteMember());
+                MessageStream<QueryResponseMessage> responses = testSubject.subscriptionQuery(query(), null, 16);
+                dispatcher.open(remoteMember());
+
+                // when that member reports the subscription over before the other registered
+                dispatcher.completeSubscription(remoteMember());
+
+                // then no member left to register can emit an update that matters, so the initial result is the
+                // final state, and the subscription completes after it rather than failing
+                assertThat(drain(responses)).extracting(QueryResponseMessage::identifier)
+                                            .containsExactly("initial-1");
+                assertThat(responses.isCompleted()).isTrue();
+                assertThat(responses.error()).isEmpty();
+            }
+        }
+
         @Test
         void failsWhenTheAnsweringMembersSubscriptionCannotBeOpened() {
             // given a member that cannot be subscribed to at all
@@ -452,7 +619,7 @@ class SpringCloudQueryBusConnectorTest {
             TestServiceInstance joining = TestServiceInstance.instance("university", "node-c", 8080);
             discoveryClient.register("university", localInstance, remoteInstance, joining);
             discoveryMode.answering(joining, new MemberCapabilities(0, Set.of(), Set.of(FIND_COURSE)));
-            registry.updateMemberships();
+            discovery.updateMemberships();
 
             // then the updates it emitted before being subscribed to are gone, so carrying on would be silently
             // incomplete
@@ -469,7 +636,7 @@ class SpringCloudQueryBusConnectorTest {
                 TestServiceInstance joining = TestServiceInstance.instance("university", "node-c", 8080);
                 discoveryClient.register("university", localInstance, remoteInstance, joining);
                 discoveryMode.answering(joining, new MemberCapabilities(0, Set.of(), Set.of(FIND_COURSE)));
-                registry.updateMemberships();
+                discovery.updateMemberships();
             });
 
             // when
@@ -482,10 +649,9 @@ class SpringCloudQueryBusConnectorTest {
 
         @Test
         void asksAMemberItOpenedASubscriptionOnForTheInitialResult() {
-            // given a registry whose ring changes in the instant between resolving every member advertising the query
+            // given a discovery whose ring changes in the instant between resolving every member advertising the query
             // and resolving the one to ask for the initial result
-            JoiningBetweenResolutions joining =
-                    new JoiningBetweenResolutions(discoveryClient, localInstance, discoveryMode);
+            JoiningBetweenResolutions joining = new JoiningBetweenResolutions(discoveryClient, discoveryMode);
             SpringCloudQueryBusConnector connector = new SpringCloudQueryBusConnector(
                     joining, new IncomingQueryInvoker(() -> "node-a", null), dispatcher, null, entitlementManager
             );
@@ -526,7 +692,7 @@ class SpringCloudQueryBusConnectorTest {
             TestServiceInstance joining = TestServiceInstance.instance("university", "node-c", 8080);
             discoveryClient.register("university", localInstance, remoteInstance, joining);
             discoveryMode.answering(joining, new MemberCapabilities(0, Set.of(), Set.of(LIST_COURSES)));
-            registry.updateMemberships();
+            discovery.updateMemberships();
 
             // then it emits no updates for this query, so there is nothing to have missed
             drain(responses);
@@ -572,8 +738,8 @@ class SpringCloudQueryBusConnectorTest {
             MessageStream<QueryResponseMessage> responses = testSubject.subscriptionQuery(query(), null, 16);
             drain(responses);
 
-            // when one of them stops answering, as a member leaving the cluster does
-            dispatcher.stopAnswering(remoteMember());
+            // when one of them leaves the cluster
+            dispatcher.leave(remoteMember());
             drain(responses);
 
             // then the other still has updates to give
@@ -600,20 +766,19 @@ class SpringCloudQueryBusConnectorTest {
         }
 
         @Test
-        void completesOnceEveryMemberHasCompleted() {
+        void failsOnceEveryMemberHasLeft() {
             // given
             twoRemoteMembersHandleTheQuery();
             MessageStream<QueryResponseMessage> responses = testSubject.subscriptionQuery(query(), null, 16);
             drain(responses);
 
             // when
-            dispatcher.stopAnswering(remoteMember());
-            dispatcher.stopAnswering(otherRemoteMember());
+            dispatcher.leave(remoteMember());
+            dispatcher.leave(otherRemoteMember());
             drain(responses);
 
-            // then
-            assertThat(responses.isCompleted()).isTrue();
-            assertThat(responses.error()).isEmpty();
+            // then nobody said the subscription is over; it only has nobody left to emit its updates
+            assertThat(responses.error()).get().isInstanceOf(SubscriptionQueryMembersChangedException.class);
         }
 
         @Test
@@ -690,6 +855,42 @@ class SpringCloudQueryBusConnectorTest {
     }
 
     @Nested
+    class SubscribingToUpdatesThroughTheQueryBus {
+
+        private DistributedQueryBus queryBus;
+
+        @BeforeEach
+        void setUpTheQueryBus() {
+            queryBus = new DistributedQueryBus(new SimpleQueryBus(UnitOfWorkTestUtils.SIMPLE_FACTORY),
+                                               testSubject,
+                                               DistributedQueryBusConfiguration.DEFAULT);
+            queryBus.subscribe(FIND_COURSE, (query, context) -> MessageStream.fromItems(response("initial-1")));
+        }
+
+        @Test
+        void receivesTheUpdatesThisMemberEmitsWithoutTheInitialResult() {
+            // given
+            MessageStream<SubscriptionQueryUpdateMessage> updates = queryBus.subscribeToUpdates(query(), 16);
+
+            // when
+            queryBus.emitUpdate(query -> true, () -> update("update-1"), null)
+                    .orTimeout(5, TimeUnit.SECONDS)
+                    .join();
+
+            // then the bus tells the updates apart from the initial result by their type, so an update carried as
+            // any other response would never reach a subscriber to the updates alone. The initial result is
+            // produced on the bus's query executor, and the updates only follow once it has been.
+            List<SubscriptionQueryUpdateMessage> received = new ArrayList<>();
+            await().atMost(Duration.ofSeconds(5)).until(() -> {
+                received.addAll(drain(updates));
+                return !received.isEmpty();
+            });
+            assertThat(received).extracting(SubscriptionQueryUpdateMessage::identifier)
+                                .containsExactly("update-1");
+        }
+    }
+
+    @Nested
     class ShuttingDown {
 
         @BeforeEach
@@ -707,11 +908,11 @@ class SpringCloudQueryBusConnectorTest {
 
             // then other members stop routing queries here rather than discovering it went away by timing out
             assertThat(discoveryMode.localCapabilities().queries()).isEmpty();
-            assertThat(registry.findQueryDestination(FIND_COURSE)).isEmpty();
+            assertThat(discovery.findQueryDestination(FIND_COURSE)).isEmpty();
         }
 
         @Test
-        void endsTheSubscriptionsThisMemberIsStillAnswering() {
+        void announcesLeavingOnTheSubscriptionsThisMemberIsStillAnswering() {
             // given a subscription another member opened on this one, which this member is answering
             RecordingQueryResponseSink sink = new RecordingQueryResponseSink();
             invoker.handleSubscription(
@@ -724,9 +925,30 @@ class SpringCloudQueryBusConnectorTest {
             // when
             testSubject.disconnect();
 
-            // then the subscriber is told to establish it again, rather than left on a stream nothing will write to
-            assertThat(sink.error()).isNotNull();
-            assertThat(sink.error().errorMessage()).contains("shutting down");
+            // then the subscriber carries on with the members that remain, rather than waiting on a stream nothing
+            // will write to
+            assertThat(sink.leaving()).containsExactly("query-1");
+            assertThat(sink.error()).isNull();
+        }
+
+        @Test
+        void answersSubscriptionsAgainWhenStartedAfterDisconnecting() {
+            // given a member that left, and is started again
+            testSubject.disconnect();
+            testSubject.start();
+
+            // when another member opens a subscription on it
+            RecordingQueryResponseSink sink = new RecordingQueryResponseSink();
+            invoker.handleSubscription(
+                    new SubscriptionQueryRequest("query-1", FIND_COURSE_TYPE.toString(),
+                                                 new String(PAYLOAD, StandardCharsets.UTF_8),
+                                                 Map.of(), null, 16),
+                    sink
+            );
+
+            // then it is registered, rather than told this member is leaving
+            assertThat(sink.leaving()).isEmpty();
+            assertThat(handler.subscriptions()).hasSize(1);
         }
 
         @Test

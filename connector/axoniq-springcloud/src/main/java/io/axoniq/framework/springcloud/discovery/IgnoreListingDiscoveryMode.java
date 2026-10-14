@@ -111,10 +111,14 @@ public class IgnoreListingDiscoveryMode implements CapabilityDiscoveryMode {
     }
 
     @Override
-    public void updateLocalCapabilities(ServiceInstance localInstance, MemberCapabilities capabilities) {
-        Objects.requireNonNull(localInstance, "The localInstance must not be null.");
+    public String localNodeId() {
+        return delegate.localNodeId();
+    }
+
+    @Override
+    public void updateLocalCapabilities(MemberCapabilities capabilities) {
         Objects.requireNonNull(capabilities, "The capabilities must not be null.");
-        delegate.updateLocalCapabilities(localInstance, capabilities);
+        delegate.updateLocalCapabilities(capabilities);
     }
 
     @Override
@@ -123,14 +127,14 @@ public class IgnoreListingDiscoveryMode implements CapabilityDiscoveryMode {
     }
 
     @Override
-    public Optional<MemberCapabilities> capabilities(ServiceInstance serviceInstance) {
+    public Optional<MemberAdvertisement> discover(ServiceInstance serviceInstance) {
         Objects.requireNonNull(serviceInstance, "The serviceInstance must not be null.");
         ServiceInstanceKey key = ServiceInstanceKey.of(serviceInstance);
         if (isIgnored(key)) {
             return Optional.empty();
         }
         try {
-            return delegate.capabilities(serviceInstance);
+            return delegate.discover(serviceInstance);
         } catch (ServiceInstanceClientException e) {
             ignoredUntil.put(key, clock.instant().plus(ignorePeriod));
             logger.info("Ignoring ServiceInstance [{}] for [{}], as it answered the capabilities request with a "

@@ -128,7 +128,8 @@ public final class CommandConverter {
      *                           from
      * @return the {@code commandResponse} converted to a {@link CommandResultMessage}, wrapped in a
      * {@link CompletableFuture} for convenience. The resulting {@link CommandResultMessage} carries a {@code null}
-     * payload when the response carries none; the future completes exceptionally when the response holds an error
+     * payload when the response carries no result, which is the case when the response's payload has no type, or is
+     * typed as {@link Void} without data; the future completes exceptionally when the response holds an error
      */
     public static CompletableFuture<CommandResultMessage> convertCommandResponse(
             CommandResponse commandResponse,
@@ -145,19 +146,15 @@ public final class CommandConverter {
             ));
         }
 
-        if (commandResponsePayload.getType().isEmpty()) {
-            return CompletableFuture.completedFuture(
-                    new GenericCommandResultMessage(fallbackResultType, (Object) null)
-            );
-        }
-
-        String revision = revisionOrDefault(commandResponsePayload);
-        MessageType messageType = new MessageType(commandResponsePayload.getType(), revision);
+        MessageType resultType = commandResponsePayload.getType().isEmpty()
+                ? fallbackResultType
+                : new MessageType(commandResponsePayload.getType(), revisionOrDefault(commandResponsePayload));
+        byte[] payload = isEmptyResult(commandResponsePayload) ? null : commandResponsePayload.getData().toByteArray();
         Map<String, String> metadata = convertMetadataValuesToGrpc(commandResponse.getMetaDataMap());
         return CompletableFuture.completedFuture(new GenericCommandResultMessage(new GenericMessage(
                 commandResponse.getMessageIdentifier(),
-                messageType,
-                commandResponsePayload.getData().toByteArray(),
+                resultType,
+                payload,
                 metadata
         )).withConverter(converter));
     }
@@ -189,8 +186,12 @@ public final class CommandConverter {
     }
 
     /**
-     * Converts the given {@code resultMessage}, when present, into a {@link CommandResponse}, using the given
+     * Converts the given {@code resultMessage} into a {@link CommandResponse}, using the given
      * {@code requestIdentifier} to correlate the {@link Command} that led to this {@link CommandResponse}.
+     * <p>
+     * When the {@code resultMessage} carries a {@code null} payload, as is the case for command handlers that do not
+     * return a result, the {@link CommandResponse} carries a payload of the {@code resultMessage}'s type without data.
+     * For a handler that returns nothing, that type is {@link Void}, which dispatchers recognize as an empty result.
      *
      * @param resultMessage     the result message to convert to a {@link CommandResponse}
      * @param requestIdentifier the identifier correlating the {@link CommandResponse} to the {@link Command} that led
@@ -233,6 +234,21 @@ public final class CommandConverter {
             var instruction = createProcessingInstruction(ProcessingKey.PRIORITY, priority);
             builder.addProcessingInstructions(instruction);
         });
+    }
+
+    /**
+     * Returns whether the given {@code payload} of a {@link CommandResponse} describes an empty result.
+     * <p>
+     * That is the case when the {@code payload} has no type, or when it is typed as {@link Void} without data, which
+     * is how handlers describe a {@code null} result. The type decides rather than the data alone, as results like an
+     * empty {@code String} legitimately convert to empty data.
+     *
+     * @param payload the {@link SerializedObject} of a {@link CommandResponse} to validate
+     * @return {@code true} if the {@code payload} describes an empty result, {@code false} otherwise
+     */
+    private static boolean isEmptyResult(SerializedObject payload) {
+        String type = payload.getType();
+        return type.isEmpty() || (Void.class.getName().equals(type) && payload.getData().isEmpty());
     }
 
     /**

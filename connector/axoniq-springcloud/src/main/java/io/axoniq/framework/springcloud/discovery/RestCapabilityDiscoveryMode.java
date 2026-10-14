@@ -20,7 +20,6 @@
 package io.axoniq.framework.springcloud.discovery;
 
 import io.axoniq.framework.springcloud.routing.MemberCapabilities;
-import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.cloud.client.ServiceInstance;
@@ -36,6 +35,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -43,10 +43,14 @@ import java.util.concurrent.atomic.AtomicReference;
  * A {@link CapabilityDiscoveryMode} that asks each {@link ServiceInstance} for its {@link MemberCapabilities} over
  * HTTP, against the endpoint served by {@link MemberCapabilitiesController}.
  * <p>
- * Because capabilities are requested on every discovery heartbeat and rarely change, responses are cached per instance
- * and revalidated with a conditional {@code If-None-Match} request. An unchanged member answers {@code 304 Not
+ * Because capabilities are requested again on every refresh and rarely change, responses are cached per instance and
+ * revalidated with a conditional {@code If-None-Match} request. An unchanged member answers {@code 304 Not
  * Modified} with no body, so a steady-state cluster spends only the round trip. Cache entries are discarded when
  * {@link #retainOnly(Set)} reports that an instance is gone.
+ * <p>
+ * This application is identified by a node id generated when this mode is constructed, which
+ * {@link MemberCapabilitiesController} serves along with this application's capabilities. This application's own
+ * instance is asked like any other, and recognized by the node id it answers with.
  * <p>
  * Selecting this mode makes {@link MemberCapabilitiesController} a requirement: every member of the cluster must serve
  * the same endpoint, or its peers cannot learn what it handles.
@@ -57,9 +61,10 @@ import java.util.concurrent.atomic.AtomicReference;
  *     older version of this one. It surfaces as a {@link ServiceInstanceClientException} so that
  *     {@link IgnoreListingDiscoveryMode} can stop asking for a while.</li>
  *     <li>Any <em>other</em> failure — a refused connection, a timeout, a server error — means the instance is
- *     expected back. It yields {@link MemberCapabilities#INCAPABLE}, keeping the instance in the routing ring as a
- *     member that currently handles nothing rather than removing it, so a brief outage does not reshuffle the routing
- *     of commands it would never have handled.</li>
+ *     expected back. It yields {@link MemberCapabilities#INCAPABLE} under the node id the instance last answered
+ *     with, keeping it in the routing ring as a member that currently handles nothing rather than removing it, so a
+ *     brief outage does not reshuffle the routing of commands it would never have handled. An instance that never
+ *     answered has no node id to keep, and is left out.</li>
  * </ul>
  *
  * @author Allard Buijze
@@ -78,7 +83,7 @@ public class RestCapabilityDiscoveryMode implements CapabilityDiscoveryMode {
     /**
      * How long an instance is given to answer a capabilities request when no other deadline is configured.
      * <p>
-     * Kept short deliberately: capabilities are asked for on every discovery heartbeat, so this bounds how long one
+     * Kept short deliberately: capabilities are asked for on every discovery round, so this bounds how long one
      * unresponsive instance can hold up the round that rebuilds the routing ring. Applied by the Spring Boot
      * autoconfiguration to the client it contributes for capabilities requests.
      */
@@ -87,10 +92,13 @@ public class RestCapabilityDiscoveryMode implements CapabilityDiscoveryMode {
     private final RestClient restClient;
     private final String capabilitiesEndpoint;
 
-    private final AtomicReference<@Nullable ServiceInstance> localInstance = new AtomicReference<>();
+    private final String localNodeId = UUID.randomUUID().toString();
     private final AtomicReference<MemberCapabilities> localCapabilities =
             new AtomicReference<>(MemberCapabilities.INCAPABLE);
     private final Map<ServiceInstanceKey, CachedCapabilities> cache = new ConcurrentHashMap<>();
+    // Kept apart from the cache, which is cleared on every failure: an instance that fails to answer keeps the node id
+    // it last answered with, so that it stays the same member while it is briefly unreachable.
+    private final Map<ServiceInstanceKey, String> knownNodeIds = new ConcurrentHashMap<>();
 
     /**
      * Constructs a {@code RestCapabilityDiscoveryMode} requesting capabilities with the given {@code restClient} from
@@ -120,22 +128,27 @@ public class RestCapabilityDiscoveryMode implements CapabilityDiscoveryMode {
     }
 
     @Override
-    public void updateLocalCapabilities(ServiceInstance localInstance, MemberCapabilities capabilities) {
-        this.localInstance.set(Objects.requireNonNull(localInstance, "The localInstance must not be null."));
+    public String localNodeId() {
+        return localNodeId;
+    }
+
+    @Override
+    public void updateLocalCapabilities(MemberCapabilities capabilities) {
         this.localCapabilities.set(Objects.requireNonNull(capabilities, "The capabilities must not be null."));
     }
 
     @Override
-    public Optional<MemberCapabilities> capabilities(ServiceInstance serviceInstance) {
+    public Optional<MemberAdvertisement> discover(ServiceInstance serviceInstance) {
         Objects.requireNonNull(serviceInstance, "The serviceInstance must not be null.");
-        if (isLocal(serviceInstance)) {
-            return Optional.of(localCapabilities.get());
-        }
-        return Optional.of(requestCapabilities(serviceInstance));
+        ServiceInstanceKey key = ServiceInstanceKey.of(serviceInstance);
+        Optional<MemberAdvertisement> advertisement = requestAdvertisement(serviceInstance, key);
+        advertisement.ifPresentOrElse(answer -> knownNodeIds.put(key, answer.nodeId()),
+                                      () -> knownNodeIds.remove(key));
+        return advertisement;
     }
 
-    private MemberCapabilities requestCapabilities(ServiceInstance serviceInstance) {
-        ServiceInstanceKey key = ServiceInstanceKey.of(serviceInstance);
+    private Optional<MemberAdvertisement> requestAdvertisement(ServiceInstance serviceInstance,
+                                                               ServiceInstanceKey key) {
         CachedCapabilities cached = cache.get(key);
         try {
             // Inside the try because several Spring Cloud Discovery implementations throw from getUri() for an
@@ -163,7 +176,7 @@ public class RestCapabilityDiscoveryMode implements CapabilityDiscoveryMode {
                               .toEntity(MemberCapabilitiesPayload.class);
 
             if (response.getStatusCode() == HttpStatus.NOT_MODIFIED && cached != null) {
-                return cached.capabilities();
+                return Optional.of(cached.advertisement());
             }
             MemberCapabilitiesPayload payload = response.getBody();
             if (payload == null) {
@@ -171,9 +184,17 @@ public class RestCapabilityDiscoveryMode implements CapabilityDiscoveryMode {
                                     + "Treating it as handling nothing until the next discovery round.",
                             key, response.getStatusCode());
                 cache.remove(key);
-                return MemberCapabilities.INCAPABLE;
+                return incapable(key);
             }
-            MemberCapabilities capabilities = payload.toCapabilities();
+            String nodeId = payload.nodeId();
+            if (nodeId == null) {
+                logger.info("ServiceInstance [{}] answered the capabilities request without a node id, so it cannot "
+                                    + "be told apart from other members. Leaving it out until the next discovery "
+                                    + "round.", key);
+                cache.remove(key);
+                return Optional.empty();
+            }
+            MemberAdvertisement advertisement = new MemberAdvertisement(nodeId, payload.toCapabilities());
             // The tag remembered is the one the member issued, never one computed here. Echoing the member's own tag
             // is what makes the conditional request meaningful; a locally derived tag would only ever match by
             // coincidence, and would stop matching the moment a member computed its tag differently.
@@ -183,9 +204,9 @@ public class RestCapabilityDiscoveryMode implements CapabilityDiscoveryMode {
                 // remembering.
                 cache.remove(key);
             } else {
-                cache.put(key, new CachedCapabilities(entityTag, capabilities));
+                cache.put(key, new CachedCapabilities(entityTag, advertisement));
             }
-            return capabilities;
+            return Optional.of(advertisement);
         } catch (ServiceInstanceClientException e) {
             cache.remove(key);
             throw e;
@@ -195,14 +216,20 @@ public class RestCapabilityDiscoveryMode implements CapabilityDiscoveryMode {
             logger.debug("ServiceInstance [{}] is reported as handling nothing due to the following exception:",
                          key, e);
             cache.remove(key);
-            return MemberCapabilities.INCAPABLE;
+            return incapable(key);
         }
+    }
+
+    private Optional<MemberAdvertisement> incapable(ServiceInstanceKey key) {
+        return Optional.ofNullable(knownNodeIds.get(key))
+                       .map(nodeId -> new MemberAdvertisement(nodeId, MemberCapabilities.INCAPABLE));
     }
 
     @Override
     public void retainOnly(Set<ServiceInstanceKey> knownInstances) {
         Objects.requireNonNull(knownInstances, "The knownInstances must not be null.");
         cache.keySet().retainAll(knownInstances);
+        knownNodeIds.keySet().retainAll(knownInstances);
     }
 
     @Override
@@ -210,26 +237,7 @@ public class RestCapabilityDiscoveryMode implements CapabilityDiscoveryMode {
         return localCapabilities.get();
     }
 
-    private boolean isLocal(ServiceInstance serviceInstance) {
-        ServiceInstance local = localInstance.get();
-        if (local == null) {
-            return false;
-        }
-        if (Objects.equals(ServiceInstanceKey.of(serviceInstance), ServiceInstanceKey.of(local))) {
-            return true;
-        }
-        // Guarded for the same reason requestCapabilities guards it: an unregistered instance throws rather than
-        // reporting no URI, and an instance that cannot say where it is is not this one.
-        try {
-            return Objects.equals(serviceInstance.getUri(), local.getUri());
-        } catch (Exception e) {
-            logger.debug("Could not compare the URI of ServiceInstance [{}] with this application's own.",
-                         ServiceInstanceKey.of(serviceInstance), e);
-            return false;
-        }
-    }
-
-    private record CachedCapabilities(String entityTag, MemberCapabilities capabilities) {
+    private record CachedCapabilities(String entityTag, MemberAdvertisement advertisement) {
 
     }
 }

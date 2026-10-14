@@ -20,13 +20,13 @@
 package org.axonframework.modelling.saga.repository.jdbc;
 
 import org.axonframework.common.jdbc.DataSourceConnectionProvider;
+import org.axonframework.conversion.Converter;
 import org.axonframework.conversion.jackson.JacksonConverter;
 import org.axonframework.modelling.saga.AssociationValue;
 import org.axonframework.modelling.saga.repository.Af4CompatibilityTestSuite;
 import org.axonframework.modelling.saga.repository.SagaStore;
 import org.hsqldb.jdbc.JDBCDataSource;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.*;
 
 import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
@@ -48,7 +48,7 @@ class JdbcSagaStoreAf4CompatibilityTest extends Af4CompatibilityTestSuite {
     private JdbcSagaStore testSubject;
 
     @BeforeEach
-    void setUp() throws SQLException {
+    void setUp() throws Exception {
         dataSource = new JDBCDataSource();
         dataSource.setUrl("jdbc:hsqldb:mem:af4compat");
         dataSource.setUser("sa");
@@ -119,5 +119,28 @@ class JdbcSagaStoreAf4CompatibilityTest extends Af4CompatibilityTestSuite {
         } catch (SQLException e) {
             throw new IllegalStateException("Failed to read " + column + " for " + sagaId, e);
         }
+    }
+
+    @Override
+    protected byte[] serializedSagaOf(String sagaId) {
+        try (PreparedStatement statement =
+                     keepAlive.prepareStatement("SELECT serializedSaga FROM SagaEntry WHERE sagaId = ?")) {
+            statement.setString(1, sagaId);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                assertThat(resultSet.next()).as("expected a SagaEntry row for %s", sagaId).isTrue();
+                return resultSet.getBytes(1);
+            }
+        } catch (SQLException e) {
+            throw new IllegalStateException("Failed to read serializedSaga for " + sagaId, e);
+        }
+    }
+
+    @Override
+    protected SagaStore<Object> storeWith(Converter converter) {
+        return JdbcSagaStore.builder()
+                            .connectionProvider(new DataSourceConnectionProvider(dataSource))
+                            .sqlSchema(new HsqlSagaSqlSchema())
+                            .converter(converter)
+                            .build();
     }
 }

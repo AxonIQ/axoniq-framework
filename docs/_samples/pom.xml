@@ -121,7 +121,7 @@
         <dependency>
             <groupId>io.axoniq.framework</groupId>
             <artifactId>axoniq-data-protection</artifactId>
-            <version>5.3.0</version>
+            <version>5.4.0</version>
         </dependency>
         <!-- Spring Boot auto-configuration types (EventProcessorDefinition, etc.) used by Spring samples -->
         <dependency>
@@ -143,6 +143,11 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter</artifactId>
+        </dependency>
+        <!-- RestClient, for samples configuring the Spring Cloud connector's clients -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-web</artifactId>
         </dependency>
 
         <!-- Jackson 3, for message-transformation samples operating on JsonNode payloads -->

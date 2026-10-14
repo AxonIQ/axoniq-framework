@@ -317,6 +317,36 @@ class SseQueryResponseSinkFramingTest {
     }
 
     @Nested
+    class FramingTheEndOfASubscription {
+
+        @Test
+        void writesLeavingAsAnEventOfItsOwnAddressedToTheSubscription() throws Exception {
+            // given a subscription another member opened on this one
+            invoker.bind(new RecordingQueryHandler());
+            SubscriptionQueryRequest request = new SubscriptionQueryRequest("query-1",
+                                                                            FIND_COURSE_TYPE.toString(),
+                                                                            PAYLOAD,
+                                                                            Map.of(),
+                                                                            null,
+                                                                            16);
+            MvcResult result = mockMvc.perform(post(SpringCloudQueryController.DEFAULT_QUERY_ENDPOINT
+                                                            + SpringCloudQueryController.SUBSCRIPTION_PATH)
+                                                       .contentType(MediaType.APPLICATION_JSON)
+                                                       .content(objectMapper.writeValueAsBytes(request)))
+                                      .andReturn();
+
+            // when this member leaves the cluster
+            invoker.leave();
+
+            // then the subscribing member reads that this member left, and nothing else besides the keep-alive it
+            // discards
+            List<ServerSentEvent> wire = wireOf(result);
+            assertThat(wire).extracting(ServerSentEvent::event).containsExactly(QueryConverter.LEAVING_EVENT);
+            assertThat(wire.getFirst().data()).isEqualTo("query-1");
+        }
+    }
+
+    @Nested
     class Validation {
 
         @Test
