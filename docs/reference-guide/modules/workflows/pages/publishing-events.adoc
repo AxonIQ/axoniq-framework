@@ -81,6 +81,8 @@ include::example$workflows/publishingevents/ApprovalWorkflow.java[tag=await-publ
 
 include::example$workflows/publishingevents/ShipmentWorkflow.java[tag=workflow-to-workflow,indent=0]
 ----
+<.> The approval workflow publishes under the step name `notifyApproved`.
+<.> The published `OrderApproved` event starts the shipment workflow.
 
 When the publisher also waits for a reply, register the wait first with the non-blocking `waitForEvent`, then publish, then block on the handle.
 A wait registered after the reply has already passed is never woken.
