@@ -35,16 +35,22 @@ import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.DelegatingEventHandlingComponent;
 import org.axonframework.messaging.eventhandling.EventHandlingComponent;
 import org.axonframework.messaging.eventhandling.EventMessage;
+import org.axonframework.messaging.eventhandling.processing.streaming.token.ReplayToken;
+import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.axonframework.messaging.eventhandling.replay.ResetContext;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.lang.invoke.MethodHandles;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Spliterator;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 import java.util.function.Predicate;
+import java.util.stream.StreamSupport;
 
 /**
  * An {@link EventHandlingComponent} decorator that uses a {@link SequencedDeadLetterQueue} to enqueue
@@ -53,6 +59,12 @@ import java.util.function.Predicate;
  * Uses an {@link EnqueuePolicy} to decide whether a failed event should be
  * {@link SequencedDeadLetterQueue#enqueue(Object, DeadLetter, ProcessingContext) enqueued}. Subsequent events belonging
  * to an already enqueued "sequence identifier" are also enqueued to maintain event ordering in the face of failures.
+ * <p>
+ * Replayed events are treated differently when their sequence already holds dead letters. Replayed events positioned
+ * before the head of the sequence are handled by the delegate, since they may rebuild state the head letter depends on.
+ * Replayed events already present in the sequence are skipped, and a replayed event that fails is enqueued in position
+ * order instead of at the tail. Placing letters in position order touches every later letter of the sequence, so it is
+ * strongly recommended to resolve enqueued dead letters, by processing or evicting them, before replaying.
  * <p>
  * This component provides operations to {@link #processAny()} {@link DeadLetter dead letters} it has enqueued through
  * the {@link SequencedDeadLetterProcessor} contract. It ensures the same delegate {@link EventHandlingComponent} is
@@ -115,45 +127,109 @@ public class DeadLetteringEventHandlingComponent extends DelegatingEventHandling
     public MessageStream.Empty<Message> handle(EventMessage event,
                                                ProcessingContext context) {
         Object sequenceIdentifier = sequenceIdentifierFor(event, context);
+        boolean replaying = TrackingToken.fromContext(context)
+                                         .map(ReplayToken::isReplay)
+                                         .orElse(false);
 
-        CompletableFuture<MessageStream<Message>> resultFuture = queue.enqueueIfPresent(
-                sequenceIdentifier,
-                () -> new GenericDeadLetter<>(sequenceIdentifier, event, (Throwable) null, captureContext(context)),
+        CompletableFuture<MessageStream<Message>> resultStreamFuture = replaying
+                ? handleReplayed(event, context, sequenceIdentifier)
+                : handleRegular(event, context, sequenceIdentifier);
+        return DelayedMessageStream.create(resultStreamFuture)
+                                   .ignoreEntries()
+                                   .cast();
+    }
+
+    private CompletableFuture<MessageStream<Message>> handleReplayed(EventMessage event,
+                                                                     ProcessingContext context,
+                                                                     Object sequenceId) {
+        return queue.contains(sequenceId, context).thenCompose(
+                present -> present
+                        ? queue.deadLetterSequence(sequenceId, context)
+                               .thenCompose(sequence -> sequence.iterator().hasNext()
+                                       ? decideAndHandle(event, context, sequenceId, sequence.spliterator())
+                                       : CompletableFuture.completedFuture(handle(event, context, sequenceId, false)))
+                        : CompletableFuture.completedFuture(handle(event, context, sequenceId, false))
+        );
+    }
+
+    private CompletionStage<MessageStream<Message>> decideAndHandle(
+            EventMessage event,
+            ProcessingContext context,
+            Object sequenceId,
+            Spliterator<DeadLetter<? extends EventMessage>> letters
+    ) {
+        List<DeadLetter<? extends EventMessage>> letterList = StreamSupport.stream(letters, false).toList();
+        return switch (ReplayHandleDecision.decide(event, context, letterList)) {
+            case HANDLE -> {
+                if (logger.isDebugEnabled()) {
+                    logger.debug("Replayed event [{}] precedes the dead letters of sequence [{}]. "
+                                         + "It is delivered to the wrapped EventHandlingComponent.",
+                                 event.identifier(), sequenceId);
+                }
+                yield CompletableFuture.completedFuture(handle(event, context, sequenceId, true));
+            }
+            case SKIP -> {
+                if (logger.isDebugEnabled()) {
+                    logger.debug("Replayed event [{}] is already dead-lettered in sequence [{}]. Skipping it.",
+                                 event.identifier(), sequenceId);
+                }
+                yield CompletableFuture.completedFuture(MessageStream.empty());
+            }
+            case ENQUEUE_IN_ORDER -> {
+                if (logger.isDebugEnabled()) {
+                    logger.debug("Replayed event [{}] will be enqueued in order within sequence [{}].",
+                                 event.identifier(), sequenceId);
+                }
+                DeadLetter<EventMessage> letter =
+                        new GenericDeadLetter<>(sequenceId, event, null, captureContext(context));
+                yield DeadLetterQueueUtils.enqueueInOrder(queue, sequenceId, letter, context)
+                                          .thenApply(v -> MessageStream.empty());
+            }
+            case REGULAR -> handleRegular(event, context, sequenceId);
+        };
+    }
+
+    private CompletableFuture<MessageStream<Message>> handleRegular(EventMessage event,
+                                                                    ProcessingContext context,
+                                                                    Object sequenceId) {
+        return queue.enqueueIfPresent(
+                sequenceId,
+                () -> new GenericDeadLetter<>(sequenceId, event, null, captureContext(context)),
                 context
-        ).thenCompose(wasEnqueued -> {
+        ).thenApply(wasEnqueued -> {
             if (wasEnqueued) {
                 if (logger.isInfoEnabled()) {
                     logger.info("Event with id [{}] is added to the dead-letter queue "
                                         + "since its sequence id [{}] is already present.",
-                                event.identifier(), sequenceIdentifier);
+                                event.identifier(), sequenceId);
                 }
-                return CompletableFuture.completedFuture(MessageStream.empty());
+                return MessageStream.empty();
             }
-            return CompletableFuture.completedFuture(handle(event, context, sequenceIdentifier));
+            return handle(event, context, sequenceId, false);
         });
-
-        return DelayedMessageStream.create(resultFuture).ignoreEntries().cast();
     }
 
     /**
      * Handles an event normally through the delegate, with dead-lettering on failure.
      *
-     * @param event              the event to handle
-     * @param context            the processing context
-     * @param sequenceIdentifier the sequence identifier
+     * @param event          the event to handle
+     * @param context        the processing context
+     * @param sequenceId     the sequence identifier
+     * @param enqueueInOrder whether to enqueue this in the order of the event's stream position instead of at the end
      * @return a stream representing the handling result with error handling
      */
     private MessageStream<Message> handle(EventMessage event,
                                           ProcessingContext context,
-                                          Object sequenceIdentifier) {
+                                          Object sequenceId,
+                                          boolean enqueueInOrder) {
         if (logger.isTraceEnabled()) {
             logger.trace("Event [{}] with sequence id [{}] is not present in the dead-letter queue. "
                                  + "Handle operation is delegated to the wrapped EventHandlingComponent.",
-                         event.identifier(), sequenceIdentifier);
+                         event.identifier(), sequenceId);
         }
 
         return delegate.handle(event, context)
-                       .onErrorContinue(error -> handleError(event, context, sequenceIdentifier, error));
+                       .onErrorContinue(error -> handleError(event, context, sequenceId, error, enqueueInOrder));
     }
 
     /**
@@ -163,22 +239,24 @@ public class DeadLetteringEventHandlingComponent extends DelegatingEventHandling
      * is considered "handled" by being dead-lettered or evicted, and is not propagated to the processor. This allows
      * the processor to continue with the next event rather than aborting the work package.
      *
-     * @param event              the event that failed
-     * @param sequenceIdentifier the sequence identifier
-     * @param error              the error that occurred
+     * @param event          the event that failed
+     * @param sequenceId     the sequence identifier
+     * @param error          the error that occurred
+     * @param enqueueInOrder whether to enqueue this in the order of the event's stream position instead of at the end
      * @return a stream that completes after the error is handled (either enqueued or evicted)
      */
     private MessageStream<Message> handleError(EventMessage event,
                                                ProcessingContext context,
-                                               Object sequenceIdentifier,
-                                               Throwable error) {
+                                               Object sequenceId,
+                                               Throwable error,
+                                               boolean enqueueInOrder) {
         DeadLetter<EventMessage> letter = new GenericDeadLetter<>(
-                sequenceIdentifier, event, error, captureContext(context)
+                sequenceId, event, error, captureContext(context)
         );
         EnqueueDecision<EventMessage> decision = enqueuePolicy.decide(letter, error);
 
         if (decision.shouldEnqueue()) {
-            return enqueueDeadLetter(event, context, sequenceIdentifier, error, letter, decision);
+            return enqueueDeadLetter(event, context, sequenceId, error, letter, decision, enqueueInOrder);
         }
 
         if (logger.isInfoEnabled()) {
@@ -189,10 +267,11 @@ public class DeadLetteringEventHandlingComponent extends DelegatingEventHandling
 
     private MessageStream<Message> enqueueDeadLetter(EventMessage event,
                                                      ProcessingContext context,
-                                                     Object sequenceIdentifier,
+                                                     Object sequenceId,
                                                      Throwable error,
                                                      DeadLetter<EventMessage> letter,
-                                                     EnqueueDecision<EventMessage> decision) {
+                                                     EnqueueDecision<EventMessage> decision,
+                                                     boolean enqueueInOrder) {
         Throwable cause = decision.enqueueCause().orElse(null);
         DeadLetter<? extends EventMessage> letterWithCause = cause != null ? letter.withCause(cause) : letter;
         DeadLetter<? extends EventMessage> letterToEnqueue = decision.withDiagnostics(letterWithCause);
@@ -202,9 +281,10 @@ public class DeadLetteringEventHandlingComponent extends DelegatingEventHandling
                         event.identifier(), error.getMessage());
         }
 
-        CompletableFuture<MessageStream<Message>> enqueueFuture = queue.enqueue(
-                sequenceIdentifier, letterToEnqueue, context
-        ).thenApply(v -> MessageStream.empty());
+        CompletableFuture<Void> enqueued = enqueueInOrder
+                ? DeadLetterQueueUtils.enqueueInOrder(queue, sequenceId, letterToEnqueue, context)
+                : queue.enqueue(sequenceId, letterToEnqueue, context);
+        CompletableFuture<MessageStream<Message>> enqueueFuture = enqueued.thenApply(v -> MessageStream.empty());
 
         return DelayedMessageStream.create(enqueueFuture);
     }
