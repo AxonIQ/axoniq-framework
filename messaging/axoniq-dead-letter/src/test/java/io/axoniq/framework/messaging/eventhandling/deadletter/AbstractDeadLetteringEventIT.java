@@ -567,6 +567,7 @@ public abstract class AbstractDeadLetteringEventIT {
             handleReplayed(precedingEvent, 3);
 
             // then
+            assertThat(eventHandler.eventWasHandled(precedingEvent.identifier())).isTrue();
             assertThat(identifiersInSequence(aggregateId)).containsExactly(head.identifier());
         }
 
@@ -581,6 +582,10 @@ public abstract class AbstractDeadLetteringEventIT {
             handleReplayed(head, 5);
 
             // then
+            // The head's initial failure counted once; a second handling would register as an evaluation.
+            assertThat(eventHandler.unsuccessfulInitialHandlingCount(aggregateId)).isEqualTo(1);
+            assertThat(eventHandler.evaluationWasSuccessful(aggregateId)).isFalse();
+            assertThat(eventHandler.evaluationWasUnsuccessful(aggregateId)).isFalse();
             assertThat(identifiersInSequence(aggregateId)).containsExactly(head.identifier());
         }
 
@@ -598,6 +603,9 @@ public abstract class AbstractDeadLetteringEventIT {
             handleReplayed(failingReplayed, 3);
 
             // then
+            assertThat(eventHandler.eventWasHandled(failingReplayed.identifier())).isTrue();
+            assertThat(eventHandler.evaluationWasUnsuccessful(aggregateId)).isTrue();
+            assertThat(eventHandler.evaluationWasSuccessful(aggregateId)).isFalse();
             assertThat(identifiersInSequence(aggregateId))
                     .containsExactly(failingReplayed.identifier(), head.identifier(), tail.identifier());
         }
@@ -922,6 +930,10 @@ public abstract class AbstractDeadLetteringEventIT {
                         "Evaluation failed. Let's dead letter event [" + sequenceId + "].\n" + event.getCauseMessage()
                 )).ignoreEntries();
             }
+        }
+
+        public boolean eventWasHandled(String eventIdentifier) {
+            return handledEvent.contains(eventIdentifier);
         }
 
         public boolean initialHandlingWasSuccessful(String sequenceId) {
