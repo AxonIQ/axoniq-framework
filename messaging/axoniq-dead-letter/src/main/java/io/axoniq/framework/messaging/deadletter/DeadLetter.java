@@ -173,8 +173,9 @@ public interface DeadLetter<M extends Message> {
      * {@code TrackingToken}, or that token has no position
      */
     default OptionalLong position() {
-        return context().getResource(TrackingToken.RESOURCE_KEY) instanceof TrackingToken token
-                ? WrappedToken.unwrapLowerBound(token).position()
-                : OptionalLong.empty();
+        return TrackingToken.fromContext(context())
+                            .map(WrappedToken::unwrapLowerBound)
+                            .map(TrackingToken::position)
+                            .orElse(OptionalLong.empty());
     }
 }
