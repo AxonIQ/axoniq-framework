@@ -172,6 +172,10 @@ public class DeadLetteringEventHandlingComponent extends DelegatingEventHandling
                 yield CompletableFuture.completedFuture(MessageStream.empty());
             }
             case ENQUEUE_IN_ORDER -> {
+                if (logger.isDebugEnabled()) {
+                    logger.debug("Replayed event [{}] will be enqueued in order within sequence [{}].",
+                                 event.identifier(), sequenceId);
+                }
                 DeadLetter<EventMessage> letter =
                         new GenericDeadLetter<>(sequenceId, event, null, captureContext(context));
                 yield DeadLetterQueueUtils.enqueueInOrder(queue, sequenceId, letter, context)
