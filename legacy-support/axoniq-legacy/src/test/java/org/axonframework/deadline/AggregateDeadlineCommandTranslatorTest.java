@@ -22,6 +22,7 @@ package org.axonframework.deadline;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.messaging.ScopeDescriptor;
 import org.axonframework.messaging.commandhandling.CommandMessage;
+import org.axonframework.messaging.commandhandling.NoHandlerForCommandException;
 import org.axonframework.messaging.commandhandling.gateway.CommandGateway;
 import org.axonframework.messaging.commandhandling.gateway.CommandResult;
 import org.axonframework.messaging.core.GenericMessage;
@@ -34,6 +35,10 @@ import org.axonframework.modelling.command.AggregateScopeDescriptor;
 import org.axonframework.modelling.saga.SagaScopeDescriptor;
 import org.junit.jupiter.api.*;
 
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Queue;
 import java.util.concurrent.CompletableFuture;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -80,7 +85,7 @@ class AggregateDeadlineCommandTranslatorTest {
     class Send {
 
         @Test
-        void dispatchesPayloadAndMetadataAsCommandWithGivenContext() throws Exception {
+        void dispatchesPayloadAndMetadataAsCommandNamedAfterTheDeadlineWithGivenContext() throws Exception {
             // given
             record TestPayload(String data) {
 
@@ -96,11 +101,97 @@ class AggregateDeadlineCommandTranslatorTest {
             testSubject.send(deadline, context, TEST_SCOPE);
 
             // then
-            assertThat(commandGateway.capturedPayload).isEqualTo(payload);
-            assertThat(commandGateway.capturedContext).isSameAs(context);
-            assertThat(commandGateway.capturedMetadata)
+            assertThat(commandGateway.sent).hasSize(1);
+            CommandMessage command = commandGateway.sentCommand(0);
+            assertThat(command.type().qualifiedName().name()).isEqualTo("paymentDue");
+            assertThat(command.payload()).isEqualTo(payload);
+            assertThat(command.metadata())
                     .containsEntry("key", "value")
                     .containsEntry(DESCRIPTOR_BASED_ID, "aggregateId");
+            assertThat(commandGateway.sent.getFirst().context()).isSameAs(context);
+        }
+
+        @Test
+        void dispatchesDeadlinesSharingAPayloadTypeAsDifferentCommands() throws Exception {
+            // given
+            record TestPayload(String data) {
+
+            }
+            DeadlineMessage paymentDue = new GenericDeadlineMessage(
+                    "paymentDue", new MessageType(TestPayload.class), new TestPayload("some-data")
+            );
+            DeadlineMessage shipmentDue = new GenericDeadlineMessage(
+                    "shipmentDue", new MessageType(TestPayload.class), new TestPayload("some-data")
+            );
+
+            // when
+            testSubject.send(paymentDue, StubProcessingContext.forMessage(paymentDue), TEST_SCOPE);
+            testSubject.send(shipmentDue, StubProcessingContext.forMessage(shipmentDue), TEST_SCOPE);
+
+            // then
+            assertThat(commandGateway.sentCommand(0).type().qualifiedName().name()).isEqualTo("paymentDue");
+            assertThat(commandGateway.sentCommand(1).type().qualifiedName().name()).isEqualTo("shipmentDue");
+        }
+
+        @Test
+        void dispatchesThePayloadAgainNamedAfterItsTypeWhenNoHandlerExistsForTheDeadlineName() throws Exception {
+            // given
+            record TestPayload(String data) {
+
+            }
+            TestPayload payload = new TestPayload("some-data");
+            Metadata metadata = Metadata.with("key", "value");
+            DeadlineMessage deadline = new GenericDeadlineMessage(
+                    "paymentDue", new MessageType(TestPayload.class), payload, metadata
+            );
+            ProcessingContext context = StubProcessingContext.forMessage(deadline);
+            // only a handler migrated with an earlier version, named after the payload type, exists
+            commandGateway.results.add(CompletableFuture.failedFuture(new NoHandlerForCommandException("none")));
+
+            // when
+            testSubject.send(deadline, context, TEST_SCOPE);
+
+            // then
+            assertThat(commandGateway.sent).hasSize(2);
+            RecordingCommandGateway.Sent fallback = commandGateway.sent.get(1);
+            assertThat(fallback.payload()).isEqualTo(payload);
+            assertThat(fallback.metadata())
+                    .containsEntry("key", "value")
+                    .containsEntry(DESCRIPTOR_BASED_ID, "aggregateId");
+            assertThat(fallback.context()).isSameAs(context);
+        }
+
+        @Test
+        void rethrowsTheFallbacksFailureWhenNoHandlerExistsForThePayloadTypeEither() {
+            // given
+            record TestPayload(String data) {
+
+            }
+            DeadlineMessage deadline = new GenericDeadlineMessage(
+                    "paymentDue", new MessageType(TestPayload.class), new TestPayload("some-data")
+            );
+            ProcessingContext context = StubProcessingContext.forMessage(deadline);
+            NoHandlerForCommandException fallbackFailure = new NoHandlerForCommandException("none for payload type");
+            commandGateway.results.add(CompletableFuture.failedFuture(new NoHandlerForCommandException("none")));
+            commandGateway.results.add(CompletableFuture.failedFuture(fallbackFailure));
+
+            // when / then
+            assertThatThrownBy(() -> testSubject.send(deadline, context, TEST_SCOPE)).isSameAs(fallbackFailure);
+            assertThat(commandGateway.sent).hasSize(2);
+        }
+
+        @Test
+        void doesNotFallBackForAPayloadLessDeadline() {
+            // given
+            DeadlineMessage deadline =
+                    new GenericDeadlineMessage("paymentDue", new MessageType(Void.class), null);
+            ProcessingContext context = StubProcessingContext.forMessage(deadline);
+            NoHandlerForCommandException noHandler = new NoHandlerForCommandException("none");
+            commandGateway.results.add(CompletableFuture.failedFuture(noHandler));
+
+            // when / then
+            assertThatThrownBy(() -> testSubject.send(deadline, context, TEST_SCOPE)).isSameAs(noHandler);
+            assertThat(commandGateway.sent).hasSize(1);
         }
 
         @Test
@@ -115,21 +206,20 @@ class AggregateDeadlineCommandTranslatorTest {
             testSubject.send(deadline, context, TEST_SCOPE);
 
             // then
-            assertThat(commandGateway.capturedPayload).isInstanceOf(CommandMessage.class);
-            CommandMessage command = (CommandMessage) commandGateway.capturedPayload;
+            CommandMessage command = commandGateway.sentCommand(0);
             assertThat(command.type().qualifiedName().name()).isEqualTo("paymentDue");
             assertThat(command.payload()).isEqualTo("paymentDue");
             assertThat(command.metadata())
                     .containsEntry("key", "value")
                     .containsEntry(DESCRIPTOR_BASED_ID, "aggregateId");
-            assertThat(commandGateway.capturedContext).isSameAs(context);
+            assertThat(commandGateway.sent.getFirst().context()).isSameAs(context);
         }
 
         @Test
-        void rethrowsTheFailedCommandsCause() {
+        void rethrowsTheFailedCommandsCauseWithoutFallingBack() {
             // given
             RuntimeException commandFailure = new RuntimeException("Command handling failed");
-            commandGateway.resultToReturn = CompletableFuture.failedFuture(commandFailure);
+            commandGateway.results.add(CompletableFuture.failedFuture(commandFailure));
             record TestPayload(String data) {
 
             }
@@ -141,6 +231,7 @@ class AggregateDeadlineCommandTranslatorTest {
             // when / then
             assertThatThrownBy(() -> testSubject.send(deadline, context, TEST_SCOPE))
                     .isSameAs(commandFailure);
+            assertThat(commandGateway.sent).hasSize(1);
         }
 
         @Test
@@ -155,7 +246,7 @@ class AggregateDeadlineCommandTranslatorTest {
             // when / then
             assertThatThrownBy(() -> testSubject.send(notADeadline, context, TEST_SCOPE))
                     .isInstanceOf(IllegalArgumentException.class);
-            assertThat(commandGateway.capturedPayload).isNull();
+            assertThat(commandGateway.sent).isEmpty();
         }
 
         @Test
@@ -173,7 +264,7 @@ class AggregateDeadlineCommandTranslatorTest {
             // when / then
             assertThatThrownBy(() -> testSubject.send(deadline, context, sagaScope))
                     .isInstanceOf(IllegalArgumentException.class);
-            assertThat(commandGateway.capturedPayload).isNull();
+            assertThat(commandGateway.sent).isEmpty();
         }
 
         @Test
@@ -189,23 +280,35 @@ class AggregateDeadlineCommandTranslatorTest {
             testSubject.send(deadline, context, TEST_SCOPE);
 
             // then
-            assertThat(commandGateway.capturedPayload).isNull();
+            assertThat(commandGateway.sent).isEmpty();
         }
     }
 
+    /**
+     * Records every dispatched command, and answers each with the next queued result, or a successful one once the
+     * queue is empty.
+     */
     private static class RecordingCommandGateway implements CommandGateway {
 
-        private Object capturedPayload;
-        private Metadata capturedMetadata;
-        private ProcessingContext capturedContext;
-        private CompletableFuture<? extends Message> resultToReturn = CompletableFuture.completedFuture(null);
+        private final List<Sent> sent = new ArrayList<>();
+        private final Queue<CompletableFuture<? extends Message>> results = new ArrayDeque<>();
 
         @Override
         public CommandResult send(Object payload, Metadata metadata, ProcessingContext context) {
-            this.capturedPayload = payload;
-            this.capturedMetadata = metadata;
-            this.capturedContext = context;
-            return () -> resultToReturn;
+            sent.add(new Sent(payload, metadata, context));
+            CompletableFuture<? extends Message> result = results.poll();
+            CompletableFuture<? extends Message> answer =
+                    result != null ? result : CompletableFuture.completedFuture(null);
+            return () -> answer;
+        }
+
+        private CommandMessage sentCommand(int index) {
+            assertThat(sent.get(index).payload()).isInstanceOf(CommandMessage.class);
+            return (CommandMessage) sent.get(index).payload();
+        }
+
+        private record Sent(Object payload, Metadata metadata, ProcessingContext context) {
+
         }
 
         @Override
