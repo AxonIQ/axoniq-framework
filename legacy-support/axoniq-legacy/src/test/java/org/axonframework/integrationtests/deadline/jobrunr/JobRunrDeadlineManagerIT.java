@@ -77,6 +77,16 @@ class JobRunrDeadlineManagerIT extends AbstractDeadlineManagerTestSuite {
         return manager;
     }
 
+    @Override
+    protected boolean keepsTheIdentifierOfTheScheduledMessage() {
+        return false;
+    }
+
+    @Override
+    protected boolean keepsTheTimestampOfTheScheduledMessage() {
+        return false;
+    }
+
     @AfterEach
     void stopBackgroundJobServer() {
         if (backgroundJobServer != null) {

@@ -48,6 +48,11 @@ import static org.axonframework.deadline.quartz.DeadlineJob.DeadlineJobDataBinde
  * <p>
  * The job data is read before the deadline's unit of work starts. Job data that cannot be read fails the job, which
  * Quartz then does not refire, as in Axon Framework 4.
+ * <p>
+ * A job that fires before a {@link QuartzDeadlineManager} has put its components into the {@link SchedulerContext},
+ * for example because the scheduler started before the manager was created, fails with a {@link JobExecutionException}
+ * saying so. Quartz does not refire it, and the deadline is lost, as in Axon Framework 4. Create the
+ * {@code QuartzDeadlineManager} before starting its {@link org.quartz.Scheduler} to prevent this.
  *
  * @author Milan Savic
  * @author Steven van Beelen
@@ -94,15 +99,21 @@ public class DeadlineJob implements Job {
 
         StoredDeadlineConverter converter = (StoredDeadlineConverter) schedulerContext.get(JOB_DATA_CONVERTER);
         DeadlineDelivery delivery = (DeadlineDelivery) schedulerContext.get(DEADLINE_DELIVERY);
+        @SuppressWarnings("unchecked")
+        Predicate<Throwable> refirePolicy = (Predicate<Throwable>) schedulerContext.get(REFIRE_IMMEDIATELY_POLICY);
+        if (converter == null || delivery == null || refirePolicy == null) {
+            throw new JobExecutionException(
+                    "Deadline job [" + jobDetail.getKey() + "] fired before a QuartzDeadlineManager was "
+                    + "created for its scheduler, so the deadline cannot be delivered. Create the "
+                            + "QuartzDeadlineManager before starting the scheduler.");
+        }
 
         DeadlineMessage deadlineMessage = deadlineMessage(converter, jobData);
         ScopeDescriptor deadlineScope = deadlineScope(converter, jobData);
 
         try {
             delivery.deliver(deadlineMessage, deadlineScope);
-        } catch (Exception exceptionResult) {
-            @SuppressWarnings("unchecked")
-            Predicate<Throwable> refirePolicy = (Predicate<Throwable>) schedulerContext.get(REFIRE_IMMEDIATELY_POLICY);
+        } catch (Exception | Error exceptionResult) {
             if (refirePolicy.test(exceptionResult)) {
                 logger.error("Exception occurred during processing a deadline job which will be retried [{}]",
                              jobDetail.getDescription(), exceptionResult);
@@ -222,7 +233,8 @@ public class DeadlineJob implements Job {
             if (jobDataMap.containsKey(AXON_3_3_SERIALIZED_DEADLINE_MESSAGE)) {
                 throw new DeadlineException(
                         "The deadline job was stored in the format of Axon Framework 3.3, which is not supported. "
-                                + "Reschedule the deadline."
+                                + "Let such jobs fire on an Axon Framework 4 node, or reschedule their deadlines "
+                                + "from Axon Framework 4, before upgrading to Axon Framework 5."
                 );
             }
             Object payload = converter.payload((String) jobDataMap.get(MESSAGE_TYPE),

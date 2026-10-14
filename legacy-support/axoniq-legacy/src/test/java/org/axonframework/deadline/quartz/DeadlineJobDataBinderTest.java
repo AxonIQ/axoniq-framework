@@ -148,7 +148,7 @@ class DeadlineJobDataBinderTest {
         }
 
         @Test
-        void rejectsAJobInTheAxonFramework33Layout() {
+        void rejectsAJobInTheAxonFramework33LayoutAndSaysHowToHandleIt() {
             // given
             JobDataMap jobData = new JobDataMap();
             jobData.put("serializedDeadlineMessage", new byte[]{1, 2, 3});
@@ -157,7 +157,8 @@ class DeadlineJobDataBinderTest {
             // when / then
             assertThatThrownBy(() -> deadlineMessage(converter, jobData))
                     .isInstanceOf(DeadlineException.class)
-                    .hasMessageContaining("Axon Framework 3.3");
+                    .hasMessageContaining("Axon Framework 3.3")
+                    .hasMessageContaining("before upgrading to Axon Framework 5");
         }
     }
 }
