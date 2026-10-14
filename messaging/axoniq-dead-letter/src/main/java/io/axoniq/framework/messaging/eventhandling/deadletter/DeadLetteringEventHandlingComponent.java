@@ -142,10 +142,14 @@ public class DeadLetteringEventHandlingComponent extends DelegatingEventHandling
     private CompletableFuture<MessageStream<Message>> handleReplayed(EventMessage event,
                                                                      ProcessingContext context,
                                                                      Object sequenceId) {
-        return queue.deadLetterSequence(sequenceId, context)
-                    .thenCompose(sequence -> sequence.iterator().hasNext()
-                            ? decideAndHandle(event, context, sequenceId, sequence.spliterator())
-                            : CompletableFuture.completedFuture(handle(event, context, sequenceId, false)));
+        return queue.contains(sequenceId, context).thenCompose(
+                present -> present
+                        ? queue.deadLetterSequence(sequenceId, context)
+                               .thenCompose(sequence -> sequence.iterator().hasNext()
+                                       ? decideAndHandle(event, context, sequenceId, sequence.spliterator())
+                                       : CompletableFuture.completedFuture(handle(event, context, sequenceId, false)))
+                        : CompletableFuture.completedFuture(handle(event, context, sequenceId, false))
+        );
     }
 
     private CompletionStage<MessageStream<Message>> decideAndHandle(
@@ -211,8 +215,7 @@ public class DeadLetteringEventHandlingComponent extends DelegatingEventHandling
      * @param event          the event to handle
      * @param context        the processing context
      * @param sequenceId     the sequence identifier
-     * @param enqueueInOrder whether to enqueue this in the order of the event's stream position instead of at the
-     *                       end
+     * @param enqueueInOrder whether to enqueue this in the order of the event's stream position instead of at the end
      * @return a stream representing the handling result with error handling
      */
     private MessageStream<Message> handle(EventMessage event,
@@ -239,8 +242,7 @@ public class DeadLetteringEventHandlingComponent extends DelegatingEventHandling
      * @param event          the event that failed
      * @param sequenceId     the sequence identifier
      * @param error          the error that occurred
-     * @param enqueueInOrder whether to enqueue this in the order of the event's stream position instead of at the
-     *                       end
+     * @param enqueueInOrder whether to enqueue this in the order of the event's stream position instead of at the end
      * @return a stream that completes after the error is handled (either enqueued or evicted)
      */
     private MessageStream<Message> handleError(EventMessage event,
