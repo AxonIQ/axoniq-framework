@@ -31,6 +31,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
 import org.springframework.test.context.ContextConfiguration;
 
@@ -64,7 +65,7 @@ class TopologyChangeListenerAutoConfigurationTest {
 
     @Test
     void topologyChangeListenersAreInvokedForCommandHandlerRegistration() {
-        testContext.withUserConfiguration(TestContext.class).run(context -> {
+        testContext.withUserConfiguration(TestContext.class, ListenerOne.class, ListenerTwo.class).run(context -> {
             TopologyChangeListener listenerOne = context.getBean("listenerOne", TopologyChangeListener.class);
             TopologyChangeListener listenerTwo = context.getBean("listenerTwo", TopologyChangeListener.class);
 
@@ -73,6 +74,39 @@ class TopologyChangeListenerAutoConfigurationTest {
             verify(mockedControlChannel).registerTopologyChangeHandler(listenerOne);
             verify(mockedControlChannel).registerTopologyChangeHandler(listenerTwo);
         });
+    }
+
+    @Test
+    void aSingleTopologyChangeListenerIsRegisteredOnce() {
+        testContext.withUserConfiguration(TestContext.class, ListenerOne.class).run(context -> {
+            TopologyChangeListener listenerOne = context.getBean("listenerOne", TopologyChangeListener.class);
+
+            ControlChannel mockedControlChannel = context.getBean("mockedControlChannel", ControlChannel.class);
+
+            verify(mockedControlChannel).registerTopologyChangeHandler(listenerOne);
+        });
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    private static class ListenerOne {
+
+        @Bean
+        public TopologyChangeListener listenerOne() {
+            return change -> {
+                // Unimportant - only exists to validate the change listener registration.
+            };
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    private static class ListenerTwo {
+
+        @Bean
+        public TopologyChangeListener listenerTwo() {
+            return change -> {
+                // Unimportant - only exists to validate the change listener registration.
+            };
+        }
     }
 
     @ContextConfiguration
@@ -95,19 +129,6 @@ class TopologyChangeListenerAutoConfigurationTest {
             return mockedManager;
         }
 
-        @Bean
-        public TopologyChangeListener listenerOne() {
-            return change -> {
-                // Unimportant - only exists to validate the change listener registration.
-            };
-        }
-
-        @Bean
-        public TopologyChangeListener listenerTwo() {
-            return change -> {
-                // Unimportant - only exists to validate the change listener registration.
-            };
-        }
 
         @Bean(initMethod = "start", destroyMethod = "shutdown")
         public GrpcServerStub grpcServerStub(@Value("${axon.axonserver.servers}") String servers) {
