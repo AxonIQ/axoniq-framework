@@ -66,6 +66,16 @@ class HumanReadableDbSchedulerDeadlineManagerIT extends AbstractDeadlineManagerT
         return manager;
     }
 
+    @Override
+    protected boolean keepsTheIdentifierOfTheScheduledMessage() {
+        return false;
+    }
+
+    @Override
+    protected boolean keepsTheTimestampOfTheScheduledMessage() {
+        return false;
+    }
+
     @Test
     void aFailingDeliveryLeavesTheTaskForALaterRetry() {
         // given

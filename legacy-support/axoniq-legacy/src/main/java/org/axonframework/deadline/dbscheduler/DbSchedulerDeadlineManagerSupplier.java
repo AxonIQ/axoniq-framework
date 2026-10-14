@@ -39,10 +39,10 @@ public class DbSchedulerDeadlineManagerSupplier implements Supplier<DbSchedulerD
     /**
      * Returns the set {@link DbSchedulerDeadlineManager}, or {@code null} if it hasn't been set yet.
      *
-     * @return the set {@link DbSchedulerDeadlineManager}
+     * @return the set {@link DbSchedulerDeadlineManager}, or {@code null} if it hasn't been set yet
      */
     @Override
-    public DbSchedulerDeadlineManager get() {
+    public @Nullable DbSchedulerDeadlineManager get() {
         return deadlineManager.get();
     }
 
