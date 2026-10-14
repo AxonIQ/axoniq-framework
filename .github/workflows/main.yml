@@ -71,7 +71,7 @@ jobs:
             echo "License file size: $(wc -c < "$dir/src/test/resources/axon-server-test.license") bytes"
           done
         env:
-          AXON_SERVER_LICENSE: ${{ secrets.AXON_SERVER_LICENSE }}
+          AXON_SERVER_LICENSE: ${{ secrets.AXONIQ_LICENSE }}
 
       - name: Enable Testcontainers reuse
         run: printf 'testcontainers.reuse.enable=true\n' > ~/.testcontainers.properties
@@ -82,7 +82,7 @@ jobs:
           -Possrh -Pintegration-test -Djacoco.skip=true -Dsurefire.rerunFailingTestsCount=5 -Dfailsafe.rerunFailingTestsCount=5 \
           -Dparallel=classes -DthreadCount=1 -DforkCount=2 -DforkedProcessTimeoutInSeconds=600
         env:
-          AXONIQ_LICENSE: ${{ secrets.AXON_SERVER_LICENSE }}
+          AXONIQ_LICENSE: ${{ secrets.AXONIQ_LICENSE }}
 
       - name: Deploy to Sonatype
         if: success() && matrix.deploy-enabled
