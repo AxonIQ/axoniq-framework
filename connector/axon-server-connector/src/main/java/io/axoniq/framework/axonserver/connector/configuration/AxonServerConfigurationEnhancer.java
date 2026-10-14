@@ -20,6 +20,7 @@
 package io.axoniq.framework.axonserver.connector.configuration;
 
 import io.axoniq.axonserver.connector.AxonServerConnection;
+import io.axoniq.axonserver.connector.control.ControlChannel;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
 import io.axoniq.framework.axonserver.connector.api.TagsConfiguration;
@@ -50,7 +51,7 @@ import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
 import org.axonframework.messaging.core.conversion.MessageConverter;
 import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 
-import java.util.Optional;
+import java.util.Collection;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -231,14 +232,13 @@ public class AxonServerConfigurationEnhancer implements ConfigurationEnhancer {
         return DecoratorDefinition.forType(AxonServerConnectionManager.class)
                                   .with((config, name, delegate) -> delegate)
                                   .onStart(Phase.INSTRUCTION_COMPONENTS, (config, connectionManager) -> {
-                                      Optional<TopologyChangeListener> topologyChangeListener =
-                                              config.getOptionalComponent(TopologyChangeListener.class);
-                                      topologyChangeListener.ifPresent(
-                                              changeListener -> connectionManager.getConnection()
-                                                                                 .controlChannel()
-                                                                                 .registerTopologyChangeHandler(
-                                                                                         changeListener)
-                                      );
+                                      Collection<TopologyChangeListener> changeListeners =
+                                              config.getComponents(TopologyChangeListener.class).values();
+                                      if (!changeListeners.isEmpty()) {
+                                          ControlChannel controlChannel =
+                                                  connectionManager.getConnection().controlChannel();
+                                          changeListeners.forEach(controlChannel::registerTopologyChangeHandler);
+                                      }
                                       return FutureUtils.emptyCompletedFuture();
                                   });
     }
