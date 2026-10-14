@@ -66,7 +66,7 @@ final class DeadLetterQueueUtils {
 
         return queue.deadLetterSequence(sequenceId, context).thenCompose(sequence -> {
             CompletableFuture<Void> result = CompletableFuture.completedFuture(null);
-            List<DeadLetter<? extends EventMessage>> lettersToMove = getLettersToMove(sequence, position);
+            List<DeadLetter<? extends EventMessage>> lettersToMove = getLettersToMove(sequence, position.getAsLong());
 
             // 1. Evict all the letters that should move a spot
             for (DeadLetter<? extends EventMessage> moved : lettersToMove) {
@@ -82,16 +82,15 @@ final class DeadLetterQueueUtils {
         });
     }
 
-    @SuppressWarnings({"OptionalUsedAsFieldOrParameterType", "OptionalGetWithoutIsPresent"})
     private static List<DeadLetter<? extends EventMessage>> getLettersToMove(
             Iterable<DeadLetter<? extends EventMessage>> sequence,
-            OptionalLong position
+            long position
     ) {
         boolean moving = false;
         List<DeadLetter<? extends EventMessage>> lettersToMove = new ArrayList<>();
         for (DeadLetter<? extends EventMessage> existing : sequence) {
             OptionalLong existingPosition = existing.position();
-            moving = moving || (existingPosition.isPresent() && existingPosition.getAsLong() > position.getAsLong());
+            moving = moving || (existingPosition.isPresent() && existingPosition.getAsLong() > position);
             if (moving) {
                 lettersToMove.add(existing);
             }
