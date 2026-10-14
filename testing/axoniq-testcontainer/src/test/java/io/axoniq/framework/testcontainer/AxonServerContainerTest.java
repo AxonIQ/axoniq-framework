@@ -85,4 +85,37 @@ class AxonServerContainerTest {
                     testDevMode));
         }
     }
+
+    @Nested
+    class License {
+
+        @Test
+        void configurePrefersLicenseContentOverLicensePath() {
+            try (
+                    AxonServerContainer testSubject = new AxonServerContainer()
+                            .withLicense("axon-server-test.license")
+                            .withLicenseContent("license-content")
+            ) {
+                // when
+                testSubject.configure();
+
+                // then
+                // The license path points to a resource that isn't on this test classpath, so falling back to it
+                // would already fail configure(); the absent file mapping confirms it was not used.
+                assertThat(testSubject.getCopyToFileContainerPathMap())
+                        .doesNotContainValue("/axonserver/config/axoniq.license");
+            }
+        }
+
+        @Test
+        void toStringDoesNotExposeLicenseContent() {
+            try (AxonServerContainer testSubject = new AxonServerContainer().withLicenseContent("secret-license")) {
+                // when
+                String result = testSubject.toString();
+
+                // then
+                assertThat(result).doesNotContain("secret-license");
+            }
+        }
+    }
 }
