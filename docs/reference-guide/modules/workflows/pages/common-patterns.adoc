@@ -85,7 +85,7 @@ include::example$workflows/commonpatterns/CommonPatternsExamples.java[tag=human-
 
 Skip a step entirely if it has been failing consistently.
 This is implemented in your action code, not in the engine.
-But the engine's durable state makes it easy:
+However, the engine's durable state makes it easy:
 
 [source,java]
 ----

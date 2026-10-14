@@ -120,7 +120,7 @@ Both terminate the workflow, but they signal different intent and are called fro
 |The workflow logic has determined that it should stop gracefully.
 |===
 
-=== `fail`: internal termination
+=== `fail`: Internal termination
 
 Use `fail` inside your workflow code when the business logic determines the workflow should stop.
 
@@ -152,7 +152,7 @@ The last event recorded for `shipOrder` and `notifyCustomer` is their `Started`;
 The `Failed` event records the original exception's class and message (`RuntimeException` here), not the wrapper.
 To record a terminal outcome and run compensation for a running step, cancel it individually with `ctx.cancelStep(...)` before failing the workflow.
 
-=== `cancel`: internal termination
+=== `cancel`: Internal termination
 
 Use `ctx.cancel()` inside a workflow when its business logic determines that it should stop gracefully.
 Like `fail`, cancellation interrupts running steps and then terminates the workflow with a single workflow-level event.

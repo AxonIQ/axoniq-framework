@@ -24,7 +24,7 @@ You can also mix `execute` with `waitForEvent`:
 include::example$workflows/steporchestration/StepOrchestrationExamples.java[tag=mix-execute-waitforevent,indent=0]
 ----
 
-== `anyMatch`: first match wins
+== `anyMatch`: First match wins
 
 `anyMatch` resolves as soon as the *first* step reaches a terminal state that matches the predicate.
 
@@ -60,7 +60,7 @@ Request shipping quotes from two carriers, take whichever responds first:
 include::example$workflows/steporchestration/StepOrchestrationExamples.java[tag=anymatch-race-services,indent=0]
 ----
 
-== `allMatch`: all must succeed
+== `allMatch`: All must succeed
 
 `allMatch` succeeds only when _all_ steps match the predicate.
 It short-circuits on the first non-match:
@@ -74,7 +74,7 @@ include::example$workflows/steporchestration/StepOrchestrationExamples.java[tag=
 <.> `success()` on the combinator is `true` only if all steps matched the predicate.
 <.> `unmatched()` contains the step that violated the predicate, plus any steps that hadn't completed yet when the short-circuit happened.
 
-== `noneMatch`: no failures allowed
+== `noneMatch`: No failures allowed
 
 `noneMatch` succeeds when _no_ step matches the predicate.
 
