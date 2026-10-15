@@ -19,7 +19,6 @@
 
 package org.axonframework.modelling.saga.metamodel;
 
-import org.axonframework.common.StringUtils;
 import org.axonframework.messaging.core.ClassBasedMessageTypeResolver;
 import org.axonframework.messaging.core.MessageTypeResolver;
 import org.axonframework.messaging.core.QualifiedName;
@@ -36,6 +35,8 @@ import org.axonframework.messaging.eventhandling.annotation.EventHandlingMember;
 import org.axonframework.modelling.saga.AssociationValue;
 import org.axonframework.modelling.saga.SagaMethodMessageHandlingMember;
 
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -124,24 +125,20 @@ public class AnnotationSagaMetaModelFactory implements SagaMetaModelFactory {
     private class InspectedSagaModel<T> implements SagaModel<T> {
 
         private final List<MessageHandlingMember<? super T>> handlers;
-        private final Set<QualifiedName> supportedEvents;
+        private final Map<QualifiedName, Class<?>> payloadTypesByEventName;
 
         public InspectedSagaModel(
                 List<MessageHandlingMember<? super T>> handlers
         ) {
             this.handlers = handlers;
-            this.supportedEvents = handlers.stream()
-                                           .filter(handler -> handler.canHandleMessageType(EventMessage.class))
-                                           .map(this::qualifiedNameOf)
-                                           .collect(Collectors.toUnmodifiableSet());
-        }
-
-        private QualifiedName qualifiedNameOf(MessageHandlingMember<? super T> handler) {
-            return handler.unwrap(EventHandlingMember.class)
-                          .map(EventHandlingMember::eventName)
-                          .filter(StringUtils::nonEmpty)
-                          .map(QualifiedName::new)
-                          .orElseGet(() -> MESSAGE_TYPE_RESOLVER.resolveOrThrow(handler.payloadType()).qualifiedName());
+            Map<QualifiedName, Class<?>> payloadTypes = new LinkedHashMap<>();
+            handlers.stream()
+                    .filter(handler -> handler.canHandleMessageType(EventMessage.class))
+                    .forEach(handler -> EventHandlingMember.eventNamesOf(handler, MESSAGE_TYPE_RESOLVER)
+                                                           .forEach(name -> payloadTypes.putIfAbsent(
+                                                                   name, handler.payloadType()
+                                                           )));
+            this.payloadTypesByEventName = Collections.unmodifiableMap(payloadTypes);
         }
 
         @Override
@@ -157,11 +154,7 @@ public class AnnotationSagaMetaModelFactory implements SagaMetaModelFactory {
 
         @Override
         public Optional<Class<?>> payloadTypeFor(QualifiedName eventName) {
-            return handlers.stream()
-                           .map(MessageHandlingMember::payloadType)
-                           .filter(type -> new QualifiedName(type).equals(eventName))
-                           .<Class<?>>map(type -> type)
-                           .findFirst();
+            return Optional.ofNullable(payloadTypesByEventName.get(eventName));
         }
 
         @Override
@@ -188,7 +181,7 @@ public class AnnotationSagaMetaModelFactory implements SagaMetaModelFactory {
 
         @Override
         public Set<QualifiedName> supportedEvents() {
-            return supportedEvents;
+            return payloadTypesByEventName.keySet();
         }
     }
 }

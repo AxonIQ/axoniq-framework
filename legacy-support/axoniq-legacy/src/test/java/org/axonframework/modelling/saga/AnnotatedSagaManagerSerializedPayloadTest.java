@@ -22,6 +22,7 @@ package org.axonframework.modelling.saga;
 import org.axonframework.common.FutureUtils;
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.messaging.core.MessageType;
+import org.axonframework.messaging.core.annotation.QualifiedName;
 import org.axonframework.messaging.core.configuration.MessagingConfigurer;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventMessage;
@@ -102,9 +103,47 @@ class AnnotatedSagaManagerSerializedPayloadTest {
         assertThat(sagaStore.size()).isZero();
     }
 
+    @Test
+    void aSerializedEventUnderADeclaredEventNameIsConvertedToTheHandlerPayloadType() {
+        // given a saga handler declaring a legacy name for the StartingEvent
+        AnnotatedSagaManager<SagaWithDeclaredEventName> manager =
+                AnnotatedSagaManager.<SagaWithDeclaredEventName>builder()
+                                    .sagaRepository(AnnotatedSagaRepository.<SagaWithDeclaredEventName>builder()
+                                                                           .sagaType(SagaWithDeclaredEventName.class)
+                                                                           .sagaStore(sagaStore)
+                                                                           .build())
+                                    .sagaType(SagaWithDeclaredEventName.class)
+                                    .sagaFactory(SagaWithDeclaredEventName::new)
+                                    .build();
+        // and a stored event with a byte[] payload under that legacy name
+        EventConverter converter = configuration.getComponent(EventConverter.class);
+        byte[] serialized = converter.convert(new StartingEvent("789"), byte[].class);
+        EventMessage stored = new GenericEventMessage(new MessageType("legacy.Started"), serialized);
+
+        // when
+        handle(manager, stored);
+
+        // then the payload was converted to StartingEvent, starting and associating the saga
+        assertThat(sagaStore.findSagas(SagaWithDeclaredEventName.class, new AssociationValue("myIdentifier", "789")))
+                .hasSize(1);
+    }
+
     private void handle(EventMessage event) {
+        handle(testSubject, event);
+    }
+
+    private void handle(AnnotatedSagaManager<?> manager, EventMessage event) {
         var unitOfWork = configuration.getComponent(UnitOfWorkFactory.class).create();
-        unitOfWork.runOnInvocation(context -> testSubject.handle(event, context));
+        unitOfWork.runOnInvocation(context -> manager.handle(event, context));
         FutureUtils.joinAndUnwrap(unitOfWork.execute(), Duration.ofSeconds(5));
+    }
+
+    public static class SagaWithDeclaredEventName {
+
+        @StartSaga
+        @SagaEventHandler(associationProperty = "myIdentifier",
+                event = @QualifiedName(namespace = "legacy", name = "Started"))
+        public void handle(StartingEvent event) {
+        }
     }
 }

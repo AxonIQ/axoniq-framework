@@ -23,6 +23,7 @@ import org.axonframework.messaging.eventhandling.annotation.EventHandler;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.Metadata;
+import org.axonframework.messaging.core.annotation.QualifiedName;
 
 import java.lang.annotation.*;
 
@@ -76,6 +77,31 @@ public @interface SagaEventHandler {
      * the value given by {@link #associationProperty()}.
      */
     String keyName() default "";
+
+    /**
+     * The names of the events this saga event handler listens to, each described through its separate
+     * {@link QualifiedName#namespace() namespace} and {@link QualifiedName#name() local name}, mirroring the attributes
+     * of the {@link org.axonframework.messaging.eventhandling.annotation.Event @Event} annotation.
+     * <p>
+     * Interpreted the same way as {@link EventHandler#event()}: an empty {@link QualifiedName#namespace()} or
+     * {@link QualifiedName#name()} defaults to the respective part of the
+     * {@link org.axonframework.messaging.core.QualifiedName} the payload type (thus the <b>first</b> parameter) of the
+     * annotated method resolves to. When not defined, the name is derived from the payload type of the annotated
+     * method. All listed events are converted to the payload type of the annotated method.
+     * <p>
+     * Example, handling both the current and a legacy name of an event:
+     * <pre>{@code
+     * @SagaEventHandler(associationProperty = "orderId", event = {
+     *         @QualifiedName(namespace = "com.acme", name = "OrderPlacedEvent"),
+     *         @QualifiedName(namespace = "com.acme.legacy", name = "OrderPlaced")
+     * })
+     * void on(OrderPlacedEvent event) { ... }
+     * }</pre>
+     *
+     * @return the names of the events this saga event handler listens to, as namespace and local name pairs
+     * @since 5.5.0
+     */
+    QualifiedName[] event() default {};
 
     /**
      * The type of event this method handles. If specified, this handler will only be invoked for message that have a
