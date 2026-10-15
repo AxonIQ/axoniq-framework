@@ -398,7 +398,7 @@ public class MultiTenantAxonServerQueryBusConnector
         }
 
         @Override
-        protected FetchResult<Entry<QueryResponseMessage>> terminalState() {
+        protected FetchResult.NoValue<Entry<QueryResponseMessage>> terminalState() {
             Throwable error = forcedError;
             return error != null ? FetchResult.error(error) : terminalStateOf(delegate);
         }

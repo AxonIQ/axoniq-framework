@@ -84,14 +84,14 @@ public abstract class AbstractQueryResponseMessageStream<T> extends AbstractMess
     }
 
     @Override
-    protected FetchResult<Entry<QueryResponseMessage>> terminalState() {
+    protected FetchResult.NoValue<Entry<QueryResponseMessage>> terminalState() {
         // ResultStream#isClosed() only reports true once all buffered responses have been consumed
         if (!stream.isClosed()) {
             return FetchResult.notReady();
         }
 
         return stream.getError()
-                     .<FetchResult<Entry<QueryResponseMessage>>>map(FetchResult::error)
+                     .<FetchResult.NoValue<Entry<QueryResponseMessage>>>map(FetchResult::error)
                      .orElseGet(FetchResult::completed);
     }
 
