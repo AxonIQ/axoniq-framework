@@ -65,6 +65,7 @@ class AppendCriteriaAxonServerIT extends AbstractCommandHandlingStudentIT {
     // SimpleCommandBus passes the payload through without serialization, so there is no in-memory equivalent.
     private static final TestInfrastructure INFRASTRUCTURE = new AxonServerTestInfrastructure();
 
+    private static final QualifiedName STUDENT_ENROLLED = new QualifiedName(StudentEnrolledEvent.class);
     private static final String CONSISTENCY_CONDITION_NOT_MET = "Consistency condition is not met";
 
     private final String studentId = createId("student");
@@ -129,7 +130,7 @@ class AppendCriteriaAxonServerIT extends AbstractCommandHandlingStudentIT {
                         (command, context, sourcingCriteria) -> {
                             receivedPayloads.add(command.payload());
                             command.payloadAs(Enroll.class, context.component(MessageConverter.class));
-                            EventCriteria criteria = sourcingCriteria.replaceEventTypes(StudentEnrolledEvent.class);
+                            EventCriteria criteria = sourcingCriteria.replaceEventTypes(STUDENT_ENROLLED);
                             resolvedCriteria.add(criteria);
                             return criteria;
                         }
@@ -167,7 +168,7 @@ class AppendCriteriaAxonServerIT extends AbstractCommandHandlingStudentIT {
     private EventCriteria enrollmentOnly() {
         return EventCriteria.havingTags(new Tag("Student", studentId))
                             .or(EventCriteria.havingTags(new Tag("Course", courseId)))
-                            .replaceEventTypes(StudentEnrolledEvent.class);
+                            .replaceEventTypes(STUDENT_ENROLLED);
     }
 
     sealed interface StudentCommand permits Enroll, Rename {
@@ -210,7 +211,7 @@ class AppendCriteriaAxonServerIT extends AbstractCommandHandlingStudentIT {
         static EventCriteria appendCriteria(StudentCommand command, EventCriteria sourcingCriteria) {
             receivedCommands.add(command);
             EventCriteria criteria = switch (command) {
-                case Enroll ignored -> sourcingCriteria.replaceEventTypes(StudentEnrolledEvent.class);
+                case Enroll ignored -> sourcingCriteria.replaceEventTypes(STUDENT_ENROLLED);
                 case Rename ignored -> sourcingCriteria;
             };
             resolvedCriteria.add(criteria);
