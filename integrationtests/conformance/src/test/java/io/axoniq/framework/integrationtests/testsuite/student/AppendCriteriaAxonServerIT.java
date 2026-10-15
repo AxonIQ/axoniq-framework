@@ -24,7 +24,7 @@ import org.axonframework.eventsourcing.commandhandling.AppendCriteriaInterceptor
 import org.axonframework.eventsourcing.commandhandling.annotation.AppendCriteriaBuilder;
 import org.axonframework.eventsourcing.eventstore.EventStore;
 import org.axonframework.integrationtests.testsuite.infrastructure.TestInfrastructure;
-import org.axonframework.integrationtests.testsuite.student.AbstractCommandHandlingStudentIT;
+import org.axonframework.integrationtests.testsuite.student.AppendCriteriaIT;
 import org.axonframework.integrationtests.testsuite.student.events.StudentEnrolledEvent;
 import org.axonframework.integrationtests.testsuite.student.events.StudentNameChangedEvent;
 import org.axonframework.integrationtests.testsuite.student.state.Course;
@@ -59,7 +59,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  *
  * @author Mateusz Nowak
  */
-class AppendCriteriaAxonServerIT extends AbstractCommandHandlingStudentIT {
+class AppendCriteriaAxonServerIT extends AppendCriteriaIT {
 
     // AxonServer-only: payload conversion is a distributed-bus concern.
     // SimpleCommandBus passes the payload through without serialization, so there is no in-memory equivalent.
