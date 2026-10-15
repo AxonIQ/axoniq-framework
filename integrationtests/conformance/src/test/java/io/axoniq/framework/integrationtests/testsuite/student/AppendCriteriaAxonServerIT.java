@@ -130,7 +130,7 @@ class AppendCriteriaAxonServerIT extends AbstractCommandHandlingStudentIT {
                         (command, context, sourcingCriteria) -> {
                             receivedPayloads.add(command.payload());
                             command.payloadAs(Enroll.class, context.component(MessageConverter.class));
-                            EventCriteria criteria = sourcingCriteria.replaceEventTypes(STUDENT_ENROLLED);
+                            EventCriteria criteria = sourcingCriteria.withEventTypes(STUDENT_ENROLLED);
                             resolvedCriteria.add(criteria);
                             return criteria;
                         }
@@ -168,7 +168,7 @@ class AppendCriteriaAxonServerIT extends AbstractCommandHandlingStudentIT {
     private EventCriteria enrollmentOnly() {
         return EventCriteria.havingTags(new Tag("Student", studentId))
                             .or(EventCriteria.havingTags(new Tag("Course", courseId)))
-                            .replaceEventTypes(STUDENT_ENROLLED);
+                            .withEventTypes(STUDENT_ENROLLED);
     }
 
     sealed interface StudentCommand permits Enroll, Rename {
@@ -211,7 +211,7 @@ class AppendCriteriaAxonServerIT extends AbstractCommandHandlingStudentIT {
         static EventCriteria appendCriteria(StudentCommand command, EventCriteria sourcingCriteria) {
             receivedCommands.add(command);
             EventCriteria criteria = switch (command) {
-                case Enroll ignored -> sourcingCriteria.replaceEventTypes(STUDENT_ENROLLED);
+                case Enroll ignored -> sourcingCriteria.withEventTypes(STUDENT_ENROLLED);
                 case Rename ignored -> sourcingCriteria;
             };
             resolvedCriteria.add(criteria);
