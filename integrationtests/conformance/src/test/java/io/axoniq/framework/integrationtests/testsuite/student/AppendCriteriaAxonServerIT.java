@@ -20,8 +20,9 @@
 package io.axoniq.framework.integrationtests.testsuite.student;
 
 import io.axoniq.framework.integrationtests.testsuite.infrastructure.AxonServerTestInfrastructure;
-import org.axonframework.eventsourcing.annotation.AppendCriteriaBuilder;
-import org.axonframework.eventsourcing.commandhandling.AppendCriteriaResolvingCommandHandlingComponent;
+import org.axonframework.eventsourcing.commandhandling.AppendCriteriaInterceptor;
+import org.axonframework.eventsourcing.commandhandling.annotation.AppendCriteriaBuilder;
+import org.axonframework.eventsourcing.eventstore.EventStore;
 import org.axonframework.integrationtests.testsuite.infrastructure.TestInfrastructure;
 import org.axonframework.integrationtests.testsuite.student.AbstractCommandHandlingStudentIT;
 import org.axonframework.integrationtests.testsuite.student.events.StudentEnrolledEvent;
@@ -53,8 +54,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * handling component with a serialized payload.
  * <p>
  * An {@link AppendCriteriaBuilder} receives the payload converted to the handler's declared type, so it can switch over
- * a sealed command supertype. A declaratively registered resolver decorates the command-handling component, runs before
- * that conversion, and therefore converts the payload itself.
+ * a sealed command supertype. A resolver registered through an {@link AppendCriteriaInterceptor} runs before that
+ * conversion, and therefore converts the payload itself.
  *
  * @author Mateusz Nowak
  */
@@ -103,8 +104,8 @@ class AppendCriteriaAxonServerIT extends AbstractCommandHandlingStudentIT {
         // given
         List<Object> receivedPayloads = new CopyOnWriteArrayList<>();
         List<EventCriteria> resolvedCriteria = new CopyOnWriteArrayList<>();
-        registerCommandHandlers(handlerPhase -> handlerPhase.commandHandlingComponent(
-                AppendCriteriaResolvingCommandHandlingComponent.withAppendCriteria(
+        registerCommandHandlers(handlerPhase -> handlerPhase
+                .commandHandlingComponent(
                         c -> SimpleCommandHandlingComponent
                                 .create("declarative-enrollment")
                                 .subscribe(new QualifiedName(Enroll.class), (command, context) -> {
@@ -121,16 +122,19 @@ class AppendCriteriaAxonServerIT extends AbstractCommandHandlingStudentIT {
                                             new StudentEnrolledEvent(enroll.studentId(), enroll.courseId())
                                     );
                                     return MessageStream.just(SUCCESSFUL_COMMAND_RESULT).cast();
-                                }),
-                        c -> (command, context, sourcingCriteria) -> {
+                                })
+                )
+                .intercepted(c -> new AppendCriteriaInterceptor(
+                        c.getComponent(EventStore.class),
+                        (command, context, sourcingCriteria) -> {
                             receivedPayloads.add(command.payload());
                             command.payloadAs(Enroll.class, context.component(MessageConverter.class));
                             EventCriteria criteria = sourcingCriteria.replaceEventTypes(StudentEnrolledEvent.class);
                             resolvedCriteria.add(criteria);
                             return criteria;
                         }
-                )
-        ));
+                ))
+        );
         startApp();
 
         // when
