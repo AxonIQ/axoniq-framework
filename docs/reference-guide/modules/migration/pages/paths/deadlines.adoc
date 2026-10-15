@@ -72,9 +72,13 @@ Going forward, what used to be "a deadline firing on an aggregate" becomes "a sc
 
 `axoniq-legacy` helps you make that transition: it automatically drains every deadline Axon Framework 4 already scheduled against an aggregate, by translating it into a command and dispatching it through the `CommandGateway`, so you do not need to re-schedule anything yourself.
 This changes what the migrated entity needs: replace the aggregate's `@DeadlineHandler` method with a
-`@CommandHandler` method named after the deadline, as shown below, first for a deadline scheduled with a payload, then
-for one scheduled without.
-Naming the command after the deadline keeps deadlines apart that share a payload type.
+`@CommandHandler` method named `<aggregateType>.<deadlineName>`, as shown below for an `Order` aggregate, first for a
+deadline scheduled with a payload, then for one scheduled without.
+This name keeps deadlines apart that share a payload type, and deadlines of different aggregate types that share a
+name.
+The aggregate type is the one Axon Framework 4 stored with the deadline: the aggregate's simple class name, unless
+`@Aggregate(type = ...)` set another one.
+Keep that name in the command name, even when the migration renames the class.
 
 [tabs]
 ====
@@ -95,7 +99,7 @@ Axon Framework 5::
 --
 [source,java]
 ----
-@CommandHandler(commandName = "paymentDue")
+@CommandHandler(commandName = "Order.paymentDue")
 void handle(PaymentDueReminder command) {
     // ...
 }
@@ -103,7 +107,7 @@ void handle(PaymentDueReminder command) {
 --
 ====
 
-A payload-less deadline keeps its name, but becomes a command without a payload:
+A payload-less deadline is named the same way, but becomes a command without a payload:
 
 [tabs]
 ====
@@ -124,7 +128,7 @@ Axon Framework 5::
 --
 [source,java]
 ----
-@CommandHandler(commandName = "accountExpired")
+@CommandHandler(commandName = "Order.accountExpired")
 void handle(Void command) {
     // ...
 }
@@ -135,9 +139,10 @@ void handle(Void command) {
 [NOTE]
 ====
 A handler migrated with `axoniq-legacy` 5.4.0 is named after the deadline's payload type, such as
-`@CommandHandler void handle(PaymentDueReminder command)`.
-When no handler exists for the deadline name, `axoniq-legacy` dispatches the deadline again under its payload type,
-so such a handler keeps receiving its deadlines, and logs a warning asking to rename it.
+`@CommandHandler void handle(PaymentDueReminder command)`, or after the deadline name alone for a deadline without a
+payload, such as `@CommandHandler(commandName = "accountExpired")`.
+When no handler exists for `<aggregateType>.<deadlineName>`, `axoniq-legacy` dispatches the deadline again under that
+earlier name, so such a handler keeps receiving its deadlines, and logs a warning asking to rename it.
 ====
 
 [IMPORTANT]

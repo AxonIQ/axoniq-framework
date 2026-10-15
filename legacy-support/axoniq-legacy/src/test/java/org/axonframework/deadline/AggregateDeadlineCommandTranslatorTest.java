@@ -85,7 +85,7 @@ class AggregateDeadlineCommandTranslatorTest {
     class Send {
 
         @Test
-        void dispatchesPayloadAndMetadataAsCommandNamedAfterTheDeadlineWithGivenContext() throws Exception {
+        void dispatchesPayloadAndMetadataAsCommandNamedAfterTheAggregateTypeAndDeadlineWithGivenContext() throws Exception {
             // given
             record TestPayload(String data) {
 
@@ -103,7 +103,7 @@ class AggregateDeadlineCommandTranslatorTest {
             // then
             assertThat(commandGateway.sent).hasSize(1);
             CommandMessage command = commandGateway.sentCommand(0);
-            assertThat(command.type().qualifiedName().name()).isEqualTo("paymentDue");
+            assertThat(command.type().qualifiedName().name()).isEqualTo("MyAggregate.paymentDue");
             assertThat(command.payload()).isEqualTo(payload);
             assertThat(command.metadata())
                     .containsEntry("key", "value")
@@ -129,12 +129,32 @@ class AggregateDeadlineCommandTranslatorTest {
             testSubject.send(shipmentDue, StubProcessingContext.forMessage(shipmentDue), TEST_SCOPE);
 
             // then
-            assertThat(commandGateway.sentCommand(0).type().qualifiedName().name()).isEqualTo("paymentDue");
-            assertThat(commandGateway.sentCommand(1).type().qualifiedName().name()).isEqualTo("shipmentDue");
+            assertThat(commandGateway.sentCommand(0).type().qualifiedName().name())
+                    .isEqualTo("MyAggregate.paymentDue");
+            assertThat(commandGateway.sentCommand(1).type().qualifiedName().name())
+                    .isEqualTo("MyAggregate.shipmentDue");
         }
 
         @Test
-        void dispatchesThePayloadAgainNamedAfterItsTypeWhenNoHandlerExistsForTheDeadlineName() throws Exception {
+        void dispatchesDeadlinesOfDifferentAggregateTypesSharingANameAsDifferentCommands() throws Exception {
+            // given
+            DeadlineMessage deadline =
+                    new GenericDeadlineMessage("expired", new MessageType(Void.class), null);
+            AggregateScopeDescriptor otherScope = new AggregateScopeDescriptor("OtherAggregate", "otherId");
+
+            // when
+            testSubject.send(deadline, StubProcessingContext.forMessage(deadline), TEST_SCOPE);
+            testSubject.send(deadline, StubProcessingContext.forMessage(deadline), otherScope);
+
+            // then
+            assertThat(commandGateway.sentCommand(0).type().qualifiedName().name())
+                    .isEqualTo("MyAggregate.expired");
+            assertThat(commandGateway.sentCommand(1).type().qualifiedName().name())
+                    .isEqualTo("OtherAggregate.expired");
+        }
+
+        @Test
+        void dispatchesThePayloadAgainNamedAfterItsTypeWhenNoHandlerExistsForTheQualifiedName() throws Exception {
             // given
             record TestPayload(String data) {
 
@@ -181,17 +201,28 @@ class AggregateDeadlineCommandTranslatorTest {
         }
 
         @Test
-        void doesNotFallBackForAPayloadLessDeadline() {
+        void dispatchesAPayloadLessDeadlineAgainNamedAfterTheDeadlineWhenNoHandlerExistsForTheQualifiedName()
+                throws Exception {
             // given
+            Metadata metadata = Metadata.with("key", "value");
             DeadlineMessage deadline =
-                    new GenericDeadlineMessage("paymentDue", new MessageType(Void.class), null);
+                    new GenericDeadlineMessage("paymentDue", new MessageType(Void.class), null, metadata);
             ProcessingContext context = StubProcessingContext.forMessage(deadline);
-            NoHandlerForCommandException noHandler = new NoHandlerForCommandException("none");
-            commandGateway.results.add(CompletableFuture.failedFuture(noHandler));
+            // only a handler migrated with an earlier version, named after the deadline alone, exists
+            commandGateway.results.add(CompletableFuture.failedFuture(new NoHandlerForCommandException("none")));
 
-            // when / then
-            assertThatThrownBy(() -> testSubject.send(deadline, context, TEST_SCOPE)).isSameAs(noHandler);
-            assertThat(commandGateway.sent).hasSize(1);
+            // when
+            testSubject.send(deadline, context, TEST_SCOPE);
+
+            // then
+            assertThat(commandGateway.sent).hasSize(2);
+            CommandMessage fallback = commandGateway.sentCommand(1);
+            assertThat(fallback.type().qualifiedName().name()).isEqualTo("paymentDue");
+            assertThat(fallback.payload()).isEqualTo("paymentDue");
+            assertThat(fallback.metadata())
+                    .containsEntry("key", "value")
+                    .containsEntry(DESCRIPTOR_BASED_ID, "aggregateId");
+            assertThat(commandGateway.sent.get(1).context()).isSameAs(context);
         }
 
         @Test
@@ -207,7 +238,7 @@ class AggregateDeadlineCommandTranslatorTest {
 
             // then
             CommandMessage command = commandGateway.sentCommand(0);
-            assertThat(command.type().qualifiedName().name()).isEqualTo("paymentDue");
+            assertThat(command.type().qualifiedName().name()).isEqualTo("MyAggregate.paymentDue");
             assertThat(command.payload()).isEqualTo("paymentDue");
             assertThat(command.metadata())
                     .containsEntry("key", "value")
