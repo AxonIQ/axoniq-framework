@@ -1,6 +1,6 @@
 # Documentation Code Samples
 
-This module compiles the Java code samples that are included in the documentation. The sample
+This module compiles the Java and Kotlin code samples that are included in the documentation. The sample
 sources live in the Antora `examples` directories of each documentation component
 (`docs/<guide>/modules/<module>/examples`) and are pulled into the pages through tagged regions.
 The module is part of the default Maven reactor: a framework API change that breaks a documented
@@ -23,6 +23,15 @@ Axon Framework 4 "before" migration snippets) keep their code inline and are out
 - `reference-guide/modules/connector`
 - `reference-guide/modules/snapshotting`
 - `reference-guide/modules/workflows`
+- `workflow-getting-started/modules/ROOT`
+
+The workflow examples are grouped alongside their guides:
+
+- [Workflow reference examples](../reference-guide/modules/workflows/examples/workflows)
+- [Workflow getting started examples](../workflow-getting-started/modules/ROOT/examples/gettingstarted)
+
+These are documentation snippets with supporting types, compiled to validate API usage. They are
+not standalone applications. Clone the repository and use the build command below to compile them.
 
 ## How a page includes a sample
 
@@ -80,7 +89,7 @@ partial** belongs to, so partials include samples the same way pages do.
 Compile everything (from the repository root):
 
 ```bash
-./mvnw -pl docs/_samples test-compile
+./mvnw -pl docs/_samples -am compile
 ```
 
 Check that a converted page renders the same code as before conversion:

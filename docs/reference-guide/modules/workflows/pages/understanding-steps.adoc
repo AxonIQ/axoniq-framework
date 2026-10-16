@@ -15,17 +15,19 @@ Primitives cannot be nested.
 Do not call `execute`, `awaitExecute`, `awaitEvent`, `sleep`, `fail`, or `cancel` from *inside* an action passed to another primitive.
 Each primitive must be called directly from the workflow method—the engine tracks execution through the top-level call sequence, and nesting would break event ordering and replay.
 
-[source,java]
+.Invalid nesting (pseudocode)
+[source,java,role=pseudocode]
 ----
 // WRONG — do not nest primitives
 ctx.awaitExecute("outer", Map.of(), (pc, payload) -> {
     ctx.awaitExecute("inner", ...);  // this will not work correctly
     return Map.of();
 });
+----
 
-// CORRECT — call primitives sequentially from the workflow method
-ctx.awaitExecute("stepA", Map.of(), ServiceA::doWork);
-ctx.awaitExecute("stepB", Map.of(), ServiceB::doWork);
+[source,java]
+----
+include::example$workflows/understandingsteps/UnderstandingStepsExamples.java[tag=sequential-primitives,indent=0]
 ----
 ====
 
@@ -646,21 +648,7 @@ The Kotlin DSL exposes the same options as concise overloads, while still allowi
 
 [source,kotlin]
 ----
-val result = execute(
-    stepName = "shipOrder",
-    inputPayload = mapOf("address" to address),
-    timeout = 5.minutes,
-    retryPolicy = RetryPolicy.NONE
-) { pc, p ->
-    ShippingService.shipOrder(pc, p)
-}
-
-val reservation = awaitExecute(
-    stepName = "reserveStock",
-    timeout = 10.seconds
-) { _, _ ->
-    mapOf("reserved" to InventoryService.reserveStock())
-}
+include::example$workflows/understandingsteps/kotlin/UnderstandingStepsKotlin.kt[tag=named-arguments,indent=0]
 ----
 
 For advanced cases, you can still pass `ExecuteStepDefinition`, `WaitForStepDefinition`, and `PayloadStepDefinition` directly to `Kontext`.

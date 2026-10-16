@@ -42,6 +42,14 @@ public class UnderstandingStepsExamples {
 
     private static final Logger logger = LoggerFactory.getLogger(UnderstandingStepsExamples.class);
 
+    public void sequentialPrimitives(SimpleWorkflowContext ctx) {
+        // tag::sequential-primitives[]
+        // CORRECT - call primitives sequentially from the workflow method
+        ctx.awaitExecute("stepA", Map.of(), ServiceA::doWork);
+        ctx.awaitExecute("stepB", Map.of(), ServiceB::doWork);
+        // end::sequential-primitives[]
+    }
+
     public void stepResultInspect(SimpleWorkflowContext context) {
         // tag::step-result-inspect[]
         // non-blocking execute
