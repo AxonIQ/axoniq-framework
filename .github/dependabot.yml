@@ -77,6 +77,10 @@ updates:
         versions: [ "[5.0.0,)" ]
       - dependency-name: "org.jobrunr:jobrunr"
         versions: [ "[9.0.0,)" ]
+      - dependency-name: "org.quartz-scheduler:quartz"
+        versions: [ "[3.0.0,)" ]
+      - dependency-name: "com.github.kagkarlsson:db-scheduler"
+        versions: [ "[17.0.0,)" ]
 
   - package-ecosystem: npm
     directory: "/docs/_playbook"
