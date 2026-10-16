@@ -217,6 +217,35 @@ class CheckpointThreadAffinityTest {
         assertThat(tm.offThreadCommits).isEmpty();
     }
 
+    @Test
+    void resetTokensWithTwoParticipantsKeepsCheckpointing() {
+        ThreadBoundTransactionManager tm = new ThreadBoundTransactionManager(true);
+        CheckingTokenStore store = new CheckingTokenStore();
+        AsyncParticipant first = new AsyncParticipant(foreign, false);
+        AsyncParticipant second = new AsyncParticipant(foreign, false);
+        first.requestOnEach = true;
+        start(tm, store, 1, first, second);
+        publish(5, first);
+        await().pollDelay(Duration.ofSeconds(2)).atMost(TIMEOUT).until(() -> true);
+        long before = storedPosition(store, 0);
+        logger.warn("reset-pre stored={} handled={} advances={}",
+                    FutureUtils.joinAndUnwrap(store.fetchToken(PROCESSOR_NAME, 0, null)), first.handled.get(),
+                    first.advanceThreads.size());
+
+        processor().shutdown().join();
+        processor().resetTokens().join();
+        processor().start().join();
+        int handledBefore = first.handled.get();
+        await().atMost(TIMEOUT).until(() -> first.handled.get() >= handledBefore + 5);
+        eventSource.publishMessage(EventTestUtils.asEventMessage("after-reset"));
+        await().pollDelay(Duration.ofSeconds(3)).atMost(TIMEOUT).until(() -> true);
+        TrackingToken stored = FutureUtils.joinAndUnwrap(store.fetchToken(PROCESSOR_NAME, 0, null));
+        logger.warn("reset storedBefore={} storedAfter={} handledAfterReset={} violations={}", before, stored,
+                    first.handled.get() - handledBefore, store.violations);
+        assertThat(first.handled.get() - handledBefore).isLessThan(20);
+        assertThat(storedPosition(store, 0)).isGreaterThanOrEqualTo(5);
+    }
+
     // ---------------------------------------------------------------------------------------------------------------
 
     private void report(String scenario, ThreadBoundTransactionManager tm, CheckingTokenStore store,
@@ -455,6 +484,7 @@ class CheckpointThreadAffinityTest {
         private final ExecutorService foreign;
         volatile boolean async;
         volatile boolean neverComplete;
+        volatile boolean requestOnEach;
         volatile CheckpointTrigger trigger;
         final AtomicInteger handled = new AtomicInteger();
         final AtomicInteger released = new AtomicInteger();
@@ -471,6 +501,9 @@ class CheckpointThreadAffinityTest {
         void on(String event, CheckpointTrigger checkpoint) {
             this.trigger = checkpoint;
             handled.incrementAndGet();
+            if (requestOnEach) {
+                checkpoint.requestCheckpoint();
+            }
         }
 
         @Override

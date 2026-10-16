@@ -19,9 +19,11 @@
 package io.axoniq.framework.workflow.configuration;
 
 import io.axoniq.framework.workflow.configuration.AbstractEventSourcedEntityRepositoryTestBase.TestContext;
+import io.axoniq.framework.workflow.dsl.api.EventCondition;
 import io.axoniq.framework.workflow.dsl.api.EventConditions;
 import io.axoniq.framework.workflow.dsl.api.PayloadMapping;
 import io.axoniq.framework.workflow.dsl.api.PrimitiveMetadata;
+import io.axoniq.framework.workflow.dsl.api.StepStatus;
 import io.axoniq.framework.workflow.dsl.api.Timing;
 import io.axoniq.framework.workflow.dsl.api.WaitForStepDefinition;
 import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
@@ -30,8 +32,12 @@ import io.axoniq.framework.workflow.runtime.execution.EventSourcedWorkflowState;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowEngine;
 import io.axoniq.framework.workflow.runtime.execution.payload.GlobalOnlyPayloadReducer;
 import io.axoniq.framework.workflow.runtime.execution.payload.LocalOnlyPayloadReducer;
+import io.axoniq.framework.workflow.runtime.util.DefaultTimeoutFutureResolver;
+import io.axoniq.framework.workflow.runtime.util.FutureResolver;
 import io.axoniq.framework.workflow.runtime.util.MetadataUtils;
 import org.axonframework.common.configuration.AxonConfiguration;
+import org.axonframework.common.configuration.ComponentRegistry;
+import org.axonframework.common.configuration.Configuration;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.eventsourcing.eventstore.AppendCondition;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
@@ -62,6 +68,8 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.BiFunction;
+import java.util.function.BiPredicate;
 import java.util.function.Consumer;
 
 import static org.awaitility.Awaitility.await;
@@ -87,6 +95,25 @@ class WorkflowConfigurerWakeCheckpointTest {
             new Timing(Duration.ofMinutes(5))
     );
     private static final Consumer<TestContext> AWAIT_PAID_BODY = ctx -> ctx.awaitEvent(AWAIT_PAID);
+    private static final WaitForStepDefinition AWAIT_PAID_WITH_FAILING_CONDITION = new WaitForStepDefinition(
+            new PrimitiveMetadata(WAIT_STEP, DefaultEventNameCustomizer.Builder.defaults()),
+            new EventCondition() {
+                @Override
+                public BiPredicate<EventMessage, ProcessingContext> predicate() {
+                    return (event, context) -> {
+                        throw new IllegalStateException("wait condition failed");
+                    };
+                }
+
+                @Override
+                public QualifiedName qualifiedName() {
+                    return new QualifiedName("paid");
+                }
+            },
+            new PayloadMapping(LocalOnlyPayloadReducer.INSTANCE, GlobalOnlyPayloadReducer.INSTANCE),
+            new Timing(Duration.ofMinutes(5))
+    );
+    private static final Duration SHORT_TIMEOUT = Duration.ofMillis(300);
 
     private final InMemoryTokenStore tokenStore = new InMemoryTokenStore();
     private final GatedStorageEngine storageEngine = new GatedStorageEngine(new InMemoryEventStorageEngine());
@@ -156,6 +183,91 @@ class WorkflowConfigurerWakeCheckpointTest {
     }
 
     @Nested
+    class CompletedStepAppendFails {
+
+        @Test
+        void storedTokenStaysBeforeTheAwaitedEventWhenTheCompletedStepIsRefused() {
+            // given
+            var configuration = start(tokenStore, AWAIT_PAID_BODY);
+            var workflowId = startWorkflow(configuration);
+            storageEngine.stallNextCompletedAppendOf(WAIT_STEP);
+            publish(configuration, "paid");
+            var paidPosition = latestToken();
+            await().atMost(5, TimeUnit.SECONDS).until(storageEngine::completedAppendStalled);
+
+            // when the store refuses the completed step, and a later event gives the node a reason to checkpoint
+            storageEngine.failStalledAppend();
+            publish(configuration, "unrelated");
+
+            // then the stored token only passes the awaited event once the wait's completion is durable
+            await().during(Duration.ofSeconds(1)).atMost(3, TimeUnit.SECONDS)
+                   .until(() -> !covers(storedToken(tokenStore), paidPosition)
+                           || waitCompletedDurably(configuration, workflowId));
+        }
+
+        @Test
+        void restartAfterTheRefusedCompletedStepCompletesTheWorkflow() {
+            // given
+            var refused = start(tokenStore, AWAIT_PAID_BODY);
+            var workflowId = startWorkflow(refused);
+            storageEngine.stallNextCompletedAppendOf(WAIT_STEP);
+            publish(refused, "paid");
+            await().atMost(5, TimeUnit.SECONDS).until(storageEngine::completedAppendStalled);
+            storageEngine.failStalledAppend();
+            publish(refused, "unrelated");
+            await().pollDelay(Duration.ofMillis(500)).until(() -> true);
+
+            // when
+            var restarted = start(tokenStoreAt(storedToken(tokenStore)), AWAIT_PAID_BODY);
+
+            // then
+            await().atMost(10, TimeUnit.SECONDS)
+                   .until(() -> durableStatus(restarted, workflowId) == WorkflowStatus.COMPLETED);
+        }
+
+        @Test
+        void storedTokenStaysBeforeTheAwaitedEventWhileATimedOutCompletedStepIsUndecided() {
+            // given a resolver that stops waiting for an append long before the append is decided
+            var configuration = start(tokenStore, AWAIT_PAID_BODY, new DefaultTimeoutFutureResolver(SHORT_TIMEOUT));
+            var workflowId = startWorkflow(configuration);
+            storageEngine.stallNextCompletedAppendOf(WAIT_STEP);
+            publish(configuration, "paid");
+            var paidPosition = latestToken();
+            await().atMost(5, TimeUnit.SECONDS).until(storageEngine::completedAppendStalled);
+
+            // when the resolver times out, and a later event gives the node a reason to checkpoint
+            await().pollDelay(SHORT_TIMEOUT.multipliedBy(2)).until(() -> true);
+            publish(configuration, "unrelated");
+
+            // then the stored token only passes the awaited event once the wait's completion is durable
+            await().during(Duration.ofSeconds(1)).atMost(3, TimeUnit.SECONDS)
+                   .until(() -> !covers(storedToken(tokenStore), paidPosition)
+                           || waitCompletedDurably(configuration, workflowId));
+        }
+
+        @Test
+        void restartAfterATimedOutCompletedStepThatFailsCompletesTheWorkflow() {
+            // given
+            var timedOut = start(tokenStore, AWAIT_PAID_BODY, new DefaultTimeoutFutureResolver(SHORT_TIMEOUT));
+            var workflowId = startWorkflow(timedOut);
+            storageEngine.stallNextCompletedAppendOf(WAIT_STEP);
+            publish(timedOut, "paid");
+            await().atMost(5, TimeUnit.SECONDS).until(storageEngine::completedAppendStalled);
+            await().pollDelay(SHORT_TIMEOUT.multipliedBy(2)).until(() -> true);
+            publish(timedOut, "unrelated");
+            await().pollDelay(Duration.ofMillis(500)).until(() -> true);
+            storageEngine.failStalledAppend();
+
+            // when
+            var restarted = start(tokenStoreAt(storedToken(tokenStore)), AWAIT_PAID_BODY);
+
+            // then
+            await().atMost(10, TimeUnit.SECONDS)
+                   .until(() -> durableStatus(restarted, workflowId) == WorkflowStatus.COMPLETED);
+        }
+    }
+
+    @Nested
     class WorkflowStart {
 
         @Test
@@ -177,22 +289,90 @@ class WorkflowConfigurerWakeCheckpointTest {
         }
     }
 
+    @Nested
+    class DeliveryFailsWhileTheBodyRuns {
+
+        @Test
+        void segmentHandlesLaterEventsAfterTheStartedListenerOfARunningWorkflowFails() {
+            // given
+            var listenerFailed = new AtomicBoolean();
+            var configuration = startWith(tokenStore, AWAIT_PAID_BODY, registry -> {
+            }, (config, customization) -> customization.registerWorkflowStatusChangeListener(
+                    WorkflowStatus.STARTED, (status, context, processingContext) -> {
+                        if (listenerFailed.compareAndSet(false, true)) {
+                            throw new IllegalStateException("status listener failed");
+                        }
+                    }));
+            publish(configuration, "start");
+            await().atMost(5, TimeUnit.SECONDS).until(listenerFailed::get);
+
+            // when
+            var laterWorkflowId = publish(configuration, "start");
+
+            // then
+            await("the segment handles the later start event")
+                    .atMost(30, TimeUnit.SECONDS)
+                    .ignoreExceptions()
+                    .until(() -> durableState(configuration, laterWorkflowId).containsStep(WAIT_STEP));
+        }
+
+        @Test
+        void segmentHandlesLaterEventsAfterAFailingWaitConditionEndsTheWorkflow() {
+            // given
+            var configuration = start(tokenStore, ctx -> ctx.awaitEvent(AWAIT_PAID_WITH_FAILING_CONDITION));
+            startWorkflow(configuration);
+            publish(configuration, "paid");
+
+            // when
+            var laterWorkflowId = publish(configuration, "start");
+
+            // then
+            await("the segment handles the later start event")
+                    .atMost(30, TimeUnit.SECONDS)
+                    .ignoreExceptions()
+                    .until(() -> durableState(configuration, laterWorkflowId).containsStep(WAIT_STEP));
+        }
+    }
+
+    private AxonConfiguration start(TokenStore tokenStore,
+                                    Consumer<TestContext> body,
+                                    FutureResolver futureResolver) {
+        return startWith(tokenStore, body, registry -> registry.registerComponent(FutureResolver.class,
+                                                                                  cfg -> futureResolver));
+    }
+
     private AxonConfiguration start(TokenStore tokenStore,
                                     Consumer<TestContext> body) {
+        return startWith(tokenStore, body, registry -> {
+        });
+    }
+
+    private AxonConfiguration startWith(TokenStore tokenStore,
+                                        Consumer<TestContext> body,
+                                        Consumer<ComponentRegistry> extraRegistrations) {
+        return startWith(tokenStore, body, extraRegistrations, (config, customization) -> customization);
+    }
+
+    private AxonConfiguration startWith(
+            TokenStore tokenStore,
+            Consumer<TestContext> body,
+            Consumer<ComponentRegistry> extraRegistrations,
+            BiFunction<Configuration, WorkflowCustomization, WorkflowCustomization> customization
+    ) {
         var module = WorkflowModule.configure(MODULE, TestContext.class)
                                    .definition(d -> d
                                            .declarative(c -> body::accept)
                                            .workflowName(MODULE)
                                            .on(c -> EventConditions.fromQualifiedName(new QualifiedName("start")))
-                                           .notCustomized()
+                                           .customized(customization)
                                    )
                                    .processorConfiguration(pc -> pc.initialSegmentCount(1))
                                    .contextFactory(c -> TestContext::new);
         var configurer = WorkflowConfigurer.create();
-        configurer.componentRegistry(cr -> cr
+        configurer.componentRegistry(cr -> extraRegistrations.accept(cr
                 .registerComponent(EventStorageEngine.class, cfg -> storageEngine)
                 .registerComponent(TokenStore.class, cfg -> tokenStore)
-                .registerModule(module));
+                .registerModule(module)));
         var configuration = configurer.build();
         configurations.add(configuration);
         configuration.start();
@@ -229,6 +409,12 @@ class WorkflowConfigurerWakeCheckpointTest {
         return storageEngine.latestToken().orTimeout(5, TimeUnit.SECONDS).join();
     }
 
+    private static TokenStore tokenStoreAt(@Nullable TrackingToken token) {
+        var tokenStore = new InMemoryTokenStore();
+        tokenStore.initializeTokenSegments(PROCESSOR, 1, token, null).orTimeout(5, TimeUnit.SECONDS).join();
+        return tokenStore;
+    }
+
     @Nullable
     private static TrackingToken storedToken(TokenStore tokenStore) {
         return tokenStore.fetchToken(PROCESSOR, 0, null).orTimeout(5, TimeUnit.SECONDS).join();
@@ -236,6 +422,11 @@ class WorkflowConfigurerWakeCheckpointTest {
 
     private static boolean covers(@Nullable TrackingToken stored, TrackingToken position) {
         return stored != null && stored.covers(position);
+    }
+
+    private static boolean waitCompletedDurably(AxonConfiguration configuration, String workflowId) {
+        var state = durableState(configuration, workflowId);
+        return state.containsStep(WAIT_STEP) && state.getStep(WAIT_STEP).status() == StepStatus.COMPLETED;
     }
 
     private static WorkflowStatus durableStatus(AxonConfiguration configuration, String workflowId) {

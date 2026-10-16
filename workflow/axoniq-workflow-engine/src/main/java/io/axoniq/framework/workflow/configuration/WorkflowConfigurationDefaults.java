@@ -162,7 +162,7 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
                                            cfg.getComponent(Clock.class), defaultWorkflowTimerExecutor()
                                    ))
                                    .onShutdown(
-                                           Phase.INBOUND_EVENT_CONNECTORS,
+                                           Phase.OUTBOUND_EVENT_CONNECTORS,
                                            scheduler -> ((DefaultWorkflowScheduler) scheduler).shutdown()
                                    )
         );

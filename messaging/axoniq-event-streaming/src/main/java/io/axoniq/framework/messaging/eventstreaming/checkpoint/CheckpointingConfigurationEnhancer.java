@@ -72,6 +72,7 @@ public class CheckpointingConfigurationEnhancer implements ConfigurationEnhancer
      */
     private static Customization checkpointingCustomization() {
         return (config, processorConfig) ->
-                processorConfig.progressStrategyFactoryBuilder(CheckpointingProgressStrategyFactory.detecting());
+                processorConfig.progressStrategyFactoryBuilder(CheckpointingProgressStrategyFactory.detecting())
+                               .enableCoordinatorClaimExtension();
     }
 }
