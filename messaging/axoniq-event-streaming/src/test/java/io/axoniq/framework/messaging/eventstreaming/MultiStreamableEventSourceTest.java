@@ -67,7 +67,7 @@ class MultiStreamableEventSourceTest {
         eventSourceA.publishMessage(publishedEvent);
 
         MessageStream<EventMessage> stream = testSubject.open(
-                StreamingCondition.startingFrom(null), null
+                StreamingCondition.startingFrom(TrackingToken.FIRST), null
         );
 
         assertThat(stream.hasNextAvailable()).isTrue();
@@ -86,7 +86,7 @@ class MultiStreamableEventSourceTest {
         eventSourceB.publishMessage(event2);
 
         MessageStream<EventMessage> stream = testSubject.open(
-                StreamingCondition.startingFrom(null), null
+                StreamingCondition.startingFrom(TrackingToken.FIRST), null
         );
 
         assertThat(stream.hasNextAvailable()).isTrue();
@@ -115,7 +115,7 @@ class MultiStreamableEventSourceTest {
         eventSourceB.publishMessage(event2);
 
         MessageStream<EventMessage> stream = testSubject.open(
-                StreamingCondition.startingFrom(null), null
+                StreamingCondition.startingFrom(TrackingToken.FIRST), null
         );
 
         MessageStream.Entry<EventMessage> first = stream.next().orElseThrow();
@@ -143,7 +143,7 @@ class MultiStreamableEventSourceTest {
         eventSourceB.publishMessage(EventTestUtils.asEventMessage("EventB"));
 
         MessageStream<EventMessage> stream = testSubject.open(
-                StreamingCondition.startingFrom(null), null
+                StreamingCondition.startingFrom(TrackingToken.FIRST), null
         );
 
         MessageStream.Entry<EventMessage> first = stream.next().orElseThrow();
@@ -160,7 +160,7 @@ class MultiStreamableEventSourceTest {
         eventSourceA.publishMessage(event);
 
         MessageStream<EventMessage> stream = testSubject.open(
-                StreamingCondition.startingFrom(null), null
+                StreamingCondition.startingFrom(TrackingToken.FIRST), null
         );
 
         MessageStream.Entry<EventMessage> peeked = stream.peek().orElseThrow();
@@ -216,16 +216,35 @@ class MultiStreamableEventSourceTest {
     }
 
     @Test
-    void openWithNullTokenStartsFromBeginning() {
+    void openWithFirstTokenStartsFromBeginning() {
         eventSourceA.publishMessage(EventTestUtils.asEventMessage("Event1"));
         eventSourceB.publishMessage(EventTestUtils.asEventMessage("Event2"));
 
         MessageStream<EventMessage> stream = testSubject.open(
-                StreamingCondition.startingFrom(null), null
+                StreamingCondition.startingFrom(TrackingToken.FIRST), null
         );
 
         assertThat(stream.hasNextAvailable()).isTrue();
         assertThat(stream.next()).isPresent();
+
+        stream.close();
+    }
+
+    @Test
+    void openWithLatestTokenSkipsExistingEvents() {
+        eventSourceA.publishMessage(EventTestUtils.asEventMessage("Event1"));
+
+        MessageStream<EventMessage> stream = testSubject.open(
+                StreamingCondition.startingFrom(TrackingToken.LATEST), null
+        );
+
+        assertThat(stream.hasNextAvailable()).isFalse();
+
+        eventSourceA.publishMessage(EventTestUtils.asEventMessage("Event2"));
+
+        assertThat(stream.hasNextAvailable()).isTrue();
+        MessageStream.Entry<EventMessage> entry = stream.next().orElseThrow();
+        assertThat(entry.message().payload()).isEqualTo("Event2");
 
         stream.close();
     }
@@ -270,7 +289,7 @@ class MultiStreamableEventSourceTest {
         eventSourceB.publishMessage(EventTestUtils.asEventMessage("Event2"));
 
         MessageStream<EventMessage> stream = testSubject.open(
-                StreamingCondition.startingFrom(null), null
+                StreamingCondition.startingFrom(TrackingToken.FIRST), null
         );
 
         MessageStream.Entry<EventMessage> entry1 = stream.next().orElseThrow();
@@ -292,7 +311,7 @@ class MultiStreamableEventSourceTest {
         eventSourceA.publishMessage(EventTestUtils.asEventMessage("Event1"));
 
         MessageStream<EventMessage> stream = testSubject.open(
-                StreamingCondition.startingFrom(null), null
+                StreamingCondition.startingFrom(TrackingToken.FIRST), null
         );
 
         stream.next();
@@ -308,7 +327,7 @@ class MultiStreamableEventSourceTest {
         AtomicBoolean callbackInvoked = new AtomicBoolean(false);
 
         MessageStream<EventMessage> stream = testSubject.open(
-                StreamingCondition.startingFrom(null), null
+                StreamingCondition.startingFrom(TrackingToken.FIRST), null
         );
 
         stream.setCallback(() -> callbackInvoked.set(true));
@@ -375,7 +394,7 @@ class MultiStreamableEventSourceTest {
     @Test
     void emptyStreamReturnsNoMessages() {
         MessageStream<EventMessage> stream = testSubject.open(
-                StreamingCondition.startingFrom(null), null
+                StreamingCondition.startingFrom(TrackingToken.FIRST), null
         );
 
         assertThat(stream.hasNextAvailable()).isFalse();
@@ -390,10 +409,10 @@ class MultiStreamableEventSourceTest {
         eventSourceB.publishMessage(EventTestUtils.asEventMessage("Event2"));
 
         MessageStream<EventMessage> stream1 = testSubject.open(
-                StreamingCondition.startingFrom(null), null
+                StreamingCondition.startingFrom(TrackingToken.FIRST), null
         );
         MessageStream<EventMessage> stream2 = testSubject.open(
-                StreamingCondition.startingFrom(null), null
+                StreamingCondition.startingFrom(TrackingToken.FIRST), null
         );
 
         assertThat(stream1.next()).isPresent();
