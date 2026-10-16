@@ -36,7 +36,7 @@ Kotlin::
 --
 [source,kotlin]
 ----
-awaitPublish("notifyApproved", OrderApproved(orderId, approvedBy))
+include::example$workflows/publishingevents/ApprovalWorkflowKotlin.kt[tag=await-publish,indent=0]
 ----
 --
 ====

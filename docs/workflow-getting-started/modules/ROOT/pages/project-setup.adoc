@@ -3,6 +3,17 @@
 
 Before we can build our order fulfillment workflow, we need to set up the project dependencies and define our domain classes.
 
+[TIP]
+====
+The Java and Kotlin code samples for this tutorial are available in the link:https://github.com/AxonIQ/axoniq-framework/tree/main/docs/workflow-getting-started/modules/ROOT/examples/gettingstarted[tutorial examples directory].
+Browse them on GitHub, or clone the repository and compile the documentation samples from its root:
+
+[source,bash]
+----
+./mvnw -pl docs/_samples -am compile
+----
+====
+
 == Prerequisites
 
 * Java 21 or higher
@@ -68,12 +79,7 @@ Let's define them as Java records:
 [source,java]
 .src/main/java/io/axoniq/example/order/OrderPlaced.java
 ----
-public record OrderPlaced(
-    String orderId,    // <1>
-    String customerId,
-    String email,
-    double amount
-) {}
+include::example$gettingstarted/order/OrderPlaced.java[tag=order-placed,indent=0]
 ----
 
 <.> The `orderId` will serve as the workflow instance identifier.
@@ -82,10 +88,7 @@ When this event is published, the engine creates a new workflow instance and pop
 [source,java]
 .src/main/java/io/axoniq/example/order/PaymentConfirmed.java
 ----
-public record PaymentConfirmed(
-    String orderId,       // <1>
-    String transactionId
-) {}
+include::example$gettingstarted/order/PaymentConfirmed.java[tag=payment-confirmed,indent=0]
 ----
 
 <.> The `orderId` field lets us correlate this event to the correct workflow instance.
@@ -105,63 +108,25 @@ For the tutorial, we'll create simple stubs that log what they're doing:
 [source,java]
 .src/main/java/io/axoniq/example/order/InventoryService.java
 ----
-public class InventoryService {
-
-    static Logger logger = LoggerFactory.getLogger(InventoryService.class);
-
-    public static boolean reserveStock() {
-        logger.info("Reserving stock for order.");
-        return true;
-    }
-
-    public static boolean reserveStock(Map<String, Object> payload) {
-        logger.info("Reserving stock for order: {}", payload);
-        return true;
-    }
-}
+include::example$gettingstarted/order/InventoryService.java[tag=inventory-service,indent=0]
 ----
 
 [source,java]
 .src/main/java/io/axoniq/example/order/PaymentService.java
 ----
-public class PaymentService {
-
-    static Logger logger = LoggerFactory.getLogger(PaymentService.class);
-
-    public static Map<String, Object> initiatePayment(ProcessingContext pc,
-                                                       Map<String, Object> payload) {
-        logger.info("Initiating payment for order: {}", payload.get("orderId"));
-        return Map.of();
-    }
-}
+include::example$gettingstarted/order/PaymentService.java[tag=payment-service,indent=0]
 ----
 
 [source,java]
 .src/main/java/io/axoniq/example/order/ShippingService.java
 ----
-public class ShippingService {
-
-    static Logger logger = LoggerFactory.getLogger(ShippingService.class);
-
-    public static Map<String, Object> shipOrder(ProcessingContext pc,
-                                                 Map<String, Object> payload) {
-        logger.info("Shipping order: {}", payload.get("orderId"));
-        return Map.of("shipped", true);
-    }
-}
+include::example$gettingstarted/order/ShippingService.java[tag=shipping-service,indent=0]
 ----
 
 [source,java]
 .src/main/java/io/axoniq/example/order/NotificationService.java
 ----
-public class NotificationService {
-
-    static Logger logger = LoggerFactory.getLogger(NotificationService.class);
-
-    public static void sendConfirmation(String email) {
-        logger.info("Sending order confirmation to {}.", email);
-    }
-}
+include::example$gettingstarted/order/NotificationService.java[tag=notification-service,indent=0]
 ----
 
 With our project set up and domain classes defined, let's create our first workflow!
