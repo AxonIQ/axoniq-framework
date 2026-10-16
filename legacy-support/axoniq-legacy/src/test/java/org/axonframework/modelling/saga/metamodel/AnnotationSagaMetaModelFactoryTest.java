@@ -142,7 +142,7 @@ class AnnotationSagaMetaModelFactoryTest {
     class PayloadTypeFor {
 
         @Test
-        void returnsTheHandlerPayloadTypeForADeclaredEventName() {
+        void returnsTheHandlerPayloadTypeForThePayloadTypeName() {
             SagaModel<MySaga> sagaModel = testSubject.modelOf(MySaga.class);
 
             assertThat(sagaModel.payloadTypeFor(new QualifiedName(MySagaStartEvent.class)))
@@ -154,6 +154,64 @@ class AnnotationSagaMetaModelFactoryTest {
             SagaModel<MySaga> sagaModel = testSubject.modelOf(MySaga.class);
 
             assertThat(sagaModel.payloadTypeFor(new QualifiedName(String.class))).isEmpty();
+        }
+    }
+
+    @Nested
+    class DeclaredEventNames {
+
+        private static final QualifiedName CURRENT_NAME = new QualifiedName("current", "SagaStarted");
+        private static final QualifiedName LEGACY_NAME = new QualifiedName("legacy", "MySagaStartEvent");
+
+        @Test
+        void supportedEventsContainsEveryDeclaredNameInsteadOfThePayloadTypeName() {
+            // when
+            SagaModel<SagaWithDeclaredEventNames> sagaModel = testSubject.modelOf(SagaWithDeclaredEventNames.class);
+
+            // then
+            assertThat(sagaModel.supportedEvents()).containsExactlyInAnyOrder(
+                    CURRENT_NAME,
+                    LEGACY_NAME,
+                    new QualifiedName(MySagaEndEvent.class)
+            );
+        }
+
+        @Test
+        void payloadTypeForReturnsTheHandlerPayloadTypeForEveryDeclaredName() {
+            // given
+            SagaModel<SagaWithDeclaredEventNames> sagaModel = testSubject.modelOf(SagaWithDeclaredEventNames.class);
+
+            // when / then
+            assertThat(sagaModel.payloadTypeFor(CURRENT_NAME)).contains(MySagaStartEvent.class);
+            assertThat(sagaModel.payloadTypeFor(LEGACY_NAME)).contains(MySagaStartEvent.class);
+        }
+
+        @Test
+        void payloadTypeForReturnsEmptyForThePayloadTypeNameWhenNamesAreDeclared() {
+            // given
+            SagaModel<SagaWithDeclaredEventNames> sagaModel = testSubject.modelOf(SagaWithDeclaredEventNames.class);
+
+            // when / then
+            assertThat(sagaModel.payloadTypeFor(new QualifiedName(MySagaStartEvent.class))).isEmpty();
+        }
+    }
+
+    public static class SagaWithDeclaredEventNames {
+
+        @StartSaga
+        @SagaEventHandler(associationProperty = "property", event = {
+                @org.axonframework.messaging.core.annotation.QualifiedName(namespace = "current",
+                        name = "SagaStarted"),
+                @org.axonframework.messaging.core.annotation.QualifiedName(namespace = "legacy",
+                        name = "MySagaStartEvent")
+        })
+        public void handle(MySagaStartEvent event) {
+
+        }
+
+        @SagaEventHandler(associationProperty = "property")
+        public void handle(MySagaEndEvent event) {
+
         }
     }
 
