@@ -1,0 +1,15 @@
+= Event Schedulers
+:navtitle: Event Schedulers
+:reftext: Event Schedulers migration
+:page-aliases: deadlines:event-schedulers.adoc
+
+Axon Framework 5 has no direct successor for the Axon Framework 4 built-in event scheduling.
+We have decided against this, as it is rather straightforward to schedule messages yourself.
+You can schedule a command or an event yourself by picking your desired scheduling library and invoke the `CommandGateway` or `EventGateway` to dispatch the message at your desired time.
+For more on how we envision message scheduling going forward, be sure to check out our Message Scheduling guide xref:message-scheduling-guide:ROOT:index.adoc[here].
+
+[WARNING]
+====
+Event schedulers do not have a migration aid for in-flight scheduled event yet in Axon Framework 5.
+Once the intended replacement is in place the documentation will be adjusted accordingly.
+====
