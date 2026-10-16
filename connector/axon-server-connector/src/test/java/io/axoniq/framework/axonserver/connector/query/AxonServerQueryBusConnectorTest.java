@@ -317,6 +317,53 @@ class AxonServerQueryBusConnectorTest {
             verify(resultStream).close();
             verify(mockConverter).convert(any(), eq((Type)String.class));
         }
+
+        @Test
+        void queryReportsCompletedOnceLastResponseIsConsumed() {
+            // given
+            QueryResponse response = QueryResponse.newBuilder()
+                                                  .setMessageIdentifier(UUID.randomUUID().toString())
+                                                  .setPayload(SerializedObject.newBuilder()
+                                                                              .setType("java.lang.String")
+                                                                              .setData(copyFromUtf8("ok"))
+                                                                              .build())
+                                                  .build();
+            when(mockQueryChannel.query(any())).thenReturn(new StubResultStream<>(response));
+
+            QueryMessage query = new GenericQueryMessage(
+                    new GenericMessage(new MessageType("QueryType", "1"),
+                                       "payload".getBytes(),
+                                       Metadata.emptyInstance())
+            );
+            MessageStream<QueryResponseMessage> stream = testSubject.query(query, null);
+
+            // when
+            assertThat(stream.next()).isPresent();
+
+            // then the result stream closed on handing out its last response, which needs no further read to notice
+            assertThat(stream.isCompleted()).isTrue();
+            assertThat(stream.error()).isNotPresent();
+        }
+
+        @Test
+        void queryReportsFailureWithoutReading() {
+            // given
+            RuntimeException failure = new RuntimeException("connection lost");
+            when(mockQueryChannel.query(any())).thenReturn(new StubResultStream<QueryResponse>(failure));
+
+            QueryMessage query = new GenericQueryMessage(
+                    new GenericMessage(new MessageType("QueryType", "1"),
+                                       "payload".getBytes(),
+                                       Metadata.emptyInstance())
+            );
+
+            // when
+            MessageStream<QueryResponseMessage> stream = testSubject.query(query, null);
+
+            // then
+            assertThat(stream.isCompleted()).isTrue();
+            assertThat(stream.error()).contains(failure);
+        }
     }
 
     @Nested
