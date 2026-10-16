@@ -31,7 +31,7 @@
 
     <name>Axoniq Framework - Documentation Code Samples</name>
     <description>
-        Compiles the code samples that are included in the documentation. The Java sources live in the Antora
+        Compiles the code samples that are included in the documentation. The Java and Kotlin sources live in the Antora
         "examples" directories of each documentation component (docs/*/modules/*/examples) and are included in the
         documentation pages through tagged regions. This module exists solely to guarantee that every documented
         code sample compiles against the current framework APIs. It is never deployed. The main Antora documentation
@@ -99,6 +99,12 @@
         <dependency>
             <groupId>io.axoniq.framework</groupId>
             <artifactId>axoniq-workflow-dsl</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <!-- Kotlin workflow DSL, for the Kotlin samples (not managed by the BOM) -->
+        <dependency>
+            <groupId>io.axoniq.framework</groupId>
+            <artifactId>axoniq-workflow-dsl-kotlin</artifactId>
             <version>${project.version}</version>
         </dependency>
         <!-- Workflow test fixture, for the testing-workflows samples (not managed by the BOM). Compile scope here
@@ -216,11 +222,17 @@
                                 <source>${project.basedir}/../reference-guide/modules/migration/examples</source>
                                 <source>${project.basedir}/../reference-guide/modules/snapshotting/examples</source>
                                 <source>${project.basedir}/../reference-guide/modules/workflows/examples</source>
+                                <source>${project.basedir}/../workflow-getting-started/modules/ROOT/examples</source>
                                 <source>${project.basedir}/../reference-guide/modules/tracing/examples</source>
                             </sources>
                         </configuration>
                     </execution>
                 </executions>
+            </plugin>
+            <!-- Uses the same documentation source roots registered above, including Java support types. -->
+            <plugin>
+                <groupId>org.jetbrains.kotlin</groupId>
+                <artifactId>kotlin-maven-plugin</artifactId>
             </plugin>
         </plugins>
     </build>

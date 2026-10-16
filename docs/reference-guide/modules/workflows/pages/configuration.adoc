@@ -57,8 +57,9 @@ include::example$workflows/configuration/ConfigurationExamples.java[tag=step1-mo
 Specifies the module name and the author-facing workflow context type. Use `SimpleWorkflowContext.class` for the built-in context, or your
 own custom context class. Both implement `WorkflowContext`, the contract supplied to workflow bodies.
 The context type must extend `AbstractWorkflowContext`.
-`WorkflowModule.configure(name, contextType)` is the variant that also lets you supply a `WorkflowConfigurationRegistry`,
-a `WorkflowExecutionRepository`, history settings, and the configuration of the event processors, see <<running-on-several-nodes,Running on several nodes>>.
+`WorkflowModule.configure(name, contextType)` exposes the same builder as `defaults(name, contextType)`.
+With either entry point, you can supply a `WorkflowConfigurationRegistry`, a `WorkflowExecutionRepository`, history settings,
+and the configuration of the event processors after the workflow definitions, see <<running-on-several-nodes,Running on several nodes>>.
 
 === Step 2: Workflow definitions
 
@@ -193,7 +194,7 @@ Claims then stay inside the process, so run a single node only.
 
 === Processor settings
 
-`WorkflowModule.configure(...)` accepts `processorConfiguration(...)` for the engine processor and `historyProcessorConfiguration(...)` for the history processor.
+After the workflow definitions, the module builder accepts `processorConfiguration(...)` for the engine processor and `historyProcessorConfiguration(...)` for the history processor.
 Both take a function that receives and returns a `PooledStreamingEventProcessorConfiguration`.
 Only the initial segment count is applied to a new token store. To change it later, split or merge the stored tokens.
 
