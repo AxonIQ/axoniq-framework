@@ -1,4 +1,12 @@
 #!/usr/bin/env bash
+#
+# Copyright (c) 2022-2026. Axoniq B.V.
+#
+# Licensed under the Axoniq Terms of Service (the "Terms"). You may not
+# use this file except in compliance with the Terms, available at
+# https://www.axoniq.io/legal/terms-of-service
+#
+
 # Detects external SNAPSHOT dependencies actually resolved for this reactor build (e.g. Axon
 # Framework, when axon-framework.version points at a SNAPSHOT), hashes their jar content, and
 # drops the result into every actually-active reactor module's src/main/resources. The Maven

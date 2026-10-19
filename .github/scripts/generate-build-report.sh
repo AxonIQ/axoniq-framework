@@ -1,4 +1,12 @@
 #!/usr/bin/env bash
+#
+# Copyright (c) 2022-2026. Axoniq B.V.
+#
+# Licensed under the Axoniq Terms of Service (the "Terms"). You may not
+# use this file except in compliance with the Terms, available at
+# https://www.axoniq.io/legal/terms-of-service
+#
+
 # Parses a captured Maven build log into a per-module markdown status table: cache hit/miss,
 # success/failure/skipped, build time, and (for a failed module) the first failing test and a
 # short error message.

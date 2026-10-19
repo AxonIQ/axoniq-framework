@@ -1,3 +1,11 @@
+<!--
+  - Copyright (c) 2022-2026. Axoniq B.V.
+  -
+  - Licensed under the Axoniq Terms of Service (the "Terms"). You may not
+  - use this file except in compliance with the Terms, available at
+  - https://www.axoniq.io/legal/terms-of-service
+  -->
+
 <svg xmlns="http://www.w3.org/2000/svg" width="820" height="580" viewBox="0 0 820 580" font-family="-apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif">
   <defs>
     <marker id="a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
