@@ -93,7 +93,7 @@ final class MicrometerSpanThreadLocalAccessor implements ThreadLocalAccessor<Spa
             return currentSpan != null && (tracingContext == null || !currentSpan.equals(tracingContext.getSpan()))
                     ? currentSpan
                     : null;
-        } catch (RuntimeException | AssertionError e) {
+        } catch (RuntimeException e) {
             logContainedFailure("capturing", e);
             return null;
         }
@@ -118,11 +118,14 @@ final class MicrometerSpanThreadLocalAccessor implements ThreadLocalAccessor<Spa
     public void restore(Span previousValue) {
         closeCurrentScope();
         try {
-            if (!Objects.equals(previousValue, tracer.currentSpan())) {
-                logger.warn("Closing a propagated span scope did not restore the previous Micrometer span. "
-                                    + "The tracing mismatch was contained so application processing can continue.");
+            Span currentSpan = tracer.currentSpan();
+            if (!Objects.equals(previousValue, currentSpan)) {
+                logger.warn("Closing a propagated span scope left span [{}] current instead of the previous span [{}]. "
+                                    + "A scope was most likely opened and not closed. The tracing mismatch was "
+                                    + "contained so application processing can continue.",
+                            currentSpan, previousValue);
             }
-        } catch (RuntimeException | AssertionError e) {
+        } catch (RuntimeException e) {
             logContainedFailure("verifying", e);
         }
     }
@@ -136,7 +139,7 @@ final class MicrometerSpanThreadLocalAccessor implements ThreadLocalAccessor<Spa
         Tracer.SpanInScope scope;
         try {
             scope = tracer.withSpan(span);
-        } catch (RuntimeException | AssertionError e) {
+        } catch (RuntimeException e) {
             logContainedFailure("restoring", e);
             scope = NO_OP_SCOPE;
         }
@@ -151,7 +154,7 @@ final class MicrometerSpanThreadLocalAccessor implements ThreadLocalAccessor<Spa
         }
         try {
             currentScopes.pop().close();
-        } catch (RuntimeException | AssertionError e) {
+        } catch (RuntimeException e) {
             logContainedFailure("closing", e);
         } finally {
             if (currentScopes.isEmpty()) {
