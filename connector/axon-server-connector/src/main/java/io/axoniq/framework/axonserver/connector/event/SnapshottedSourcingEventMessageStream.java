@@ -182,6 +182,8 @@ class SnapshottedSourcingEventMessageStream implements MessageStream<EventMessag
 
     @Override
     public void close() {
-        stream.close();
+        if (!stream.isClosed()) {
+            stream.close();
+        }
     }
 }
