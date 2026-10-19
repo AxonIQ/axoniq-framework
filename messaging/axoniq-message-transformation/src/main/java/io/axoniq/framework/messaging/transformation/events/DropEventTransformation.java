@@ -9,19 +9,15 @@
 package io.axoniq.framework.messaging.transformation.events;
 
 import io.axoniq.framework.messaging.transformation.FromMatcher;
-import io.axoniq.framework.messaging.transformation.TransformationContext;
 import org.axonframework.common.annotation.Internal;
-import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
-import org.axonframework.messaging.eventhandling.EventMessage;
 
 import static java.util.Objects.requireNonNull;
 
 /**
  * A 1:0 drop {@link EventTransformation}: it suppresses an event matched by exact identity {@code source}, declaring
- * no {@code to} and producing no output. The chain removes a matched event by short-circuiting on this variant; a
- * direct {@link #transform(EventMessage, TransformationContext)} call yields an empty stream. A drop converts no
- * payload and resolves no identity, so neither the
+ * no {@code to} and producing no output. The chain removes a matched event by short-circuiting on this variant. A drop
+ * converts no payload and resolves no identity, so neither the
  * {@link org.axonframework.messaging.core.conversion.MessageConverter} nor the
  * {@link org.axonframework.messaging.core.MessageTypeResolver} is consulted.
  *
@@ -42,19 +38,6 @@ final class DropEventTransformation implements EventTransformation {
     DropEventTransformation(MessageType source) {
         this.source = requireNonNull(source, "source may not be null");
         this.matcher = new FromMatcher.Exact(source);
-    }
-
-    /**
-     * Produces no output: the matched event is suppressed. The empty stream satisfies a direct SPI call; within the
-     * chain a drop is short-circuited and this is not invoked.
-     *
-     * @param message the matched input message
-     * @param context the per-message {@link TransformationContext}; required by the contract but otherwise unused
-     * @return an empty stream
-     */
-    @Override
-    public MessageStream<EventMessage> transform(EventMessage message, TransformationContext context) {
-        return MessageStream.empty();
     }
 
     FromMatcher matcher() {

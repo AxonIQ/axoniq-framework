@@ -9,7 +9,6 @@
 package io.axoniq.framework.messaging.transformation.events;
 
 import io.axoniq.framework.messaging.transformation.ChainConfigurationException;
-import io.axoniq.framework.messaging.transformation.TransformationContext;
 import org.axonframework.messaging.core.Context;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
@@ -158,20 +157,6 @@ final class EventTransformerChainDropTest {
                     null, neverInvokedConverter(), neverInvokedMessageTypeResolver()));
 
             assertThat(outputs).isEmpty();
-        }
-
-        @Test
-        void dropTransformationEmitsAnEmptyStreamWhenInvokedDirectly() {
-            // SPI contract: the chain short-circuits a drop, but a direct transform(...) call must
-            // still yield no output element. The stand-ins fail loudly if a drop converts or resolves.
-            EventTransformation drop = EventTransformation.drop(HEARTBEAT_V1);
-            TransformationContext context = new TransformationContext(
-                    Context.empty(), null, neverInvokedConverter(), neverInvokedMessageTypeResolver());
-
-            MessageStream<? extends EventMessage> result =
-                    drop.transform(eventOf(HEARTBEAT_V1, "heartbeat-payload"), context);
-
-            assertThat(collectMessages(result)).isEmpty();
         }
     }
 
