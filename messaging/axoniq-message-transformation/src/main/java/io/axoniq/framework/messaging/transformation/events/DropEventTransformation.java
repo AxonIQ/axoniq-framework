@@ -57,8 +57,7 @@ final class DropEventTransformation implements EventTransformation {
         return MessageStream.empty();
     }
 
-    @Override
-    public FromMatcher matcher() {
+    FromMatcher matcher() {
         return matcher;
     }
 

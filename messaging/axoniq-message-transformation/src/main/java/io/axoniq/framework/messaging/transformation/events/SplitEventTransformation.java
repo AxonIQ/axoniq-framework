@@ -106,8 +106,7 @@ final class SplitEventTransformation<T> implements EventTransformation {
         return MessageStream.fromIterable(produced);
     }
 
-    @Override
-    public FromMatcher matcher() {
+    FromMatcher matcher() {
         return matcher;
     }
 

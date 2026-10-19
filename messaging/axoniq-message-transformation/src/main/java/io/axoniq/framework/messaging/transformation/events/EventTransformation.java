@@ -11,7 +11,6 @@ package io.axoniq.framework.messaging.transformation.events;
 import io.axoniq.framework.messaging.transformation.FromMatcher;
 import io.axoniq.framework.messaging.transformation.MessageTransformation;
 import org.axonframework.common.TypeReference;
-import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
@@ -191,15 +190,6 @@ public sealed interface EventTransformation extends MessageTransformation<EventM
         requireNonNull(source, SOURCE_NOT_NULL);
         return new DropEventTransformation(source);
     }
-
-    /**
-     * The {@code from}-side matcher selecting the events this transformation applies to. The chain's lookup uses
-     * this; the declared {@code to} identity, if any, is variant-specific and not part of this contract.
-     *
-     * @return the {@code from}-side matcher
-     */
-    @Internal
-    FromMatcher matcher();
 
     /**
      * Continuation of {@link #from(Predicate)}; optionally restricts the predicate match to a set of declared

@@ -70,8 +70,7 @@ final class RenameEventTransformation implements EventTransformation {
         return MessageStream.just(output);
     }
 
-    @Override
-    public FromMatcher matcher() {
+    FromMatcher matcher() {
         return matcher;
     }
 

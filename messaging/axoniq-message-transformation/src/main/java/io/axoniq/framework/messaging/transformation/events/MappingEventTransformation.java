@@ -110,8 +110,7 @@ final class MappingEventTransformation<T, U> implements EventTransformation {
                 resolved.get()));
     }
 
-    @Override
-    public FromMatcher matcher() {
+    FromMatcher matcher() {
         return matcher;
     }
 
