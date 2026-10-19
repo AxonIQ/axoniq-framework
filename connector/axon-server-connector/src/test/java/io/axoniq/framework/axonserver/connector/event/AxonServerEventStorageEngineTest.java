@@ -211,6 +211,43 @@ class AxonServerEventStorageEngineTest {
         }
 
         @Test
+        void sourceWithUnboundedSnapshotStrategyUsesTheSeparateLoadInsteadOfTheSingleRoundTripRpcByDefault() {
+            // given a stored snapshot, found through the separate load() RPC
+            io.axoniq.axonserver.grpc.event.dcb.Snapshot storedSnapshot =
+                    io.axoniq.axonserver.grpc.event.dcb.Snapshot.newBuilder()
+                                                                .setName(qualifiedName.fullName())
+                                                                .setVersion("0.0.1")
+                                                                .putMetadata("__AxonFramework__:Position-Type", "GIP")
+                                                                .build();
+            when(snapshotChannel.getLastSnapshot(any())).thenReturn(CompletableFuture.completedFuture(
+                    GetLastSnapshotResponse.newBuilder().setSnapshot(storedSnapshot).setSequence(50L).build()
+            ));
+            when(sourcingStream.nextIfAvailable())
+                    .thenReturn(SourceEventsResponse.newBuilder().setConsistencyMarker(50L).build(), null);
+            when(sourcingStream.peek())
+                    .thenReturn(SourceEventsResponse.newBuilder().setConsistencyMarker(50L).build(), null);
+
+            SourcingCondition condition = SourcingCondition.conditionFor(
+                    new SourcingStrategy.Snapshot(qualifiedName, identifier, null),
+                    EventCriteria.havingTags("AGGREGATE_TYPE", identifier)
+            );
+
+            // when / then the snapshot is prepended through the separate load(), and the single-round-trip RPC
+            // is never attempted, since it is disabled by default
+            StepVerifier.create(FluxUtils.of(testSubject.source(condition, null)))
+                        .assertNext(entry -> assertThat(entry.message()).isInstanceOf(SnapshotEventMessage.class))
+                        .expectNextMatches(entry -> entry.message() instanceof TerminalEventMessage)
+                        .verifyComplete();
+
+            verify(snapshotChannel).getLastSnapshot(any());
+            verify(dcbEventChannel, never()).source(any(SnapshottedSourceRequest.class));
+            ArgumentCaptor<SourceEventsRequest> captor = ArgumentCaptor.forClass(SourceEventsRequest.class);
+            verify(dcbEventChannel).source(captor.capture());
+            assertThat(captor.getValue().getFromSequence()).isEqualTo(50L);
+        }
+
+        @Test
+        @Disabled("#675 - source-with-snapshot is disabled by default")
         @SuppressWarnings("unchecked")
         void sourceWithUnboundedSnapshotStrategyEmitsStoredSnapshotBeforeSubsequentEvents() {
             // given a snapshot followed by one event and the consistency marker on the single-round-trip stream
@@ -264,6 +301,7 @@ class AxonServerEventStorageEngineTest {
         }
 
         @Test
+        @Disabled("#675 - source-with-snapshot is disabled by default")
         @SuppressWarnings("unchecked")
         void sourceWithUnboundedSnapshotStrategyFallsBackToLoadingSeparatelyWhenAxonServerDoesNotSupportSnapshotting() {
             // given the single-round-trip snapshotted-source RPC failing with UNIMPLEMENTED, as an older Axon
@@ -309,6 +347,7 @@ class AxonServerEventStorageEngineTest {
         }
 
         @Test
+        @Disabled("#675 - source-with-snapshot is disabled by default")
         @SuppressWarnings("unchecked")
         void sourceWithUnboundedSnapshotStrategyOnlyFallsBackOnceWhenTheAvailabilityCallbackRacesTheInlineCheck()
                 throws InterruptedException {
@@ -356,6 +395,7 @@ class AxonServerEventStorageEngineTest {
         }
 
         @Test
+        @Disabled("#675 - source-with-snapshot is disabled by default")
         @SuppressWarnings("unchecked")
         void sourceWithUnboundedSnapshotStrategySkipsTheSingleRoundTripRpcAfterItWasFoundUnimplementedOnce() {
             // given the snapshotted-source RPC failing with UNIMPLEMENTED
@@ -391,6 +431,7 @@ class AxonServerEventStorageEngineTest {
         }
 
         @Test
+        @Disabled("#675 - source-with-snapshot is disabled by default")
         @SuppressWarnings("unchecked")
         void sourceWithUnboundedSnapshotStrategyFallsBackToFullReconstructionWhenNeitherAxonServerNorASnapshotAreAvailable() {
             // given the single-round-trip snapshotted-source RPC failing with UNIMPLEMENTED, and the separate
