@@ -1,7 +1,6 @@
 Copyright (c) Axoniq B.V. All rights reserved.
 
-Axoniq Platform Framework Client, part of Axoniq Framework, is licensed
-under the Axoniq Terms of Service. The Terms published at the URL below
-govern all use of this software:
+Axoniq Framework is licensed under the Axoniq Terms of Service.
+The Terms published at the URL below govern all use of this software:
 
   https://www.axoniq.io/legal/terms-of-service
