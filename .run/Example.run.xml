@@ -1,3 +1,11 @@
+<!--
+  ~ Copyright (c) 2022-2026. Axoniq B.V.
+  ~
+  ~ Licensed under the Axoniq Terms of Service (the "Terms"). You may not
+  ~ use this file except in compliance with the Terms, available at
+  ~ https://www.axoniq.io/legal/terms-of-service
+  -->
+
 <component name="ProjectRunConfigurationManager">
   <configuration default="false" name="Example" type="Application" factoryName="Application">
     <option name="MAIN_CLASS_NAME" value="org.axonframework.examples.university.UniversityExampleApplication" />
