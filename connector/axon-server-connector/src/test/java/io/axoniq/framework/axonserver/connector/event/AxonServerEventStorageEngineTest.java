@@ -203,7 +203,8 @@ class AxonServerEventStorageEngineTest {
 
             // then
             assertThat(result).isNotNull();
-            assertThat(result.position()).isEqualTo(new GlobalIndexPosition(42L));
+            // the snapshot includes the event at sequence 42, so the first event it excludes is at 43
+            assertThat(result.position()).isEqualTo(new GlobalIndexPosition(43L));
             ArgumentCaptor<GetLastSnapshotRequest> captor = ArgumentCaptor.forClass(GetLastSnapshotRequest.class);
             verify(snapshotChannel).getLastSnapshot(captor.capture());
             ByteString expectedKey = snapshotStore.snapshotKey(qualifiedName, identifier);
@@ -305,7 +306,7 @@ class AxonServerEventStorageEngineTest {
             verify(snapshotChannel).getLastSnapshot(any());
             ArgumentCaptor<SourceEventsRequest> captor = ArgumentCaptor.forClass(SourceEventsRequest.class);
             verify(dcbEventChannel).source(captor.capture());
-            assertThat(captor.getValue().getFromSequence()).isEqualTo(50L);
+            assertThat(captor.getValue().getFromSequence()).isEqualTo(51L);
         }
 
         @Test
@@ -480,7 +481,7 @@ class AxonServerEventStorageEngineTest {
 
             ArgumentCaptor<SourceEventsRequest> captor = ArgumentCaptor.forClass(SourceEventsRequest.class);
             verify(dcbEventChannel).source(captor.capture());
-            assertThat(captor.getValue().getFromSequence()).isEqualTo(50L);
+            assertThat(captor.getValue().getFromSequence()).isEqualTo(51L);
         }
 
         @Test

@@ -86,7 +86,8 @@ public class AxonServerSnapshotStore implements SnapshotStore {
             .addSnapshot(AddSnapshotRequest.newBuilder()
                 .setKey(key)
                 .setSequence(switch(snapshot.position()) {
-                    case GlobalIndexPosition gip -> GlobalIndexPosition.toIndex(snapshot.position());
+                    // The position is the first event the snapshot excludes; Axon Server wants the last it includes
+                    case GlobalIndexPosition gip -> GlobalIndexPosition.toIndex(snapshot.position()) - 1;
                     case AggregateSequenceNumberPosition asnp -> AggregateSequenceNumberPosition.toSequenceNumber(snapshot.position());
                     default -> throw new IllegalArgumentException("Unsupported position type: " + snapshot.position());
                 })
@@ -133,7 +134,7 @@ public class AxonServerSnapshotStore implements SnapshotStore {
                 Map<String, String> metadata = new HashMap<>(snapshot.getMetadataMap());
                 String positionType = metadata.remove(POSITION_TYPE_KEY);  // remove this key, so user doesn't notice
                 Position position = switch(positionType) {
-                    case "GIP" -> new GlobalIndexPosition(sr.getSequence());
+                    case "GIP" -> new GlobalIndexPosition(sr.getSequence() + 1);
                     case "ASNP" -> new AggregateSequenceNumberPosition(sr.getSequence());
                     case null, default -> throw new IllegalArgumentException("Unexpected position type: " + positionType);
                 };
