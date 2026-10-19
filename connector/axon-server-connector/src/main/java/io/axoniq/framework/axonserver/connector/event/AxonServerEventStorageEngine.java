@@ -95,7 +95,13 @@ public class AxonServerEventStorageEngine implements EventStorageEngine, Snapsho
     private final TaggedEventConverter converter;
     private final AxonServerSnapshotStore snapshotStore;
 
-    private final AtomicBoolean snapshottedSourceSupported = new AtomicBoolean(true);
+    /*
+     * Disabled by default: the single-round-trip snapshotted-source RPC on affected Axon Server versions
+     * silently skips the event at the snapshot's position instead of including it. Flip to true once the
+     * server fix is in place and this engine can detect it supports the corrected behavior.
+     * See https://github.com/AxonIQ/axoniq-framework/issues/675.
+     */
+    private final AtomicBoolean snapshottedSourceSupported = new AtomicBoolean(false);
 
     /**
      * Constructs an {@code AxonServerEventStorageEngine} with the given {@code connection} and {@code converter}, using
