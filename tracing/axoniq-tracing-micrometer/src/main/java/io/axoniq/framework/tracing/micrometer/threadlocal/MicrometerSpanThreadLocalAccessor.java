@@ -43,8 +43,11 @@ import java.util.Objects;
  * <p>
  * This differs deliberately from Micrometer's default accessor, whose clear operation replaces the scope held by the
  * current restore action. A nested clear can consequently discard the scope needed to restore the outer span and
- * trigger a context-propagation assertion in reactive drivers. Keeping the scopes in a LIFO stack preserves the same
- * Micrometer Tracing semantics for synchronous code while making nested Reactor snapshots safe.
+ * trigger a context-propagation assertion in reactive drivers, or leave the span current on a worker thread after the
+ * reactive pipeline completed. Keeping the scopes in a LIFO stack preserves the same Micrometer Tracing semantics for
+ * synchronous code while making nested Reactor snapshots safe. The corresponding fix for Micrometer's default accessor
+ * is proposed in <a href="https://github.com/micrometer-metrics/tracing/pull/1614">micrometer-metrics/tracing pull
+ * request 1614</a>.
  * <p>
  * The accessor uses Micrometer's standard {@link ObservationAwareSpanThreadLocalAccessor#KEY} and retains its
  * Observation-aware read behavior: when the current span is already governed by an {@link Observation}, the

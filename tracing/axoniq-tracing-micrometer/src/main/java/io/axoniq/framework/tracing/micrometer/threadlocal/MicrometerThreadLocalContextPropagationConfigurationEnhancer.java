@@ -142,6 +142,8 @@ public final class MicrometerThreadLocalContextPropagationConfigurationEnhancer 
         }
         // The standard Micrometer accessor uses this same key. Replace it so ContextSnapshot always selects the
         // balanced implementation; registering both would leave selection dependent on registry order.
+        // shortcut: replaces Micrometer's accessor until micrometer-metrics/tracing PR 1614 is in every supported
+        // Micrometer Tracing version; then register ObservationAwareSpanThreadLocalAccessor again.
         if (existing != null) {
             contextRegistry.removeThreadLocalAccessor(spanAccessorKey);
         }
