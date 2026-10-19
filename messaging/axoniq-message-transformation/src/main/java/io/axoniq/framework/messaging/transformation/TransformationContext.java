@@ -18,8 +18,7 @@ import org.jspecify.annotations.Nullable;
 import static java.util.Objects.requireNonNull;
 
 /**
- * Immutable per-invocation context handed to a {@link MessageTransformation} when it transforms a
- * single message.
+ * Immutable per-invocation context handed to a transformation when it transforms a single message.
  * <p>
  * It groups two contexts with distinct roles. {@code entryContext} is the {@link Context} attached
  * to the source message. It is always present and, where the source provides one, carries the

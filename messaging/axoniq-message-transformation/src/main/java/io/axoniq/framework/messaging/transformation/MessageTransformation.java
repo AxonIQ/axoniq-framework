@@ -8,32 +8,27 @@
 
 package io.axoniq.framework.messaging.transformation;
 
-import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.Message;
-import org.axonframework.messaging.core.MessageStream;
 
 /**
- * Transforms messages of type {@code M}.
+ * Marker interface for transformations of {@link Message messages}, grouping the kinds of message a stored
+ * representation can be rewritten into when it is read.
  * <p>
- * A transformation accepts a {@link Message} of type {@code M} and produces zero or more transformed messages of the
- * same type.
+ * Only {@link io.axoniq.framework.messaging.transformation.events.EventTransformation EventTransformation}
+ * implements this today; command and query transformations are intended to join it, so that rolling upgrades can
+ * rewrite those messages in the same way events are rewritten now.
+ * <p>
+ * There is deliberately no common operation here. Each kind declares the behaviour its own variants need, and the
+ * chain for that kind dispatches over its sealed hierarchy, so a shared method would only erase the shape each
+ * kind actually has. A generic contract can be added here if one turns out to exist.
+ * <p>
+ * Transformations of things that are not messages sit outside this interface. A snapshot, for instance, carries
+ * entity state identified by a {@link org.axonframework.messaging.core.VersionedType VersionedType}, not a
+ * message, so a snapshot transformation is not a {@code MessageTransformation}.
  *
- * @param <M> the message type accepted as input and emitted as output
  * @author Laura Devriendt
  * @since 5.2.0
  */
-public interface MessageTransformation<M extends Message> {
+public interface MessageTransformation {
 
-    /**
-     * Transforms a message into zero or more messages of the same type. If the transformation fails, the returned
-     * stream completes with the error.
-     *
-     * @param message the input message, cannot be {@code null}
-     * @param context the transformation context, cannot be {@code null}
-     * @return a stream of transformed messages, or a stream completed with an error if the transformation failed,
-     * never {@code null}
-     * @throws NullPointerException if {@code message} or {@code context} is {@code null}
-     */
-    @Internal
-    MessageStream<? extends M> transform(M message, TransformationContext context);
 }

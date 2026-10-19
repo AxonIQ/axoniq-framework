@@ -87,8 +87,7 @@ final class SplitEventTransformation<T> implements EventTransformation {
      * @param context the per-message {@link TransformationContext}
      * @return a stream of the produced events
      */
-    @Override
-    public MessageStream<EventMessage> transform(EventMessage message, TransformationContext context) {
+    MessageStream<EventMessage> transform(EventMessage message, TransformationContext context) {
         requireNonNull(context, "context may not be null");
         T typedPayload = inputType.resolvePayload(message, context);
         List<EventMessage> produced = new ArrayList<>(outputs.size());

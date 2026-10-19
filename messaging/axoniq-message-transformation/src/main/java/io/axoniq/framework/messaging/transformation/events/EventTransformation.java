@@ -14,7 +14,6 @@ import org.axonframework.common.TypeReference;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
-import org.axonframework.messaging.eventhandling.EventMessage;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -28,9 +27,8 @@ import java.util.function.Predicate;
 import static java.util.Objects.requireNonNull;
 
 /**
- * An event-specific {@link MessageTransformation} describing how stored events of one {@link MessageType} are
- * rewritten into another when they are read. A transformation is a 1:1 payload mapping, a pure rename, a 1:N split,
- * or a 1:0 drop.
+ * Describes how stored events of one {@link MessageType} are rewritten into another when they are read. A
+ * transformation is a 1:1 payload mapping, a pure rename, a 1:N split, or a 1:0 drop.
  * <p>
  * A mapping is built through one of two {@code from} paths, each continuing with {@code to(...)} to declare the
  * resulting identity and {@code transform(...)} to supply the payload mapper:
@@ -92,7 +90,7 @@ import static java.util.Objects.requireNonNull;
  * @author Laura Devriendt
  * @since 5.2.0
  */
-public sealed interface EventTransformation extends MessageTransformation<EventMessage>
+public sealed interface EventTransformation extends MessageTransformation
         permits MappingEventTransformation, RenameEventTransformation, SplitEventTransformation,
                 DropEventTransformation {
 

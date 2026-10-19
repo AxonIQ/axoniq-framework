@@ -69,8 +69,7 @@ final class MappingEventTransformation<T, U> implements EventTransformation {
      * @throws ChainConfigurationException if the mapper's output resolves to a {@link MessageType} other than the
      *                                     declared {@code to}
      */
-    @Override
-    public MessageStream<EventMessage> transform(EventMessage message, TransformationContext context) {
+    MessageStream<EventMessage> transform(EventMessage message, TransformationContext context) {
         requireNonNull(context, "context may not be null");
         T typedPayload = inputType.resolvePayload(message, context);
         U mappedPayload = mapper.apply(typedPayload, context.processingContext());

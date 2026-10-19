@@ -57,8 +57,7 @@ final class RenameEventTransformation implements EventTransformation {
      *                as a rename consults neither the converter nor the resolver
      * @return a single-element stream carrying the re-labeled message
      */
-    @Override
-    public MessageStream<EventMessage> transform(EventMessage message, TransformationContext context) {
+    MessageStream<EventMessage> transform(EventMessage message, TransformationContext context) {
         requireNonNull(context, "context may not be null");
         EventMessage output = new GenericEventMessage(
                 message.identifier(),
