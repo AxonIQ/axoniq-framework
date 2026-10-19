@@ -916,6 +916,16 @@ class MultiTenantAxonServerQueryBusConnectorTest {
 
     private static final class EmptyResultStream<T> implements ResultStream<T> {
 
+        private final boolean closed;
+
+        private EmptyResultStream() {
+            this(true);
+        }
+
+        private EmptyResultStream(boolean closed) {
+            this.closed = closed;
+        }
+
         @Override
         public T peek() {
             return null;
@@ -948,7 +958,7 @@ class MultiTenantAxonServerQueryBusConnectorTest {
 
         @Override
         public boolean isClosed() {
-            return true;
+            return closed;
         }
 
         @Override
@@ -971,7 +981,8 @@ class MultiTenantAxonServerQueryBusConnectorTest {
 
         @Override
         public ResultStream<QueryUpdate> updates() {
-            return new EmptyResultStream<>();
+            // a subscription keeps its update stream open until cancelled
+            return new EmptyResultStream<>(false);
         }
     }
 
