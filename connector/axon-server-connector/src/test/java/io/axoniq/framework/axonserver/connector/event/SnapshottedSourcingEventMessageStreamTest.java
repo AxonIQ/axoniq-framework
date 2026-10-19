@@ -139,6 +139,34 @@ class SnapshottedSourcingEventMessageStreamTest {
         assertThat(testSubject.next().orElseThrow()).isSameAs(firstPeek);
     }
 
+    @Nested
+    class Close {
+
+        @Test
+        void doesNotCancelAStreamTheServerAlreadyCompleted() {
+            // given the server completed the stream and all responses were consumed
+            when(stream.isClosed()).thenReturn(true);
+
+            // when
+            testSubject.close();
+
+            // then cancelling is skipped, as it would record a client-side close error on a completed stream
+            verify(stream, never()).close();
+        }
+
+        @Test
+        void cancelsAStreamThatIsStillOpen() {
+            // given
+            when(stream.isClosed()).thenReturn(false);
+
+            // when
+            testSubject.close();
+
+            // then
+            verify(stream).close();
+        }
+    }
+
     private static Snapshot snapshot() {
         return Snapshot.newBuilder()
                        .setName("snapshot-name")
