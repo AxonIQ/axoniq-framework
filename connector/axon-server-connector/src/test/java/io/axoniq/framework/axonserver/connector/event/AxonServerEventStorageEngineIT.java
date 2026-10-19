@@ -119,7 +119,7 @@ class AxonServerEventStorageEngineIT extends StorageEngineTestSuite<AxonServerEv
         );
 
         Snapshot snapshot = new Snapshot(
-                new GlobalIndexPosition(GlobalIndexConsistencyMarker.position(markerAfterFirstTwoEvents) - 1),
+                new GlobalIndexPosition(GlobalIndexConsistencyMarker.position(markerAfterFirstTwoEvents)),
                 "0.0.1", "snapshot-payload", Instant.now(), Map.of()
         );
         testSubject.store(snapshotType, identifier, snapshot, processingContext())
