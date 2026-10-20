@@ -15,8 +15,8 @@ This is not an open-source project in the OSS sense:
   see [AxonIQ/AxonFramework](https://github.com/AxonIQ/AxonFramework), which remains our open-source project and does
   accept contributions.
 
-See [LICENSE.txt](./LICENSE.txt) for a summary of the restrictions that apply to this Software, and the
-full [Axoniq Terms of Service](https://www.axoniq.io/legal/terms-of-service) for the controlling legal terms. Questions
+The [LICENSE.txt](./LICENSE.txt) contains a short reference that Axoniq Framework is licensed under
+the [Axoniq Terms of Service](https://www.axoniq.io/legal/terms-of-service) for the controlling legal terms. Questions
 about licensing, permitted use, or usage rights should go to your Axoniq account contact, not GitHub issues.
 
 ## Getting started
@@ -75,5 +75,5 @@ Participation in this repository (issues, discussions, etc.) is governed by our 
 
 ---
 
-Copyright (c) Axoniq B.V. All rights reserved. Licensed under the Axoniq Commercial License.
-See [LICENSE.txt](./LICENSE.txt) and the full [Terms of Service](https://www.axoniq.io/legal/terms-of-service).
+Copyright (c) Axoniq B.V. All rights reserved. Licensed under
+the [Axoniq Terms of Service](https://www.axoniq.io/legal/terms-of-service).
