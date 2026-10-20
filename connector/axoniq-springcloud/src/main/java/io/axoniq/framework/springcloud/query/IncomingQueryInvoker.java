@@ -391,7 +391,9 @@ public class IncomingQueryInvoker {
                     sink.response(QueryConverter.convertResponseMessage(next.get().message(), requestIdentifier));
                     hasNext = responses.hasNextAvailable();
                 }
-                if (!hasNext && responses.isCompleted()) {
+                // Reading a stream that has just ended reports its completion, which drains it again from inside
+                // this drain. That nested drain already finished the answer, so finishing it here would do so twice.
+                if (!hasNext && !terminated && responses.isCompleted()) {
                     responses.error().ifPresentOrElse(this::fail, this::finish);
                 }
             } catch (Exception e) {

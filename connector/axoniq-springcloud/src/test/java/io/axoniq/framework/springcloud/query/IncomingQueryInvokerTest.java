@@ -39,6 +39,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -129,6 +130,26 @@ class IncomingQueryInvokerTest {
             assertThat(sink.responses()).isEmpty();
             assertThat(sink.completed()).isTrue();
             assertThat(sink.error()).isNull();
+        }
+
+        @Test
+        void completesTheAnswerOnce() {
+            // given
+            AtomicInteger completions = new AtomicInteger();
+            RecordingQueryResponseSink countingSink = new RecordingQueryResponseSink() {
+                @Override
+                public void complete() {
+                    completions.incrementAndGet();
+                    super.complete();
+                }
+            };
+            handler.answeringWith(response("response-1"));
+
+            // when
+            testSubject.handle(request(), countingSink);
+
+            // then
+            assertThat(completions).hasValue(1);
         }
 
         @Test
@@ -541,6 +562,34 @@ class IncomingQueryInvokerTest {
             // then sending the same bytes again cannot succeed
             assertThat(sink.error()).isNotNull();
             assertThat(sink.error().errorCode()).isEqualTo(QueryErrorCode.QUERY_EXECUTION_NON_TRANSIENT_ERROR);
+        }
+
+        @Test
+        void reportsAHandlerFailingAfterItRespondedOnce() {
+            // given a handler that produced a response before it failed
+            QueueMessageStream<QueryResponseMessage> responses = new QueueMessageStream<>();
+            responses.offer(response("response-1"), Context.empty());
+            responses.sealExceptionally(new QueryExecutionException("The course store is unavailable.", null));
+            testSubject.bind(new RecordingQueryHandler() {
+                @Override
+                public MessageStream<QueryResponseMessage> query(QueryMessage query) {
+                    return responses;
+                }
+            });
+            AtomicInteger failures = new AtomicInteger();
+            RecordingQueryResponseSink countingSink = new RecordingQueryResponseSink() {
+                @Override
+                public void error(QueryDispatchFailure error) {
+                    failures.incrementAndGet();
+                    super.error(error);
+                }
+            };
+
+            // when
+            testSubject.handle(request(), countingSink);
+
+            // then
+            assertThat(failures).hasValue(1);
         }
 
         @Test
