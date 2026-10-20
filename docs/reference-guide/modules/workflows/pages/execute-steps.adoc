@@ -158,14 +158,7 @@ See xref:waiting-for-events.adoc[].
 
 [source,kotlin]
 ----
-fun Kontext.fulfillOrder() {
-    val reserved = awaitExecute<Boolean>(
-        stepName = "reserveStock",
-        timeout = 10.seconds
-    ) {
-        InventoryService.reserveStock()
-    }
-}
+include::example$workflows/executesteps/kotlin/ExecuteStepsKotlin.kt[tag=typed-await-execute,indent=0]
 ----
 
 If you want to pass step-local data with a named Kotlin argument, use `inputPayload = ...`.

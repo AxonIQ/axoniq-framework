@@ -182,7 +182,8 @@ Steps below this point in the new code that are already in history can only have
 History: `A.started, A.completed, B.started, B.completed, C.started, C.completed, workflow.completed`.
 New code:
 
-[source,java]
+.Version migration (pseudocode)
+[source,java,role=pseudocode]
 ----
 step A;                                       // line 1
 if (context.migrateVersion("x", "0.0.2")) {       // line 2—newly added
@@ -327,16 +328,7 @@ The Kotlin DSL exposes the primitive on `Kontext`:
 
 [source,kotlin]
 ----
-@Workflow(idProperty = "orderId", startOnEventClass = OrderPlacedEvent::class)
-fun Kontext.execute() {
-    awaitExecute<Boolean>("reserveStock") { InventoryService.reserveStock() }
-
-    if (migrateVersion("payment-redesign", "0.0.2")) {
-        awaitExecute<Boolean>("processPayment") { PaymentService.processV2() }
-    } else {
-        awaitExecute<Boolean>("chargePayment") { PaymentService.chargeV1() }
-    }
-}
+include::example$workflows/versioning/kotlin/VersioningKotlin.kt[tag=migrate-version,indent=0]
 ----
 
 All rules (current-version default, single-call-per-changeId, downstream-steps guard, downgrade rejection) apply identically to the Kotlin DSL.
