@@ -10,6 +10,7 @@ package io.axoniq.framework.axonserver.connector.event;
 
 import io.axoniq.axonserver.connector.ResultStream;
 import io.axoniq.axonserver.grpc.event.dcb.SequencedEvent;
+import io.axoniq.axonserver.grpc.event.dcb.SequencedSnapshot;
 import io.axoniq.axonserver.grpc.event.dcb.SnapshottedSourceEventsResponse;
 import org.axonframework.eventsourcing.eventstore.ConsistencyMarker;
 import org.axonframework.eventsourcing.eventstore.GlobalIndexConsistencyMarker;
@@ -23,14 +24,11 @@ import org.axonframework.messaging.core.SimpleEntry;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.GlobalSequenceTrackingToken;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
-import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.lang.invoke.MethodHandles;
 import java.time.Instant;
-import java.util.ArrayDeque;
-import java.util.Deque;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -40,12 +38,9 @@ import java.util.Optional;
  * {@code SnapshottedSourceEventsResponses} into {@link EventMessage EventMessages} as it moves along, prefixed by a
  * {@link SnapshotEventMessage} when Axon Server has a matching snapshot available.
  * <p>
- * This stream implementation buffers to ensure we can set the position on the snapshot we return. This in turn is
- * necessary as the {@code SnapshottedSourceEventsResponse} does not hold a sequence, only the events and the
- * consistency marker that follow it carry one. Hence, this stream implementation infers the snapshot's
- * {@link org.axonframework.eventsourcing.eventstore.Position Position} from the entry that comes after it. There are
- * two options for this, which are (1) the following event's sequence minus one, or (2) the terminal consistency marker
- * position.
+ * Each response is translated directly, with no buffering - the {@code SequencedSnapshot} a node advertising
+ * {@code dcb:snapshot-aware-sourcing} returns already carries the snapshot's own sequence, so this stream no longer
+ * needs to infer it from whichever entry happens to follow it.
  *
  * @author Steven van Beelen
  * @since 5.4.0
@@ -56,9 +51,6 @@ class SnapshottedSourcingEventMessageStream implements MessageStream<EventMessag
 
     private final ResultStream<SnapshottedSourceEventsResponse> stream;
     private final TaggedEventConverter converter;
-    private final Deque<Entry<EventMessage>> ready = new ArrayDeque<>();
-
-    private io.axoniq.axonserver.grpc.event.dcb.@Nullable Snapshot pendingSnapshot;
 
     /**
      * Constructs a {@code SnapshottedSourcingEventMessageStream} with the given {@code stream} and {@code converter}.
@@ -76,55 +68,33 @@ class SnapshottedSourcingEventMessageStream implements MessageStream<EventMessag
 
     @Override
     public Optional<Entry<EventMessage>> next() {
-        tryAdvance();
-        return Optional.ofNullable(ready.poll());
+        SnapshottedSourceEventsResponse next = stream.nextIfAvailable();
+        if (next == null) {
+            logger.debug("Nothing available yet on the snapshotted source result stream.");
+            return Optional.empty();
+        }
+        return Optional.of(convert(next));
     }
 
     @Override
     public Optional<Entry<EventMessage>> peek() {
-        tryAdvance();
-        return Optional.ofNullable(ready.peek());
+        SnapshottedSourceEventsResponse peeked = stream.peek();
+        return peeked == null ? Optional.empty() : Optional.of(convert(peeked));
     }
 
-    /**
-     * Pulls as much as is currently available from the underlying {@code stream} into {@link #ready}, resolving a
-     * still-{@link #pendingSnapshot} against whichever item follows it. Does nothing once {@link #ready} already holds
-     * an entry, so it never discards an entry that {@link #next()} has not yet consumed.
-     */
-    private void tryAdvance() {
-        while (ready.isEmpty()) {
-            SnapshottedSourceEventsResponse next = stream.nextIfAvailable();
-            if (next == null) {
-                logger.debug("Nothing available yet on the snapshotted source result stream.");
-                return;
-            } else if (next.hasSnapshot()) {
-                logger.debug("Received a snapshot on the snapshotted source result stream; awaiting the item "
-                                     + "that follows it to resolve its position.");
-                pendingSnapshot = next.getSnapshot();
-            } else if (next.hasEvent()) {
-                SequencedEvent event = next.getEvent();
-                resolvePendingSnapshot(event.getSequence() - 1);
-                ready.add(convertToEventEntry(event));
-            } else {
-                long marker = next.getConsistencyMarker();
-                logger.debug("Reached the consistency marker message of the snapshotted source result stream.");
-                resolvePendingSnapshot(marker);
-                ready.add(convertToMarkerEntry(marker));
-            }
+    private Entry<EventMessage> convert(SnapshottedSourceEventsResponse response) {
+        if (response.hasSequencedSnapshot()) {
+            return convertToSnapshotEntry(response.getSequencedSnapshot());
+        } else if (response.hasEvent()) {
+            return convertToEventEntry(response.getEvent());
         }
+        return convertToMarkerEntry(response.getConsistencyMarker());
     }
 
-    private void resolvePendingSnapshot(long position) {
-        if (pendingSnapshot != null) {
-            ready.add(convertToSnapshotEntry(pendingSnapshot, position));
-            pendingSnapshot = null;
-        }
-    }
-
-    private Entry<EventMessage> convertToSnapshotEntry(io.axoniq.axonserver.grpc.event.dcb.Snapshot snapshot,
-                                                       long position) {
+    private Entry<EventMessage> convertToSnapshotEntry(SequencedSnapshot sequencedSnapshot) {
+        io.axoniq.axonserver.grpc.event.dcb.Snapshot snapshot = sequencedSnapshot.getSnapshot();
         Snapshot domainSnapshot = new Snapshot(
-                new GlobalIndexPosition(position),
+                new GlobalIndexPosition(sequencedSnapshot.getSequence()),
                 snapshot.getVersion(),
                 snapshot.getPayload().toByteArray(),
                 Instant.ofEpochMilli(snapshot.getTimestamp()),
@@ -159,14 +129,12 @@ class SnapshottedSourcingEventMessageStream implements MessageStream<EventMessag
 
     @Override
     public boolean isCompleted() {
-        tryAdvance();
-        return stream.isClosed() && ready.isEmpty();
+        return stream.isClosed();
     }
 
     @Override
     public boolean hasNextAvailable() {
-        tryAdvance();
-        return !ready.isEmpty();
+        return stream.peek() != null;
     }
 
     @Override
