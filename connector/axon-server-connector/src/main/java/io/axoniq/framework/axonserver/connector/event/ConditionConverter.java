@@ -11,8 +11,9 @@ package io.axoniq.framework.axonserver.connector.event;
 import com.google.protobuf.ByteString;
 import io.axoniq.axonserver.grpc.event.dcb.ConsistencyCondition;
 import io.axoniq.axonserver.grpc.event.dcb.Criterion;
-import io.axoniq.axonserver.grpc.event.dcb.SnapshottedSourceRequest;
+import io.axoniq.axonserver.grpc.event.dcb.SnapshotCandidate;
 import io.axoniq.axonserver.grpc.event.dcb.SourceEventsRequest;
+import io.axoniq.axonserver.grpc.event.dcb.SourceWithSnapshotRequest;
 import io.axoniq.axonserver.grpc.event.dcb.StreamEventsRequest;
 import io.axoniq.axonserver.grpc.event.dcb.Tag;
 import io.axoniq.axonserver.grpc.event.dcb.TagsAndNamesCriterion;
@@ -79,18 +80,18 @@ public final class ConditionConverter {
     }
 
     /**
-     * Converts the given {@code condition} and {@code snapshotKey} into a {@link SnapshottedSourceRequest}.
+     * Converts the given {@code condition} and {@code snapshotKey} into a {@link SourceWithSnapshotRequest}.
      *
-     * @param condition   the {@code SourcingCondition} to base the {@link SnapshottedSourceRequest} on
+     * @param condition   the {@code SourcingCondition} to base the {@link SourceWithSnapshotRequest} on
      * @param snapshotKey the key identifying the snapshotted entity to prefix the resulting stream with, if present
-     * @return a {@code SnapshottedSourceRequest} based on the given {@code condition} and {@code snapshotKey}
+     * @return a {@code SourceWithSnapshotRequest} based on the given {@code condition} and {@code snapshotKey}
      */
-    public static SnapshottedSourceRequest convertSnapshottedSourcingCondition(SourcingCondition condition,
-                                                                               ByteString snapshotKey) {
-        return SnapshottedSourceRequest.newBuilder()
-                                       .setSnapshotKey(snapshotKey)
-                                       .addAllCriterion(convertEventCriterion(condition.criteria().flatten()))
-                                       .build();
+    public static SourceWithSnapshotRequest convertSourcingWithSnapshotCondition(SourcingCondition condition,
+                                                                                 ByteString snapshotKey) {
+        return SourceWithSnapshotRequest.newBuilder()
+                                        .addCandidate(SnapshotCandidate.newBuilder().setKey(snapshotKey))
+                                        .addAllCriterion(convertEventCriterion(condition.criteria().flatten()))
+                                        .build();
     }
 
     /**

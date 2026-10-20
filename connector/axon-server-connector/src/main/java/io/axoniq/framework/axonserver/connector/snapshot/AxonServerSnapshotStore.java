@@ -11,7 +11,9 @@ package io.axoniq.framework.axonserver.connector.snapshot;
 import com.google.protobuf.ByteString;
 import io.axoniq.axonserver.connector.AxonServerConnection;
 import io.axoniq.axonserver.grpc.event.dcb.AddSnapshotRequest;
+import io.axoniq.axonserver.grpc.event.dcb.FindLastSnapshotRequest;
 import io.axoniq.axonserver.grpc.event.dcb.GetLastSnapshotRequest;
+import io.axoniq.axonserver.grpc.event.dcb.SnapshotCandidate;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
 import org.axonframework.common.infra.ComponentDescriptor;
@@ -43,6 +45,12 @@ import static java.util.Objects.requireNonNull;
  * @since 5.1.0
  */
 public class AxonServerSnapshotStore implements SnapshotStore {
+
+    /**
+     * The Axon Server capability advertising {@code FindLast} and {@code SourceWithSnapshot}, which take ordered
+     * {@code SnapshotCandidate}s. A node without it only offers {@code GetLast}, which takes a single key.
+     */
+    public static final String SNAPSHOT_AWARE_SOURCING_CAPABILITY = "dcb:snapshot-aware-sourcing";
 
     private static final String POSITION_TYPE_KEY = "__AxonFramework__:Position-Type";  // reserved key in metadata
     private static final ByteString SNAPSHOT_KEY_SEPARATOR = ByteString.copyFrom(new byte[]{0});
@@ -106,24 +114,23 @@ public class AxonServerSnapshotStore implements SnapshotStore {
         ByteString key = snapshotKey(qualifiedName, identifier);
 
         /*
-         * Note, even though getLastSnapshot is documented to not return a snapshot when none is available,
-         * it actually throws an exception, which is handled in the exceptionally block.
+         * Note, even though the server is documented to not return a snapshot when none is available, it actually
+         * answers with an error, which is handled in the exceptionally block.
          */
 
-        return connection.snapshotChannel()
-            .getLastSnapshot(GetLastSnapshotRequest.newBuilder().setKey(key).build())
-            .thenApply(sr -> {
-                io.axoniq.axonserver.grpc.event.dcb.Snapshot snapshot = sr.getSnapshot();
+        CompletableFuture<LastSnapshot> found = connection.supports(SNAPSHOT_AWARE_SOURCING_CAPABILITY)
+                ? findLast(key)
+                : getLast(key);
 
-                if (snapshot == null) {  // this probably never happens, but just in case the behavior changes
-                    return null;
-                }
+        return found
+            .thenApply(last -> {
+                io.axoniq.axonserver.grpc.event.dcb.Snapshot snapshot = last.snapshot();
 
                 Map<String, String> metadata = new HashMap<>(snapshot.getMetadataMap());
                 String positionType = metadata.remove(POSITION_TYPE_KEY);  // remove this key, so user doesn't notice
                 Position position = switch(positionType) {
-                    case "GIP" -> new GlobalIndexPosition(sr.getSequence());
-                    case "ASNP" -> new AggregateSequenceNumberPosition(sr.getSequence());
+                    case "GIP" -> new GlobalIndexPosition(last.sequence());
+                    case "ASNP" -> new AggregateSequenceNumberPosition(last.sequence());
                     case null, default -> throw new IllegalArgumentException("Unexpected position type: " + positionType);
                 };
 
@@ -146,6 +153,43 @@ public class AxonServerSnapshotStore implements SnapshotStore {
 
                 throw new CompletionException("Snapshot loading failed for %s with identifier %s".formatted(qualifiedName.toString(), identifier.toString()), e);
             });
+    }
+
+    private CompletableFuture<LastSnapshot> getLast(ByteString key) {
+        return connection.snapshotChannel()
+            .getLastSnapshot(GetLastSnapshotRequest.newBuilder().setKey(key).build())
+            .thenApply(response -> new LastSnapshot(response.getSnapshot(), response.getSequence()));
+    }
+
+    /*
+     * Falls back to getLast when a node that advertised the capability still answers UNIMPLEMENTED, which can happen
+     * when the connection moved to a less capable node in between.
+     */
+    private CompletableFuture<LastSnapshot> findLast(ByteString key) {
+        FindLastSnapshotRequest request =
+                FindLastSnapshotRequest.newBuilder()
+                                       .addCandidate(SnapshotCandidate.newBuilder().setKey(key))
+                                       .build();
+
+        return connection.snapshotChannel()
+            .findLastSnapshot(request)
+            .thenApply(response -> new LastSnapshot(response.getSnapshot().getSnapshot(),
+                                                    response.getSnapshot().getSequence()))
+            .exceptionallyCompose(e -> isUnimplemented(e) ? getLast(key) : CompletableFuture.failedFuture(e));
+    }
+
+    private static boolean isUnimplemented(Throwable e) {
+        Throwable cause = e;
+
+        while (cause instanceof CompletionException && cause.getCause() != null) {
+            cause = cause.getCause();
+        }
+
+        return cause instanceof StatusRuntimeException sre && sre.getStatus().getCode() == Status.Code.UNIMPLEMENTED;
+    }
+
+    private record LastSnapshot(io.axoniq.axonserver.grpc.event.dcb.Snapshot snapshot, long sequence) {
+
     }
 
     /**

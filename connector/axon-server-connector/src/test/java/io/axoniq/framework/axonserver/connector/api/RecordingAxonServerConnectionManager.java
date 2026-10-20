@@ -155,6 +155,11 @@ public class RecordingAxonServerConnectionManager extends AxonServerConnectionMa
         }
 
         @Override
+        public boolean supports(String capability) {
+            return false;
+        }
+
+        @Override
         public void disconnect() {
             // no-op
         }
