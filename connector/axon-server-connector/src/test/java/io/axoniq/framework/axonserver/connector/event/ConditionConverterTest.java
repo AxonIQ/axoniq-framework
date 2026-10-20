@@ -11,7 +11,9 @@ package io.axoniq.framework.axonserver.connector.event;
 import com.google.protobuf.ByteString;
 import io.axoniq.axonserver.grpc.event.dcb.ConsistencyCondition;
 import io.axoniq.axonserver.grpc.event.dcb.Criterion;
-import io.axoniq.axonserver.grpc.event.dcb.SnapshottedSourceRequest;
+import io.axoniq.axonserver.grpc.event.dcb.LegacySnapshotCandidate;
+import io.axoniq.axonserver.grpc.event.dcb.SnapshotCandidate;
+import io.axoniq.axonserver.grpc.event.dcb.SourceWithSnapshotRequest;
 import io.axoniq.axonserver.grpc.event.dcb.SourceEventsRequest;
 import io.axoniq.axonserver.grpc.event.dcb.StreamEventsRequest;
 import io.axoniq.axonserver.grpc.event.dcb.TagsAndNamesCriterion;
@@ -114,17 +116,27 @@ class ConditionConverterTest {
     }
 
     @Test
-    void convertSnapshottedSourcingConditionThrowsNullPointerExceptionForNullSourcingCondition() {
-        ByteString snapshotKey = ByteString.copyFromUtf8("test-entity");
+    void convertSourcingWithSnapshotConditionThrowsNullPointerExceptionForNullSourcingCondition() {
+        List<SnapshotCandidate> candidates =
+                List.of(SnapshotCandidate.newBuilder().setKey(ByteString.copyFromUtf8("test-entity")).build());
         //noinspection DataFlowIssue
-        assertThatThrownBy(() -> ConditionConverter.convertSnapshottedSourcingCondition(null, snapshotKey))
+        assertThatThrownBy(() -> ConditionConverter.convertSourcingWithSnapshotCondition(null, candidates, null))
                 .isInstanceOf(NullPointerException.class);
     }
 
     @Test
-    void convertSnapshottedSourcingConditionConstructsSnapshottedSourceRequestAsExpected() {
+    void convertSourcingWithSnapshotConditionConstructsSourceWithSnapshotRequestAsExpected() {
         // given...
         ByteString snapshotKey = ByteString.copyFromUtf8("test-entity" + '\0' + "entity-id");
+        ByteString formerKey = ByteString.copyFromUtf8("former-entity" + '\0' + "entity-id");
+        List<SnapshotCandidate> candidates = List.of(
+                SnapshotCandidate.newBuilder().setKey(snapshotKey).addAcceptableVersion("2.0.0").build(),
+                SnapshotCandidate.newBuilder().setKey(formerKey).addAcceptableVersion("1.0.0").build()
+        );
+        LegacySnapshotCandidate legacyCandidate = LegacySnapshotCandidate.newBuilder()
+                                                                         .setAggregateIdentifier("entity-id")
+                                                                         .setPayloadType("com.example.Entity")
+                                                                         .build();
         SourcingCondition testCondition = SourcingCondition.conditionFor(
                 EventCriteria.havingTags(
                                      Tag.of("key1OnCriterion1", "value1OnCriterion1"),
@@ -141,11 +153,12 @@ class ConditionConverterTest {
                              .havingTags(Tag.of("key1OnCriterion3", "value1OnCriterion3"))
         );
         // when...
-        SnapshottedSourceRequest result = ConditionConverter.convertSnapshottedSourcingCondition(
-                testCondition, snapshotKey
+        SourceWithSnapshotRequest result = ConditionConverter.convertSourcingWithSnapshotCondition(
+                testCondition, candidates, legacyCandidate
         );
         // then...
-        assertThat(result.getSnapshotKey()).isEqualTo(snapshotKey);
+        assertThat(result.getCandidateList()).isEqualTo(candidates);
+        assertThat(result.getLegacyCandidate()).isEqualTo(legacyCandidate);
         List<Criterion> resultCriterion = result.getCriterionList();
         assertThat(resultCriterion).hasSize(3);
         validateCriterion(resultCriterion.getFirst().getTagsAndNames());

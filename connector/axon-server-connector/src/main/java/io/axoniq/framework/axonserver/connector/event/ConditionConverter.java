@@ -11,8 +11,10 @@ package io.axoniq.framework.axonserver.connector.event;
 import com.google.protobuf.ByteString;
 import io.axoniq.axonserver.grpc.event.dcb.ConsistencyCondition;
 import io.axoniq.axonserver.grpc.event.dcb.Criterion;
-import io.axoniq.axonserver.grpc.event.dcb.SnapshottedSourceRequest;
+import io.axoniq.axonserver.grpc.event.dcb.LegacySnapshotCandidate;
+import io.axoniq.axonserver.grpc.event.dcb.SnapshotCandidate;
 import io.axoniq.axonserver.grpc.event.dcb.SourceEventsRequest;
+import io.axoniq.axonserver.grpc.event.dcb.SourceWithSnapshotRequest;
 import io.axoniq.axonserver.grpc.event.dcb.StreamEventsRequest;
 import io.axoniq.axonserver.grpc.event.dcb.Tag;
 import io.axoniq.axonserver.grpc.event.dcb.TagsAndNamesCriterion;
@@ -25,6 +27,7 @@ import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.eventstreaming.EventCriteria;
 import org.axonframework.messaging.eventstreaming.EventCriterion;
 import org.axonframework.messaging.eventstreaming.StreamingCondition;
+import org.jspecify.annotations.Nullable;
 
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -79,18 +82,31 @@ public final class ConditionConverter {
     }
 
     /**
-     * Converts the given {@code condition} and {@code snapshotKey} into a {@link SnapshottedSourceRequest}.
+     * Converts the given {@code condition}, snapshot {@code candidates} and {@code legacyCandidate} into a
+     * {@link SourceWithSnapshotRequest}.
      *
-     * @param condition   the {@code SourcingCondition} to base the {@link SnapshottedSourceRequest} on
-     * @param snapshotKey the key identifying the snapshotted entity to prefix the resulting stream with, if present
-     * @return a {@code SnapshottedSourceRequest} based on the given {@code condition} and {@code snapshotKey}
+     * @param condition       the {@code SourcingCondition} to base the {@link SourceWithSnapshotRequest} on
+     * @param candidates      the candidates to look up the snapshot to prefix the resulting stream with, in order of
+     *                        preference
+     * @param legacyCandidate the aggregate-based snapshot to look up when no candidate yields one, or {@code null} to
+     *                        not look one up
+     * @return a {@code SourceWithSnapshotRequest} based on the given arguments
      */
-    public static SnapshottedSourceRequest convertSnapshottedSourcingCondition(SourcingCondition condition,
-                                                                               ByteString snapshotKey) {
-        return SnapshottedSourceRequest.newBuilder()
-                                       .setSnapshotKey(snapshotKey)
-                                       .addAllCriterion(convertEventCriterion(condition.criteria().flatten()))
-                                       .build();
+    public static SourceWithSnapshotRequest convertSourcingWithSnapshotCondition(
+            SourcingCondition condition,
+            List<SnapshotCandidate> candidates,
+            @Nullable LegacySnapshotCandidate legacyCandidate
+    ) {
+        SourceWithSnapshotRequest.Builder request =
+                SourceWithSnapshotRequest.newBuilder()
+                                         .addAllCandidate(candidates)
+                                         .addAllCriterion(convertEventCriterion(condition.criteria().flatten()));
+
+        if (legacyCandidate != null) {
+            request.setLegacyCandidate(legacyCandidate);
+        }
+
+        return request.build();
     }
 
     /**
