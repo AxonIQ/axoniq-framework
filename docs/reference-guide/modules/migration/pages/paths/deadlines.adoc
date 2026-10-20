@@ -1,7 +1,7 @@
 = Deadline Migration
 :navtitle: Deadlines
 :reftext: Deadline migration
-:page-aliases: deadlines:index.adoc, deadlines:deadline-managers.adoc, deadlines-guide:ROOT:advanced.adoc, deadlines-guide:ROOT:deciding.adoc, deadlines-guide:ROOT:implementing.adoc, deadlines-guide:ROOT:index.adoc, deadlines-guide:ROOT:testing.adoc
+:page-aliases: deadlines:index.adoc, deadlines:deadline-managers.adoc
 
 Axon Framework 5 has no built-in deadline scheduling.
 We have decided against this, as it is rather straightforward to schedule messages yourself.
