@@ -1,21 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  ~ Copyright (c) 2010-2026. AxonIQ B.V.
+  ~ Copyright (c) 2010-2026. Axoniq B.V.
   ~
-  ~ Licensed under the AXONIQ TERMS OF SERVICE,
-  ~ Version 29 April 2026 (the "License");
-  ~
-  ~ The software is available for evaluation use without registration.
-  ~ Continued use beyond the evaluation period requires registration
-  ~ and a commercial license. See the License for the specific language
-  ~ governing permissions and limitations under the License.
-  ~ You may not use this file except in compliance with the License.
-  ~
-  ~ You may obtain a copy of the License at:
-  ~  https://www.axoniq.io/legal/terms-of-service
-  ~
-  ~ For licensing information and to register, visit:
-  ~  https://www.axoniq.io/pricing
+  ~ Licensed under the Axoniq Terms of Service (the "Terms"). You may not
+  ~ use this file except in compliance with the Terms, available at
+  ~ https://www.axoniq.io/legal/terms-of-service
   -->
 
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
@@ -58,7 +47,7 @@
         <c3p0.version>0.9.1.2</c3p0.version>
         <hikari.version>7.1.0</hikari.version>
         <hsqldb.version>2.7.4</hsqldb.version>
-        <hibernate-core.version>7.4.12.Final</hibernate-core.version>
+        <hibernate-core.version>7.4.13.Final</hibernate-core.version>
         <mysql-connector-java.version>26.7.0</mysql-connector-java.version>
         <postgresql.version>42.7.14</postgresql.version>
         <ojdbc.version>23.26.3.0.0</ojdbc.version>
@@ -81,7 +70,7 @@
         <micrometer-tracing.version>1.7.1</micrometer-tracing.version>
         <context-propagation.version>1.2.1</context-propagation.version>
         <!-- Other -->
-        <byte-buddy.version>1.18.14</byte-buddy.version>
+        <byte-buddy.version>1.18.15</byte-buddy.version>
         <commons-io.version>2.22.0</commons-io.version>
         <findbugs-jsr305.version>3.0.2</findbugs-jsr305.version>
         <javassist.version>3.33.0-GA</javassist.version>
@@ -111,7 +100,7 @@
         <mockito.version>5.24.0</mockito.version>
         <testcontainers.version>2.0.5</testcontainers.version>
         <!-- Validation -->
-        <hibernate-validator.version>9.1.4.Final</hibernate-validator.version>
+        <hibernate-validator.version>9.1.5.Final</hibernate-validator.version>
 
         <!-- Maven plugins -->
         <checkstyle-maven-plugin.version>3.6.0</checkstyle-maven-plugin.version>
