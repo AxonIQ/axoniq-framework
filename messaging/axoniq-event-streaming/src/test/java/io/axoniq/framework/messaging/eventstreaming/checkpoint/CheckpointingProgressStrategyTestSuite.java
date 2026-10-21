@@ -418,6 +418,60 @@ public abstract class CheckpointingProgressStrategyTestSuite extends SegmentProg
     }
 
     @Nested
+    class FullyDeferredIdleProgress {
+
+        @Test
+        void theConsumedPositionIsStoredWithoutARequestWhenEveryParticipantIsIdle() {
+            RecordingCheckpointing participant = new RecordingCheckpointing();
+            participant.idle = true;
+            WorkPackageHarness testSubject = deferred(participant);
+            testSubject.onSegmentClaimed();
+
+            testSubject.scheduleEvent(eventAt(1L));
+
+            ArgumentCaptor<TrackingToken> stored = ArgumentCaptor.forClass(TrackingToken.class);
+            await().atMost(TIMEOUT).untilAsserted(() -> {
+                assertThat(participant.advanced).containsExactly(new GlobalSequenceTrackingToken(1L));
+                verify(tokenStore()).storeToken(stored.capture(), anyString(), anyInt(), any());
+            });
+            assertThat(stored.getValue()).isEqualTo(new GlobalSequenceTrackingToken(1L));
+        }
+
+        @Test
+        void nothingIsStoredWithoutARequestWhileAParticipantIsNotIdle() {
+            RecordingCheckpointing idle = new RecordingCheckpointing();
+            idle.idle = true;
+            RecordingCheckpointing busy = new RecordingCheckpointing();
+            WorkPackageHarness testSubject = deferred(idle, busy);
+            testSubject.onSegmentClaimed();
+
+            testSubject.scheduleEvent(eventAt(1L));
+
+            await().atMost(TIMEOUT).untilAsserted(() -> assertThat(testSubject.batchProcessor().processed()).hasSize(1));
+            verify(tokenStore(), never()).storeToken(any(), anyString(), anyInt(), any());
+            assertThat(idle.advanced).isEmpty();
+            assertThat(busy.advanced).isEmpty();
+        }
+
+        @Test
+        void aPendingRequestTakesPrecedenceOverTheIdlePosition() {
+            RecordingCheckpointing participant = new RecordingCheckpointing();
+            participant.idle = true;
+            WorkPackageHarness testSubject = deferred(participant);
+            testSubject.onSegmentClaimed();
+
+            participant.trigger.requestCheckpoint(new GlobalSequenceTrackingToken(5L));
+
+            ArgumentCaptor<TrackingToken> stored = ArgumentCaptor.forClass(TrackingToken.class);
+            await().atMost(TIMEOUT).untilAsserted(() -> verify(tokenStore()).storeToken(
+                    stored.capture(), anyString(), anyInt(), any()
+            ));
+            assertThat(stored.getValue()).isEqualTo(new GlobalSequenceTrackingToken(5L));
+            assertThat(participant.advanced).containsExactly(new GlobalSequenceTrackingToken(5L));
+        }
+    }
+
+    @Nested
     class AutoModeWithParticipant {
 
         @Test
@@ -710,6 +764,12 @@ public abstract class CheckpointingProgressStrategyTestSuite extends SegmentProg
                 CompletableFuture::completedFuture;
         private volatile Function<TrackingToken, CompletableFuture<TrackingToken>> releaseResult =
                 CompletableFuture::completedFuture;
+        private volatile boolean idle;
+
+        @Override
+        public boolean isIdle(@NonNull Segment segment) {
+            return idle;
+        }
 
         @Override
         public void onSegmentClaimed(@NonNull Segment segment,

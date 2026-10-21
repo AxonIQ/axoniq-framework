@@ -122,13 +122,25 @@ public final class CheckpointingProgressStrategy implements SegmentProgressStrat
         // The auto component(s) are durable to the batch-end token within this transaction: cover at least there.
         TrackingToken requested = autoCheckpointing
                 ? (pending == null || consumed == null ? consumed : pending.upperBound(consumed))
-                : pending;
+                : (pending != null ? pending : idlePosition(consumed));
         if (requested == null) {
             return emptyCompletedFuture();
         }
         return persistOnCallingThread(requestEach(participant -> requestAdvance(participant, requested))
                                               .thenCompose(this::reconcile),
                                       processingContext);
+    }
+
+    /**
+     * Returns the last consumed position when every participant is idle, so a fully-deferred segment that has moved
+     * past its stored token without an explicit request still stores its progress. A participant that is not idle is
+     * never asked, so this never waits on in-flight work.
+     */
+    private @Nullable TrackingToken idlePosition(@Nullable TrackingToken consumed) {
+        Segment segment = context.segment();
+        return consumed != null && participants.stream().allMatch(participant -> participant.isIdle(segment))
+                ? consumed
+                : null;
     }
 
     @Override

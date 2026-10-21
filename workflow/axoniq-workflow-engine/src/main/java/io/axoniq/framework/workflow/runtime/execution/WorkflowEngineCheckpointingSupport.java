@@ -68,6 +68,12 @@ public class WorkflowEngineCheckpointingSupport implements Checkpointing {
     }
 
     @Override
+    public boolean isIdle(Segment segment) {
+        return !checkpointLatchCoordinator.hasUnsafeCheckpointWork(segment)
+                && !checkpointLatchCoordinator.holdsCheckpoint(segment);
+    }
+
+    @Override
     public CompletableFuture<TrackingToken> onCheckpointAdvanced(Segment segment,
                                                                  TrackingToken requested) {
         CompletableFuture<TrackingToken> result = new CompletableFuture<>();
