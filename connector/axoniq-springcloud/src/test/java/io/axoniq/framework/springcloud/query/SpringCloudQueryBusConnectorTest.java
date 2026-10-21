@@ -47,6 +47,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -595,6 +599,47 @@ class SpringCloudQueryBusConnectorTest {
             // then a subscriber sees one stream of updates however many members produce them
             assertThat(drain(responses)).extracting(QueryResponseMessage::identifier)
                                         .containsExactlyInAnyOrder("update-from-b", "update-from-c");
+        }
+
+        @Test
+        void carriesAnUpdateEmittedWhileTheSubscriptionIsBeingOpened() throws Exception {
+            // given
+            remoteMemberHandlesTheQuery();
+            Member member = remoteMember();
+            int iterations = 20_000;
+            int carried = 0;
+
+            try (ExecutorService emitter = Executors.newSingleThreadExecutor()) {
+                for (int i = 0; i < iterations; i++) {
+                    RecordingRemoteQueryDispatcher subscriptions = new RecordingRemoteQueryDispatcher();
+                    SpringCloudQueryBusConnector connector = new SpringCloudQueryBusConnector(
+                            discovery, invoker, subscriptions, null, entitlementManager
+                    );
+                    CountDownLatch opening = new CountDownLatch(1);
+                    // the member emits as soon as its stream exists, racing this member starting to read from it
+                    subscriptions.whileOpening(opening::countDown);
+                    Future<?> emitting = emitter.submit(() -> {
+                        // spinning rather than parking, so that the update lands while the stream is being read
+                        while (opening.getCount() > 0) {
+                            Thread.onSpinWait();
+                        }
+                        subscriptions.emit(member, response("update-1"));
+                        return null;
+                    });
+
+                    // when
+                    MessageStream<QueryResponseMessage> responses = connector.subscriptionQuery(query(), null, 16);
+                    emitting.get(5, TimeUnit.SECONDS);
+
+                    if (drain(responses).stream().anyMatch(update -> update.identifier().equals("update-1"))) {
+                        carried++;
+                    }
+                    responses.close();
+                }
+            }
+
+            // then
+            assertThat(carried).isEqualTo(iterations);
         }
 
         @Test

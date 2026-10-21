@@ -368,14 +368,21 @@ public class IncomingQueryInvoker {
                 return;
             }
             try {
-                while (responses.hasNextAvailable()) {
+                // Asked once per decision: a second ask can take a response that arrived in between, swallowing the
+                // notification that would have drained it, and leave it unwritten.
+                boolean hasNext = responses.hasNextAvailable();
+                while (hasNext) {
                     Optional<MessageStream.Entry<QueryResponseMessage>> next = responses.next();
                     if (next.isEmpty()) {
+                        hasNext = false;
                         break;
                     }
                     sink.response(QueryConverter.convertResponseMessage(next.get().message(), requestIdentifier));
+                    hasNext = responses.hasNextAvailable();
                 }
-                if (!responses.hasNextAvailable() && responses.isCompleted()) {
+                // Reading a stream that has just ended reports its completion, which drains it again from inside
+                // this drain. That nested drain already finished the answer, so finishing it here would do so twice.
+                if (!hasNext && !terminated && responses.isCompleted()) {
                     responses.error().ifPresentOrElse(this::fail, this::finish);
                 }
             } catch (Exception e) {
