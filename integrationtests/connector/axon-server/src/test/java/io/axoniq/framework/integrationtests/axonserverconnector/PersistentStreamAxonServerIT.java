@@ -200,7 +200,11 @@ class PersistentStreamAxonServerIT {
                 segmentCount,
                 PersistentStreamSequencingPolicy.SEQUENTIAL_POLICY,
                 Collections.emptyList(),
-                "HEAD",
+                // Properties are only considered when Axon Server creates the stream. Opening the stream does not wait
+                // for that, so with HEAD the stream could start after the events a test publishes right after
+                // startup, and miss them. TAIL loses nothing: the context is purged before every test and the
+                // stream name is unique, so the stream only ever sees this test's events.
+                "TAIL",
                 null  // no server-side filter
         );
 
