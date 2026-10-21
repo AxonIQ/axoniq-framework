@@ -23,6 +23,10 @@ import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.*;
 
 import java.nio.charset.StandardCharsets;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.*;
@@ -191,5 +195,45 @@ class FlowControlledResponseSenderTest {
         assertThat(upstream.hasNextAvailable()).isFalse();
         assertThat(upstream.isCompleted()).isTrue();
         assertThat(upstream.offer(newMessage(), Context.empty())).isFalse();
+    }
+
+    @Test
+    void shouldNeverLoseTheResponseWhenResultAndPermitsArriveConcurrently() throws Exception {
+        // given
+        int iterations = 20_000;
+        AtomicInteger sent = new AtomicInteger();
+        AtomicInteger completed = new AtomicInteger();
+
+        try (ExecutorService executor = Executors.newFixedThreadPool(2)) {
+            for (int i = 0; i < iterations; i++) {
+                QueueMessageStream<QueryResponseMessage> stream = new QueueMessageStream<>();
+                ReplyChannel<QueryResponse> downstream = mock();
+                doAnswer(invocation -> sent.incrementAndGet()).when(downstream).send(any());
+                doAnswer(invocation -> completed.incrementAndGet()).when(downstream).complete();
+                FlowControlledResponseSender sender =
+                        new FlowControlledResponseSender("testCase", "test", stream, downstream, null);
+                CountDownLatch start = new CountDownLatch(1);
+
+                // when
+                var handler = executor.submit(() -> {
+                    start.await();
+                    stream.offer(newMessage(), Context.empty());
+                    stream.seal();
+                    return null;
+                });
+                var permits = executor.submit(() -> {
+                    start.await();
+                    sender.request(1);
+                    return null;
+                });
+                start.countDown();
+                handler.get();
+                permits.get();
+            }
+        }
+
+        // then
+        assertThat(sent.get()).isEqualTo(iterations);
+        assertThat(completed.get()).isEqualTo(iterations);
     }
 }
