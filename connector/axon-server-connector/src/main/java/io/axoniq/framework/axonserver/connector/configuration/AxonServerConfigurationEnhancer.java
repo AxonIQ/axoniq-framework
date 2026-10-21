@@ -9,6 +9,7 @@
 package io.axoniq.framework.axonserver.connector.configuration;
 
 import io.axoniq.axonserver.connector.AxonServerConnection;
+import io.axoniq.axonserver.connector.control.ControlChannel;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
 import io.axoniq.framework.axonserver.connector.api.TagsConfiguration;
@@ -39,7 +40,7 @@ import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
 import org.axonframework.messaging.core.conversion.MessageConverter;
 import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 
-import java.util.Optional;
+import java.util.Collection;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -75,9 +76,8 @@ import java.util.concurrent.ConcurrentHashMap;
  *     using the present {@link MessageConverter}.</li>
  *     <li>The {@link QueryBusConnector} in a {@link PayloadConvertingQueryBusConnector}, converting payloads using
  *     the present {@link MessageConverter}.</li>
- *     <li>The {@link AxonServerConnectionManager}, registering a {@link TopologyChangeListener} with the
- *     {@link io.axoniq.axonserver.connector.control.ControlChannel ControlChannel} of its default context on start,
- *     <b>if</b> one is present.</li>
+ *     <li>The {@link AxonServerConnectionManager}, registering every {@link TopologyChangeListener} present in the
+ *     {@link Configuration} with the {@link ControlChannel} of its default context on start.</li>
  * </ul>
  *
  * @author Allard Buijze
@@ -220,14 +220,13 @@ public class AxonServerConfigurationEnhancer implements ConfigurationEnhancer {
         return DecoratorDefinition.forType(AxonServerConnectionManager.class)
                                   .with((config, name, delegate) -> delegate)
                                   .onStart(Phase.INSTRUCTION_COMPONENTS, (config, connectionManager) -> {
-                                      Optional<TopologyChangeListener> topologyChangeListener =
-                                              config.getOptionalComponent(TopologyChangeListener.class);
-                                      topologyChangeListener.ifPresent(
-                                              changeListener -> connectionManager.getConnection()
-                                                                                 .controlChannel()
-                                                                                 .registerTopologyChangeHandler(
-                                                                                         changeListener)
-                                      );
+                                      Collection<TopologyChangeListener> topologyChangeListeners =
+                                              config.getComponents(TopologyChangeListener.class).values();
+                                      if (!topologyChangeListeners.isEmpty()) {
+                                          ControlChannel controlChannel =
+                                                  connectionManager.getConnection().controlChannel();
+                                          topologyChangeListeners.forEach(controlChannel::registerTopologyChangeHandler);
+                                      }
                                       return FutureUtils.emptyCompletedFuture();
                                   });
     }
