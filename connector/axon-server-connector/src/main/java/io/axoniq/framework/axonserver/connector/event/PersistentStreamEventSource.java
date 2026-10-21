@@ -30,9 +30,9 @@ import java.util.function.BiFunction;
 /**
  * A {@link SubscribableEventSource} that receives events from a persistent stream on Axon Server.
  * <p>
- * The persistent stream is identified by a unique {@code name}, which acts as the stream identifier in Axon Server.
- * Using the same name for different instances will join the same server-side stream. Each instance owns an exclusive
- * {@link PersistentStreamConnection} and may have at most one active subscriber at a time.
+ * The persistent stream is identified by a unique {@code streamId}, which acts as the stream identifier in Axon Server.
+ * Using the same stream identifier for different instances will join the same server-side stream. Each instance owns an
+ * exclusive {@link PersistentStreamConnection} and may have at most one active subscriber at a time.
  * <p>
  * Marked {@link Internal} as a concrete, internal implementation behind the {@link PersistentStreamEventSourceFactory}.
  *
@@ -47,7 +47,7 @@ public class PersistentStreamEventSource implements SubscribableEventSource {
     private static final BiFunction<List<? extends EventMessage>, ProcessingContext, CompletableFuture<?>>
             NO_OP_CONSUMER = (events, context) -> CompletableFuture.completedFuture(null);
 
-    private final String name;
+    private final String streamId;
     private final PersistentStreamConnection persistentStreamConnection;
 
     private BiFunction<List<? extends EventMessage>, ProcessingContext, CompletableFuture<?>> consumer =
@@ -56,7 +56,7 @@ public class PersistentStreamEventSource implements SubscribableEventSource {
     /**
      * Instantiates a {@code PersistentStreamEventSource}.
      *
-     * @param name                       the name of the persistent stream; acts as the unique stream identifier in Axon
+     * @param streamId                   the id of the persistent stream; acts as the unique stream identifier in Axon
      *                                   Server
      * @param connectionManager          the Axon Server connection manager
      * @param serverConfig               the Axon Server configuration
@@ -68,7 +68,7 @@ public class PersistentStreamEventSource implements SubscribableEventSource {
      *                                   processing
      * @param batchSize                  the maximum number of events to collect per batch
      */
-    public PersistentStreamEventSource(String name,
+    public PersistentStreamEventSource(String streamId,
                                        AxonServerConnectionManager connectionManager,
                                        AxonServerConfiguration serverConfig,
                                        EventConverter converter,
@@ -77,7 +77,7 @@ public class PersistentStreamEventSource implements SubscribableEventSource {
                                        ScheduledExecutorService scheduler,
                                        UnitOfWorkFactory unitOfWorkFactory,
                                        int batchSize) {
-        this(name,
+        this(streamId,
              connectionManager,
              serverConfig,
              converter,
@@ -94,7 +94,7 @@ public class PersistentStreamEventSource implements SubscribableEventSource {
      * Instantiates a {@code PersistentStreamEventSource} placing additional resources on the
      * {@link ProcessingContext} of every batch it delivers through the given {@code contextCustomizer}.
      *
-     * @param name                       the name of the persistent stream; acts as the unique stream identifier in Axon
+     * @param streamId                   the id of the persistent stream; acts as the unique stream identifier in Axon
      *                                   Server
      * @param connectionManager          the Axon Server connection manager
      * @param serverConfig               the Axon Server configuration
@@ -111,7 +111,7 @@ public class PersistentStreamEventSource implements SubscribableEventSource {
      * @param context                    the Axon Server context in which this stream exists, or {@code null} to use the
      *                                   context from {@link AxonServerConfiguration#getContext()}
      */
-    public PersistentStreamEventSource(String name,
+    public PersistentStreamEventSource(String streamId,
                                        AxonServerConnectionManager connectionManager,
                                        AxonServerConfiguration serverConfig,
                                        EventConverter converter,
@@ -122,11 +122,11 @@ public class PersistentStreamEventSource implements SubscribableEventSource {
                                        PersistentStreamContextCustomizer contextCustomizer,
                                        int batchSize,
                                        @Nullable String context) {
-        if(StringUtils.emptyOrNull(name)){
-            throw new IllegalArgumentException("name must not be null or empty");
+        if (StringUtils.emptyOrNull(streamId)) {
+            throw new IllegalArgumentException("streamId must not be null or empty");
         }
-        this.name = name;
-        this.persistentStreamConnection = new PersistentStreamConnection(name,
+        this.streamId = streamId;
+        this.persistentStreamConnection = new PersistentStreamConnection(streamId,
                                                                          connectionManager,
                                                                          serverConfig,
                                                                          converter,
@@ -155,7 +155,7 @@ public class PersistentStreamEventSource implements SubscribableEventSource {
                             String.format(
                                     "%s: Cannot subscribe to PersistentStreamEventSource with another consumer:"
                                             + " there is already an active subscription.",
-                                    name));
+                                    streamId));
                 }
             }
         }
