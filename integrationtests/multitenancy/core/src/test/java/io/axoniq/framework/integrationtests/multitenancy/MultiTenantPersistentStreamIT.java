@@ -9,12 +9,18 @@
 package io.axoniq.framework.integrationtests.multitenancy;
 
 import io.axoniq.axonserver.connector.event.PersistentStreamProperties;
+import io.axoniq.axonserver.grpc.streams.StreamStatus;
+import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
 import io.axoniq.framework.axonserver.connector.event.PersistentStreamScheduledExecutorBuilder;
 import io.axoniq.framework.axonserver.connector.event.PersistentStreamSequencingPolicy;
 import io.axoniq.framework.integrationtests.testsuite.infrastructure.AxonServerTestInfrastructure;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
 import io.axoniq.framework.messaging.multitenancy.axonserver.eventstreaming.MultiTenantPersistentStreamEventSourceFactory;
+import io.axoniq.framework.messaging.multitenancy.axonserver.eventstreaming.MultiTenantPersistentStreamIdResolver;
+import io.axoniq.framework.messaging.multitenancy.configuration.StaticTenantConnectPredicate;
+import io.axoniq.framework.testcontainer.SharedAxonServerContainer;
+import org.axonframework.common.Registration;
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.eventsourcing.configuration.EventSourcingConfigurer;
@@ -31,10 +37,16 @@ import org.axonframework.messaging.eventhandling.gateway.EventAppender;
 import org.axonframework.messaging.eventhandling.processing.subscribing.SubscribingEventProcessorModule;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.extension.*;
+import org.springframework.boot.WebApplicationType;
+import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
+import org.springframework.boot.builder.SpringApplicationBuilder;
+import org.springframework.context.ConfigurableApplicationContext;
+import org.springframework.context.annotation.Bean;
 
 import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 
@@ -46,7 +58,9 @@ import static org.awaitility.Awaitility.await;
  * every event reaches its handler labelled with the tenant whose stream delivered it.
  * <p>
  * A single subscribing event processor consumes one configured stream. With multi-tenancy active that stream exists in
- * each tenant's context, so the processor consumes both tenants while the handler can tell them apart.
+ * each tenant's context, so the processor consumes both tenants while the handler can tell them apart. A
+ * {@link MultiTenantPersistentStreamIdResolver} gives each tenant's stream an id of its own, so these flows also cover
+ * streams opened under a resolved id.
  * <p>
  * The application, contexts, and stream are built once for the whole class rather than per test: the subscribing
  * processor only ever sees events published after it started, so tests stay isolated from each other without paying
@@ -140,12 +154,113 @@ class MultiTenantPersistentStreamIT {
         assertThat(handled).contains(new HandledEvent(TENANT_A, "before"));
     }
 
+    @Test
+    void opensEveryTenantsStreamUnderTheResolvedStreamId() {
+        // given the processor is running, so every tenant's stream is open
+        AxonServerConnectionManager connectionManager = application.getComponent(AxonServerConnectionManager.class);
+
+        // then Axon Server holds each tenant's stream under the resolved id, not under the configured name
+        await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
+            assertThat(streamIdsIn(connectionManager, TENANT_A))
+                    .contains(streamName + "@" + TENANT_A)
+                    .doesNotContain(streamName);
+            assertThat(streamIdsIn(connectionManager, TENANT_B))
+                    .contains(streamName + "@" + TENANT_B)
+                    .doesNotContain(streamName);
+        });
+    }
+
+    /**
+     * Verifies the Spring Boot wiring: a {@link MultiTenantPersistentStreamIdResolver} declared as a bean is used for
+     * the persistent stream configured under {@code axon.axonserver.persistent-streams}, which Spring Boot builds through
+     * the multi-tenant {@link io.axoniq.framework.axonserver.connector.event.PersistentStreamEventSourceFactory}.
+     */
+    @Nested
+    class SpringBoot {
+
+        @Test
+        void opensEveryTenantsStreamUnderTheIdResolvedByADeclaredBean() {
+            // given a Spring Boot application declaring a resolver bean and configuring a persistent stream
+            String springStreamName = "mt-spring-stream-" + UUID.randomUUID();
+            try (ConfigurableApplicationContext context = startSpringApplication(springStreamName)) {
+                SubscribableEventSource source = context.getBean(springStreamName, SubscribableEventSource.class);
+                AxonServerConnectionManager connectionManager =
+                        context.getBean(AxonConfiguration.class).getComponent(AxonServerConnectionManager.class);
+
+                // when the configured stream gets a subscriber, which opens a stream in every tenant's context
+                Registration subscription = source.subscribe(
+                        (events, processingContext) -> CompletableFuture.completedFuture(null)
+                );
+
+                // then Axon Server holds each tenant's stream under the id the declared bean resolved
+                try {
+                    await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
+                        assertThat(streamIdsIn(connectionManager, TENANT_A))
+                                .contains(springStreamName + "@" + TENANT_A)
+                                .doesNotContain(springStreamName);
+                        assertThat(streamIdsIn(connectionManager, TENANT_B))
+                                .contains(springStreamName + "@" + TENANT_B)
+                                .doesNotContain(springStreamName);
+                    });
+                } finally {
+                    subscription.cancel();
+                }
+            }
+        }
+
+        private static ConfigurableApplicationContext startSpringApplication(String streamName) {
+            return new SpringApplicationBuilder(SpringStreamApplication.class)
+                    .web(WebApplicationType.NONE)
+                    .properties(
+                            "axon.axonserver.servers=" + SharedAxonServerContainer.INSTANCE.getHost() + ":"
+                                    + SharedAxonServerContainer.INSTANCE.getGrpcPort(),
+                            // only this class's tenants, since other test classes share the Axon Server container
+                            StaticTenantConnectPredicate.TENANTS_PROPERTY + "=" + TENANT_A + "," + TENANT_B,
+                            "axon.axonserver.persistent-streams." + streamName + ".initial-segment-count=1"
+                    )
+                    .run();
+        }
+
+        @org.springframework.context.annotation.Configuration
+        @EnableAutoConfiguration
+        static class SpringStreamApplication {
+
+            @Bean
+            MultiTenantPersistentStreamIdResolver streamIdResolver() {
+                return (name, tenant) -> name + "@" + tenant.tenantId();
+            }
+        }
+    }
+
     // ----- helpers -------------------------------------------------------
+
+    /**
+     * Lists the ids of the persistent streams Axon Server holds in the given {@code context}.
+     *
+     * @param connectionManager the connection manager to reach the given {@code context} through
+     * @param context           the Axon Server context to list the persistent streams of
+     * @return the ids of the persistent streams in the given {@code context}
+     */
+    private static List<String> streamIdsIn(AxonServerConnectionManager connectionManager, String context) {
+        return connectionManager.getConnection(context)
+                                .eventChannel()
+                                .persistentStreams()
+                                .orTimeout(10, TimeUnit.SECONDS)
+                                .join()
+                                .stream()
+                                .map(StreamStatus::getStreamId)
+                                .toList();
+    }
 
     private static AxonConfiguration buildApplication() {
         return EventSourcingConfigurer.create()
                                       .componentRegistry(INFRASTRUCTURE::configureInfrastructure)
                                       .componentRegistry(registry -> TenantFixture.connectOnlyCustomTenantsPredicate(registry, "stream-tenant-"))
+                                      // every tenant's stream is opened under an id of its own, so the flows below
+                                      // also prove a resolved stream id is what reaches Axon Server
+                                      .componentRegistry(registry -> registry.registerComponent(
+                                              MultiTenantPersistentStreamIdResolver.class,
+                                              c -> (name, tenant) -> name + "@" + tenant.tenantId()))
                                       .messaging(messaging -> messaging.eventProcessing(
                                               processing -> processing.subscribing(
                                                       subscribing -> subscribing.processor(buildProcessorModule()))))

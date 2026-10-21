@@ -40,7 +40,8 @@ On the Configuration API you register a `MultiTenantPersistentStreamEventSourceF
 
 **Your existing event processor tokens need replacing.**
 Under pooled streaming a token holds one position per tenant, which is a different type from what the extension stored, so plan the switch as a replay rather than as a resume.
-Persistent streams keep no token store at all, so there is no position to carry into them either and they start with a full replay.
+Persistent streams keep no token store at all, since Axon Server holds their position.
+A persistent stream you already consumed through the extension keeps that position as long as you open it under the same stream id (covered by <<step-persistent-stream-ids>>), while a stream opened under a new id starts with a full replay.
 
 **<<resetting-a-projection,Resetting a projection>> covers every tenant at once.**
 Under pooled streaming one processor serves all of them, so a reset replays them together rather than one at a time.
@@ -541,6 +542,47 @@ A subscribing event processor on the in-process event bus is a different story, 
 It keeps no position, which means it cannot replay or catch up on anything it missed, though it will still write a per-tenant projection through a tenant-scoped resource for events published while it is running.
 Where a projection has to survive a restart, use a streaming processor, or a subscribing processor fed by a persistent stream, which does keep a durable position per tenant on Axon Server.
 
+[#step-persistent-stream-ids]
+== Step 7: Keep the stream ids of your persistent streams
+
+Skip this step if you did not consume persistent streams through the extension.
+
+The extension opened each tenant's persistent stream under the configured stream name followed by `@` and the tenant identifier, so a stream configured as `course-statistics` was opened as `course-statistics@tenant-a` in the context of `tenant-a`.
+Axon Framework 5 opens each tenant's stream under the configured name as-is, as xref:multi-tenancy:tenant-event-processing.adoc#naming-tenant-streams[customizing stream identifiers per tenant] describes.
+Axon Server identifies a persistent stream by that id, so without further configuration every tenant gets a new stream that replays its events from the stream's initial position, while the stream holding the position you already reached is left unused.
+
+To continue from where the extension left off, register a `MultiTenantPersistentStreamIdResolver` that reproduces the extension's ids:
+
+[tabs]
+====
+Axon Framework 5 - Configuration API::
++
+--
+Provide the resolver via the configuration:
+
+[source,java]
+----
+include::example$migration/paths/multitenancy/DeclarativeTenantConfiguration.java[tag=extension-stream-ids,indent=0]
+----
+
+<1> Opens the stream configured as `course-statistics` as `course-statistics@tenant-a` in the context of `tenant-a`, the id the extension used.
+--
+Axon Framework 5 - Spring Boot::
++
+--
+Expose the resolver as a bean, and keep the persistent stream configuration under `axon.axonserver.persistent-streams` as it is:
+
+[source,java]
+----
+include::example$migration/paths/multitenancy/springboot/SpringTenantConfiguration.java[tag=extension-stream-ids,indent=0]
+----
+
+<1> Opens the stream configured as `course-statistics` as `course-statistics@tenant-a` in the context of `tenant-a`, the id the extension used.
+--
+====
+
+Register the resolver before the application first starts on Axon Framework 5.
+
 [#property-reference]
 == Property reference
 
@@ -613,7 +655,7 @@ Types missing from it, such as `TenantDescriptor`, `TenantProvider`, and `Tenant
 | `MultiTenantPersistentStreamEventSource`, built for you in Spring Boot and registered through `MultiTenantPersistentStreamEventSourceFactory` on the Configuration API.
 
 | `TenantPersistentStreamMessageSourceFactory`
-| Replaced by supplying a `PersistentStreamEventSourceFactory` bean of your own.
+| To keep the extension's `+{stream-name}@{tenant-id}+` stream ids, register a `MultiTenantPersistentStreamIdResolver`, see <<step-persistent-stream-ids>>. To control how streams are built altogether, supply a `PersistentStreamEventSourceFactory` bean of your own.
 
 | `MultiTenantDispatchInterceptorSupport`, `MultiTenantHandlerInterceptorSupport`
 | Removed. These fanned one registration out across the per-tenant components, which a single shared bus no longer needs.
