@@ -228,9 +228,13 @@ public class SpringCloudQueryBusConnector implements QueryBusConnector {
                     return;
                 }
                 try {
-                    while (source.stream.hasNextAvailable()) {
+                    // Asked once per decision: a second ask can take an update that arrived in between, swallowing
+                    // the notification that would have drained it, and leave it stranded.
+                    boolean hasNext = source.stream.hasNextAvailable();
+                    while (hasNext) {
                         Optional<MessageStream.Entry<QueryResponseMessage>> next = source.stream.next();
                         if (next.isEmpty()) {
+                            hasNext = false;
                             break;
                         }
                         if (!merged.offer(next.get().message(), Context.empty())) {
@@ -241,8 +245,9 @@ public class SpringCloudQueryBusConnector implements QueryBusConnector {
                             )));
                             return;
                         }
+                        hasNext = source.stream.hasNextAvailable();
                     }
-                    if (!source.stream.hasNextAvailable() && source.stream.isCompleted()) {
+                    if (!hasNext && source.stream.isCompleted()) {
                         // A stream that ends without a failure is one whose member said it is leaving: the
                         // dispatcher fails a stream that ends without saying why. A member reporting the subscription
                         // over has already ended the merged updates, so counting it changes nothing.
