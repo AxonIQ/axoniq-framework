@@ -15,6 +15,7 @@ import io.axoniq.framework.messaging.multitenancy.api.TenantConnectPredicate;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantNotResolvedException;
 import io.axoniq.framework.messaging.multitenancy.api.TenantResolver;
+import io.axoniq.framework.messaging.multitenancy.axonserver.eventstreaming.MultiTenantPersistentStreamIdResolver;
 import io.axoniq.framework.messaging.multitenancy.configuration.StaticTenantConnectPredicate;
 import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.configuration.MessagingConfigurer;
@@ -95,6 +96,14 @@ public class DeclarativeTenantConfiguration {
                         tenant -> new JdbcCourseStatisticsStore(dataSourceFor(tenant)))));
     }
     // end::register-tenant-scoped-store[]
+
+    // tag::extension-stream-ids[]
+    public void keepExtensionStreamIds(MessagingConfigurer configurer) {
+        configurer.componentRegistry(registry -> registry.registerComponent(
+                MultiTenantPersistentStreamIdResolver.class,
+                config -> (name, tenant) -> name + "@" + tenant.tenantId()));      // <1>
+    }
+    // end::extension-stream-ids[]
 
     private String extractTenantId(Message message) {
         return null; // Elided: application-specific lookup, from the payload or a transport header.
