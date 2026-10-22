@@ -20,6 +20,7 @@ import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.configuration.MessagingConfigurer;
+import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.queryhandling.GenericQueryMessage;
 import org.axonframework.messaging.queryhandling.GenericQueryResponseMessage;
 import org.axonframework.messaging.queryhandling.GenericSubscriptionQueryUpdateMessage;
@@ -32,8 +33,10 @@ import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -55,6 +58,7 @@ class DistributedTracingAxonServerIT {
     private TracingAxonServerTestInfrastructure infrastructure;
     private AxonConfiguration startedConfiguration;
     private boolean infrastructureStarted;
+    private final AtomicReference<QueryUpdateEmitter> emitter = new AtomicReference<>();
 
     @BeforeEach
     void setUp() {
@@ -137,6 +141,39 @@ class DistributedTracingAxonServerIT {
     @Test
     void subscriptionQueryUpdateIsParentedOnTheEmitterAndLinkedToTheSubscription() throws InterruptedException {
         // given
+        MessageStream<QueryResponseMessage> result = startRoomSubscription();
+
+        // when
+        emitter.get().emit(QUERY_NAME, query -> true, DistributedTracingAxonServerIT::roomBooked);
+
+        // then
+        assertUpdateDeliveredAndTraced(result);
+    }
+
+    @Test
+    void subscriptionQueryUpdateEmittedFromAnUncommittedUnitOfWorkIsParentedOnTheEmitter()
+            throws InterruptedException {
+        // given
+        MessageStream<QueryResponseMessage> result = startRoomSubscription();
+        UnitOfWorkFactory unitOfWorkFactory = startedConfiguration.getComponent(UnitOfWorkFactory.class);
+        AtomicBoolean committedWhileEmitting = new AtomicBoolean(true);
+
+        // when
+        // like a projector: the update is emitted while the UnitOfWork is still running, so the send is deferred to
+        // after commit
+        unitOfWorkFactory.create().executeWithResult(context -> {
+            committedWhileEmitting.set(context.isCommitted());
+            QueryUpdateEmitter.forContext(context)
+                              .emit(QUERY_NAME, query -> true, DistributedTracingAxonServerIT::roomBooked);
+            return CompletableFuture.completedFuture(null);
+        }).orTimeout(30, TimeUnit.SECONDS).join();
+
+        // then
+        assertThat(committedWhileEmitting).isFalse();
+        assertUpdateDeliveredAndTraced(result);
+    }
+
+    private MessageStream<QueryResponseMessage> startRoomSubscription() throws InterruptedException {
         startInfrastructure();
         ApplicationConfigurer configurer = MessagingConfigurer.create()
                                                               .componentRegistry(
@@ -145,7 +182,6 @@ class DistributedTracingAxonServerIT {
         startedConfiguration = configurer.start();
         QueryBus queryBus = startedConfiguration.getComponent(QueryBus.class);
         CountDownLatch queryHandled = new CountDownLatch(1);
-        AtomicReference<QueryUpdateEmitter> emitter = new AtomicReference<>();
         queryBus.subscribe(QUERY_NAME, (query, context) -> {
             emitter.set(QueryUpdateEmitter.forContext(context));
             queryHandled.countDown();
@@ -162,22 +198,24 @@ class DistributedTracingAxonServerIT {
         assertThat(queryHandled.await(30, TimeUnit.SECONDS)).isTrue();
         await().atMost(Duration.ofSeconds(30)).until(result::hasNextAvailable);
         assertThat(result.next().orElseThrow().message().payloadAs(String.class)).isEqualTo("room-42 available");
+        return result;
+    }
 
-        // when
-        emitter.get().emit(
-                QUERY_NAME,
-                query -> true,
-                () -> new GenericSubscriptionQueryUpdateMessage(
-                        new MessageType("RoomUpdate"),
-                        "room-42 booked"
-                )
-        );
+    private static GenericSubscriptionQueryUpdateMessage roomBooked() {
+        return new GenericSubscriptionQueryUpdateMessage(new MessageType("RoomUpdate"), "room-42 booked");
+    }
+
+    /**
+     * Asserts the documented topology: {@code QueryBus.emitUpdate} parents the connector producer span, the producer
+     * parents the consumer span, and the consumer links back to the subscription query.
+     */
+    private void assertUpdateDeliveredAndTraced(MessageStream<QueryResponseMessage> result) {
         await().atMost(Duration.ofSeconds(30)).until(result::hasNextAvailable);
         assertThat(result.next().orElseThrow().message().payloadAs(String.class)).isEqualTo("room-42 booked");
         emitter.get().complete(QUERY_NAME, query -> true);
 
-        // then
         InMemorySpanExporter exporter = infrastructure.spanExporter();
+        String emitUpdateSpanName = "QueryBus.emitUpdate";
         String subscriptionSpanName = "QueryBus.subscriptionQuery " + QUERY_NAME.name();
         String connectorSubscriptionSpanName = QUERY_CONNECTOR_SUBSCRIPTION_SPAN + " " + QUERY_NAME.name();
         String updateSpanName = QUERY_CONNECTOR_UPDATE_SPAN + " RoomUpdate";
@@ -185,7 +223,7 @@ class DistributedTracingAxonServerIT {
                 assertThat(exporter.getFinishedSpanItems())
                         .extracting(SpanData::getName)
                         .contains(
-                                "QueryBus.emitUpdate",
+                                emitUpdateSpanName,
                                 subscriptionSpanName,
                                 connectorSubscriptionSpanName,
                                 updateSpanName
@@ -193,10 +231,15 @@ class DistributedTracingAxonServerIT {
         );
 
         List<SpanData> spans = exporter.getFinishedSpanItems();
+        SpanData emitUpdate = spanByName(spans, emitUpdateSpanName);
         SpanData subscription = spanByNameAndKind(spans, subscriptionSpanName, SpanKind.PRODUCER);
         SpanData producer = spanByNameAndKind(spans, updateSpanName, SpanKind.PRODUCER);
         SpanData consumer = spanByNameAndKind(spans, updateSpanName, SpanKind.CONSUMER);
 
+        assertThat(producer.getTraceId())
+                .as("trace of %s (parent span id %s)", updateSpanName, producer.getParentSpanId())
+                .isEqualTo(emitUpdate.getTraceId());
+        assertThat(producer.getParentSpanId()).isEqualTo(emitUpdate.getSpanId());
         assertThat(consumer.getTraceId()).isEqualTo(producer.getTraceId());
         assertThat(consumer.getParentSpanId()).isEqualTo(producer.getSpanId());
         assertThat(consumer.getLinks()).anySatisfy(link -> {
