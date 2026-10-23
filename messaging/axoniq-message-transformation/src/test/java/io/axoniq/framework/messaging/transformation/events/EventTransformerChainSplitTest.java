@@ -76,12 +76,11 @@ final class EventTransformerChainSplitTest {
     }
 
     /** A split of the combined event into an enrollment followed by a capacity change, in that order. */
-    private static EventTransformation studentEnrolledSplit() {
-        return EventTransformation.split(COMBINED, Combined.class)
-                                  .producing(STUDENT_ENROLLED, combined -> new Enrollment(combined.student()))
-                                  .producing(COURSE_CAPACITY_UPDATED,
-                                             combined -> new CapacityChange(combined.capacity()))
-                                  .build();
+    private static SplitEventTransformation<?> studentEnrolledSplit() {
+        return (SplitEventTransformation<?>) EventTransformation.split(COMBINED, Combined.class)
+            .producing(STUDENT_ENROLLED, combined -> new Enrollment(combined.student()))
+            .producing(COURSE_CAPACITY_UPDATED, combined -> new CapacityChange(combined.capacity()))
+            .build();
     }
 
     @Nested
@@ -273,7 +272,7 @@ final class EventTransformerChainSplitTest {
         @Test
         void splitEmitsItsReplacementsWhenInvokedDirectly() {
             // SPI contract: a direct transform(...) call yields the ordered replacement events
-            EventTransformation split = studentEnrolledSplit();
+            SplitEventTransformation<?> split = studentEnrolledSplit();
             TransformationContext context = new TransformationContext(
                     Context.empty(), null, neverInvokedConverter(), alwaysEmptyMessageTypeResolver());
 
@@ -557,7 +556,7 @@ final class EventTransformerChainSplitTest {
         @Test
         void aNullConvertedPayloadIsRejected() {
             // given a split whose declared input type does not match the stored payload, and a converter yielding null
-            EventTransformation split = studentEnrolledSplit();
+            SplitEventTransformation<?> split = studentEnrolledSplit();
             TransformationContext context = new TransformationContext(
                     Context.empty(), null, recordingConverter(message -> (Combined) null),
                     alwaysEmptyMessageTypeResolver());
@@ -578,7 +577,7 @@ final class EventTransformerChainSplitTest {
         void aNullOutputPayloadIsRejected() {
             // given a split whose second output mapper returns null: a split emits every declared output, so a
             // missing payload is a configuration error rather than a conditional omission
-            EventTransformation split = EventTransformation.split(COMBINED, Combined.class)
+            SplitEventTransformation<?> split = (SplitEventTransformation<?>) EventTransformation.split(COMBINED, Combined.class)
                                                            .producing(STUDENT_ENROLLED,
                                                                       combined -> new Enrollment(combined.student()))
                                                            .producing(COURSE_CAPACITY_UPDATED, combined -> null)
@@ -596,7 +595,7 @@ final class EventTransformerChainSplitTest {
         @Test
         void theSameProducedTypeMayBeDeclaredTwice() {
             // given a split declaring the enrolled type twice with distinct mappers
-            EventTransformation split = EventTransformation.split(COMBINED, Combined.class)
+            SplitEventTransformation<?> split = (SplitEventTransformation<?>) EventTransformation.split(COMBINED, Combined.class)
                                                            .producing(STUDENT_ENROLLED,
                                                                       combined -> new Enrollment(combined.student()))
                                                            .producing(STUDENT_ENROLLED,
@@ -621,13 +620,10 @@ final class EventTransformerChainSplitTest {
         @Test
         void aContextAwareOutputMapperReceivesTheProcessingContext() {
             // given a split whose first output mapper branches on whether a ProcessingContext was supplied
-            EventTransformation split =
-                    EventTransformation.split(COMBINED, Combined.class)
-                                       .producing(STUDENT_ENROLLED, (combined, context) ->
-                                               new Enrollment(context == null ? "no-context" : combined.student()))
-                                       .producing(COURSE_CAPACITY_UPDATED,
-                                                  combined -> new CapacityChange(combined.capacity()))
-                                       .build();
+            SplitEventTransformation<?> split = (SplitEventTransformation<?>) EventTransformation.split(COMBINED, Combined.class)
+                .producing(STUDENT_ENROLLED, (combined, context) -> new Enrollment(context == null ? "no-context" : combined.student()))
+                .producing(COURSE_CAPACITY_UPDATED, combined -> new CapacityChange(combined.capacity()))
+                .build();
             EventMessage stored = eventOf(COMBINED, new Combined("olivia", 3));
 
             // when the split transforms a matched event on the entity-load path, which supplies a context
