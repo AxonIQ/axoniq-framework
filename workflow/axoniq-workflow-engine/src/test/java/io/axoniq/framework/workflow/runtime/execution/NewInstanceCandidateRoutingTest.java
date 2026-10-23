@@ -35,6 +35,8 @@ import java.util.ArrayList;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiPredicate;
 import java.util.function.Consumer;
@@ -54,8 +56,9 @@ import static org.mockito.Mockito.*;
  *     <li><b>several definitions naming the same id</b> - the candidates are collected into a {@link java.util.Set},
  *     which dedups them back to one, so routing stays targeted. Asserted on the routing decision itself: an assertion
  *     that only counted instances would pass under broadcast too;</li>
- *     <li><b>no candidate</b> - nothing starts, but an instance resident on any segment may be waiting for the event,
- *     so it is broadcast;</li>
+ *     <li><b>no candidate</b> - nothing starts. An event no definition starts on is routed to the workflow waiting
+ *     for it, or to a single segment when none waits; a single candidate is joined by the workflows waiting for the
+ *     event, so a waiter on another segment is not skipped;</li>
  *     <li><b>a derivation that throws</b> - degraded to a broadcast rather than allowed to fail the work package: a
  *     sequencing policy that throws stalls the segment, which is worse than an extra delivery;</li>
  *     <li><b>a {@code workflowIdProvider} deriving no id</b> - a misconfiguration, so that definition alone is
@@ -199,10 +202,35 @@ class NewInstanceCandidateRoutingTest {
 
     private static EventMessage businessEvent(QualifiedName name) {
         var eventMessage = mock(EventMessage.class);
+        when(eventMessage.identifier()).thenReturn(UUID.randomUUID().toString());
         when(eventMessage.metadata()).thenReturn(Metadata.emptyInstance());
         when(eventMessage.type()).thenReturn(new MessageType(name));
         when(eventMessage.payloadAs(any(TypeReference.class))).thenReturn(Map.of("id", "1"));
         return eventMessage;
+    }
+
+    /**
+     * The wait-step STARTED event of a workflow waiting for an event of the given name, without associations.
+     */
+    private static EventMessage startedWait(String workflowId, QualifiedName awaited) {
+        var eventMessage = mock(EventMessage.class);
+        when(eventMessage.identifier()).thenReturn(UUID.randomUUID().toString());
+        when(eventMessage.metadata()).thenReturn(MetadataUtils.markWaitForEventStep(
+                MetadataUtils.create(workflowId, "await", StepStatus.STARTED)
+        ));
+        when(eventMessage.type()).thenReturn(new MessageType(new QualifiedName("AwaitStarted")));
+        when(eventMessage.payloadAs(any(TypeReference.class))).thenReturn(Map.of(
+                WaitAssociation.EVENT_NAME_KEY, awaited.toString(),
+                WaitAssociation.ASSOCIATIONS_KEY, Set.of()
+        ));
+        return eventMessage;
+    }
+
+    /**
+     * The context the processor evaluates the sequencing policy in when it schedules an event: without a segment.
+     */
+    private static ProcessingContext schedulingContext() {
+        return new StubProcessingContext();
     }
 
     // ---------------------------------------------------------------------------------------------------------
@@ -223,13 +251,13 @@ class NewInstanceCandidateRoutingTest {
     @BeforeEach
     void setUp() {
         registry = new SimpleWorkflowConfigurationRegistry();
-        routing = new WorkflowEngineSequencingPolicy(registry);
         repository = new InMemoryWorkflowExecutionRepository();
         engine = new WorkflowEngine(registry,
                                     repository,
                                     mock(WorkflowCancellationService.class),
                                     mock(WorkflowStore.class),
                                     mock(UnitOfWorkFactory.class));
+        routing = (WorkflowEngineSequencingPolicy) engine.segmentedRouting();
         checkpointingSupport = new WorkflowEngineCheckpointingSupport(engine);
         engine.setCheckpointingSupport(checkpointingSupport);
     }
@@ -280,19 +308,58 @@ class NewInstanceCandidateRoutingTest {
     }
 
     @Test
-    void anEventNoDefinitionStartsOnIsBroadcastAndStillWakesAWaitingInstance() {
+    void anEventNoDefinitionStartsOnAndNoWorkflowWaitsForReachesASingleSegment() {
+        // given
+        register("Alpha", "1.0.0", always(), event -> "alpha-1");
+        var resident = execution("alpha-1");
+        repository.save("alpha-1", () -> resident);
+        var event = unregisteredEvent();
+
+        // when
+        var decision = routing.sequenceIdentifierFor(event, context(owningSegment("alpha-1")));
+
+        // then
+        assertThat(decision)
+                .as("no definition starts on this event and no wait names it, so its own id hands it to one segment")
+                .contains(event.identifier());
+        assertThat(started).as("an event with no start candidate must not create an instance").isEmpty();
+    }
+
+    @Test
+    void anEventNoDefinitionStartsOnIsSequencedByTheWorkflowWaitingForIt() {
+        // given
         register("Alpha", "1.0.0", always(), event -> "alpha-1");
         var waitingId = "alpha-1";
         var waiting = execution(waitingId);
         repository.save(waitingId, () -> waiting);
+        // the processor schedules the wait's STARTED event before the awaited event, which records the wait
+        routing.sequenceIdentifierFor(startedWait(waitingId, UNREGISTERED_EVENT), schedulingContext());
 
-        assertThat(routing.sequenceIdentifierFor(unregisteredEvent(), context(owningSegment(waitingId))))
-                .as("no definition starts on this event, but an instance on any segment may be waiting for it")
+        // when
+        var decision = routing.sequenceIdentifierFor(unregisteredEvent(), schedulingContext());
+
+        // then
+        assertThat(decision).as("the event's only target is the workflow waiting for it").contains(waitingId);
+    }
+
+    @Test
+    void aSingleStartCandidateWithAWaiterOnAnotherSegmentIsBroadcastSoBothAct() {
+        // given
+        register("Alpha", "1.0.0", always(), event -> "alpha-1");
+        var waitingId = idOnAnotherSegmentThan("alpha-1");
+        var waiting = execution(waitingId);
+        repository.save(waitingId, () -> waiting);
+        routing.sequenceIdentifierFor(startedWait(waitingId, START_EVENT), schedulingContext());
+
+        // when
+        var decision = routing.sequenceIdentifierFor(startEvent(), schedulingContext());
+
+        // then
+        assertThat(decision)
+                .as("the start candidate and the waiter sit on different segments, so both segments need the event")
                 .contains(SequencingPolicy.BROADCAST);
-
-        SEGMENTS.forEach(segment -> engine.handle(unregisteredEvent(), context(segment)));
-
-        assertThat(started).as("an event with no start candidate must not create an instance").isEmpty();
+        SEGMENTS.forEach(segment -> engine.handle(startEvent(), context(segment)));
+        assertThat(started).as("the candidate still starts exactly once, by its owner").containsExactly("alpha-1");
         verify(waiting, times(1)).onEvent(any(), any());
     }
 

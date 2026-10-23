@@ -104,6 +104,9 @@ class ExternalStepCancellationWorkflowTest extends AbstractWorkflowIntegrationTe
         assertThat(cancelledStepEvent).isPresent();
         assertThat(cancelledStepEvent.orElseThrow().type().qualifiedName().toString())
                 .isEqualTo("io.axoniq.dsl.externalcancel.AwaitApprovalCancelled");
+        assertThat(MetadataUtils.isWaitForEventStep(cancelledStepEvent.orElseThrow().metadata()))
+                .as("a cancelled wait carries the wait marker, so it is tagged and closes the wait's index row")
+                .isTrue();
     }
 
     public static class ExternalStepCancellationWorkflow {

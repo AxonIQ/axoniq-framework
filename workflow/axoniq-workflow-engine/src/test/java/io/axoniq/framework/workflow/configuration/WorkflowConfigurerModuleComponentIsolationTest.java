@@ -225,9 +225,11 @@ class WorkflowConfigurerModuleComponentIsolationTest {
         var workflowId = startEventForA.identifier();
         publish(startEventForA);
 
-        // then: module A's own engine durably completed the workflow it owns
+        // then: module A's own engine durably completed the workflow it owns. Sourcing a workflow without events
+        // throws, and a poll may run before the processors claimed their segments and started the workflow.
         Awaitility.await()
                   .atMost(Duration.ofSeconds(5))
+                  .ignoreExceptions()
                   .until(() -> durableStatus(workflowId) == WorkflowStatus.COMPLETED);
         // and: module B's engine never reacted to it - its own repository never held an execution for it
         assertThat(engineOf("module-b").workflowExecutions()).isEmpty();

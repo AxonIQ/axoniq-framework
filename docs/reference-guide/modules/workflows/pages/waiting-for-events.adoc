@@ -111,6 +111,10 @@ This maps to a value retriever.
 The built-in operator is `=`.
 - `value` is stored in serialized text form.
 
+The engine also uses associations to route events, see xref:configuration.adoc#event-routing[Event routing].
+An event reaches only the workflows whose wait names the event and whose `=` associations hold for it.
+A wait without associations, or a custom `EventCondition` that declares none, receives every event with that event name and checks its condition itself.
+
 [NOTE]
 ====
 Without associations, event matching is based solely on the event type.
@@ -172,7 +176,7 @@ Under the hood, this is a `waitForEvent` with an event condition that never matc
 ++++
 <div class="et-player" data-autoplay>
   <div class="et-src" data-title="sleep — 10-day delay">
-1 started CooldownPeriodStarted {"startTime": "2026-03-25T10:00:00Z", "eventName": "Void", "associations": [], "timeoutTime": "2026-04-04T10:00:00Z"}
+1 started CooldownPeriodStarted {"startTime": "2026-03-25T10:00:00Z", "eventName": "java.lang.Void", "associations": [], "timeoutTime": "2026-04-04T10:00:00Z"}
 2 timedout CooldownPeriodTimedOut "2026-04-04T10:00:00Z"
   </div>
 </div>
