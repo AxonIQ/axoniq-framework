@@ -1,4 +1,4 @@
 name: axon-framework-reference
 version:
   axoniq-(?<version>+({0..9}).+({0..9})).*: $<version>
-  '*': development
+  '*': '5.2'
