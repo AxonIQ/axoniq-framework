@@ -13,6 +13,7 @@ import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.config.SagaConfigurer;
 import org.axonframework.deadline.DeadlineManager;
 import org.axonframework.deadline.DeadlineMessage;
+import org.axonframework.eventhandling.scheduling.EventScheduler;
 import org.axonframework.messaging.ScopeAware;
 import org.axonframework.messaging.ScopeAwareProvider;
 import org.axonframework.messaging.ScopeDescriptor;
@@ -40,6 +41,7 @@ import org.axonframework.modelling.saga.repository.inmemory.InMemorySagaStore;
 import org.axonframework.test.FixtureExecutionException;
 import org.axonframework.test.deadline.DeadlineConsumer;
 import org.axonframework.test.deadline.StubDeadlineManager;
+import org.axonframework.test.eventscheduler.StubEventScheduler;
 import org.axonframework.test.fixture.AxonTestFixture;
 import org.axonframework.test.fixture.AxonTestPhase;
 import org.axonframework.test.fixture.AxonTestPhase.Given;
@@ -61,6 +63,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.UnaryOperator;
 
 /**
@@ -71,9 +74,11 @@ import java.util.function.UnaryOperator;
  * publishing thread, so a "when" call has already completed by the time the assertions run and no waiting is needed.
  * The Sagas are kept in an {@link InMemorySagaStore}, which the store assertions read.
  * <p>
- * The fixture's {@link DeadlineManager} is a {@link StubDeadlineManager}, so a Saga handler taking a
- * {@code DeadlineManager} parameter schedules on it. Nothing fires on its own: moving the fixture's time, through
- * {@link #whenTimeElapses(Duration)} and its siblings, fires every deadline due by then in the Saga that scheduled it.
+ * The fixture's {@link DeadlineManager} is a {@link StubDeadlineManager} and its {@link EventScheduler} a
+ * {@link StubEventScheduler}, so a Saga handler taking a {@code DeadlineManager} or {@code EventScheduler} parameter
+ * schedules on them. Nothing fires on its own: moving the fixture's time, through {@link #whenTimeElapses(Duration)}
+ * and its siblings, first publishes every scheduled event due by then, as an event of the "when" phase that the
+ * published event assertions leave out, and then fires every deadline due by then in the Saga that scheduled it.
  * <p>
  * When given an event payload, the fixture resolves its Axon Framework 5 message type from that payload. When given an
  * {@link EventMessage}, it preserves the message's declared type. Axon Framework 5 routes by that type, so it must match
@@ -100,6 +105,7 @@ public class SagaTestFixture<T> implements FixtureConfiguration, ContinuedGivenS
     private final Class<T> sagaType;
     private final InMemorySagaStore sagaStore = new InMemorySagaStore();
     private final StubDeadlineManager deadlineManager;
+    private final StubEventScheduler eventScheduler;
     private final Map<String, AggregateEventPublisher> aggregatePublishers = new HashMap<>();
 
     // Prepended, so the last registered resource of a type wins, as in Axon Framework 4.
@@ -137,6 +143,12 @@ public class SagaTestFixture<T> implements FixtureConfiguration, ContinuedGivenS
         UnitOfWorkFactory configurationUnitOfWorkFactory = (identifier, customization) ->
                 configuration().getComponent(UnitOfWorkFactory.class).create(identifier, customization);
         this.deadlineManager = new StubDeadlineManager(ZonedDateTime.now(), configurationUnitOfWorkFactory);
+        // Scheduled payloads get the message type the configuration resolves, which only exists once the fixture
+        // starts it, so the resolver is looked up when an event is scheduled rather than now.
+        MessageTypeResolver configurationMessageTypeResolver =
+                payloadType -> configuration().getComponent(MessageTypeResolver.class).resolve(payloadType);
+        this.eventScheduler = new StubEventScheduler(deadlineManager.getCurrentDateTime(),
+                                                     configurationMessageTypeResolver);
     }
 
     @Deprecated(forRemoval = true)
@@ -314,24 +326,21 @@ public class SagaTestFixture<T> implements FixtureConfiguration, ContinuedGivenS
 
     @Override
     public ContinuedGivenState givenCurrentTime(Instant currentTime) {
-        // TODO #3104 - Axon Framework 4 also initialized the event scheduler:
-        // eventScheduler.initializeAt(currentTime);
+        eventScheduler.initializeAt(currentTime);
         deadlineManager.initializeAt(currentTime);
         return this;
     }
 
     @Override
     public ContinuedGivenState andThenTimeElapses(Duration elapsedTime) {
-        // TODO #3104 - Axon Framework 4 also fired the scheduled events:
-        // eventScheduler.advanceTimeBy(elapsedTime, this::handleInSaga);
+        eventScheduler.advanceTimeBy(elapsedTime, this::publishInGiven);
         deadlineManager.advanceTimeBy(elapsedTime, sagaDeadlineConsumer());
         return this;
     }
 
     @Override
     public ContinuedGivenState andThenTimeAdvancesTo(Instant newDateTime) {
-        // TODO #3104 - Axon Framework 4 also fired the scheduled events:
-        // eventScheduler.advanceTimeTo(newDateTime, this::handleInSaga);
+        eventScheduler.advanceTimeTo(newDateTime, this::publishInGiven);
         deadlineManager.advanceTimeTo(newDateTime, sagaDeadlineConsumer());
         return this;
     }
@@ -339,36 +348,36 @@ public class SagaTestFixture<T> implements FixtureConfiguration, ContinuedGivenS
     @Override
     public FixtureExecutionResult whenTimeElapses(Duration elapsedTime) {
         When phase = startWhenPhase();
+        AtomicReference<AxonTestPhase.When.@Nullable Event> lastPublished = new AtomicReference<>();
         try {
-            // TODO #3104 - Axon Framework 4 also fired the scheduled events:
-            // eventScheduler.advanceTimeBy(elapsedTime, this::handleInSaga);
+            eventScheduler.advanceTimeBy(elapsedTime, event -> lastPublished.set(phase.events(event)));
             deadlineManager.advanceTimeBy(elapsedTime, sagaDeadlineConsumer());
         } catch (Exception e) {
             throw new FixtureExecutionException("Exception occurred while trying to advance time "
                                                         + "and handle scheduled events", e);
         }
-        return resultOf(phase.nothing());
+        return resultOf(phase, lastPublished.get());
     }
 
     @Override
     public FixtureExecutionResult whenTimeAdvancesTo(Instant newDateTime) {
         When phase = startWhenPhase();
+        AtomicReference<AxonTestPhase.When.@Nullable Event> lastPublished = new AtomicReference<>();
         try {
-            // TODO #3104 - Axon Framework 4 also fired the scheduled events:
-            // eventScheduler.advanceTimeTo(newDateTime, this::handleInSaga);
+            eventScheduler.advanceTimeTo(newDateTime, event -> lastPublished.set(phase.events(event)));
             deadlineManager.advanceTimeTo(newDateTime, sagaDeadlineConsumer());
         } catch (Exception e) {
             throw new FixtureExecutionException("Exception occurred while trying to advance time "
                                                         + "and handle scheduled events", e);
         }
-        return resultOf(phase.nothing());
+        return resultOf(phase, lastPublished.get());
     }
 
     /**
      * {@inheritDoc}
      * <p>
-     * This is the time of the fixture's {@link StubDeadlineManager}. Axon Framework 4 reported the time of its event
-     * scheduler, which it moved in step with the deadline manager.
+     * This is the time of the fixture's {@link StubDeadlineManager}, which moves in step with the time of its
+     * {@link StubEventScheduler}.
      */
     @Override
     public Instant currentTime() {
@@ -449,6 +458,7 @@ public class SagaTestFixture<T> implements FixtureConfiguration, ContinuedGivenS
                 .create()
                 .componentRegistry(cr -> cr.registerComponent(SagaStore.class, c -> sagaStore))
                 .componentRegistry(cr -> cr.registerComponent(DeadlineManager.class, c -> deadlineManager))
+                .componentRegistry(cr -> cr.registerComponent(EventScheduler.class, c -> eventScheduler))
                 // Decorating rather than replacing keeps whatever command bus the configuration builds, so a command
                 // reaching a subscribed handler is still handled by it.
                 .componentRegistry(cr -> cr.registerDecorator(
@@ -550,6 +560,7 @@ public class SagaTestFixture<T> implements FixtureConfiguration, ContinuedGivenS
                 sagaType,
                 event.then(),
                 deadlineManager,
+                eventScheduler,
                 new MatchAllFieldFilter(fieldFilters)
         );
     }
@@ -559,8 +570,34 @@ public class SagaTestFixture<T> implements FixtureConfiguration, ContinuedGivenS
                 sagaType,
                 nothing.then(),
                 deadlineManager,
+                eventScheduler,
                 new MatchAllFieldFilter(fieldFilters)
         );
+    }
+
+    /**
+     * The result of moving the fixture's time: of the last scheduled event published while time moved, whose
+     * then-phase also reports a Saga failing to handle any of the published events, or of nothing if none was due.
+     */
+    private FixtureExecutionResult resultOf(When phase, AxonTestPhase.When.@Nullable Event lastPublished) {
+        return lastPublished != null ? resultOf(lastPublished) : resultOf(phase.nothing());
+    }
+
+    /**
+     * Publishes the given scheduled {@code event} in the fixture's given phase, as Axon Framework 4 handed a scheduled
+     * event that became due while time moved to the Saga. The event keeps the time it was scheduled for as its
+     * timestamp.
+     */
+    private void publishInGiven(EventMessage event) {
+        Given phase = given();
+        try {
+            givenPhase = phase.events(event);
+        } catch (RuntimeException e) {
+            if (!suppressExceptionInGivenPhase) {
+                throw e;
+            }
+            givenPhase = phase;
+        }
     }
 
     private DeadlineConsumer sagaDeadlineConsumer() {

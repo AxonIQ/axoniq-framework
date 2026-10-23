@@ -13,6 +13,8 @@ import org.axonframework.messaging.commandhandling.CommandMessage;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.test.deadline.DeadlineManagerValidator;
 import org.axonframework.test.deadline.StubDeadlineManager;
+import org.axonframework.test.eventscheduler.EventSchedulerValidator;
+import org.axonframework.test.eventscheduler.StubEventScheduler;
 import org.axonframework.test.fixture.AxonTestPhase;
 import org.axonframework.test.matchers.FieldFilter;
 import org.axonframework.test.matchers.Matchers;
@@ -44,6 +46,7 @@ class FixtureExecutionResultImpl implements FixtureExecutionResult {
     private final CommandValidator commandValidator;
     private final EventValidator eventValidator;
     private final DeadlineManagerValidator deadlineManagerValidator;
+    private final EventSchedulerValidator eventSchedulerValidator;
 
     /**
      * Constructs a {@code FixtureExecutionResultImpl} asserting on the then-phase of a published event.
@@ -51,38 +54,45 @@ class FixtureExecutionResultImpl implements FixtureExecutionResult {
      * @param sagaType        the type of Saga under test, used to filter the store on the association assertions
      * @param then            the then-phase of the fixture the Saga was driven through
      * @param deadlineManager the deadline manager the Saga scheduled its deadlines on
+     * @param eventScheduler  the event scheduler the Saga scheduled its events on
      * @param fieldFilter     the filter describing the fields to include when comparing messages
      */
     FixtureExecutionResultImpl(Class<?> sagaType,
                                AxonTestPhase.Then.Event then,
                                StubDeadlineManager deadlineManager,
+                               StubEventScheduler eventScheduler,
                                FieldFilter fieldFilter) {
-        this(sagaType, then, then::success, deadlineManager, fieldFilter);
+        this(sagaType, then, then::success, deadlineManager, eventScheduler, fieldFilter);
     }
 
     /**
      * Constructs a {@code FixtureExecutionResultImpl} asserting on the then-phase of moving the fixture's time.
      * <p>
      * A deadline handler that fails while time moves fails the "when" call itself, as it did in Axon Framework 4, so
-     * by the time this result exists every handler executed successfully.
+     * by the time this result exists every handler executed successfully. Moving the time while no scheduled event
+     * became due yields this result; otherwise the result of the last published scheduled event reports whether its
+     * handlers succeeded.
      *
      * @param sagaType        the type of Saga under test, used to filter the store on the association assertions
      * @param then            the then-phase of the fixture the Saga was driven through
      * @param deadlineManager the deadline manager the Saga scheduled its deadlines on
+     * @param eventScheduler  the event scheduler the Saga scheduled its events on
      * @param fieldFilter     the filter describing the fields to include when comparing messages
      */
     FixtureExecutionResultImpl(Class<?> sagaType,
                                AxonTestPhase.Then.Nothing then,
                                StubDeadlineManager deadlineManager,
+                               StubEventScheduler eventScheduler,
                                FieldFilter fieldFilter) {
         this(sagaType, then, () -> {
-        }, deadlineManager, fieldFilter);
+        }, deadlineManager, eventScheduler, fieldFilter);
     }
 
     private FixtureExecutionResultImpl(Class<?> sagaType,
                                        AxonTestPhase.Then.Message<?> then,
                                        Runnable successfulHandlerExecution,
                                        StubDeadlineManager deadlineManager,
+                                       StubEventScheduler eventScheduler,
                                        FieldFilter fieldFilter) {
         this.sagaType = Objects.requireNonNull(sagaType, "The sagaType may not be null.");
         this.then = Objects.requireNonNull(then, "The then-phase may not be null.");
@@ -92,6 +102,9 @@ class FixtureExecutionResultImpl implements FixtureExecutionResult {
         this.eventValidator = new EventValidator(this::publishedEvents, fieldFilter);
         this.deadlineManagerValidator = new DeadlineManagerValidator(
                 Objects.requireNonNull(deadlineManager, "The deadlineManager may not be null."), fieldFilter
+        );
+        this.eventSchedulerValidator = new EventSchedulerValidator(
+                Objects.requireNonNull(eventScheduler, "The eventScheduler may not be null.")
         );
     }
 
@@ -155,101 +168,79 @@ class FixtureExecutionResultImpl implements FixtureExecutionResult {
 
 
     @Override
-    public FixtureExecutionResult expectScheduledEventMatching(Duration duration, Matcher<? super EventMessage> matcher) {
-        // TODO #3104 - Axon Framework 4:
-        // eventSchedulerValidator.assertScheduledEventMatching(duration, matcher);
-        // return this;
-        throw NotPorted.eventScheduler("expectScheduledEventMatching");
+    public FixtureExecutionResult expectScheduledEventMatching(Duration duration,
+                                                               Matcher<? super EventMessage> matcher) {
+        eventSchedulerValidator.assertScheduledEventMatching(duration, matcher);
+        return this;
     }
 
     @Override
     public FixtureExecutionResult expectScheduledEvent(Duration duration, Object applicationEvent) {
-        // TODO #3104 - Axon Framework 4:
-        // return expectScheduledEventMatching(duration, messageWithPayload(deepEquals(applicationEvent, fieldFilter)));
-        throw NotPorted.eventScheduler("expectScheduledEvent");
+        return expectScheduledEventMatching(duration, messageWithPayload(deepEquals(applicationEvent, fieldFilter)));
     }
 
     @Override
     public FixtureExecutionResult expectScheduledEventOfType(Duration duration, Class<?> eventType) {
-        // TODO #3104 - Axon Framework 4:
-        // return expectScheduledEventMatching(duration, messageWithPayload(any(eventType)));
-        throw NotPorted.eventScheduler("expectScheduledEventOfType");
+        return expectScheduledEventMatching(duration, messageWithPayload(any(eventType)));
     }
 
     @Override
-    public FixtureExecutionResult expectScheduledEventMatching(Instant scheduledTime, Matcher<? super EventMessage> matcher) {
-        // TODO #3104 - Axon Framework 4:
-        // eventSchedulerValidator.assertScheduledEventMatching(scheduledTime, matcher);
-        // return this;
-        throw NotPorted.eventScheduler("expectScheduledEventMatching");
+    public FixtureExecutionResult expectScheduledEventMatching(Instant scheduledTime,
+                                                               Matcher<? super EventMessage> matcher) {
+        eventSchedulerValidator.assertScheduledEventMatching(scheduledTime, matcher);
+        return this;
     }
 
     @Override
     public FixtureExecutionResult expectScheduledEvent(Instant scheduledTime, Object applicationEvent) {
-        // TODO #3104 - Axon Framework 4:
-        // return expectScheduledEventMatching(scheduledTime,
-        //                                     messageWithPayload(deepEquals(applicationEvent, fieldFilter)));
-        throw NotPorted.eventScheduler("expectScheduledEvent");
+        return expectScheduledEventMatching(scheduledTime,
+                                            messageWithPayload(deepEquals(applicationEvent, fieldFilter)));
     }
 
     @Override
     public FixtureExecutionResult expectScheduledEventOfType(Instant scheduledTime, Class<?> eventType) {
-        // TODO #3104 - Axon Framework 4:
-        // return expectScheduledEventMatching(scheduledTime, messageWithPayload(any(eventType)));
-        throw NotPorted.eventScheduler("expectScheduledEventOfType");
+        return expectScheduledEventMatching(scheduledTime, messageWithPayload(any(eventType)));
     }
 
     @Override
     public FixtureExecutionResult expectNoScheduledEvents() {
-        // TODO #3104 - Axon Framework 4:
-        // eventSchedulerValidator.assertNoScheduledEvents();
-        // return this;
-        throw NotPorted.eventScheduler("expectNoScheduledEvents");
+        eventSchedulerValidator.assertNoScheduledEvents();
+        return this;
     }
 
     @Override
-    public FixtureExecutionResult expectNoScheduledEventMatching(Duration durationToScheduledTime, Matcher<? super EventMessage> matcher) {
-        // TODO #3104 - Axon Framework 4:
-        // eventSchedulerValidator.assertNoScheduledEventMatching(durationToScheduledTime, matcher);
-        // return this;
-        throw NotPorted.eventScheduler("expectNoScheduledEventMatching");
+    public FixtureExecutionResult expectNoScheduledEventMatching(Duration durationToScheduledTime,
+                                                                 Matcher<? super EventMessage> matcher) {
+        eventSchedulerValidator.assertNoScheduledEventMatching(durationToScheduledTime, matcher);
+        return this;
     }
 
     @Override
     public FixtureExecutionResult expectNoScheduledEvent(Duration durationToScheduledTime, Object event) {
-        // TODO #3104 - Axon Framework 4:
-        // return expectNoScheduledEventMatching(durationToScheduledTime,
-        //                                       messageWithPayload(deepEquals(event, fieldFilter)));
-        throw NotPorted.eventScheduler("expectNoScheduledEvent");
+        return expectNoScheduledEventMatching(durationToScheduledTime,
+                                              messageWithPayload(deepEquals(event, fieldFilter)));
     }
 
     @Override
     public FixtureExecutionResult expectNoScheduledEventOfType(Duration durationToScheduledTime, Class<?> eventType) {
-        // TODO #3104 - Axon Framework 4:
-        // return expectNoScheduledEventMatching(durationToScheduledTime, messageWithPayload(any(eventType)));
-        throw NotPorted.eventScheduler("expectNoScheduledEventOfType");
+        return expectNoScheduledEventMatching(durationToScheduledTime, messageWithPayload(any(eventType)));
     }
 
     @Override
-    public FixtureExecutionResult expectNoScheduledEventMatching(Instant scheduledTime, Matcher<? super EventMessage> matcher) {
-        // TODO #3104 - Axon Framework 4:
-        // eventSchedulerValidator.assertNoScheduledEventMatching(scheduledTime, matcher);
-        // return this;
-        throw NotPorted.eventScheduler("expectNoScheduledEventMatching");
+    public FixtureExecutionResult expectNoScheduledEventMatching(Instant scheduledTime,
+                                                                 Matcher<? super EventMessage> matcher) {
+        eventSchedulerValidator.assertNoScheduledEventMatching(scheduledTime, matcher);
+        return this;
     }
 
     @Override
     public FixtureExecutionResult expectNoScheduledEvent(Instant scheduledTime, Object event) {
-        // TODO #3104 - Axon Framework 4:
-        // return expectNoScheduledEventMatching(scheduledTime, messageWithPayload(deepEquals(event, fieldFilter)));
-        throw NotPorted.eventScheduler("expectNoScheduledEvent");
+        return expectNoScheduledEventMatching(scheduledTime, messageWithPayload(deepEquals(event, fieldFilter)));
     }
 
     @Override
     public FixtureExecutionResult expectNoScheduledEventOfType(Instant scheduledTime, Class<?> eventType) {
-        // TODO #3104 - Axon Framework 4:
-        // return expectNoScheduledEventMatching(scheduledTime, messageWithPayload(any(eventType)));
-        throw NotPorted.eventScheduler("expectNoScheduledEventOfType");
+        return expectNoScheduledEventMatching(scheduledTime, messageWithPayload(any(eventType)));
     }
 
     @Override

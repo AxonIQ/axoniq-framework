@@ -1,19 +1,9 @@
 /*
- * Copyright (c) 2010-2026. AxonIQ B.V.
+ * Copyright (c) 2010-2026. Axoniq B.V.
  *
- * Licensed under the AXONIQ SOFTWARE SUBSCRIPTION AGREEMENT TERMS,
- * Version September 2025 (the "License");
- * The software is available under Non-Production Free License.
- * Production use requires a paid license. See the License for the
- * specific language governing permissions and limitations under
- * the License.
- *
- * You may not use this file except in compliance with the License.
- * You may obtain a copy of the License at:
- *
- *    https://www.axoniq.io/legal/terms-of-service
- *
- *
+ * Licensed under the Axoniq Terms of Service (the "Terms"). You may not
+ * use this file except in compliance with the Terms, available at
+ * https://www.axoniq.io/legal/terms-of-service
  */
 
 package org.axonframework.test.eventscheduler;
@@ -26,6 +16,7 @@ import org.hamcrest.StringDescription;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Objects;
 
 import static java.lang.String.format;
 import static org.axonframework.common.DateTimeUtils.formatInstant;
@@ -43,18 +34,18 @@ public class EventSchedulerValidator {
     /**
      * Initializes the validator to validate the state of the given {@code eventScheduler}.
      *
-     * @param eventScheduler The event scheduler to monitor
+     * @param eventScheduler the event scheduler to monitor
      */
     public EventSchedulerValidator(StubEventScheduler eventScheduler) {
-        this.eventScheduler = eventScheduler;
+        this.eventScheduler = Objects.requireNonNull(eventScheduler, "The StubEventScheduler may not be null.");
     }
 
     /**
      * Asserts that an event matching the given {@code matcher} is scheduled for publication after the given {@code
      * duration}.
      *
-     * @param duration The delay expected before the event is published
-     * @param matcher  The matcher that must match with the event scheduled at the given time
+     * @param duration the delay expected before the event is published
+     * @param matcher  the matcher that must match with the event scheduled at the given time
      */
     public void assertScheduledEventMatching(Duration duration, Matcher<?> matcher) {
         Instant targetTime = eventScheduler.getCurrentDateTime().plus(duration);
@@ -66,7 +57,7 @@ public class EventSchedulerValidator {
      * scheduledTime}.
      *
      * @param scheduledTime the time at which the event should be published
-     * @param matcher       The matcher that must match with the event scheduled at the given time
+     * @param matcher       the matcher that must match with the event scheduled at the given time
      */
     public void assertScheduledEventMatching(Instant scheduledTime, Matcher<?> matcher) {
         List<ScheduledItem> schedule = eventScheduler.getScheduledItems();
@@ -137,7 +128,7 @@ public class EventSchedulerValidator {
      */
     public void assertNoScheduledEvents() {
         List<ScheduledItem> scheduledItems = eventScheduler.getScheduledItems();
-        if (scheduledItems != null && !scheduledItems.isEmpty()) {
+        if (!scheduledItems.isEmpty()) {
             throw new AxonAssertionError("Expected no scheduled events, got " + scheduledItems.size());
         }
     }
