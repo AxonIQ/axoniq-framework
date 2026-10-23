@@ -111,7 +111,7 @@ public class AxonServerSnapshotStore implements SnapshotStore {
          */
 
         return connection.snapshotChannel()
-            .getLastSnapshot(GetLastSnapshotRequest.newBuilder().setKey(key).build())
+            .getLastSnapshot(GetLastSnapshotRequest.newBuilder().addKey(key).build())
             .thenApply(sr -> {
                 io.axoniq.axonserver.grpc.event.dcb.Snapshot snapshot = sr.getSnapshot();
 

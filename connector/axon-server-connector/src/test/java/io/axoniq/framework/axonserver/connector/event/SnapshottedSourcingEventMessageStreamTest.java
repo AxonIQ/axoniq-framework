@@ -8,9 +8,11 @@
 
 package io.axoniq.framework.axonserver.connector.event;
 
+import com.google.protobuf.ByteString;
 import io.axoniq.axonserver.connector.ResultStream;
 import io.axoniq.axonserver.grpc.event.dcb.Event;
 import io.axoniq.axonserver.grpc.event.dcb.SequencedEvent;
+import io.axoniq.axonserver.grpc.event.dcb.SequencedSnapshot;
 import io.axoniq.axonserver.grpc.event.dcb.Snapshot;
 import io.axoniq.axonserver.grpc.event.dcb.SnapshottedSourceEventsResponse;
 import org.axonframework.conversion.jackson.JacksonConverter;
@@ -37,6 +39,8 @@ import static org.mockito.Mockito.*;
  */
 class SnapshottedSourcingEventMessageStreamTest {
 
+    private static final ByteString SNAPSHOT_KEY = ByteString.copyFromUtf8("snapshot-key");
+
     private ResultStream<SnapshottedSourceEventsResponse> stream;
     private SnapshottedSourcingEventMessageStream testSubject;
 
@@ -52,16 +56,17 @@ class SnapshottedSourcingEventMessageStreamTest {
     }
 
     @Test
-    void snapshotFollowedByAnEventIsPositionedFromTheFollowingEventsSequenceMinusOne() {
-        // given
+    void snapshotIsPositionedFromItsOwnSequenceRegardlessOfWhatFollowsIt() {
+        // given a snapshot taken at sequence 4, followed by an event and the terminal marker - neither of which
+        // the snapshot's position should depend on
         Snapshot snapshot = snapshot();
         SequencedEvent event = sequencedEvent(5L);
         when(stream.nextIfAvailable()).thenReturn(
-                snapshotResponse(snapshot), eventResponse(event), markerResponse(10L), null
+                sequencedSnapshotResponse(4L, snapshot), eventResponse(event), markerResponse(10L), null
         );
         when(stream.isClosed()).thenReturn(true);
 
-        // when / then the snapshot entry is emitted first, positioned one before the following event's sequence
+        // when / then the snapshot entry is emitted first, positioned at its own sequence
         MessageStream.Entry<EventMessage> snapshotEntry = testSubject.next().orElseThrow();
         assertThat(snapshotEntry.message()).isInstanceOf(SnapshotEventMessage.class);
         org.axonframework.eventsourcing.snapshot.api.Snapshot payload =
@@ -80,14 +85,14 @@ class SnapshottedSourcingEventMessageStreamTest {
     }
 
     @Test
-    void snapshotWithNoFollowingEventIsPositionedFromTheConsistencyMarker() {
-        // given a snapshot immediately followed by the terminal marker - no events in between
+    void snapshotWithNoFollowingEventStillUsesItsOwnSequence() {
+        // given a snapshot taken at sequence 7, immediately followed by an unrelated terminal marker - no events
+        // in between, and no event following it at all
         Snapshot snapshot = snapshot();
-        when(stream.nextIfAvailable()).thenReturn(snapshotResponse(snapshot), markerResponse(7L), null);
+        when(stream.nextIfAvailable()).thenReturn(sequencedSnapshotResponse(7L, snapshot), markerResponse(99L), null);
         when(stream.isClosed()).thenReturn(true);
 
-        // when / then the snapshot's position equals the marker, since no matching event with a greater
-        // sequence exists
+        // when / then the snapshot's position is its own sequence, not derived from the unrelated marker
         MessageStream.Entry<EventMessage> snapshotEntry = testSubject.next().orElseThrow();
         org.axonframework.eventsourcing.snapshot.api.Snapshot payload =
                 (org.axonframework.eventsourcing.snapshot.api.Snapshot) snapshotEntry.message().payload();
@@ -113,19 +118,18 @@ class SnapshottedSourcingEventMessageStreamTest {
     }
 
     @Test
-    void peekDoesNotConsumeTheResolvedEntry() {
+    void peekDoesNotConsumeTheUnderlyingStream() {
         // given
-        Snapshot snapshot = snapshot();
-        when(stream.nextIfAvailable()).thenReturn(snapshotResponse(snapshot), markerResponse(3L), null);
-        when(stream.isClosed()).thenReturn(true);
+        when(stream.peek()).thenReturn(markerResponse(3L));
 
         // when peeking repeatedly
         MessageStream.Entry<EventMessage> firstPeek = testSubject.peek().orElseThrow();
         MessageStream.Entry<EventMessage> secondPeek = testSubject.peek().orElseThrow();
 
-        // then it returns the same entry both times, and next() then returns that same entry too
-        assertThat(firstPeek).isSameAs(secondPeek);
-        assertThat(testSubject.next().orElseThrow()).isSameAs(firstPeek);
+        // then the underlying stream is only ever peeked, never advanced
+        assertThat(firstPeek.message()).isInstanceOf(TerminalEventMessage.class);
+        assertThat(secondPeek.message()).isInstanceOf(TerminalEventMessage.class);
+        verify(stream, never()).nextIfAvailable();
     }
 
     @Nested
@@ -174,8 +178,13 @@ class SnapshottedSourcingEventMessageStreamTest {
         return SequencedEvent.newBuilder().setEvent(event).setSequence(sequence).build();
     }
 
-    private static SnapshottedSourceEventsResponse snapshotResponse(Snapshot snapshot) {
-        return SnapshottedSourceEventsResponse.newBuilder().setSnapshot(snapshot).build();
+    private static SnapshottedSourceEventsResponse sequencedSnapshotResponse(long sequence, Snapshot snapshot) {
+        return SnapshottedSourceEventsResponse.newBuilder()
+                                              .setSequencedSnapshot(SequencedSnapshot.newBuilder()
+                                                                                      .setKey(SNAPSHOT_KEY)
+                                                                                      .setSequence(sequence)
+                                                                                      .setSnapshot(snapshot))
+                                              .build();
     }
 
     private static SnapshottedSourceEventsResponse eventResponse(SequencedEvent event) {
