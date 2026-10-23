@@ -1,72 +1,83 @@
 /*
- * Copyright (c) 2010-2026. AxonIQ B.V.
+ * Copyright (c) 2010-2026. Axoniq B.V.
  *
- * Licensed under the AXONIQ SOFTWARE SUBSCRIPTION AGREEMENT TERMS,
- * Version September 2025 (the "License");
- * The software is available under Non-Production Free License.
- * Production use requires a paid license. See the License for the
- * specific language governing permissions and limitations under
- * the License.
- *
- * You may not use this file except in compliance with the License.
- * You may obtain a copy of the License at:
- *
- *    https://www.axoniq.io/legal/terms-of-service
- *
- *
+ * Licensed under the Axoniq Terms of Service (the "Terms"). You may not
+ * use this file except in compliance with the Terms, available at
+ * https://www.axoniq.io/legal/terms-of-service
  */
 
-package org.axonframework.messaging.eventhandling.scheduling.java;
+package org.axonframework.eventhandling.scheduling.java;
 
+import io.axoniq.framework.legacy.LegacySupportAxoniqAddon;
+import io.axoniq.license.entitlement.EntitlementManager;
 import org.axonframework.common.AxonConfigurationException;
+import org.axonframework.common.AxonThreadFactory;
+import org.axonframework.common.ClockUtils;
+import org.axonframework.common.FutureUtils;
 import org.axonframework.common.IdentifierFactory;
-import org.axonframework.messaging.core.ClassBasedMessageTypeResolver;
+import org.axonframework.eventhandling.scheduling.EventScheduler;
+import org.axonframework.eventhandling.scheduling.ScheduleToken;
+import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.MessageTypeResolver;
-import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.annotation.AnnotationMessageTypeResolver;
-import org.axonframework.messaging.core.unitofwork.transaction.NoTransactionManager;
-import org.axonframework.messaging.core.unitofwork.transaction.TransactionManager;
-import org.axonframework.messaging.eventhandling.EventBus;
+import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventMessage;
+import org.axonframework.messaging.eventhandling.EventSink;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
-import org.axonframework.messaging.eventhandling.scheduling.EventScheduler;
-import org.axonframework.messaging.eventhandling.scheduling.ScheduleToken;
-import org.axonframework.messaging.eventhandling.scheduling.quartz.QuartzEventScheduler;
-import org.axonframework.messaging.unitofwork.LegacyDefaultUnitOfWork;
-import org.axonframework.messaging.unitofwork.LegacyUnitOfWork;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
 import static org.axonframework.common.BuilderUtils.assertNonNull;
 
 /**
- * An {@link EventScheduler} implementation that uses Java's ScheduledExecutorService as scheduling and triggering
- * mechanism.
- * <p/>
+ * An {@link EventScheduler} implementation that uses Java's {@link ScheduledExecutorService} as scheduling and
+ * triggering mechanism.
+ * <p>
  * Note that this mechanism is non-persistent. Scheduled tasks will be lost when the JVM is shut down, unless special
- * measures have been taken to prevent that. For more flexible and powerful scheduling options, see
- * {@link QuartzEventScheduler}.
+ * measures have been taken to prevent that.
+ * <p>
+ * A fired event is published on the configured {@link EventSink} in a unit of work from the configured
+ * {@link UnitOfWorkFactory}. The {@link MessageType} of a fired event is the one of the scheduled
+ * {@link EventMessage}, or resolved from the scheduled payload through the configured {@link MessageTypeResolver}. A
+ * failing publication is logged, as the event cannot be retried.
+ * <p>
+ * Register it as the {@link EventScheduler} component of the configuration. A Saga handler's {@code EventScheduler}
+ * parameter then resolves to it, and the configuration shuts it down when the application stops:
+ * <pre>{@code
+ * MessagingConfigurer.create().componentRegistry(registry -> registry.registerComponent(
+ *         EventScheduler.class,
+ *         config -> SimpleEventScheduler.builder()
+ *                                       .eventSink(config.getComponent(EventSink.class))
+ *                                       .unitOfWorkFactory(config.getComponent(UnitOfWorkFactory.class))
+ *                                       .messageTypeResolver(config.getComponent(MessageTypeResolver.class))
+ *                                       .build()
+ * ));
+ * }</pre>
  *
  * @author Allard Buijze
- * @see QuartzEventScheduler
+ * @author Jakob Hatzl
  * @since 0.7
  */
 public class SimpleEventScheduler implements EventScheduler {
 
     private static final Logger logger = LoggerFactory.getLogger(SimpleEventScheduler.class);
+    private static final String THREAD_FACTORY_GROUP_NAME = "eventScheduler";
 
     private final ScheduledExecutorService scheduledExecutorService;
-    private final EventBus eventBus;
-    private final TransactionManager transactionManager;
+    private final EventSink eventSink;
+    private final UnitOfWorkFactory unitOfWorkFactory;
     private final MessageTypeResolver messageTypeResolver;
 
     private final Map<String, Future<?>> tokens = new ConcurrentHashMap<>();
@@ -74,25 +85,27 @@ public class SimpleEventScheduler implements EventScheduler {
     /**
      * Instantiate a {@code SimpleEventScheduler} based on the fields contained in the {@link Builder}.
      * <p>
-     * Will assert that the {@link ScheduledExecutorService}, {@link EventBus} and {@link TransactionManager} are not
-     * {@code null}, and will throw an {@link AxonConfigurationException} if any of them is {@code null}.
+     * Will assert that the {@link EventSink} and the {@link UnitOfWorkFactory} are not {@code null}, and will throw an
+     * {@link AxonConfigurationException} if either of them is {@code null}.
      *
      * @param builder the {@link Builder} used to instantiate a {@code SimpleEventScheduler} instance
      */
     protected SimpleEventScheduler(Builder builder) {
         builder.validate();
         this.scheduledExecutorService = builder.scheduledExecutorService;
-        this.eventBus = builder.eventBus;
-        this.transactionManager = builder.transactionManager;
+        this.eventSink = builder.eventSink;
+        this.unitOfWorkFactory = builder.unitOfWorkFactory;
         this.messageTypeResolver = builder.messageTypeResolver;
+        EntitlementManager.INSTANCE.registerAddon(LegacySupportAxoniqAddon.class);
     }
 
     /**
      * Instantiate a Builder to be able to create a {@code SimpleEventScheduler}.
      * <p>
-     * The {@link TransactionManager} is defaulted to a {@link NoTransactionManager}. The
-     * {@link ScheduledExecutorService} and {@link EventBus} are a <b>hard requirements</b> and as such should be
-     * provided.
+     * The {@link ScheduledExecutorService} is defaulted to an {@link Executors#newSingleThreadScheduledExecutor()}
+     * which contains an {@link AxonThreadFactory}, and the {@link MessageTypeResolver} to an
+     * {@link AnnotationMessageTypeResolver}, as in the configuration. The {@link EventSink} and the
+     * {@link UnitOfWorkFactory} are <b>hard requirements</b> and as such should be provided.
      *
      * @return a Builder to be able to create a {@code SimpleEventScheduler}
      */
@@ -100,32 +113,60 @@ public class SimpleEventScheduler implements EventScheduler {
         return new Builder();
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * @deprecated scheduling new events through an {@code EventScheduler} is supported only to keep Axon Framework 4
+     *             code running while migrating. Schedule with a scheduler of choice that publishes through the
+     *             {@link org.axonframework.messaging.eventhandling.gateway.EventGateway} instead
+     */
     @Override
+    @Deprecated(since = "5.5.0")
     public ScheduleToken schedule(Instant triggerDateTime, Object event) {
-        return schedule(Duration.between(Instant.now(), triggerDateTime), event);
+        Objects.requireNonNull(triggerDateTime, "The trigger date time may not be null.");
+        return schedule(Duration.between(ClockUtils.instant(), triggerDateTime), event);
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * @deprecated scheduling new events through an {@code EventScheduler} is supported only to keep Axon Framework 4
+     *             code running while migrating. Schedule with a scheduler of choice that publishes through the
+     *             {@link org.axonframework.messaging.eventhandling.gateway.EventGateway} instead
+     */
     @Override
+    @Deprecated(since = "5.5.0")
     public ScheduleToken schedule(Duration triggerDuration, Object event) {
+        Objects.requireNonNull(triggerDuration, "The trigger duration may not be null.");
+        Objects.requireNonNull(event, "The event may not be null.");
         String tokenId = IdentifierFactory.getInstance().generateIdentifier();
-        ScheduledFuture<?> future = scheduledExecutorService.schedule(new PublishEventTask(event, tokenId),
-                                                                      triggerDuration.toMillis(),
-                                                                      TimeUnit.MILLISECONDS);
+        Future<?> future = scheduledExecutorService.schedule(new PublishEventTask(event, tokenId),
+                                                             triggerDuration.toMillis(),
+                                                             TimeUnit.MILLISECONDS);
         tokens.put(tokenId, future);
+        if (future.isDone()) {
+            // The task already ran and removed its token before it was put, so it would otherwise stay behind.
+            tokens.remove(tokenId);
+        }
         return new SimpleScheduleToken(tokenId);
     }
 
     @Override
     public void cancelSchedule(ScheduleToken scheduleToken) {
-        if (!(scheduleToken instanceof SimpleScheduleToken)) {
+        if (!(scheduleToken instanceof SimpleScheduleToken simpleScheduleToken)) {
             throw new IllegalArgumentException("The given ScheduleToken was not provided by this scheduler.");
         }
-        Future<?> future = tokens.remove(((SimpleScheduleToken) scheduleToken).getTokenId());
+        Future<?> future = tokens.remove(simpleScheduleToken.getTokenId());
         if (future != null) {
             future.cancel(false);
         }
     }
 
+    /**
+     * {@inheritDoc}
+     * <p>
+     * Shuts down the {@link ScheduledExecutorService}, which ignores every further call.
+     */
     @Override
     public void shutdown() {
         scheduledExecutorService.shutdown();
@@ -134,33 +175,39 @@ public class SimpleEventScheduler implements EventScheduler {
     /**
      * Builder class to instantiate a {@link SimpleEventScheduler}.
      * <p>
-     * The {@link TransactionManager} is defaulted to a {@link NoTransactionManager}. The
-     * {@link ScheduledExecutorService} and {@link EventBus} are a <b>hard requirements</b> and as such should be
-     * provided.
+     * The {@link ScheduledExecutorService} is defaulted to an {@link Executors#newSingleThreadScheduledExecutor()}
+     * which contains an {@link AxonThreadFactory}, and the {@link MessageTypeResolver} to an
+     * {@link AnnotationMessageTypeResolver}, as in the configuration. The {@link EventSink} and the
+     * {@link UnitOfWorkFactory} are <b>hard requirements</b> and as such should be provided.
      */
     public static class Builder {
 
-        private ScheduledExecutorService scheduledExecutorService;
-        private EventBus eventBus;
-        private TransactionManager transactionManager = NoTransactionManager.INSTANCE;
+        private ScheduledExecutorService scheduledExecutorService =
+                Executors.newSingleThreadScheduledExecutor(new AxonThreadFactory(THREAD_FACTORY_GROUP_NAME));
+        private @Nullable EventSink eventSink;
+        private @Nullable UnitOfWorkFactory unitOfWorkFactory;
         private MessageTypeResolver messageTypeResolver = new AnnotationMessageTypeResolver();
 
         /**
-         * Sets the {@link EventBus} used to publish events on to, once the schedule has been met.
+         * Sets the {@link EventSink} used to publish events on to, once the schedule has been met. Pass the
+         * {@code EventSink} of the application's configuration, which is its event store when it has one, so that a
+         * fired event is stored and handled like any other published event.
          *
-         * @param eventBus a {@link EventBus} used to publish events on to, once the schedule has been met
+         * @param eventSink the {@link EventSink} used to publish events on to, once the schedule has been met
          * @return the current Builder instance, for fluent interfacing
          */
-        public Builder eventBus(EventBus eventBus) {
-            assertNonNull(eventBus, "EventBus may not be null");
-            this.eventBus = eventBus;
+        public Builder eventSink(EventSink eventSink) {
+            assertNonNull(eventSink, "EventSink may not be null");
+            this.eventSink = eventSink;
             return this;
         }
 
         /**
-         * Sets the {@link ScheduledExecutorService} used for scheduling and triggering events.
+         * Sets the {@link ScheduledExecutorService} used for scheduling and triggering events. Defaults to a
+         * {@link Executors#newSingleThreadScheduledExecutor()}, containing an {@link AxonThreadFactory}.
          *
-         * @param scheduledExecutorService a {@link ScheduledExecutorService} used for scheduling and triggering events
+         * @param scheduledExecutorService a {@link ScheduledExecutorService} used for scheduling and triggering
+         *                                 events
          * @return the current Builder instance, for fluent interfacing
          */
         public Builder scheduledExecutorService(ScheduledExecutorService scheduledExecutorService) {
@@ -170,29 +217,34 @@ public class SimpleEventScheduler implements EventScheduler {
         }
 
         /**
-         * Sets the {@link TransactionManager} used to build transactions and ties them on event publication. Defaults
-         * to a {@link NoTransactionManager}.
+         * Sets the {@link UnitOfWorkFactory} creating the unit of work a fired event is published in. Pass the factory
+         * of the application's configuration, so that a fired event is published in the same kind of unit of work as
+         * other messages: transactional if the factory is, and with a
+         * {@link org.axonframework.messaging.core.unitofwork.ProcessingContext} that resolves components.
          *
-         * @param transactionManager a {@link TransactionManager} used to build transactions and ties them on event
-         *                           publication
+         * @param unitOfWorkFactory the factory creating the unit of work a fired event is published in
          * @return the current Builder instance, for fluent interfacing
          */
-        public Builder transactionManager(TransactionManager transactionManager) {
-            assertNonNull(transactionManager, "TransactionManager may not be null");
-            this.transactionManager = transactionManager;
+        public Builder unitOfWorkFactory(UnitOfWorkFactory unitOfWorkFactory) {
+            assertNonNull(unitOfWorkFactory, "UnitOfWorkFactory may not be null");
+            this.unitOfWorkFactory = unitOfWorkFactory;
             return this;
         }
 
         /**
-         * Sets the {@link MessageTypeResolver} used to resolve the {@link QualifiedName} when scheduling
-         * {@link EventMessage EventMessages}. If not set, a {@link ClassBasedMessageTypeResolver} is used by default.
+         * Sets the {@link MessageTypeResolver} resolving the {@link MessageType} of a fired event from its payload,
+         * when the scheduled event is no {@link EventMessage}. Pass the resolver of the application's configuration,
+         * so that a fired event gets the same type as when it is published through the
+         * {@link org.axonframework.messaging.eventhandling.gateway.EventGateway}. Defaults to an
+         * {@link AnnotationMessageTypeResolver}, the configuration's default, which takes the name of an
+         * {@link org.axonframework.messaging.eventhandling.annotation.Event @Event} payload class and the class name
+         * otherwise.
          *
-         * @param messageTypeResolver The {@link MessageTypeResolver} used to provide the {@link QualifiedName} for
-         *                            {@link EventMessage EventMessages}.
-         * @return The current Builder instance, for fluent interfacing.
+         * @param messageTypeResolver the {@link MessageTypeResolver} resolving the type of a fired event
+         * @return the current Builder instance, for fluent interfacing
          */
-        public Builder messageNameResolver(MessageTypeResolver messageTypeResolver) {
-            assertNonNull(messageTypeResolver, "MessageNameResolver may not be null");
+        public Builder messageTypeResolver(MessageTypeResolver messageTypeResolver) {
+            assertNonNull(messageTypeResolver, "MessageTypeResolver may not be null");
             this.messageTypeResolver = messageTypeResolver;
             return this;
         }
@@ -213,9 +265,8 @@ public class SimpleEventScheduler implements EventScheduler {
          *                                    specifications
          */
         protected void validate() throws AxonConfigurationException {
-            assertNonNull(eventBus, "The EventBus is a hard requirement and should be provided");
-            assertNonNull(scheduledExecutorService,
-                          "The ScheduledExecutorService is a hard requirement and should be provided");
+            assertNonNull(eventSink, "The EventSink is a hard requirement and should be provided");
+            assertNonNull(unitOfWorkFactory, "The UnitOfWorkFactory is a hard requirement and should be provided");
         }
     }
 
@@ -224,21 +275,25 @@ public class SimpleEventScheduler implements EventScheduler {
         private final Object event;
         private final String tokenId;
 
-        public PublishEventTask(Object event, String tokenId) {
+        private PublishEventTask(Object event, String tokenId) {
             this.event = event;
             this.tokenId = tokenId;
         }
 
         @Override
         public void run() {
-            EventMessage eventMessage = createMessage();
-            if (logger.isDebugEnabled()) {
-                logger.debug("Triggered the publication of event [{}]", eventMessage.type().name());
-            }
             try {
-                LegacyUnitOfWork<EventMessage> unitOfWork = new LegacyDefaultUnitOfWork<>(null);
-                unitOfWork.attachTransaction(transactionManager);
-                unitOfWork.execute((ctx) -> eventBus.publish(null, eventMessage));
+                EventMessage eventMessage = createMessage();
+                if (logger.isDebugEnabled()) {
+                    logger.debug("Triggered the publication of event [{}]", eventMessage.type());
+                }
+                FutureUtils.joinAndUnwrap(
+                        unitOfWorkFactory.create()
+                                         .executeWithResult(context -> eventSink.publish(context,
+                                                                                         List.of(eventMessage)))
+                );
+            } catch (Exception e) {
+                logger.error("An error occurred while publishing the scheduled event with token [{}]", tokenId, e);
             } finally {
                 tokens.remove(tokenId);
             }
@@ -251,11 +306,10 @@ public class SimpleEventScheduler implements EventScheduler {
          * @return the message to publish
          */
         private EventMessage createMessage() {
-            return event instanceof EventMessage
-                    ? new GenericEventMessage(((EventMessage) event).type(),
-                                                ((EventMessage) event).payload(),
-                                                ((EventMessage) event).metadata())
-                    : new GenericEventMessage(messageTypeResolver.resolveOrThrow(event), event);
+            if (event instanceof EventMessage eventMessage) {
+                return new GenericEventMessage(eventMessage.type(), eventMessage.payload(), eventMessage.metadata());
+            }
+            return new GenericEventMessage(messageTypeResolver.resolveOrThrow(event), event);
         }
     }
 }
