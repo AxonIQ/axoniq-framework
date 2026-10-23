@@ -6,9 +6,8 @@
  * https://www.axoniq.io/legal/terms-of-service
  */
 
-package org.axonframework.deadline;
+package org.axonframework.messaging.conversion;
 
-import org.axonframework.common.annotation.Internal;
 import org.axonframework.conversion.Converter;
 import org.axonframework.conversion.DelegatingGeneralConverter;
 import org.axonframework.conversion.xstream.XStreamConverter;
@@ -19,10 +18,10 @@ import java.util.Optional;
 import java.util.function.Function;
 
 /**
- * Resolves the type names that Axon Framework 4's {@code XStreamSerializer} stored next to a deadline's payload and
- * scope descriptor through the mapper of the configured {@link XStreamConverter}, so that aliased types resolve.
+ * Resolves the type names that Axon Framework 4's {@code XStreamSerializer} stored next to a payload or a scope
+ * descriptor through the mapper of the configured {@link XStreamConverter}, so that aliased types resolve.
  * <p>
- * Only {@link StoredDeadlineConverter} uses this class. It is kept apart so that XStream, an optional dependency, is
+ * Only {@link StoredMessageConverter} uses this class. It is kept apart so that XStream, an optional dependency, is
  * only loaded when the configured converter writes the XStream format.
  *
  * @author Jakob Hatzl
@@ -42,7 +41,7 @@ final class XStreamStoredTypeNames {
      * {@link DelegatingMessageConverter} or {@link DelegatingEventConverter}, as an application registering it as its
      * general or event converter passes it on.
      *
-     * @param converter the converter the deadlines are stored with
+     * @param converter the converter the messages are stored with
      * @return the lookup of stored type names
      */
     @SuppressWarnings("removal")
