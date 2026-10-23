@@ -28,6 +28,7 @@ import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
 
 
 /**
@@ -167,13 +168,23 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
         });
     }
 
+    /**
+     * Records a cancelled wait with the wait marker, like the wait's started and completed events.
+     */
+    @Override
+    protected CompletableFuture<Void> cancelled(String stepName,
+                                                @Nullable Throwable cause,
+                                                EventNameCustomizer eventNameCustomizer) {
+        return cancelledWaitForEvent(stepName, cause, eventNameCustomizer);
+    }
+
     private Map<String, @Nullable Object> startedPayload(EventCondition eventCondition,
                                                          Instant startedAt,
                                                          Duration timeout) {
         var payload = new LinkedHashMap<String, @Nullable Object>();
         payload.put("startTime", startedAt);
-        payload.put("eventName", eventCondition.qualifiedName().toString());
-        payload.put("associations", eventCondition.associations());
+        payload.put(WaitAssociation.EVENT_NAME_KEY, eventCondition.qualifiedName().toString());
+        payload.put(WaitAssociation.ASSOCIATIONS_KEY, eventCondition.associations());
         payload.put("timeoutTime", startedAt.plus(timeout));
         return payload;
     }
