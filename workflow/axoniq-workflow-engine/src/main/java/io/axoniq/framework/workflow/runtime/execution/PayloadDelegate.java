@@ -85,15 +85,15 @@ public class PayloadDelegate extends AbstractStepExecutor implements PayloadPrim
                                              );
                                          }
             );
+            try {
+                workflowExecution.awaitStateChange(WorkflowStateUtils.stepStatus(stepName, StepStatus.COMPLETED));
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return WorkflowStepResults.canceled(stepName);
+            }
         }
-        try {
-            workflowExecution.awaitStateChange(WorkflowStateUtils.stepStatus(stepName, StepStatus.COMPLETED));
-            return WorkflowStepResults.completed(stepName,
-                                                 workflowExecution.state().payload(),
-                                                 workflowExecution.processingContext().component(EventConverter.class));
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            return WorkflowStepResults.canceled(stepName);
-        }
+        return WorkflowStepResults.completed(stepName,
+                                             workflowExecution.state().payload(),
+                                             workflowExecution.processingContext().component(EventConverter.class));
     }
 }
