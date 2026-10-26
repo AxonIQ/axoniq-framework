@@ -105,7 +105,7 @@ include::example$workflows/commonpatterns/CommonPatternsExamples.java[tag=circui
 In a future version, you will be able to schedule steps to run at a specific time (for example, "send reminder at 9 AM tomorrow").
 ====
 
-For now, use `sleep` to implement delays:
+For now, use `awaitSleep` to implement delays:
 
 [source,java]
 ----
