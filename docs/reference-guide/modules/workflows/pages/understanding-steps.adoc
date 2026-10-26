@@ -73,7 +73,7 @@ include::example$workflows/understandingsteps/UnderstandingStepsExamples.java[ta
 |`WorkflowStepResult`
 |xref:waiting-for-events.adoc[]
 
-|`sleep`
+|`awaitSleep`
 |Yes
 |void
 |xref:waiting-for-events.adoc[]
