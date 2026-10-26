@@ -1,0 +1,149 @@
+[.axoniq-feature]
+= Kafka Migration
+:navtitle: Kafka Migration
+
+Axon Framework 4 applications connected to Kafka through the separate `extension-kafka`.
+Axoniq Framework ships that capability itself, as the `axoniq-kafka` module described in xref:connector:kafka.adoc[].
+The module keeps the two ways of consuming a topic, and changes how events get onto a topic: nothing is published unless the application publishes it explicitly.
+
+[#before-you-start]
+== Before you start
+
+Three changes affect how you plan the migration.
+
+* *No automatic publishing.*
+The extension published every event of the application to Kafka, through an event handler it registered itself.
+Axoniq Framework publishes nothing by default.
+Decide which events form the contract with other systems, and publish them through a `KafkaEventSink`, see <<step-publishing>>.
+* *A new record format.*
+Records carry `axon-id`, `axon-type`, `axon-version` and `axon-timestamp` headers instead of the extension's `axon-message-*` headers.
+While applications on both versions share a topic, use the legacy format, see <<step-mixed-fleets>>.
+* *A different offset convention in tokens.*
+The extension's tokens held the offset of the last consumed record.
+A `KafkaTrackingToken` holds the offset of the next record to read.
+Stored tokens are converted when read, see <<step-tokens>>.
+
+The extension's `KafkaTokenStore` is not available.
+Use one of the token stores of the framework, such as the JPA or JDBC token store.
+
+[#step-dependencies]
+== Replace the dependencies
+
+Replace the extension's dependencies, `org.axonframework.extensions.kafka:axon-kafka` and `org.axonframework.extensions.kafka:axon-kafka-spring-boot-starter`, by the Axoniq Framework module:
+
+[source,xml]
+----
+<dependency>
+    <groupId>io.axoniq.framework</groupId>
+    <artifactId>axoniq-kafka</artifactId>
+</dependency>
+----
+
+The Spring Boot autoconfiguration is part of the Axoniq Framework Spring Boot starter, and activates when the module is on the classpath.
+
+[cols="1,1"]
+|===
+|Axon Framework 4 extension |Axoniq Framework
+
+|`KafkaPublisher`, `KafkaEventPublisher`
+|`KafkaEventSink`
+
+|`KafkaMessageConverter`, `DefaultKafkaMessageConverter`
+|`KafkaEventCodec`, `DefaultKafkaEventCodec`
+
+|`StreamableKafkaMessageSource`
+|`KafkaStreamableEventSource`
+
+|`SubscribableKafkaMessageSource`
+|`KafkaSubscribableEventSource`
+
+|`ProducerFactory`, `ConsumerFactory`
+|`KafkaClientFactory`
+
+|`KafkaTrackingToken`
+|`KafkaTrackingToken`, in `io.axoniq.framework.kafka.streaming`
+
+|`KafkaTokenStore`
+|A token store of the framework
+|===
+
+[#step-publishing]
+== Publish explicitly
+
+Replace the automatic publishing by an event handler that publishes the events that other systems rely on.
+The handler is the place to give events on the outside a shape of their own, so that the events your application sources its state from can evolve freely.
+The handling component obtains the Kafka sink by name: in Spring, inject an `EventSink` qualified with the sink's name (`@Qualifier("<sink>")`) into its constructor or a field; with the Configuration API, use `config.getComponent(EventSink.class, "<sink>")`.
+A `@Qualifier` on an `EventSink` parameter of an event handler method is not honored: such a parameter receives the application's own event sink.
+See xref:connector:kafka.adoc#publishing[Publishing events].
+
+If an event genuinely is the contract with other systems, publish it as it is with `exposeEvents` on the `KafkaConnector`, or `axon.kafka.sinks.<sink>.expose-events` in Spring Boot.
+
+The extension's default confirmation mode was `NONE`.
+Sinks now default to `WAIT_FOR_ACK`, which fails the processing context when Kafka does not acknowledge the events.
+The `TRANSACTIONAL` mode now commits one Kafka transaction per processing context, right before the context commits.
+
+[#step-properties]
+== Translate the properties
+
+[cols="1,1"]
+|===
+|Axon Framework 4 extension |Axoniq Framework
+
+|`axon.kafka.bootstrap-servers`, `axon.kafka.client-id`, `axon.kafka.properties.*`
+|Unchanged
+
+|`axon.kafka.ssl.*`, `axon.kafka.producer.ssl.*`, `axon.kafka.consumer.ssl.*`
+|`axon.kafka.properties.ssl.*`, using the property names of the Kafka clients
+
+|`axon.kafka.default-topic`, `axon.kafka.publisher.*`
+|`axon.kafka.sinks.<sink>.topic`, `axon.kafka.sinks.<sink>.confirmation-mode`, `axon.kafka.sinks.<sink>.ack-timeout`
+
+|`axon.kafka.producer.transaction-id-prefix`
+|`axon.kafka.sinks.<sink>.transactional-id-prefix`
+
+|`axon.kafka.producer.*`
+|`axon.kafka.sinks.<sink>.properties.*`
+
+|`axon.kafka.consumer.*`, `axon.kafka.fetcher.*`
+|`axon.kafka.streaming-sources.<source>.*` or `axon.kafka.subscribing-sources.<source>.*`
+
+|`axon.kafka.message-converter-mode=cloud_event`
+|A `KafkaEventCodec` bean with the `CloudEventKafkaEventCodec`
+|===
+
+Processors select a source by name with `axon.eventhandling.processors.<processor>.source=<source>`.
+
+[#step-mixed-fleets]
+== Share topics with Axon Framework 4 applications
+
+While some applications still run on Axon Framework 4, configure the legacy format: `KafkaConnector.withLegacyFormat()`, or `axon.kafka.codec=legacy` in Spring Boot.
+Records then carry the headers of both formats, and records that only carry the extension's headers are read as well.
+The aggregate headers of those records become the aggregate information of the event's processing context, so that sequencing per aggregate keeps working.
+
+Axon Framework 4 consumers resolve the payload class from the type header.
+Publish the events they read under a type whose name is the payload's class name, with a payload format their serializer reads.
+The version of the event's type becomes the `axon-message-revision` header, which Axon Framework 4 upcasters match on.
+An event whose version is `0.0.0`, the version that a record without a revision reads as, is written without a revision header, just as Axon Framework 4 wrote unrevisioned events.
+A payload class without `@Event` gets the framework's default version `0.0.1`, so its events still carry `axon-message-revision: 0.0.1`, and Axon Framework 4 upcasters that expect no revision miss them.
+To publish such events without a revision, annotate the payload class with `@Event(version = "0.0.0")`, without a name or namespace, so that the class name remains the event name.
+That holds for a top-level class.
+The name derived for a nested class leaves out the enclosing class, so for a nested class also set `namespace` to the package and `name` to the binary class name, such as `Shipping$ParcelDispatched`.
+In the other direction, the event converter of Axoniq Framework must be able to read the payloads that Axon Framework 4 producers write.
+
+[#step-tokens]
+== Keep the progress of streaming processors
+
+To keep the progress of a streaming processor, rename the token type stored in its token entries from `org.axonframework.extensions.kafka.eventhandling.consumer.streamable.KafkaTrackingToken` to `io.axoniq.framework.kafka.streaming.LegacyKafkaTrackingToken`.
+Token stores then read those tokens as a `LegacyKafkaTrackingToken`.
+It converts the last consumed offsets to the offsets of the next records to read, so a processor resumes exactly where it stopped, without reading records twice and without skipping any.
+Once the processor handles an event, it stores a `KafkaTrackingToken`.
+
+Token stores also read entries that still carry the extension's token type, through a bridge that the framework offers only temporarily.
+Treat that as a best-effort fallback while the bridge exists, not as the migration path: rename the stored token type.
+
+The conversion applies to tokens that the extension stored in the JSON format.
+The Kafka tokens are read and written by the Jackson-based converter; a reflection-based converter such as XStream cannot restore them.
+For tokens stored in the XStream format, follow the "XStream stores" steps of the xref:migration:paths/token-store.adoc[Token Store Migration]: re-serialize them to JSON while still on Axon Framework 4, then rename the stored token type as described above.
+If a replay is acceptable, you can instead start the processor from a token you set yourself, for example with `resetTokens` and the source's `tokenAt`.
+
+Subscribing processors keep their progress in Kafka: a source in the same consumer group continues from the group's committed offsets.
