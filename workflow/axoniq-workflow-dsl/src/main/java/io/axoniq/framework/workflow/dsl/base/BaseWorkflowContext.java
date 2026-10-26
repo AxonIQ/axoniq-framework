@@ -284,10 +284,12 @@ public class BaseWorkflowContext extends AbstractWorkflowContext {
     }
 
     /**
-     * Starts a sleep step. Further customization is possible using the provided {@code customizer} unary operator.
+     * Starts a sleep step and returns immediately, without blocking. Further customization is possible using the
+     * provided {@code customizer} unary operator.
      * <p>
      * The actual delay is usually configured through the supplied customizer by setting a timeout on the step
-     * definition.
+     * definition. Combine the returned handle with other steps, for example as a timeout over several steps through
+     * {@code anyMatch}. Use {@link #awaitSleep(String, UnaryOperator)} to block until the delay has elapsed.
      *
      * @param stepName   logical name of the sleep step
      * @param customizer customizer that typically sets the timeout
