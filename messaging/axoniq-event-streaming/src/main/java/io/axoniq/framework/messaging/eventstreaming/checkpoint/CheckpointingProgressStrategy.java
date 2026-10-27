@@ -110,7 +110,9 @@ public final class CheckpointingProgressStrategy implements SegmentProgressStrat
      * <ul>
      *     <li><b>Auto mode</b> checkpoints at the batch-end token ({@code lastConsumedToken}); a participant is
      *     therefore forced to cover it.</li>
-     *     <li><b>Fully-deferred mode</b> stores only when a participant explicitly requested a checkpoint.</li>
+     *     <li><b>Fully-deferred mode</b> stores the requested position when a participant explicitly requested a
+     *     checkpoint. Without a request, it stores the consumed position when the stored token already covers every
+     *     event handed to the participants, so the segment only moved past skipped events.</li>
      * </ul>
      * The participants are {@link #reconcile(Map) reconciled} to a single agreed position before storing, so no
      * participant is left ahead of the stored token. A store is skipped when nothing is to be checkpointed.
@@ -118,11 +120,14 @@ public final class CheckpointingProgressStrategy implements SegmentProgressStrat
     @Override
     public CompletableFuture<Void> onBatchCommit(ProcessingContext processingContext) {
         TrackingToken pending = requestedCheckpoint.getAndSet(null);
+        if (!autoCheckpointing && pending == null) {
+            return context.persistProgress(skippedEventsPosition(), processingContext);
+        }
         TrackingToken consumed = context.lastConsumedToken();
         // The auto component(s) are durable to the batch-end token within this transaction: cover at least there.
         TrackingToken requested = autoCheckpointing
                 ? (pending == null || consumed == null ? consumed : pending.upperBound(consumed))
-                : (pending != null ? pending : idlePosition(consumed));
+                : pending;
         if (requested == null) {
             return emptyCompletedFuture();
         }
@@ -132,15 +137,14 @@ public final class CheckpointingProgressStrategy implements SegmentProgressStrat
     }
 
     /**
-     * Returns the last consumed position when every participant is idle, so a fully-deferred segment that has moved
-     * past its stored token without an explicit request still stores its progress. A participant that is not idle is
-     * never asked, so this never waits on in-flight work.
+     * Returns the consumed position when the stored token covers the last event handed to the participants, and
+     * {@code null} otherwise. Every event between those positions was skipped, so storing the consumed position needs
+     * no participant: on a restart, the segment would skip those events again.
      */
-    private @Nullable TrackingToken idlePosition(@Nullable TrackingToken consumed) {
-        Segment segment = context.segment();
-        return consumed != null && participants.stream().allMatch(participant -> participant.isIdle(segment))
-                ? consumed
-                : null;
+    private @Nullable TrackingToken skippedEventsPosition() {
+        TrackingToken handled = context.lastHandledToken();
+        TrackingToken stored = context.lastStoredToken();
+        return handled == null || (stored != null && stored.covers(handled)) ? context.lastConsumedToken() : null;
     }
 
     @Override

@@ -96,35 +96,6 @@ class WorkflowEngineCheckpointingSupportTest {
         }
     }
 
-    @Nested
-    class Idle {
-
-        @Test
-        void isIdleWithoutAnyCheckpointWork() {
-            var support = new WorkflowEngineCheckpointingSupport(new InlineCheckpointLatchCoordinator());
-
-            assertThat(support.isIdle(Segment.ROOT_SEGMENT)).isTrue();
-        }
-
-        @Test
-        void isNotIdleWhileWorkflowWorkIsRunning() {
-            var coordinator = new InlineCheckpointLatchCoordinator();
-            coordinator.pendingWork = true;
-            var support = new WorkflowEngineCheckpointingSupport(coordinator);
-
-            assertThat(support.isIdle(Segment.ROOT_SEGMENT)).isFalse();
-        }
-
-        @Test
-        void isNotIdleWhileTheCoordinatorHoldsTheCheckpoint() {
-            var coordinator = new InlineCheckpointLatchCoordinator();
-            coordinator.held = true;
-            var support = new WorkflowEngineCheckpointingSupport(coordinator);
-
-            assertThat(support.isIdle(Segment.ROOT_SEGMENT)).isFalse();
-        }
-    }
-
     private static final class InlineCheckpointLatchCoordinator
             implements WorkflowEngineCheckpointingSupport.CheckpointLatchCoordinator {
 

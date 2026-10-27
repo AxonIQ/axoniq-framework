@@ -58,11 +58,6 @@ public class CheckpointingEventHandlingComponentHandlingAny extends EventHandlin
     }
 
     @Override
-    public boolean isIdle(Segment segment) {
-        return checkpointingHandler.isIdle(segment);
-    }
-
-    @Override
     public void onSegmentClaimed(Segment segment,
                                  @Nullable TrackingToken from,
                                  CheckpointTrigger trigger) {
