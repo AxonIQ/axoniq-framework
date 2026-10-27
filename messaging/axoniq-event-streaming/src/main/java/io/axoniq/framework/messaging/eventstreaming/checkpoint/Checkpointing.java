@@ -167,25 +167,6 @@ public interface Checkpointing {
     CompletableFuture<TrackingToken> onCheckpointAdvanced(Segment segment, TrackingToken requested);
 
     /**
-     * Returns whether this unit holds no work on the given {@code segment} that a checkpoint would have to wait for.
-     * <p>
-     * In fully-deferred mode the stored token only advances on an explicit {@link CheckpointTrigger} request. When no
-     * request is pending and the segment's position has moved past its stored token, for example because the segment
-     * only skipped events, the {@link CheckpointingProgressStrategy} asks every unit whether it is idle. When all units
-     * are, it stores the segment's last consumed position, so a segment that receives no events still persists its
-     * progress. A unit that answers {@code true} must complete {@link #onCheckpointAdvanced(Segment, TrackingToken)}
-     * for that position without waiting.
-     * <p>
-     * Defaults to {@code false}: such a unit is never checkpointed without an explicit request.
-     *
-     * @param segment the segment whose progress may be stored
-     * @return {@code true} when a checkpoint at the last consumed position needs no waiting on this unit
-     */
-    default boolean isIdle(Segment segment) {
-        return false;
-    }
-
-    /**
      * Invoked when {@code segment} is being released. Flush everything handled so far, discard the segment's local
      * state, and report the highest token made durable; the processor reconciles it with any co-located units (the same
      * way as {@link #onCheckpointAdvanced(Segment, TrackingToken)}) and stores the result while still holding the claim,
