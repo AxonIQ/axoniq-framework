@@ -47,6 +47,7 @@ The engine writes workflow lifecycle events with event-store tags as well:
 `workflowId=<id>` on engine-published workflow events and
 `workflowEvent=lifecycle` on workflow lifecycle events.
 `waitForEvent` step events with status STARTED, COMPLETED, CANCELLED or TIMED_OUT additionally carry `workflowEvent=waitForStep`.
+Wait CANCELLED events written by Axoniq Framework 5.4 carry no `workflowEvent=waitForStep` tag.
 ====
 
 == The workflow context
