@@ -188,9 +188,9 @@ class WorkflowConfigurerWaitAssociationRoutingTest {
         IntStream.range(0, 10).forEach(i -> publish(configuration, "start", ownedBySegmentZero.next()));
         var latest = storageEngine.latestToken().orTimeout(5, TimeUnit.SECONDS).join();
 
-        // then: the other segments store a position covering those events anyway, through the idle check. The stream
-        // keeps moving meanwhile, as it does in production: a segment stores idle progress on the first skipped event
-        // after its claim extension threshold.
+        // then: the other segments store a position covering those events anyway, since they only skipped them. The
+        // stream keeps moving meanwhile, as it does in production: a segment stores idle progress on the first skipped
+        // event after its claim extension threshold.
         await().atMost(10, TimeUnit.SECONDS).untilAsserted(() -> {
             publish(configuration, "start", ownedBySegmentZero.next());
             for (int segment = 1; segment < SEGMENT_COUNT; segment++) {
