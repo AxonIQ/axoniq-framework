@@ -28,6 +28,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 
@@ -418,6 +419,83 @@ public abstract class CheckpointingProgressStrategyTestSuite extends SegmentProg
     }
 
     @Nested
+    class FullyDeferredSkippedEvents {
+
+        @Test
+        void skippedEventsAreStoredWithoutAskingTheParticipants() {
+            // given
+            RecordingCheckpointing participant = new RecordingCheckpointing();
+            WorkPackageHarness testSubject = deferredWithShortClaimExtension(participant);
+            testSubject.onSegmentClaimed();
+            AtomicLong position = new AtomicLong();
+
+            // when -- only events of other segments arrive; each one runs the worker, which reaches the idle upkeep
+            await().atMost(TIMEOUT).untilAsserted(() -> {
+                testSubject.scheduleSkippedEvent(eventAt(position.incrementAndGet()));
+                assertThat(storedToken()).isNotEqualTo(initialToken());
+            });
+
+            // then -- the participant is never asked, since it was never handed an event
+            assertThat(participant.advanced).isEmpty();
+            assertThat(testSubject.batchProcessor().processed()).isEmpty();
+        }
+
+        @Test
+        void skippedEventsAreNotStoredWhileAHandledEventIsNotCheckpointed() {
+            // given -- a handled event the participant did not request a checkpoint for
+            RecordingCheckpointing participant = new RecordingCheckpointing();
+            WorkPackageHarness testSubject = deferredWithShortClaimExtension(participant);
+            testSubject.onSegmentClaimed();
+            testSubject.scheduleEvent(eventAt(1L));
+            await().atMost(TIMEOUT).untilAsserted(() -> assertThat(testSubject.batchProcessor().processed()).hasSize(1));
+            AtomicLong position = new AtomicLong(1L);
+
+            // when / then -- skipped events keep running the upkeep, but storing past them would skip the handled event
+            await().during(Duration.ofMillis(300)).atMost(TIMEOUT).untilAsserted(() -> {
+                testSubject.scheduleSkippedEvent(eventAt(position.incrementAndGet()));
+                verify(tokenStore(), never()).storeToken(any(), anyString(), anyInt(), any());
+            });
+            assertThat(participant.advanced).isEmpty();
+        }
+
+        @Test
+        void skippedEventsAfterACheckpointedEventAreStoredWithoutARequest() {
+            // given -- a handled event the participant requested a checkpoint for
+            RecordingCheckpointing participant = new RecordingCheckpointing();
+            WorkPackageHarness testSubject = deferredWithShortClaimExtension(participant);
+            testSubject.onSegmentClaimed();
+            testSubject.scheduleEvent(eventAt(1L));
+            await().atMost(TIMEOUT).untilAsserted(() -> assertThat(testSubject.batchProcessor().processed()).hasSize(1));
+            participant.trigger.requestCheckpoint(new GlobalSequenceTrackingToken(1L));
+            await().atMost(TIMEOUT).untilAsserted(
+                    () -> assertThat(storedToken()).isEqualTo(new GlobalSequenceTrackingToken(1L))
+            );
+            AtomicLong position = new AtomicLong(1L);
+
+            // when
+            await().atMost(TIMEOUT).untilAsserted(() -> {
+                testSubject.scheduleSkippedEvent(eventAt(position.incrementAndGet()));
+                assertThat(storedToken()).isNotEqualTo(new GlobalSequenceTrackingToken(1L));
+            });
+
+            // then -- the store moved past the skipped events, and the participant was only asked for its own request
+            assertThat(storedToken().covers(new GlobalSequenceTrackingToken(2L))).isTrue();
+            assertThat(participant.advanced).containsExactly(new GlobalSequenceTrackingToken(1L));
+        }
+
+        private WorkPackageHarness deferredWithShortClaimExtension(Checkpointing... participants) {
+            // A threshold this short lets every worker cycle without a batch run the idle upkeep.
+            return harness(segment(), checkpointingStrategy(false, List.of(participants)), 1);
+        }
+
+        private TrackingToken storedToken() {
+            return tokenStore().fetchToken(PROCESSOR_NAME, segment().getSegmentId(), null)
+                               .orTimeout(5, TimeUnit.SECONDS)
+                               .join();
+        }
+    }
+
+    @Nested
     class AutoModeWithParticipant {
 
         @Test
@@ -710,7 +788,6 @@ public abstract class CheckpointingProgressStrategyTestSuite extends SegmentProg
                 CompletableFuture::completedFuture;
         private volatile Function<TrackingToken, CompletableFuture<TrackingToken>> releaseResult =
                 CompletableFuture::completedFuture;
-
         @Override
         public void onSegmentClaimed(@NonNull Segment segment,
                                      @Nullable TrackingToken from,
