@@ -47,7 +47,7 @@ class PostgresqlSnapshotStoreTest {
 
     @BeforeAll
     @SuppressWarnings("resource")
-    static void startContainer() {
+    static void startContainer() throws SQLException {
         postgresContainer = new PostgreSQLContainer("postgres:16.2-alpine")
                 .withDatabaseName("testdb")
                 .withUsername("test")
@@ -61,6 +61,7 @@ class PostgresqlSnapshotStoreTest {
         config.setAutoCommit(false);
 
         dataSource = new HikariDataSource(config);
+        PostgresqlSchemaInitializer.initialize(dataSource, SchemaInitialization.CREATE_IF_MISSING);
         testSubject = new PostgresqlSnapshotStore(dataSource, new JacksonConverter(),
                                                    new JdbcTransactionalExecutorProvider(dataSource));
     }
