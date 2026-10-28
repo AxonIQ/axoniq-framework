@@ -79,6 +79,7 @@ class PostgresqlSchemaInitializerTest {
                 DROP TABLE IF EXISTS tags;
                 DROP TABLE IF EXISTS consistency_tags;
                 DROP TABLE IF EXISTS events;
+                DROP TABLE IF EXISTS snapshots;
                 DROP SEQUENCE IF EXISTS events_monotonic_seq;
                 """
             );
@@ -183,6 +184,33 @@ class PostgresqlSchemaInitializerTest {
     }
 
     @Test
+    void schemaIsCompleteReturnsFalseWhenOnlyTheSnapshotsTableIsMissing() throws SQLException {
+        PostgresqlSchemaInitializer.initialize(dataSource, SchemaInitialization.CREATE_IF_MISSING);
+        dropTable("snapshots");
+
+        assertThat(PostgresqlSchemaInitializer.schemaIsComplete(dataSource)).isFalse();
+    }
+
+    @Test
+    void createIfMissingRepairsASchemaThatIsMissingOnlyTheSnapshotsTable() throws SQLException {
+        PostgresqlSchemaInitializer.initialize(dataSource, SchemaInitialization.CREATE_IF_MISSING);
+        dropTable("snapshots");
+
+        PostgresqlSchemaInitializer.initialize(dataSource, SchemaInitialization.CREATE_IF_MISSING);
+
+        assertThat(PostgresqlSchemaInitializer.schemaIsComplete(dataSource)).isTrue();
+    }
+
+    @Test
+    void validateThrowsWhenOnlyTheSnapshotsTableIsMissing() throws SQLException {
+        PostgresqlSchemaInitializer.initialize(dataSource, SchemaInitialization.CREATE_IF_MISSING);
+        dropTable("snapshots");
+
+        assertThatThrownBy(() -> PostgresqlSchemaInitializer.initialize(dataSource, SchemaInitialization.VALIDATE))
+                .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
     void validateSucceedsAndChangesNothingOnAnAlreadyCompleteSchema() throws SQLException {
         PostgresqlSchemaInitializer.initialize(dataSource, SchemaInitialization.CREATE_IF_MISSING);
 
@@ -205,6 +233,19 @@ class PostgresqlSchemaInitializerTest {
             connection.setAutoCommit(false);
 
             statement.execute("DROP INDEX IF EXISTS " + indexName);
+
+            connection.commit();
+        }
+    }
+
+    private void dropTable(String tableName) throws SQLException {
+        try (
+            Connection connection = dataSource.getConnection();
+            Statement statement = connection.createStatement()
+        ) {
+            connection.setAutoCommit(false);
+
+            statement.execute("DROP TABLE IF EXISTS " + tableName);
 
             connection.commit();
         }
