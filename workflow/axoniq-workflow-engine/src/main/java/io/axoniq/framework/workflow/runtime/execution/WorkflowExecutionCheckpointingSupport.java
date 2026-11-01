@@ -13,6 +13,8 @@ import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
@@ -57,8 +59,9 @@ import static java.util.Objects.requireNonNull;
  *     queue. A checkpoint is not safe while such a task is still running, even if the queue itself is empty.</li>
  *     <li>{@code latchQueued} is {@code true} once a {@link CheckpointLatch} has been appended and until
  *     that intent is consumed by the workflow thread.</li>
- *     <li>{@code latchCallback} is the callback to run after the queued latch has been crossed. If several
- *     callers register while the same intent is pending, their callbacks are composed into one runnable.</li>
+ *     <li>{@code latchCallbacks} holds the callbacks to run after the queued latch has been crossed. If several
+ *     callers register while the same intent is pending, their callbacks are collected and invoked one after the
+ *     other, in registration order.</li>
  * </ul>
  * <p>
  * The typical sequence is:
@@ -68,16 +71,16 @@ import static java.util.Objects.requireNonNull;
  *     {@link CheckpointLatch} to the execution queue.</li>
  *     <li>The execution eventually dequeues that intent and runs it through {@link #runTask(Consumer, WorkflowExecution)}.
  *     Consuming the intent means every task that was ahead of it has completed.</li>
- *     <li>After the task finishes, the stored {@code latchCallback} is invoked.</li>
+ *     <li>After the task finishes, the pending {@code latchCallbacks} are invoked in registration order.</li>
  *     <li>The engine re-evaluates whether any work is still unsafe. If more workflow work was appended after the
  *     latch, it can schedule another one and waits again.</li>
  * </ol>
  * <p>
  * Synchronization is deliberately local to this instance. The host execution already provides the single-threaded task
  * queue; this class only needs to protect its own bookkeeping about whether such a latch has been queued and
- * which callback should fire when it is crossed.
+ * which callbacks should fire when it is crossed.
  * <p>
- * The queued-latch state and composed callback are guarded by this instance's monitor. {@code taskActive} is an
+ * The queued-latch state and pending callbacks are guarded by this instance's monitor. {@code taskActive} is an
  * {@link AtomicBoolean} because it is set around arbitrary workflow task execution, which must not hold that monitor,
  * while checkpoint safety may be queried concurrently. Latch callbacks are captured while coordinated but always run
  * after task execution and outside the monitor.
@@ -88,13 +91,10 @@ import static java.util.Objects.requireNonNull;
  */
 @Internal final class WorkflowExecutionCheckpointingSupport {
 
-    private static final Runnable NO_OP = () -> {
-    };
-
     private final ExecutionTaskQueue executionTaskQueue;
     private final AtomicBoolean taskActive = new AtomicBoolean(false);
     private boolean latchQueued;
-    private Runnable latchCallback = NO_OP;
+    private List<Runnable> latchCallbacks = new ArrayList<>();
 
     private CheckpointWorkStateListener checkpointWorkStateListener;
     private boolean checkpointWorkUnsafe;
@@ -125,7 +125,8 @@ import static java.util.Objects.requireNonNull;
      * {@link CheckpointLatch} is queued for the current drain cycle.
      * <p>
      * Repeated calls while that same intent is still pending do not enqueue more tasks. Instead, their callbacks are
-     * composed into {@link #latchCallback} so they all fire when the single queued latch is consumed.
+     * added to the pending {@link #latchCallbacks} so they all fire, in registration order, when the single queued
+     * latch is consumed.
      * <p>
      * The latch is appended outside the synchronized block. The synchronized section only decides whether a new latch
      * is needed; once that decision is made, queueing the task does not need to hold this object's monitor.
@@ -144,11 +145,7 @@ import static java.util.Objects.requireNonNull;
         }
 
         synchronized (this) {
-            Runnable previous = latchCallback;
-            latchCallback = previous == NO_OP ? latch : () -> {
-                previous.run();
-                latch.run();
-            };
+            latchCallbacks.add(latch);
             if (latchQueued) {
                 return;
             }
@@ -246,31 +243,60 @@ import static java.util.Objects.requireNonNull;
      * This method marks a task as active for the duration of execution so {@link #hasUnsafeCheckpointWork()} can
      * observe that the queue is not yet safe even when it appears empty.
      * <p>
-     * When the task is a {@link CheckpointLatch}, consuming it snapshots the currently composed callback. That callback
-     * is then invoked after the task finishes and after {@code taskActive} has been cleared, so the subsequent safety
-     * re-check sees the most up-to-date state.
+     * When the task is a {@link CheckpointLatch}, consuming it takes the currently pending callbacks. Those callbacks
+     * are then invoked in registration order after the task finishes and after {@code taskActive} has been cleared, so
+     * the subsequent safety re-check sees the most up-to-date state.
      *
      * @param task      the queue task to run
      * @param execution the execution instance passed to the task
      */
     void runTask(Consumer<WorkflowExecution> task,
                  WorkflowExecution execution) {
-        Runnable afterTask;
+        List<Runnable> afterTask;
         taskActive.set(true);
         synchronized (this) {
             reportCheckpointWorkUnsafe();
         }
         try {
             task.accept(execution);
-            afterTask = task instanceof CheckpointLatch checkpointLatch ? checkpointLatch.whenComplete() : null;
+            afterTask = task instanceof CheckpointLatch checkpointLatch ? checkpointLatch.whenComplete() : List.of();
         } finally {
             taskActive.set(false);
             synchronized (this) {
                 reportCheckpointWorkState();
             }
         }
-        if (afterTask != null) {
-            afterTask.run();
+        runLatchCallbacks(afterTask);
+    }
+
+    /**
+     * Takes the pending latch callbacks, leaving a fresh empty list in place. Must be called while holding this
+     * instance's monitor.
+     * <p>
+     * The returned list is no longer reachable through this instance, so it can safely be iterated outside the
+     * monitor.
+     *
+     * @return the pending latch callbacks in registration order, possibly empty
+     */
+    private List<Runnable> takeLatchCallbacks() {
+        if (latchCallbacks.isEmpty()) {
+            return List.of();
+        }
+        List<Runnable> callbacks = latchCallbacks;
+        latchCallbacks = new ArrayList<>();
+        return callbacks;
+    }
+
+    /**
+     * Invokes the given latch callbacks one after the other, in registration order. Running them iteratively keeps the
+     * stack depth constant regardless of how many callbacks were registered against a single latch. If a callback
+     * throws, the exception propagates and the remaining callbacks are not invoked.
+     *
+     * @param callbacks the latch callbacks to invoke
+     */
+    private static void runLatchCallbacks(List<Runnable> callbacks) {
+        for (Runnable callback : callbacks) {
+            callback.run();
         }
     }
 
@@ -304,14 +330,13 @@ import static java.util.Objects.requireNonNull;
      * the callbacks prevents a checkpoint waiter from being stranded by terminal cleanup.
      */
     void completePendingCheckpointLatch() {
-        Runnable callback;
+        List<Runnable> callbacks;
         synchronized (this) {
             checkpointWorkUnsafe = false;
             latchQueued = false;
-            callback = latchCallback;
-            latchCallback = NO_OP;
+            callbacks = takeLatchCallbacks();
         }
-        callback.run();
+        runLatchCallbacks(callbacks);
     }
 
     /**
@@ -358,16 +383,16 @@ import static java.util.Objects.requireNonNull;
      * Synthetic {@link ExecutionTaskQueue} task that acts as the checkpoint latch.
      * <p>
      * The task itself does not mutate workflow state. Its purpose is positional: once it reaches the head of the queue,
-     * every task that was queued before the checkpoint request has already run. At that moment it captures and clears
-     * the currently accumulated latch callback attached through {@link #addCheckpointLatch} so that the callback can be
-     * invoked after the task completes.
+     * every task that was queued before the checkpoint request has already run. At that moment it takes the pending
+     * latch callbacks attached through {@link #addCheckpointLatch} so that they can be invoked, in registration order,
+     * after the task completes.
      */
     private final class CheckpointLatch implements Consumer<WorkflowExecution> {
 
-        private Runnable whenComplete = NO_OP;
+        private List<Runnable> whenComplete = List.of();
 
         /**
-         * Marks the queued checkpoint latch as consumed and captures the callback associated with that latch.
+         * Marks the queued checkpoint latch as consumed and captures the callbacks associated with that latch.
          * <p>
          * This runs on the workflow thread as part of normal queue consumption. Clearing {@link #latchQueued} here
          * allows a later checkpoint cycle to enqueue a fresh latch if new work appears after this point.
@@ -379,17 +404,16 @@ import static java.util.Objects.requireNonNull;
         public void accept(WorkflowExecution ignored) {
             synchronized (WorkflowExecutionCheckpointingSupport.this) {
                 latchQueued = false;
-                whenComplete = latchCallback;
-                latchCallback = NO_OP;
+                whenComplete = takeLatchCallbacks();
             }
         }
 
         /**
-         * Returns the callback to run after the checkpoint task has finished.
+         * Returns the callbacks to run, in registration order, after the checkpoint task has finished.
          *
-         * @return the callback to run after the checkpoint task has finished
+         * @return the callbacks to run after the checkpoint task has finished, possibly empty
          */
-        private Runnable whenComplete() {
+        private List<Runnable> whenComplete() {
             return whenComplete;
         }
     }
