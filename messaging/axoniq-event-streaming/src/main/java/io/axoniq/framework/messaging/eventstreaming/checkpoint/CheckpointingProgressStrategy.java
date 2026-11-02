@@ -46,7 +46,7 @@ import static org.axonframework.common.FutureUtils.joinAndUnwrap;
  *     participants, so a checkpoint at the batch-end token is requested every batch and the participants are driven to
  *     cover it; they cannot defer the stored token.</li>
  *     <li><b>Fully-deferred</b> ({@code autoCheckpointing == false}): every handler is a participant, so the stored
- *     token advances only on an explicit {@link CheckpointTrigger} request.</li>
+ *     token advances on an explicit {@link CheckpointTrigger} request, and without one only past skipped events.</li>
  * </ul>
  * <p>
  * <b>Internal API.</b> This class is marked {@link Internal}: it is part of the self-checkpointing support, intended
@@ -144,7 +144,9 @@ public final class CheckpointingProgressStrategy implements SegmentProgressStrat
     private @Nullable TrackingToken skippedEventsPosition() {
         TrackingToken handled = context.lastHandledToken();
         TrackingToken stored = context.lastStoredToken();
-        return handled == null || (stored != null && stored.covers(handled)) ? context.lastConsumedToken() : null;
+        return handled == null || (stored != null && TrackingTokenUtils.coversWhenUnwrapped(stored, handled))
+                ? context.lastConsumedToken()
+                : null;
     }
 
     @Override
