@@ -19,6 +19,7 @@ import org.jspecify.annotations.Nullable;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static java.util.Objects.requireNonNull;
 
@@ -71,24 +72,37 @@ public class WorkflowEngineCheckpointingSupport implements Checkpointing {
     public CompletableFuture<TrackingToken> onCheckpointAdvanced(Segment segment,
                                                                  TrackingToken requested) {
         CompletableFuture<TrackingToken> result = new CompletableFuture<>();
+        completeWhenSafe(segment, requested, result);
+        return result;
+    }
+
+    /**
+     * Completes the given {@code result} with the {@code requested} token once the given {@code segment} holds no
+     * unsafe checkpoint work, re-checking each time a latch is crossed.
+     * <p>
+     * Every re-check completes the same {@code result}, so no chain of futures builds up while the work stays unsafe
+     * for many rounds. The coordinator attaches one latch to every unsafe execution, but only its first crossing
+     * re-checks: later crossings of that latch are no-ops, so each crossing schedules at most one follow-up latch
+     * instead of one per execution that shared the previous latch.
+     *
+     * @param segment   the segment whose checkpoint is being advanced
+     * @param requested the token to complete the {@code result} with
+     * @param result    the future to complete once the checkpoint work of the {@code segment} is safe
+     */
+    private void completeWhenSafe(Segment segment,
+                                  TrackingToken requested,
+                                  CompletableFuture<TrackingToken> result) {
         if (!checkpointLatchCoordinator.hasUnsafeCheckpointWork(segment)) {
             result.complete(requested);
-            return result;
+            return;
         }
 
+        AtomicBoolean crossed = new AtomicBoolean();
         checkpointLatchCoordinator.addCheckpointLatch(segment, () -> {
-            if (result.isDone()) {
-                return;
+            if (crossed.compareAndSet(false, true) && !result.isDone()) {
+                completeWhenSafe(segment, requested, result);
             }
-            onCheckpointAdvanced(segment, requested).whenComplete((token, cause) -> {
-                if (cause != null) {
-                    result.completeExceptionally(cause);
-                } else {
-                    result.complete(token);
-                }
-            });
         });
-        return result;
     }
 
     @Override
