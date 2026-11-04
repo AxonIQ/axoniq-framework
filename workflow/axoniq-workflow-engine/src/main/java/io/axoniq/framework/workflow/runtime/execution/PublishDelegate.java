@@ -79,13 +79,13 @@ public class PublishDelegate implements PublishPrimitive {
                     processingContext,
                     workflowExecution.appendWorkflowEvent(event, processingContext)
             ));
+            try {
+                workflowExecution.awaitStateChange(WorkflowStateUtils.stepStatus(stepName, StepStatus.COMPLETED));
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return WorkflowStepResults.canceled(stepName);
+            }
         }
-        try {
-            workflowExecution.awaitStateChange(WorkflowStateUtils.stepStatus(stepName, StepStatus.COMPLETED));
-            return WorkflowStepResults.completed(stepName);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            return WorkflowStepResults.canceled(stepName);
-        }
+        return WorkflowStepResults.completed(stepName);
     }
 }
