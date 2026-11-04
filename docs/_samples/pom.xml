@@ -88,13 +88,11 @@
         <dependency>
             <groupId>io.axoniq.framework</groupId>
             <artifactId>axoniq-workflow-dsl</artifactId>
-            <version>${project.version}</version>
         </dependency>
         <!-- Kotlin workflow DSL, for the Kotlin samples (not managed by the BOM) -->
         <dependency>
             <groupId>io.axoniq.framework</groupId>
             <artifactId>axoniq-workflow-dsl-kotlin</artifactId>
-            <version>${project.version}</version>
         </dependency>
         <!-- Workflow test fixture, for the testing-workflows samples (not managed by the BOM). Compile scope here
              since this module compiles every documented sample as ordinary main sources, unlike a real application
@@ -102,7 +100,7 @@
         <dependency>
             <groupId>io.axoniq.framework</groupId>
             <artifactId>axoniq-workflow-test</artifactId>
-            <version>${project.version}</version>
+            <scope>compile</scope>
         </dependency>
         <!-- The parent POM declares junit-jupiter at test scope; the testing-workflows samples use @Test,
              @BeforeEach, and @AfterEach as ordinary main sources (see note above), so it is re-declared here at
