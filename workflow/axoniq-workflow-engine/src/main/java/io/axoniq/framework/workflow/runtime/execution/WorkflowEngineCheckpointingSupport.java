@@ -84,6 +84,10 @@ public class WorkflowEngineCheckpointingSupport implements Checkpointing {
      * for many rounds. The coordinator attaches one latch to every unsafe execution, but only its first crossing
      * re-checks: later crossings of that latch are no-ops, so each crossing schedules at most one follow-up latch
      * instead of one per execution that shared the previous latch.
+     * <p>
+     * A failure to check or to attach a latch completes the {@code result} exceptionally. Re-checks run inside a latch
+     * callback on a workflow thread, where a thrown exception would leave the {@code result} incomplete and skip the
+     * other callbacks waiting on that execution.
      *
      * @param segment   the segment whose checkpoint is being advanced
      * @param requested the token to complete the {@code result} with
@@ -92,17 +96,21 @@ public class WorkflowEngineCheckpointingSupport implements Checkpointing {
     private void completeWhenSafe(Segment segment,
                                   TrackingToken requested,
                                   CompletableFuture<TrackingToken> result) {
-        if (!checkpointLatchCoordinator.hasUnsafeCheckpointWork(segment)) {
-            result.complete(requested);
-            return;
-        }
-
-        AtomicBoolean crossed = new AtomicBoolean();
-        checkpointLatchCoordinator.addCheckpointLatch(segment, () -> {
-            if (crossed.compareAndSet(false, true) && !result.isDone()) {
-                completeWhenSafe(segment, requested, result);
+        try {
+            if (!checkpointLatchCoordinator.hasUnsafeCheckpointWork(segment)) {
+                result.complete(requested);
+                return;
             }
-        });
+
+            AtomicBoolean crossed = new AtomicBoolean();
+            checkpointLatchCoordinator.addCheckpointLatch(segment, () -> {
+                if (crossed.compareAndSet(false, true) && !result.isDone()) {
+                    completeWhenSafe(segment, requested, result);
+                }
+            });
+        } catch (RuntimeException e) {
+            result.completeExceptionally(e);
+        }
     }
 
     @Override
