@@ -12,6 +12,7 @@ import org.axonframework.messaging.eventhandling.processing.streaming.token.Glob
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.junit.jupiter.api.*;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -140,6 +141,24 @@ class WorkflowEngineCheckpointingSupportTest {
             assertThat(coordinator.scheduledLatches).isLessThanOrEqualTo(1 + rounds * executions);
             assertThat(result).isNotDone();
         }
+
+        @Test
+        void failsTheRequestWhenAFollowUpLatchCannotBeAttached() {
+            // given
+            var coordinator = new PendingExecutionsCoordinator(2);
+            var support = new WorkflowEngineCheckpointingSupport(coordinator);
+            var result = support.onCheckpointAdvanced(Segment.ROOT_SEGMENT, new GlobalSequenceTrackingToken(42));
+            var failure = new IllegalStateException("execution queue closed");
+            coordinator.latchFailure = failure;
+
+            // when crossing the latch re-checks, finds the work still unsafe and fails to attach the follow-up
+            coordinator.crossPendingLatches();
+
+            // then
+            assertThat(result).failsWithin(Duration.ZERO)
+                              .withThrowableThat()
+                              .withCause(failure);
+        }
     }
 
     /**
@@ -152,6 +171,7 @@ class WorkflowEngineCheckpointingSupportTest {
         private final List<List<Runnable>> pendingLatchesPerExecution = new ArrayList<>();
         private boolean pendingWork = true;
         private int scheduledLatches;
+        private RuntimeException latchFailure;
 
         private PendingExecutionsCoordinator(int executions) {
             for (int i = 0; i < executions; i++) {
@@ -171,6 +191,9 @@ class WorkflowEngineCheckpointingSupportTest {
 
         @Override
         public void addCheckpointLatch(Segment segment, Runnable latch) {
+            if (latchFailure != null) {
+                throw latchFailure;
+            }
             scheduledLatches++;
             pendingLatchesPerExecution.forEach(pending -> pending.add(latch));
         }
