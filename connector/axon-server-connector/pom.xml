@@ -23,6 +23,12 @@
         Connector module providing infrastructure components that connect to AxonServer.
     </description>
 
+    <properties>
+        <!-- Temporary Spring dependencies allowed due to enforcer upgrade to 3.7.0 -->
+        <!-- Sole misbehaving class is the AxonServerConfiguration, which will be split off in a follow-up PR -->
+        <maven-enforcer.allow-spring-dependencies>true</maven-enforcer.allow-spring-dependencies>
+    </properties>
+
     <dependencies>
         <dependency>
             <groupId>io.axoniq</groupId>
