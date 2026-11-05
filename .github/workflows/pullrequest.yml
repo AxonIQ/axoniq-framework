@@ -12,9 +12,7 @@ concurrency:
 jobs:
   build:
     name: Test and Build on JDK ${{ matrix.java-version }}
-    # Pinned (instead of ubuntu-latest) to rule out the ubuntu-26.04 / Docker 29 runner image as the cause of the
-    # Axon Server test container refusing context operations and the build timing out after 60 minutes.
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
       # The build cache extension defaults to disabled (see .mvn/maven-build-cache-config.xml);
@@ -70,35 +68,6 @@ jobs:
           -Dparallel=classes -DthreadCount=1 -DforkCount=2 -DforkedProcessTimeoutInSeconds=600 2>&1 | tee build.log
         env:
           AXONIQ_LICENSE: ${{ secrets.AXONIQ_LICENSE }}
-
-      - name: Collect Docker diagnostics
-        # Also runs when the job is cancelled by the timeout, which is exactly when the shared Axon Server
-        # container's logs are needed.
-        if: always()
-        run: |
-          mkdir -p docker-diagnostics
-          {
-            echo "# docker version"; docker version
-            echo; echo "# docker info"; docker info
-            echo; echo "# docker ps -a"; docker ps -a --no-trunc
-          } > docker-diagnostics/docker-overview.txt 2>&1 || true
-          for id in $(docker ps -aq); do
-            name="$(docker inspect --format '{{.Name}}' "$id" | tr -d '/')"
-            {
-              docker inspect "$id"
-            } > "docker-diagnostics/${name}-${id:0:12}-inspect.json" 2>&1 || true
-            docker logs --timestamps "$id" > "docker-diagnostics/${name}-${id:0:12}.log" 2>&1 || true
-          done
-          ls -la docker-diagnostics
-
-      - name: Upload Docker diagnostics
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: docker-diagnostics-jdk${{ matrix.java-version }}
-          path: docker-diagnostics/
-          retention-days: 7
-          if-no-files-found: ignore
 
       - name: Generate build status report
         if: always()
