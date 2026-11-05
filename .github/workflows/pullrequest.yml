@@ -12,7 +12,9 @@ concurrency:
 jobs:
   build:
     name: Test and Build on JDK ${{ matrix.java-version }}
-    runs-on: ubuntu-latest
+    # Pinned (instead of ubuntu-latest) to rule out the ubuntu-26.04 / Docker 29 runner image as the cause of the
+    # Axon Server test container refusing context operations and the build timing out after 60 minutes.
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
     env:
       # The build cache extension defaults to disabled (see .mvn/maven-build-cache-config.xml);
