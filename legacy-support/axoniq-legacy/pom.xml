@@ -37,6 +37,8 @@
         <quartz.version>2.5.2</quartz.version>
         <jobrunr.version>8.8.2</jobrunr.version>
         <db-scheduler.version>16.12.0</db-scheduler.version>
+        <!-- Spring is allowed for this module, as this module provides legacy AF4 Saga support which anybody would pair with Spring -->
+        <maven-enforcer.allow-spring-dependencies>true</maven-enforcer.allow-spring-dependencies>
     </properties>
 
     <dependencies>

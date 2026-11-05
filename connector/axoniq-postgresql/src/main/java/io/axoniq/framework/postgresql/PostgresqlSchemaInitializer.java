@@ -46,6 +46,7 @@ final class PostgresqlSchemaInitializer {
            AND to_regclass('consistency_tags_global_index_idx') IS NOT NULL
            AND to_regclass('tags_global_index_idx') IS NOT NULL
            AND to_regclass('tags_type_unique') IS NOT NULL
+           AND to_regclass('snapshots') IS NOT NULL
            AND EXISTS (
              SELECT 1 FROM pg_trigger
              WHERE tgname = 'axon_events_write_type_tag' AND tgrelid = to_regclass('events')
@@ -170,6 +171,20 @@ final class PostgresqlSchemaInitializer {
                 -- Ensures at most one reserved type tag row per event
                 CREATE UNIQUE INDEX IF NOT EXISTS tags_type_unique
                   ON tags (global_index) WHERE key = '__T';
+
+                CREATE TABLE IF NOT EXISTS snapshots (
+                  qualified_name VARCHAR     NOT NULL,
+                  identifier     VARCHAR     NOT NULL,
+                  position_type  VARCHAR     NOT NULL,
+                  position_value INT8        NOT NULL,
+                  version        VARCHAR     NOT NULL,
+                  payload        BYTEA       NOT NULL,
+                  timestamp      TIMESTAMPTZ NOT NULL,
+                  metadata       JSON        NOT NULL,
+
+                  -- keys
+                  PRIMARY KEY (qualified_name, identifier, version)
+                );
                 """
             );
 
