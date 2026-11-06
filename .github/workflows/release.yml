@@ -1,0 +1,184 @@
+name: Release Axoniq Framework
+
+# Releases Axoniq Framework with the maven-release-plugin and publishes the artifacts to Maven Central.
+#
+# Run it from:
+#   - main              -> releases X.Y.0 or a release candidate (X.Y.0-RCn). For a final X.Y.0 release,
+#                          it also creates the patch branch axoniq-X.Y.x at version X.Y.1-SNAPSHOT.
+#   - axoniq-X.Y.x      -> releases patch X.Y.Z. Fixes reach patch branches by backporting from main
+#                          (see backport.yml), so nothing is merged back into main.
+#
+# Steps:
+#   1. check the inputs against the branch, and check that CI passed on the commit being released
+#   2. release:prepare  - release commit, tag axoniq-<version>, next development commit
+#                         (local only, because pushChanges=false in the pom)
+#   3. release:perform  - builds the tag, then signs it and uploads it to Central, waiting until the
+#                         deployment is validated
+#   4. push the commits and the tag; this happens only once step 3 succeeded, so a failed deploy leaves
+#      nothing to revert. The tag push (with the App token) starts the "Publish API Docs" workflow.
+#   5. create the patch branch (only for a final X.Y.0 released from main)
+#
+# Still manual afterwards (listed in the job summary):
+#   - publish the validated deployment at https://central.sonatype.com/publishing/deployments
+#   - close the GitHub milestone, then review and publish the draft release
+#   - add the release notes to docs, and review and pin the Discuss announcement
+#
+# Required secrets: RELEASE_APP_ID, RELEASE_APP_PRIVATE_KEY, SONATYPE_TOKEN_ID, SONATYPE_TOKEN_PASS,
+#                   MAVEN_GPG_PRIVATE_KEY, MAVEN_GPG_PASSPHRASE.
+# The release App must be allowed to push to protected branches (main, axoniq-*).
+
+on:
+  workflow_dispatch:
+    inputs:
+      RELEASE_VERSION:
+        description: 'Version to release, e.g. 5.5.0, 5.5.0-RC1 or 5.4.2'
+        required: true
+        type: string
+      DEVELOPMENT_VERSION:
+        description: 'Next development version for this branch, e.g. 5.6.0-SNAPSHOT or 5.4.3-SNAPSHOT'
+        required: true
+        type: string
+      DRY_RUN:
+        description: 'Only simulate (release:prepare -DdryRun); no deploy, push or branch'
+        required: true
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Release ${{ inputs.RELEASE_VERSION }} from ${{ github.ref_name }}
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/axoniq-')
+    timeout-minutes: 90
+    env:
+      RELEASE_VERSION: ${{ inputs.RELEASE_VERSION }}
+      DEVELOPMENT_VERSION: ${{ inputs.DEVELOPMENT_VERSION }}
+      BRANCH_NAME: ${{ github.ref_name }}
+      RELEASE_TAG: axoniq-${{ inputs.RELEASE_VERSION }}
+
+    steps:
+      - name: Validate inputs against branch
+        id: plan
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_VERSION" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)(-RC[0-9]+)?$ ]] \
+            || { echo "::error::RELEASE_VERSION '$RELEASE_VERSION' must be X.Y.Z or X.Y.Z-RCn"; exit 1; }
+          MAJOR=${BASH_REMATCH[1]} MINOR=${BASH_REMATCH[2]} PATCH=${BASH_REMATCH[3]} RC=${BASH_REMATCH[4]}
+          [[ "$DEVELOPMENT_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+-SNAPSHOT$ ]] \
+            || { echo "::error::DEVELOPMENT_VERSION '$DEVELOPMENT_VERSION' must be X.Y.Z-SNAPSHOT"; exit 1; }
+
+          if [ "$BRANCH_NAME" = "main" ]; then
+            [ "$PATCH" = "0" ] \
+              || { echo "::error::Patch releases must run from axoniq-$MAJOR.$MINOR.x, not main"; exit 1; }
+            if [ -z "$RC" ]; then
+              echo "patch_branch=axoniq-$MAJOR.$MINOR.x" >> "$GITHUB_OUTPUT"
+              echo "patch_version=$MAJOR.$MINOR.1-SNAPSHOT" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            [ "$BRANCH_NAME" = "axoniq-$MAJOR.$MINOR.x" ] \
+              || { echo "::error::$RELEASE_VERSION cannot be released from $BRANCH_NAME"; exit 1; }
+          fi
+
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+
+      - name: Checkout ${{ github.ref_name }}
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.ref_name }}
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Verify CI passed on the commit being released
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          SHA=$(git rev-parse HEAD)
+          CONCLUSION=$(gh run list --workflow main.yml --commit "$SHA" --limit 1 --json conclusion --jq '.[0].conclusion')
+          [ "$CONCLUSION" = "success" ] \
+            || { echo "::error::main.yml on $SHA is '${CONCLUSION:-missing}'; release a commit with a green build"; exit 1; }
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v6.1.0
+        with:
+          distribution: 'zulu'
+          java-version: 21
+          cache: 'maven'
+          server-id: central
+          server-username: MAVEN_USERNAME
+          server-password: MAVEN_PASSWORD
+          gpg-private-key: ${{ secrets.MAVEN_GPG_PRIVATE_KEY }}
+          gpg-passphrase: MAVEN_GPG_PASSPHRASE
+
+      - name: Configure git identity
+        run: |
+          git config user.name "Axoniq Release Bot"
+          git config user.email "releases@axoniq.io"
+
+      - name: Release prepare
+        run: |
+          ./mvnw -B -ntp -Dstyle.color=always \
+            -DreleaseVersion=$RELEASE_VERSION \
+            -DdevelopmentVersion=$DEVELOPMENT_VERSION \
+            -Dtag=$RELEASE_TAG \
+            -DdryRun=${{ inputs.DRY_RUN }} \
+            -DskipTests -Darguments=-DskipTests \
+            release:prepare
+
+      - name: Release perform (sign and upload to Maven Central)
+        if: ${{ !inputs.DRY_RUN }}
+        env:
+          MAVEN_USERNAME: ${{ secrets.SONATYPE_TOKEN_ID }}
+          MAVEN_PASSWORD: ${{ secrets.SONATYPE_TOKEN_PASS }}
+          MAVEN_GPG_PASSPHRASE: ${{ secrets.MAVEN_GPG_PASSPHRASE }}
+        run: ./mvnw -B -ntp -Dstyle.color=always release:perform -Darguments="-DskipTests"
+
+      - name: Push release commits and tag
+        if: ${{ !inputs.DRY_RUN }}
+        run: |
+          git push origin "$BRANCH_NAME"
+          git push origin "$RELEASE_TAG"
+
+      - name: Clean release plugin working files
+        if: always()
+        run: ./mvnw -B -ntp release:clean
+
+      - name: Create patch branch ${{ steps.plan.outputs.patch_branch }}
+        if: ${{ !inputs.DRY_RUN && steps.plan.outputs.patch_branch != '' }}
+        env:
+          PATCH_BRANCH: ${{ steps.plan.outputs.patch_branch }}
+          PATCH_VERSION: ${{ steps.plan.outputs.patch_version }}
+        run: |
+          git switch -c "$PATCH_BRANCH" "$RELEASE_TAG"
+          ./mvnw -B -ntp -N versions:set-property -Dproperty=revision \
+            -DnewVersion="$PATCH_VERSION" -DgenerateBackupPoms=false
+          git commit -am "Prepare $PATCH_BRANCH for $PATCH_VERSION"
+          git push origin "$PATCH_BRANCH"
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## Release $RELEASE_TAG (dry run: ${{ inputs.DRY_RUN }})"
+            echo "- Branch: \`$BRANCH_NAME\`, next development version: \`$DEVELOPMENT_VERSION\`"
+            [ -n "${{ steps.plan.outputs.patch_branch }}" ] && echo "- Patch branch: \`${{ steps.plan.outputs.patch_branch }}\` at \`${{ steps.plan.outputs.patch_version }}\`"
+            echo
+            echo "### Remaining manual steps"
+            echo "1. Check the deployment and publish it: https://central.sonatype.com/publishing/deployments"
+            echo "2. Check that **Publish API Docs** ran for \`$RELEASE_TAG\` (the tag push starts it): https://apidocs.axoniq.io/latest/"
+            echo "3. Close the milestone, then review and publish the draft GitHub release"
+            echo "4. Add the release notes to docs on the right branch"
+            echo "5. Review the Discuss announcement and pin it globally for 2 weeks"
+            true
+          } >> "$GITHUB_STEP_SUMMARY"
