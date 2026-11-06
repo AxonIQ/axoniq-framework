@@ -159,7 +159,7 @@ See xref:step-orchestration.adoc[] for more on combinators.
 == Sleep
 
 Sometimes you just need to pause for a while.
-The `sleep` method provides a durable delay:
+The `awaitSleep` method provides a durable delay that blocks the workflow until the duration has elapsed:
 
 [source,java]
 ----
@@ -178,16 +178,22 @@ Under the hood, this is a `waitForEvent` with an event condition that never matc
 </div>
 ++++
 
-`sleep` always produces a STARTED followed by a TIMED_OUT—that's by design, since the "event" it waits for never arrives.
+A sleep step always produces a STARTED followed by a TIMED_OUT.
+That's by design, since the "event" it waits for never arrives.
 
 === Non-blocking sleep
 
-`sleep(stepName, customizer)` returns a `WorkflowStepResult` immediately, allowing you to compose delays with other steps using combinators:
+The `sleep` method does not block.
+It starts the sleep step and returns immediately, so the workflow continues with the next statement.
+`sleep(stepName, customizer)` returns a `WorkflowStepResult`, so you can combine the delay with other steps using combinators, for example as a timeout over several steps:
 
 [source,java]
 ----
 include::example$workflows/waitingforevents/WaitingForEventsExamples.java[tag=non-blocking-sleep,indent=0]
 ----
+
+Use `awaitSleep` whenever the workflow itself must wait for the delay.
+The Kotlin DSL offers the same blocking `awaitSleep(stepName, timeout)`.
 
 == Updated workflow
 

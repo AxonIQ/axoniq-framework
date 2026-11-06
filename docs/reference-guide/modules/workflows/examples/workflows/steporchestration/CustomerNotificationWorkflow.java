@@ -30,7 +30,7 @@ public class CustomerNotificationWorkflow {
                 EmailService::sendOrderConfirmation
         );
 
-        context.sleep("waitBeforeFollowUp", Duration.ofDays(3));
+        context.awaitSleep("waitBeforeFollowUp", Duration.ofDays(3));
 
         context.awaitExecute(
                 "sendFollowUpEmail",
