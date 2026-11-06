@@ -22,7 +22,6 @@ package io.axoniq.framework.integrationtests.testsuite.student;
 import io.axoniq.framework.integrationtests.testsuite.infrastructure.AxonServerTestInfrastructure;
 import org.axonframework.eventsourcing.commandhandling.AppendCriteriaInterceptor;
 import org.axonframework.eventsourcing.commandhandling.annotation.AppendCriteriaBuilder;
-import org.axonframework.eventsourcing.eventstore.EventStore;
 import org.axonframework.integrationtests.testsuite.infrastructure.TestInfrastructure;
 import org.axonframework.integrationtests.testsuite.student.AppendCriteriaIT;
 import org.axonframework.integrationtests.testsuite.student.events.StudentEnrolledEvent;
@@ -126,8 +125,7 @@ class AppendCriteriaAxonServerIT extends AppendCriteriaIT {
                                 })
                 )
                 .intercepted(c -> new AppendCriteriaInterceptor(
-                        c.getComponent(EventStore.class),
-                        (command, context, sourcingCriteria) -> {
+                        (command, sourcingCriteria, context) -> {
                             receivedPayloads.add(command.payload());
                             command.payloadAs(Enroll.class, context.component(MessageConverter.class));
                             EventCriteria criteria = sourcingCriteria.withEventTypes(STUDENT_ENROLLED);
