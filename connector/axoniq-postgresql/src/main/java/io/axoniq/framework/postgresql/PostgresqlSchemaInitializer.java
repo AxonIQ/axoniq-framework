@@ -14,6 +14,8 @@ import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.ArrayList;
+import java.util.List;
 import javax.sql.DataSource;
 
 /**
@@ -32,29 +34,56 @@ final class PostgresqlSchemaInitializer {
     }
 
     /**
-     * Query returning a single boolean column: whether every table, sequence, index, and internal migration that
-     * {@link PostgresqlEventStorageEngine} relies on is present. Uses {@code to_regclass}, which returns
-     * {@code NULL} (rather than raising an error) for a relation that does not exist, so this is safe to run
-     * against a database that has none of the schema yet.
+     * Query returning one row (the object's description) for every table, sequence, index, trigger, or internal
+     * migration that {@link PostgresqlEventStorageEngine} relies on and that is either missing or defined
+     * differently than this class would create it; no rows means the schema is complete. Uses
+     * {@code to_regclass}, which returns {@code NULL} (rather than raising an error) for a relation that does not
+     * exist, so this is safe to run against a database that has none of the schema yet.
+     * <p>
+     * Only reads system catalogs, which are readable by every role, so it needs no privileges on the schema's own
+     * tables and takes no locks on them.
+     * <p>
+     * Trigger type bits ({@code tgtype}): ROW = 1, BEFORE = 2, INSERT = 4, UPDATE = 16. {@code tgenabled = 'O'}
+     * means enabled for ordinary (origin) writes.
      */
-    private static final String SCHEMA_COMPLETE_QUERY =
+    private static final String SCHEMA_PROBLEMS_QUERY =
         """
-        SELECT to_regclass('events') IS NOT NULL
-           AND to_regclass('tags') IS NOT NULL
-           AND to_regclass('consistency_tags') IS NOT NULL
-           AND to_regclass('events_monotonic_seq') IS NOT NULL
-           AND to_regclass('consistency_tags_global_index_idx') IS NOT NULL
-           AND to_regclass('tags_global_index_idx') IS NOT NULL
-           AND to_regclass('tags_type_unique') IS NOT NULL
-           AND to_regclass('snapshots') IS NOT NULL
-           AND EXISTS (
-             SELECT 1 FROM pg_trigger
-             WHERE tgname = 'axon_events_write_type_tag' AND tgrelid = to_regclass('events')
-           )
-           AND EXISTS (
-             SELECT 1 FROM pg_trigger
-             WHERE tgname = 'axon_tags_validate_type' AND tgrelid = to_regclass('tags')
-           )
+        SELECT description FROM (VALUES
+          ('table events', to_regclass('events') IS NOT NULL),
+          ('table tags', to_regclass('tags') IS NOT NULL),
+          ('table consistency_tags', to_regclass('consistency_tags') IS NOT NULL),
+          ('table snapshots', to_regclass('snapshots') IS NOT NULL),
+          ('sequence events_monotonic_seq', to_regclass('events_monotonic_seq') IS NOT NULL),
+          ('index consistency_tags_global_index_idx', to_regclass('consistency_tags_global_index_idx') IS NOT NULL),
+          ('index tags_global_index_idx', to_regclass('tags_global_index_idx') IS NOT NULL),
+          ('unique index tags_type_unique (on tags (global_index) WHERE key = ''__T'')', EXISTS (
+            SELECT 1 FROM pg_index i
+            WHERE i.indexrelid = to_regclass('tags_type_unique')
+              AND i.indrelid = to_regclass('tags')
+              AND i.indisunique AND i.indisvalid AND i.indisready
+              AND i.indnatts = 1 AND i.indnkeyatts = 1 AND i.indexprs IS NULL
+              AND i.indkey[0] = (
+                SELECT a.attnum FROM pg_attribute a
+                WHERE a.attrelid = to_regclass('tags') AND a.attname = 'global_index' AND NOT a.attisdropped
+              )
+              AND pg_get_expr(i.indpred, i.indrelid) ~ '^\\(*(\\(key\\)::text|key) = ''__T''(::text)?\\)*$'
+          )),
+          ('trigger axon_events_write_type_tag (row-level AFTER INSERT on events, enabled)', EXISTS (
+            SELECT 1 FROM pg_trigger t
+            WHERE t.tgname = 'axon_events_write_type_tag'
+              AND t.tgrelid = to_regclass('events')
+              AND t.tgfoid = to_regproc('axon_write_type_tag')
+              AND t.tgtype = 5 AND t.tgenabled = 'O' AND t.tgqual IS NULL AND NOT t.tgisinternal
+          )),
+          ('trigger axon_tags_validate_type (row-level BEFORE INSERT OR UPDATE on tags, enabled)', EXISTS (
+            SELECT 1 FROM pg_trigger t
+            WHERE t.tgname = 'axon_tags_validate_type'
+              AND t.tgrelid = to_regclass('tags')
+              AND t.tgfoid = to_regproc('axon_validate_type_tag')
+              AND t.tgtype = 23 AND t.tgenabled = 'O' AND t.tgqual IS NULL AND NOT t.tgisinternal
+          ))
+        ) AS checks(description, ok)
+        WHERE NOT ok
         """;
 
     /**
@@ -64,7 +93,8 @@ final class PostgresqlSchemaInitializer {
      * @param schemaInitialization  how to handle a missing or incomplete schema, cannot be {@code null}
      * @throws SQLException          when a JDBC error occurred
      * @throws IllegalStateException when {@code schemaInitialization} is {@link SchemaInitialization#VALIDATE} and
-     *                                the schema is not complete
+     *                                the schema is not complete, or is {@link SchemaInitialization#CREATE_IF_MISSING}
+     *                                and the schema is still not complete after creating what was missing
      */
     static void initialize(DataSource dataSource, SchemaInitialization schemaInitialization) throws SQLException {
         switch (schemaInitialization) {
@@ -72,44 +102,62 @@ final class PostgresqlSchemaInitializer {
                 // Trust the caller: no database round trip at all.
             }
             case VALIDATE -> {
-                if (!schemaIsComplete(dataSource)) {
+                List<String> problems = findSchemaProblems(dataSource);
+
+                if (!problems.isEmpty()) {
                     throw new IllegalStateException(
                         "The PostgreSQL schema for " + PostgresqlEventStorageEngine.class.getSimpleName()
-                        + " is missing one or more tables, indices, or internal migrations, and "
-                        + SchemaInitialization.class.getSimpleName() + ".VALIDATE does not create or repair "
-                        + "schema objects. Apply the missing schema manually, or use "
+                        + " is missing or has incompatible definitions for: " + String.join("; ", problems)
+                        + ". " + SchemaInitialization.class.getSimpleName() + ".VALIDATE does not create or repair "
+                        + "schema objects. Apply the correct schema manually, or use "
                         + SchemaInitialization.class.getSimpleName() + ".CREATE_IF_MISSING instead."
                     );
                 }
             }
             case CREATE_IF_MISSING -> {
-                if (!schemaIsComplete(dataSource)) {
+                if (!findSchemaProblems(dataSource).isEmpty()) {
                     createSchema(dataSource);
                     installTypeTagMigration(dataSource);
+
+                    List<String> remaining = findSchemaProblems(dataSource);
+
+                    if (!remaining.isEmpty()) {
+                        throw new IllegalStateException(
+                            "The PostgreSQL schema for " + PostgresqlEventStorageEngine.class.getSimpleName()
+                            + " still has missing or incompatible definitions for: " + String.join("; ", remaining)
+                            + " after creating the missing schema objects. "
+                            + SchemaInitialization.class.getSimpleName() + ".CREATE_IF_MISSING does not replace "
+                            + "existing objects; correct or drop them manually."
+                        );
+                    }
                 }
             }
         }
     }
 
     /**
-     * Checks whether every table, sequence, index, and internal migration that
-     * {@link PostgresqlEventStorageEngine} relies on is present. Only issues cheap catalog look-ups; never
-     * acquires a lock on any of the schema's own tables.
+     * Checks that every table, sequence, index, trigger, and internal migration that
+     * {@link PostgresqlEventStorageEngine} relies on is present and defined as expected. Only issues a cheap
+     * catalog look-up; never acquires a lock on any of the schema's own tables. Function bodies are not compared.
      *
      * @param dataSource a data source to connect to PostgreSQL, cannot be {@code null}
-     * @return {@code true} if the schema is complete, {@code false} otherwise
+     * @return a description of each missing or incompatible object, empty if the schema is complete
      * @throws SQLException when a JDBC error occurred
      */
-    static boolean schemaIsComplete(DataSource dataSource) throws SQLException {
+    static List<String> findSchemaProblems(DataSource dataSource) throws SQLException {
+        List<String> problems = new ArrayList<>();
+
         try (
             Connection connection = dataSource.getConnection();
             Statement statement = connection.createStatement();
-            ResultSet resultSet = statement.executeQuery(SCHEMA_COMPLETE_QUERY)
+            ResultSet resultSet = statement.executeQuery(SCHEMA_PROBLEMS_QUERY)
         ) {
-            resultSet.next();
-
-            return resultSet.getBoolean(1);
+            while (resultSet.next()) {
+                problems.add(resultSet.getString(1));
+            }
         }
+
+        return problems;
     }
 
     // TODO #7 Allow to configure tables, sequences and indices
