@@ -22,8 +22,16 @@
     <name>Axoniq Framework - Examples</name>
     <description>Collection of examples used for demonstration and test purposes.</description>
 
+    <properties>
+        <!-- The examples do not inherit the parent pom of the framework modules; keep these in line with it. -->
+        <spring-boot.version>3.5.16</spring-boot.version>
+        <testcontainers.version>2.0.5</testcontainers.version>
+        <jackson.version>3.2.3</jackson.version>
+        <jackson2.version>2.22.3</jackson2.version>
+    </properties>
+
     <modules>
-        <!-- empty so far -->
+        <module>kafka-shipping</module>
     </modules>
 
     <dependencyManagement>
@@ -37,4 +45,29 @@
             </dependency>
         </dependencies>
     </dependencyManagement>
+
+    <profiles>
+        <profile>
+            <!-- Examples that need Docker are integration tests (*IT), run by Failsafe in this profile only. -->
+            <id>integration-test</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-failsafe-plugin</artifactId>
+                        <version>${maven-failsafe.version}</version>
+                        <executions>
+                            <execution>
+                                <id>run-integration-tests</id>
+                                <goals>
+                                    <goal>integration-test</goal>
+                                    <goal>verify</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 </project>
