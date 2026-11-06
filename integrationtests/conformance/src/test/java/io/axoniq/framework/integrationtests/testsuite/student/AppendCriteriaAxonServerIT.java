@@ -55,6 +55,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * An {@link AppendCriteriaBuilder} receives the payload converted to the handler's declared type, so it can switch over
  * a sealed command supertype. A resolver registered through an {@link AppendCriteriaInterceptor} runs before that
  * conversion, and therefore converts the payload itself.
+ * <p>
+ * A command that sourced nothing has its append criteria checked against the whole store, so Axon Server's DCB event
+ * store rejects a second command matching the criteria of an earlier one.
  *
  * @author Mateusz Nowak
  */
