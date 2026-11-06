@@ -32,6 +32,14 @@ public interface WorkflowStore {
     CompletableFuture<RunningWorkflows> loadRunningWorkflows(ProcessingContext processingContext);
 
     /**
+     * Loads the singleton wait-associations projection.
+     *
+     * @param processingContext processing context used for sourcing
+     * @return the open waits of every workflow
+     */
+    CompletableFuture<WaitAssociations> loadWaitAssociations(ProcessingContext processingContext);
+
+    /**
      * Loads the event-sourced durable state for a workflow id.
      *
      * @param workflowId        workflow identifier

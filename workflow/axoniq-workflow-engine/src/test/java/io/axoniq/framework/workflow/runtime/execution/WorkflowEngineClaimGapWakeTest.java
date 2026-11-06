@@ -38,6 +38,7 @@ import java.time.Clock;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
@@ -242,6 +243,9 @@ class WorkflowEngineClaimGapWakeTest {
         var running = new EventSourcedRunningWorkflows();
         running.evolve(MetadataUtils.create(RESIDENT_ID, WorkflowStatus.STARTED));
         when(workflowStore.loadRunningWorkflows(any())).thenReturn(CompletableFuture.completedFuture(running));
+        when(workflowStore.loadWaitAssociations(any())).thenReturn(CompletableFuture.completedFuture(
+                () -> List.of(new WaitAssociation(RESIDENT_ID, WAIT_STEP, RESUME_EVENT, Set.of()))
+        ));
         when(workflowStore.loadWorkflow(eq(RESIDENT_ID), any()))
                 .thenReturn(CompletableFuture.completedFuture(
                         new EventSourcedWorkflowState(RESIDENT_ID, Map.of("orderId", RESIDENT_ID), DEFINITION_ID)));

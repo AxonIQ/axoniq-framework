@@ -437,8 +437,7 @@ class SimpleWorkflowModule<C extends WorkflowContext>
 
     private EventHandlingComponent historyHandlingComponent(Configuration config) {
         return new SequenceOverridingEventHandlingComponent(
-                config.getComponent(WorkflowEngine.class, engineName())
-                      .segmentedRouting(),
+                new WorkflowHistorySequencingPolicy(),
                 new EventHandlingComponentHandlingAny(
                         config.getComponent(WorkflowHistoryProjector.class, historyProjectorName())
                 )

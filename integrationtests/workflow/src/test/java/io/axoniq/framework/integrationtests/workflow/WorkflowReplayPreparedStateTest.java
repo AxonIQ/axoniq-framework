@@ -46,6 +46,7 @@ import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.*;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -283,11 +284,20 @@ class WorkflowReplayPreparedStateTest {
             appendEvent(workflowCompleted);
         }
 
+        /**
+         * Appends the STARTED event of the workflow's wait for its {@link ResumeReplayWorkflowEvent}, shaped as the
+         * engine writes it: marked as a wait, and naming the awaited event and its association, so the engine routes
+         * the resume event to the waiting workflow.
+         */
         private void appendStepStarted(String workflowId, String stepName) {
+            var startTime = Instant.now();
             appendEvent(new GenericEventMessage(
                     new MessageType(stepName + "Started"),
-                    Map.of("stepName", stepName),
-                    MetadataUtils.create(workflowId, stepName, StepStatus.STARTED)
+                    Map.of("startTime", startTime,
+                           "eventName", new MessageType(ResumeReplayWorkflowEvent.class).qualifiedName().toString(),
+                           "associations", Set.of("payload:id=" + workflowId),
+                           "timeoutTime", startTime.plus(Duration.ofSeconds(60))),
+                    MetadataUtils.markWaitForEventStep(MetadataUtils.create(workflowId, stepName, StepStatus.STARTED))
             ).withConverter(eventConverter));
         }
 

@@ -788,7 +788,6 @@ public abstract class CheckpointingProgressStrategyTestSuite extends SegmentProg
                 CompletableFuture::completedFuture;
         private volatile Function<TrackingToken, CompletableFuture<TrackingToken>> releaseResult =
                 CompletableFuture::completedFuture;
-
         @Override
         public void onSegmentClaimed(@NonNull Segment segment,
                                      @Nullable TrackingToken from,

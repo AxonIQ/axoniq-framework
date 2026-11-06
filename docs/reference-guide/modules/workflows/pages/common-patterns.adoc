@@ -133,7 +133,7 @@ include::example$workflows/commonpatterns/OrderFulfillmentWorkflow.java[tag=pare
 <.> The non-blocking `waitForEvent` registers the wait first.
 A wait registered after the child's reply has already passed is never woken, so registering it before the publish removes the race between parent and child.
 <.> `payloadProperty("orderId")` matches on a field in the event payload.
-A published event is routed like any business event, so it reaches a waiting workflow on any segment.
+A published event reaches the publisher, the workflows whose wait matches it, and the workflows it starts, on any segment.
 <.> The step name `paymentProcessStarted` is the durable identifier of the publish step.
 The published `PaymentProcessStarted` event is the step's record: one event, carrying the parent's workflow metadata, that also starts the child.
 <.> Block on the handle when the parent needs the result.
