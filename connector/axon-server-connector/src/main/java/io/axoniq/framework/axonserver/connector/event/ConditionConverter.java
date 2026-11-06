@@ -88,7 +88,7 @@ public final class ConditionConverter {
     public static SnapshottedSourceRequest convertSnapshottedSourcingCondition(SourcingCondition condition,
                                                                                ByteString snapshotKey) {
         return SnapshottedSourceRequest.newBuilder()
-                                       .setSnapshotKey(snapshotKey)
+                                       .addSnapshotKey(snapshotKey)
                                        .addAllCriterion(convertEventCriterion(condition.criteria().flatten()))
                                        .build();
     }

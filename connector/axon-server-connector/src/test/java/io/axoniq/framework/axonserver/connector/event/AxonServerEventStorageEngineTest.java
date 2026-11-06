@@ -20,6 +20,7 @@ import io.axoniq.axonserver.grpc.event.dcb.Event;
 import io.axoniq.axonserver.grpc.event.dcb.GetLastSnapshotRequest;
 import io.axoniq.axonserver.grpc.event.dcb.GetLastSnapshotResponse;
 import io.axoniq.axonserver.grpc.event.dcb.SequencedEvent;
+import io.axoniq.axonserver.grpc.event.dcb.SequencedSnapshot;
 import io.axoniq.axonserver.grpc.event.dcb.SnapshottedSourceEventsResponse;
 import io.axoniq.axonserver.grpc.event.dcb.SnapshottedSourceRequest;
 import io.axoniq.axonserver.grpc.event.dcb.SourceEventsRequest;
@@ -77,6 +78,25 @@ import static org.mockito.Mockito.*;
 class AxonServerEventStorageEngineTest {
 
     private static final String EVENT_NAME = "test-event";
+
+    /**
+     * Stubs {@code peek()} and {@code nextIfAvailable()} on the given mock to share one position, so a {@code peek()}
+     * reflects the next not-yet-consumed item and {@code nextIfAvailable()} both returns and advances past it - unlike
+     * independent {@code thenReturn(...)} sequences on each method, which track separate invocation counts and can
+     * desynchronize the moment one method is called more often than the other.
+     */
+    @SafeVarargs
+    private static <T> void stubQueue(ResultStream<T> mockStream, T... items) {
+        java.util.concurrent.atomic.AtomicInteger position = new java.util.concurrent.atomic.AtomicInteger();
+        when(mockStream.peek()).thenAnswer(invocation -> {
+            int index = position.get();
+            return index < items.length ? items[index] : null;
+        });
+        when(mockStream.nextIfAvailable()).thenAnswer(invocation -> {
+            int index = position.getAndIncrement();
+            return index < items.length ? items[index] : null;
+        });
+    }
 
     private AxonServerConnection connection;
     private DcbEventChannel dcbEventChannel;
@@ -196,12 +216,13 @@ class AxonServerEventStorageEngineTest {
             ArgumentCaptor<GetLastSnapshotRequest> captor = ArgumentCaptor.forClass(GetLastSnapshotRequest.class);
             verify(snapshotChannel).getLastSnapshot(captor.capture());
             ByteString expectedKey = snapshotStore.snapshotKey(qualifiedName, identifier);
-            assertThat(captor.getValue().getKey()).isEqualTo(expectedKey);
+            assertThat(captor.getValue().getKeyList()).containsExactly(expectedKey);
         }
 
         @Test
         void sourceWithUnboundedSnapshotStrategyUsesTheSeparateLoadInsteadOfTheSingleRoundTripRpcByDefault() {
-            // given a stored snapshot, found through the separate load() RPC
+            // given a connection that does not report the snapshot-aware-sourcing capability (the default for an
+            // unstubbed connection), and a stored snapshot, found through the separate load() RPC
             io.axoniq.axonserver.grpc.event.dcb.Snapshot storedSnapshot =
                     io.axoniq.axonserver.grpc.event.dcb.Snapshot.newBuilder()
                                                                 .setName(qualifiedName.fullName())
@@ -222,7 +243,7 @@ class AxonServerEventStorageEngineTest {
             );
 
             // when / then the snapshot is prepended through the separate load(), and the single-round-trip RPC
-            // is never attempted, since it is disabled by default
+            // is never attempted, since the connection does not report the capability
             StepVerifier.create(FluxUtils.of(testSubject.source(condition, null)))
                         .assertNext(entry -> assertThat(entry.message()).isInstanceOf(SnapshotEventMessage.class))
                         .expectNextMatches(entry -> entry.message() instanceof TerminalEventMessage)
@@ -236,10 +257,11 @@ class AxonServerEventStorageEngineTest {
         }
 
         @Test
-        @Disabled("#675 - source-with-snapshot is disabled by default")
         @SuppressWarnings("unchecked")
         void sourceWithUnboundedSnapshotStrategyEmitsStoredSnapshotBeforeSubsequentEvents() {
-            // given a snapshot followed by one event and the consistency marker on the single-round-trip stream
+            // given a connection reporting the snapshot-aware-sourcing capability, and a snapshot followed by one
+            // event and the consistency marker on the single-round-trip stream
+            when(connection.supports("dcb:snapshot-aware-sourcing")).thenReturn(true);
             ResultStream<SnapshottedSourceEventsResponse> snapshottedStream = mock(ResultStream.class);
             when(snapshottedStream.getError()).thenReturn(java.util.Optional.empty());
             when(snapshottedStream.isClosed()).thenReturn(true);
@@ -256,17 +278,22 @@ class AxonServerEventStorageEngineTest {
                                      .setName(EVENT_NAME)
                                      .setVersion("0.0.1")
                                      .build();
-            when(snapshottedStream.nextIfAvailable()).thenReturn(
-                    SnapshottedSourceEventsResponse.newBuilder().setSnapshot(storedSnapshot).build(),
+            SnapshottedSourceEventsResponse snapshotResponse =
+                    SnapshottedSourceEventsResponse.newBuilder()
+                                                   .setSequencedSnapshot(SequencedSnapshot.newBuilder()
+                                                                                          .setSequence(4L)
+                                                                                          .setSnapshot(storedSnapshot))
+                                                   .build();
+            SnapshottedSourceEventsResponse eventResponse =
                     SnapshottedSourceEventsResponse.newBuilder()
                                                    .setEvent(SequencedEvent.newBuilder()
                                                                            .setEvent(storedEvent)
                                                                            .setSequence(5L)
                                                                            .build())
-                                                   .build(),
-                    SnapshottedSourceEventsResponse.newBuilder().setConsistencyMarker(5L).build(),
-                    null
-            );
+                                                   .build();
+            SnapshottedSourceEventsResponse markerResponse =
+                    SnapshottedSourceEventsResponse.newBuilder().setConsistencyMarker(5L).build();
+            stubQueue(snapshottedStream, snapshotResponse, eventResponse, markerResponse);
             when(dcbEventChannel.source(any(SnapshottedSourceRequest.class))).thenReturn(snapshottedStream);
 
             SourcingCondition condition = SourcingCondition.conditionFor(
@@ -290,11 +317,12 @@ class AxonServerEventStorageEngineTest {
         }
 
         @Test
-        @Disabled("#675 - source-with-snapshot is disabled by default")
         @SuppressWarnings("unchecked")
         void sourceWithUnboundedSnapshotStrategyFallsBackToLoadingSeparatelyWhenAxonServerDoesNotSupportSnapshotting() {
-            // given the single-round-trip snapshotted-source RPC failing with UNIMPLEMENTED, as an older Axon
-            // Server would report, but the separate snapshot-store RPC still finding a snapshot
+            // given a connection that reports the capability but whose single-round-trip snapshotted-source RPC
+            // still fails with UNIMPLEMENTED (e.g. a contract violation, or a mid-call reconnect to a lesser node),
+            // with the separate snapshot-store RPC still finding a snapshot
+            when(connection.supports("dcb:snapshot-aware-sourcing")).thenReturn(true);
             ResultStream<SnapshottedSourceEventsResponse> snapshottedStream = mock(ResultStream.class);
             when(snapshottedStream.getError())
                     .thenReturn(java.util.Optional.of(Status.UNIMPLEMENTED.asRuntimeException()));
@@ -336,13 +364,13 @@ class AxonServerEventStorageEngineTest {
         }
 
         @Test
-        @Disabled("#675 - source-with-snapshot is disabled by default")
         @SuppressWarnings("unchecked")
         void sourceWithUnboundedSnapshotStrategyOnlyFallsBackOnceWhenTheAvailabilityCallbackRacesTheInlineCheck()
                 throws InterruptedException {
-            // given the onAvailable callback firing on its own thread, concurrently with the inline availability
-            // check the engine performs right after registering it -- both invocations see the same UNIMPLEMENTED
-            // error and could otherwise both trigger the fallback
+            // given a connection reporting the capability, and the onAvailable callback firing on its own thread,
+            // concurrently with the inline availability check the engine performs right after registering it --
+            // both invocations see the same UNIMPLEMENTED error and could otherwise both trigger the fallback
+            when(connection.supports("dcb:snapshot-aware-sourcing")).thenReturn(true);
             ResultStream<SnapshottedSourceEventsResponse> snapshottedStream = mock(ResultStream.class);
             when(snapshottedStream.getError())
                     .thenReturn(java.util.Optional.of(Status.UNIMPLEMENTED.asRuntimeException()));
@@ -384,13 +412,17 @@ class AxonServerEventStorageEngineTest {
         }
 
         @Test
-        @Disabled("#675 - source-with-snapshot is disabled by default")
         @SuppressWarnings("unchecked")
-        void sourceWithUnboundedSnapshotStrategySkipsTheSingleRoundTripRpcAfterItWasFoundUnimplementedOnce() {
-            // given the snapshotted-source RPC failing with UNIMPLEMENTED
+        void sourceWithUnboundedSnapshotStrategyReEvaluatesTheCapabilityOnEveryCall() {
+            // given a connection that reports the capability on the first check only - e.g. because it reconnected
+            // to a different, lesser node in between the two sourcing calls below
+            when(connection.supports("dcb:snapshot-aware-sourcing")).thenReturn(true, false);
             ResultStream<SnapshottedSourceEventsResponse> snapshottedStream = mock(ResultStream.class);
-            when(snapshottedStream.getError())
-                    .thenReturn(java.util.Optional.of(Status.UNIMPLEMENTED.asRuntimeException()));
+            when(snapshottedStream.getError()).thenReturn(java.util.Optional.empty());
+            when(snapshottedStream.isClosed()).thenReturn(true);
+            SnapshottedSourceEventsResponse snapshottedMarkerResponse =
+                    SnapshottedSourceEventsResponse.newBuilder().setConsistencyMarker(0L).build();
+            stubQueue(snapshottedStream, snapshottedMarkerResponse);
             when(dcbEventChannel.source(any(SnapshottedSourceRequest.class))).thenReturn(snapshottedStream);
 
             when(snapshotChannel.getLastSnapshot(any()))
@@ -405,26 +437,29 @@ class AxonServerEventStorageEngineTest {
                     EventCriteria.havingTags("AGGREGATE_TYPE", identifier)
             );
 
-            // when sourcing once discovers the RPC is unsupported and falls back
+            // when sourcing once while the capability is reported
             StepVerifier.create(FluxUtils.of(testSubject.source(condition, null)))
                         .expectNextMatches(entry -> entry.message() instanceof TerminalEventMessage)
                         .verifyComplete();
             verify(dcbEventChannel, times(1)).source(any(SnapshottedSourceRequest.class));
 
-            // when sourcing again
-            testSubject.source(condition, null);
+            // when sourcing again after the connection stops reporting it
+            StepVerifier.create(FluxUtils.of(testSubject.source(condition, null)))
+                        .expectNextMatches(entry -> entry.message() instanceof TerminalEventMessage)
+                        .verifyComplete();
 
-            // then the single-round-trip RPC is not attempted a second time -- the engine remembered it's unsupported
+            // then the single-round-trip RPC is not attempted the second time -- the capability is re-checked live
+            // on every call rather than cached for the engine's lifetime, so losing it takes effect immediately
             verify(dcbEventChannel, times(1)).source(any(SnapshottedSourceRequest.class));
-            verify(dcbEventChannel, times(2)).source(any(SourceEventsRequest.class));
+            verify(dcbEventChannel, times(1)).source(any(SourceEventsRequest.class));
         }
 
         @Test
-        @Disabled("#675 - source-with-snapshot is disabled by default")
         @SuppressWarnings("unchecked")
         void sourceWithUnboundedSnapshotStrategyFallsBackToFullReconstructionWhenNeitherAxonServerNorASnapshotAreAvailable() {
-            // given the single-round-trip snapshotted-source RPC failing with UNIMPLEMENTED, and the separate
-            // snapshot-store RPC finding no snapshot either
+            // given a connection reporting the capability, the single-round-trip snapshotted-source RPC failing
+            // with UNIMPLEMENTED, and the separate snapshot-store RPC finding no snapshot either
+            when(connection.supports("dcb:snapshot-aware-sourcing")).thenReturn(true);
             ResultStream<SnapshottedSourceEventsResponse> snapshottedStream = mock(ResultStream.class);
             when(snapshottedStream.getError())
                     .thenReturn(java.util.Optional.of(Status.UNIMPLEMENTED.asRuntimeException()));
