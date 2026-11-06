@@ -318,6 +318,19 @@ class WorkflowEngineCrossSegmentCheckpointTest {
             return lastConsumed;
         }
 
+        @Nullable
+        @Override
+        public TrackingToken lastHandledToken() {
+            // Every consumed position is handled: the test never delivers an event this segment skips.
+            return lastConsumed;
+        }
+
+        @Nullable
+        @Override
+        public TrackingToken lastStoredToken() {
+            return stored;
+        }
+
         @Override
         public void scheduleWorker() {
             // The test drives the commit cycles explicitly.

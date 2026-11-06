@@ -27,8 +27,9 @@ import java.util.concurrent.CompletableFuture;
  * it via {@link EventHandlingComponent#unwrap(Class)}), and a programmatic component (which implements both
  * {@link EventHandlingComponent} and this interface). Either way the processor finds it via
  * {@code unwrap(Checkpointing.class)} and runs in request-driven mode; a processor whose every handler is
- * {@code Checkpointing} is fully-deferred (it advances the stored token only on explicit request), whereas a processor
- * with at least one ordinary handler runs in auto mode (it requests a checkpoint at the batch-end token every batch).
+ * {@code Checkpointing} is fully-deferred (it advances the stored token on explicit request, and without one only past
+ * skipped events), whereas a processor with at least one ordinary handler runs in auto mode (it requests a checkpoint at
+ * the batch-end token every batch).
  * <p>
  * Only a streaming processor (with a tracking token and segments) can honour this protocol. A processor that does not
  * stream (such as a
