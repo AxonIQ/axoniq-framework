@@ -174,8 +174,8 @@ public class WorkflowEngine implements
             if (!WorkflowSegmentOwnership.ownedBy(segment, workflowId)) {
                 logger.debug("Ignoring event [{}] for workflowId [{}] - instance is owned by another segment than {}.",
                              event.type(), workflowId, segment);
-                checkpointingSupport.requestCheckpoint(segment, currentToken);
                 activateSegmentWhenCaughtUp(segment, currentToken);
+                checkpointingSupport.requestCheckpoint(segment, currentToken);
                 return MessageStream.empty();
             }
             // Skip events whose workflowId isn't owned by this engine (expected in multi-module setups).
@@ -183,8 +183,8 @@ public class WorkflowEngine implements
             if (executionOpt.isEmpty()) {
                 logger.debug("Ignoring event [{}] for workflowId [{}] - no matching execution in this engine.",
                              event.type(), workflowId);
-                checkpointingSupport.requestCheckpoint(segment, currentToken);
                 activateSegmentWhenCaughtUp(segment, currentToken);
+                checkpointingSupport.requestCheckpoint(segment, currentToken);
                 return MessageStream.empty();
             }
             executionOpt.get().onEvent(event, context);
@@ -203,8 +203,8 @@ public class WorkflowEngine implements
             }
         }
 
-        checkpointingSupport.requestCheckpoint(segment, currentToken);
         activateSegmentWhenCaughtUp(segment, currentToken);
+        checkpointingSupport.requestCheckpoint(segment, currentToken);
         logger.trace("Event [{}] handled successfully.", event.identifier());
         return MessageStream.empty();
     }

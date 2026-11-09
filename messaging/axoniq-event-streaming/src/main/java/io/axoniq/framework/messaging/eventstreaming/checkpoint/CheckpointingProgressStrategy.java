@@ -46,7 +46,7 @@ import static org.axonframework.common.FutureUtils.joinAndUnwrap;
  *     participants, so a checkpoint at the batch-end token is requested every batch and the participants are driven to
  *     cover it; they cannot defer the stored token.</li>
  *     <li><b>Fully-deferred</b> ({@code autoCheckpointing == false}): every handler is a participant, so the stored
- *     token advances only on an explicit {@link CheckpointTrigger} request.</li>
+ *     token advances on an explicit {@link CheckpointTrigger} request, and without one only past skipped events.</li>
  * </ul>
  * <p>
  * <b>Internal API.</b> This class is marked {@link Internal}: it is part of the self-checkpointing support, intended
@@ -110,14 +110,20 @@ public final class CheckpointingProgressStrategy implements SegmentProgressStrat
      * <ul>
      *     <li><b>Auto mode</b> checkpoints at the batch-end token ({@code lastConsumedToken}); a participant is
      *     therefore forced to cover it.</li>
-     *     <li><b>Fully-deferred mode</b> stores only when a participant explicitly requested a checkpoint.</li>
+     *     <li><b>Fully-deferred mode</b> stores the requested position when a participant explicitly requested a
+     *     checkpoint. Without a request, it stores the consumed position when the stored token already covers every
+     *     event handed to the participants, so the segment only moved past skipped events.</li>
      * </ul>
-     * The participants are {@link #reconcile(Map) reconciled} to a single agreed position before storing, so no
-     * participant is left ahead of the stored token. A store is skipped when nothing is to be checkpointed.
+     * A requested or batch-end position is stored only after the participants are {@link #reconcile(Map) reconciled}
+     * to a single agreed position, so no participant is left ahead of the stored token. The skipped-events position
+     * needs no participant, so it is stored directly. A store is skipped when nothing is to be checkpointed.
      */
     @Override
     public CompletableFuture<Void> onBatchCommit(ProcessingContext processingContext) {
         TrackingToken pending = requestedCheckpoint.getAndSet(null);
+        if (!autoCheckpointing && pending == null) {
+            return context.persistProgress(skippedEventsPosition(), processingContext);
+        }
         TrackingToken consumed = context.lastConsumedToken();
         // The auto component(s) are durable to the batch-end token within this transaction: cover at least there.
         TrackingToken requested = autoCheckpointing
@@ -129,6 +135,19 @@ public final class CheckpointingProgressStrategy implements SegmentProgressStrat
         return persistOnCallingThread(requestEach(participant -> requestAdvance(participant, requested))
                                               .thenCompose(this::reconcile),
                                       processingContext);
+    }
+
+    /**
+     * Returns the consumed position when the stored token covers the last event handed to the participants, and
+     * {@code null} otherwise. Every event between those positions was skipped, so storing the consumed position needs
+     * no participant: on a restart, the segment would skip those events again.
+     */
+    private @Nullable TrackingToken skippedEventsPosition() {
+        TrackingToken handled = context.lastHandledToken();
+        TrackingToken stored = context.lastStoredToken();
+        return handled == null || (stored != null && TrackingTokenUtils.coversWhenUnwrapped(stored, handled))
+                ? context.lastConsumedToken()
+                : null;
     }
 
     @Override
