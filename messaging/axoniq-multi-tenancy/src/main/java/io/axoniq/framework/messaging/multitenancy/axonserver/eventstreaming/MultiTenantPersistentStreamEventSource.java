@@ -18,11 +18,12 @@ import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantScopedCache;
 import io.axoniq.framework.messaging.multitenancy.configuration.TenantComponentProviderUtil;
 import org.axonframework.common.Registration;
+import org.axonframework.common.StringUtils;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.common.infra.ComponentDescriptor;
-import org.axonframework.eventsourcing.eventstore.EventTypeResolver;
 import org.axonframework.conversion.Converter;
+import org.axonframework.eventsourcing.eventstore.EventTypeResolver;
 import org.axonframework.messaging.core.SubscribableEventSource;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
@@ -45,8 +46,10 @@ import java.util.function.Function;
  * the tenant it came from.
  * <p>
  * Each tenant is an Axon Server context, and a persistent stream lives in one context, so this source holds one ordinary
- * {@link PersistentStreamEventSource} per tenant and fans a single consumer out to all of them. The stream carries the
- * configured name in every tenant's context, so a tenant's stream appears in Axon Server named exactly as configured.
+ * {@link PersistentStreamEventSource} per tenant and fans a single consumer out to all of them. The source resolves the
+ * stream identifier for every tenant's context using the configured {@link MultiTenantPersistentStreamIdResolver},
+ * defaulting to the {@link MultiTenantPersistentStreamIdResolver#CONFIGURED_NAME} resolver that returns the name
+ * configured in the constructor of this class unchanged.
  * <p>
  * This source follows the tenant lifecycle only while it has a subscriber. {@link #subscribe(BiFunction)} subscribes it
  * to the {@link TenantProvider} as a {@link MultiTenantAwareComponent}, which immediately replays the known tenants and
@@ -76,6 +79,7 @@ public class MultiTenantPersistentStreamEventSource implements SubscribableEvent
     private final int batchSize;
     private final Configuration configuration;
     private final TenantProvider tenantProvider;
+    private final MultiTenantPersistentStreamIdResolver streamIdResolver;
 
     private final TenantScopedCache<TenantStream> tenantStreams;
 
@@ -94,14 +98,16 @@ public class MultiTenantPersistentStreamEventSource implements SubscribableEvent
      * Constructs a {@code MultiTenantPersistentStreamEventSource} for the persistent stream with the given
      * {@code name}.
      *
-     * @param name             the name of the persistent stream, used as the stream identifier in every tenant's Axon
-     *                         Server context
+     * @param name             the name of the persistent stream, used to construct the stream identifier for every
+     *                         tenant's Axon Server context
      * @param properties       the properties applied when creating each tenant's persistent stream
      * @param schedulerFactory the factory creating a tenant's {@link ScheduledExecutorService} for the pool name given
      *                         to it, so each tenant's stream runs on threads of its own rather than sharing one pool
      * @param batchSize        the maximum number of events to deliver per batch
      * @param configuration    the configuration supplying the components each tenant's stream is built from
      * @param tenantProvider   the provider whose tenants this source opens a stream for while it has a subscriber
+     * @param streamIdResolver a {@link MultiTenantPersistentStreamIdResolver} that derives the stream identifier for
+     *                         every tenant from the configured name and the tenant descriptor for that tenant
      * @throws NullPointerException     if any of the given arguments is {@code null}
      * @throws IllegalArgumentException if the given {@code name} is empty or {@code batchSize} is not positive
      */
@@ -110,7 +116,8 @@ public class MultiTenantPersistentStreamEventSource implements SubscribableEvent
                                                   Function<String, ScheduledExecutorService> schedulerFactory,
                                                   int batchSize,
                                                   Configuration configuration,
-                                                  TenantProvider tenantProvider) {
+                                                  TenantProvider tenantProvider,
+                                                  MultiTenantPersistentStreamIdResolver streamIdResolver) {
         this.name = Objects.requireNonNull(name, "The name must not be null");
         if (name.isEmpty()) {
             throw new IllegalArgumentException("The name must not be empty.");
@@ -123,6 +130,8 @@ public class MultiTenantPersistentStreamEventSource implements SubscribableEvent
         this.batchSize = batchSize;
         this.configuration = Objects.requireNonNull(configuration, "The configuration must not be null");
         this.tenantProvider = Objects.requireNonNull(tenantProvider, "The tenant provider must not be null");
+        this.streamIdResolver = Objects.requireNonNull(streamIdResolver,
+                                                       "The stream id resolver must not be null");
         this.tenantStreams = new TenantScopedCache<>(this::createTenantStream,
                                                      this::releaseTenantStream,
                                                      "the multi-tenant persistent stream event source [" + name + "]");
@@ -241,9 +250,10 @@ public class MultiTenantPersistentStreamEventSource implements SubscribableEvent
     // Runs inside the cache update, so the tenantStream is subscribed here rather than by the caller: whichever tenant
     // triggers the creation gets a stream that is already open and feeding the consumer.
     private TenantStream createTenantStream(TenantDescriptor tenant) {
+        String streamId = resolveStreamId(tenant);
         ScheduledExecutorService scheduler = schedulerFactory.apply(name + "@" + tenant.tenantId());
         PersistentStreamEventSource source = new PersistentStreamEventSource(
-                name,
+                streamId,
                 configuration.getComponent(AxonServerConnectionManager.class),
                 configuration.getComponent(AxonServerConfiguration.class),
                 tenantEventConverter(tenant),
@@ -257,8 +267,18 @@ public class MultiTenantPersistentStreamEventSource implements SubscribableEvent
         );
         TenantStream tenantStream = new TenantStream(source, scheduler);
         tenantStream.subscribe(consumer);
-        logger.debug("Opened persistent stream [{}] for tenant [{}].", name, tenant.tenantId());
+        logger.debug("Opened persistent stream [{}] for tenant [{}].", streamId, tenant.tenantId());
         return tenantStream;
+    }
+
+    private String resolveStreamId(TenantDescriptor tenant) {
+        String streamId = streamIdResolver.resolve(name, tenant);
+        if (StringUtils.emptyOrNull(streamId)) {
+            throw new IllegalArgumentException(String.format(
+                    "The stream id resolved for persistent stream [%s] and tenant [%s] must not be null or empty.",
+                    name, tenant.tenantId()));
+        }
+        return streamId;
     }
 
     private EventConverter tenantEventConverter(TenantDescriptor tenant) {

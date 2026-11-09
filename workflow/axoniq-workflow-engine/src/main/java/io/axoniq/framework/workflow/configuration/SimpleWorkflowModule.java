@@ -44,6 +44,7 @@ import org.axonframework.messaging.eventhandling.processing.streaming.pooled.Poo
 import org.axonframework.messaging.eventhandling.processing.streaming.pooled.PooledStreamingEventProcessorModule;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.SequenceOverridingEventHandlingComponent;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.store.TokenStore;
+import org.axonframework.messaging.eventhandling.processing.streaming.token.store.inmemory.InMemoryTokenStore;
 import org.axonframework.messaging.eventstreaming.EventCriteria;
 import org.axonframework.messaging.eventstreaming.StreamableEventSource;
 import org.jspecify.annotations.Nullable;
@@ -452,7 +453,12 @@ class SimpleWorkflowModule<C extends WorkflowContext>
             Configuration config,
             PooledStreamingEventProcessorConfiguration psepConfig
     ) {
-        return historyConfigCustomizer.apply(defaultProcessorConfig(config, psepConfig))
+        defaultProcessorConfig(config, psepConfig);
+        if (config.getComponent(MutableWorkflowHistoryRepository.class, historyRepositoryName())
+                instanceof InMemoryWorkflowHistoryRepository) {
+            psepConfig.tokenStore(new InMemoryTokenStore());
+        }
+        return historyConfigCustomizer.apply(psepConfig)
                                       .eventCriteria(SimpleWorkflowModule::eventCriteria);
     }
 

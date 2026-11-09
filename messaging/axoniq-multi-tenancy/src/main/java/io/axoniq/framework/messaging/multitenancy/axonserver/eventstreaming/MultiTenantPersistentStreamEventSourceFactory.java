@@ -62,6 +62,12 @@ public class MultiTenantPersistentStreamEventSourceFactory implements Persistent
      * configured {@code thread-count} keeps meaning "threads for this stream" and a tenant whose stream is retrying
      * cannot occupy the threads the other tenants need. Pools are named after the stream and the tenant they belong to,
      * so a thread dump shows whose stream a thread is working on.
+     * <p>
+     * The factory resolves an optional {@link MultiTenantPersistentStreamIdResolver} from the configuration and
+     * supplies it to the {@link MultiTenantPersistentStreamEventSource}. This allows users to customize the stream
+     * identifier for the resulting persistent stream per tenant. If no {@link MultiTenantPersistentStreamIdResolver} is
+     * configured, the factory falls back to the default {@link MultiTenantPersistentStreamIdResolver#CONFIGURED_NAME}
+     * resolver that returns the configured stream name as is.
      *
      * @param name             the unique stream name on Axon Server
      * @param properties       the persistent stream properties (segment count, sequencing policy, filter, etc.)
@@ -89,7 +95,9 @@ public class MultiTenantPersistentStreamEventSourceFactory implements Persistent
                 schedulerFactory,
                 batchSize,
                 configuration,
-                configuration.getComponent(TenantProvider.class)
+                configuration.getComponent(TenantProvider.class),
+                configuration.getOptionalComponent(MultiTenantPersistentStreamIdResolver.class)
+                             .orElse(MultiTenantPersistentStreamIdResolver.CONFIGURED_NAME)
         );
     }
 

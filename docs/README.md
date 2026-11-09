@@ -44,8 +44,9 @@ The recommended workflow to work across bot repositories is to
 
 and then editing and commiting the Axon Framework documentation files from
 `docs/_playbook/localLinks/AxonFramework/docs` to have proper linking support for `xref` and `include` in most AsciiDoc
-aware editors. When building the docs be sure to use the `playbook-dev.yaml` instead of `playbook.yaml` (which defaults
-to the current main branch of the Axon Framework reference).
+aware editors. When building the docs be sure to use the `playbook-dev.yaml` instead of `playbook.yaml` (which builds
+against the remote branch of the Axon Framework reference matching this branch, see
+[Versions and release branches](#versions-and-release-branches)).
 
 ## Contributing to the docs
 
@@ -77,6 +78,55 @@ the Antora build file in the [`./_playbook`](_playbook) folder following these s
    the configuration in the `antory.yml`. The rendered pages are available inside a subdirectory of the component's
    version directory, named after the component's version (depending on the git branch you have checked out).
 4. rebuilds will trigger automatically when changing documentation files
+
+## Versions and release branches
+
+The documentation in this repository and
+[extension-data-protection](https://github.com/AxonIQ/extension-data-protection) follows the versioning of the
+[Axon Framework repository](https://github.com/AxonIQ/AxonFramework). The `5.4` version of the reference guide, for
+example, is built from these branches:
+
+| Repository                 | Branch                         |
+|----------------------------|--------------------------------|
+| AxonFramework              | `axon-5.4.x`                   |
+| extension-data-protection  | `axoniq-data-protection-5.4.x` |
+| AxoniqFramework (this one) | `axoniq-5.4.x`                 |
+
+The `main` branches of all three repositories build the `development` version.
+
+To build the right combination from any branch, the docs configuration differs between `main` and a release branch:
+
+- `antora.yml` of each docs component maps `axoniq-<major>.<minor>*` branches to `<major>.<minor>` and falls back
+  to the `'*'` entry for all other branch names. On `main` the fallback is `development`, on a release branch it is the
+  release's minor version. Feature branches (including backports) and pull request builds therefore build the version
+  of the branch they are based on.
+- `_playbook/playbook.yaml` builds against the `main` branches of the other repositories on `main`, and against the
+  matching release branches on a release branch.
+- `_playbook/localLinks/update.sh` checks out the same branches of the other repositories for local builds with
+  `playbook-dev.yaml`.
+
+Feature branches inherit this configuration from the branch they are based on, so nothing needs to be adjusted when
+working on new documentation or backporting it. Avoid carrying these files between `main` and release branches when
+backporting.
+
+### Cutting a minor release branch
+
+When a new minor release branch (e.g. `axoniq-5.5.x`) is cut from `main`, run the following once on that new branch
+and commit the result there:
+
+```bash
+docs/_playbook/set-docs-version.sh 5.5
+```
+
+The script:
+
+- sets the AxonFramework and extension-data-protection content sources in `_playbook/playbook.yaml` to `axon-5.5.x`
+  and `axoniq-data-protection-5.5.x`
+- sets the same branches in `_playbook/localLinks/update.sh`
+- sets the `'*'` version fallback of every `antora.yml` in `docs/` to `'5.5'`
+
+Never run it on `main`, which keeps building `development` against the `main` branches of the other repositories.
+Patch releases on an existing release branch don't need any changes.
 
 ## Publishing documentation
 

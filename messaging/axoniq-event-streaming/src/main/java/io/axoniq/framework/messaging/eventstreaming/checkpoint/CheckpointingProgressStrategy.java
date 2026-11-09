@@ -114,8 +114,9 @@ public final class CheckpointingProgressStrategy implements SegmentProgressStrat
      *     checkpoint. Without a request, it stores the consumed position when the stored token already covers every
      *     event handed to the participants, so the segment only moved past skipped events.</li>
      * </ul>
-     * The participants are {@link #reconcile(Map) reconciled} to a single agreed position before storing, so no
-     * participant is left ahead of the stored token. A store is skipped when nothing is to be checkpointed.
+     * A requested or batch-end position is stored only after the participants are {@link #reconcile(Map) reconciled}
+     * to a single agreed position, so no participant is left ahead of the stored token. The skipped-events position
+     * needs no participant, so it is stored directly. A store is skipped when nothing is to be checkpointed.
      */
     @Override
     public CompletableFuture<Void> onBatchCommit(ProcessingContext processingContext) {

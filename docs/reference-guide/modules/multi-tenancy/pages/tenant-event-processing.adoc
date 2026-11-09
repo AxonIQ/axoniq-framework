@@ -119,7 +119,9 @@ This is the simplest way to give each tenant its own projection database: Axon S
 === One stream per tenant
 
 Each tenant is an Axon Server context, and a persistent stream lives in one context.
-A configured stream therefore becomes one stream per tenant, all carrying the name you configured, each consumed independently and all feeding the same event processor.
+A configured stream therefore becomes one stream per tenant, each consumed independently and all feeding the same event processor.
+By default, every tenant's stream is identified by the name you configured.
+The section on <<naming-tenant-streams,customizing stream identifiers per tenant>> shows how to customize the stream identifiers, for example to follow a certain tenant stream naming scheme already present.
 
 Every event arrives with the tenant of the stream it came from available on the processing context, so a handler writes to the projection of the tenant the event belongs to.
 That tenant is determined by which tenant's stream delivered the event, not by the event's metadata, so no tenant information has to be present in the stored event.
@@ -138,6 +140,58 @@ axon.axonserver.persistent-streams.my-stream.batch-size=10
 axon.eventhandling.processors.MyProjection.mode=subscribing
 axon.eventhandling.processors.MyProjection.source=my-stream
 ----
+
+[#naming-tenant-streams]
+=== Customizing stream identifiers per tenant
+
+Axon Server identifies a persistent stream by its stream identifier.
+By default, each tenant's stream uses the configured name as its stream identifier.
+This works because every tenant has its own context on Axon Server.
+
+In some scenarios you might want to customize the stream identifier per tenant, for example to follow a given naming scheme for tenant streams that include the tenant identifier.
+To customize the stream identifier per tenant, you can register a `MultiTenantPersistentStreamIdResolver`.
+It receives the configured stream name and the `TenantDescriptor` of the tenant whose stream is opened, and returns the stream identifier to use:
+
+[tabs]
+====
+Declarative - Configuration API::
++
+--
+Register the resolver as a component.
+The `MultiTenantPersistentStreamEventSourceFactory` that builds each multi-tenant source picks it up from the configuration:
+
+[source,java]
+----
+include::example$multitenancy/tenanteventprocessing/DeclarativeStreamIdConfiguration.java[tag=stream-id-resolver,indent=0]
+----
+
+<1> Opens the stream configured as `my-stream` as `my-stream-tenant-a` in the context of `tenant-a`.
+--
+Autodetected - Spring Boot::
++
+--
+Expose the resolver as a bean.
+The streams configured under `axon.axonserver.persistent-streams` stay as they are:
+
+[source,java]
+----
+include::example$multitenancy/tenanteventprocessing/SpringStreamIdConfiguration.java[tag=stream-id-resolver,indent=0]
+----
+
+<1> Opens the stream configured as `my-stream` as `my-stream-tenant-a` in the context of `tenant-a`.
+--
+====
+
+Note that only the stream identifier is resolved by this mechanism.
+The logical name Axon Server shows for the stream keeps using the configured name.
+
+[IMPORTANT]
+====
+The stream identifier is the stream's identity on Axon Server, so the resolver *MUST* return the same id for a tenant every time, including across restarts.
+Returning a different id opens a new stream, which replays that tenant's events from the stream's initial position.
+
+Ids must also stay distinct per configured stream within one tenant, since two streams resolving to the same id in one context join the same server-side stream.
+====
 
 === Thread usage
 

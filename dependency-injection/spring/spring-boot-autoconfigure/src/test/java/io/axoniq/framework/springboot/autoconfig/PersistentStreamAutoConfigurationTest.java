@@ -160,7 +160,7 @@ class PersistentStreamAutoConfigurationTest {
                 PersistentStreamEventSource source = context.getBean("myStream", PersistentStreamEventSource.class);
                 assertThat(source)
                         .isNotNull()
-                        .hasFieldOrPropertyWithValue("name", "stream1")
+                        .hasFieldOrPropertyWithValue("streamId", "stream1")
                         .extracting("persistentStreamConnection", as(InstanceOfAssertFactories.type(
                                 PersistentStreamConnection.class)))
                         .extracting("persistentStreamProperties",
@@ -221,7 +221,7 @@ class PersistentStreamAutoConfigurationTest {
                         // then
                         assertThat(eventSourceOf(processor))
                                 .isInstanceOf(PersistentStreamEventSource.class)
-                                .hasFieldOrPropertyWithValue("name", "test-processor-stream");
+                                .hasFieldOrPropertyWithValue("streamId", "test-processor-stream");
                     });
         }
     }

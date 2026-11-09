@@ -48,11 +48,25 @@ CREATE INDEX IF NOT EXISTS tags_global_index_idx
 
 CREATE UNIQUE INDEX IF NOT EXISTS tags_type_unique
   ON tags (global_index) WHERE key = '__T';
+
+CREATE TABLE IF NOT EXISTS snapshots (
+  qualified_name VARCHAR     NOT NULL,
+  identifier     VARCHAR     NOT NULL,
+  position_type  VARCHAR     NOT NULL,
+  position_value INT8        NOT NULL,
+  version        VARCHAR     NOT NULL,
+  payload        BYTEA       NOT NULL,
+  timestamp      TIMESTAMPTZ NOT NULL,
+  metadata       JSON        NOT NULL,
+  PRIMARY KEY (qualified_name, identifier, version)
+);
 ----
 
 The `events` table is the main event log; `payload` holds the serialized event as bytes, `metadata` is stored as JSON, and `type`/`type_version` together form the event's message type.
 The `tags` table associates DCB tags with events.
 The `consistency_tags` table is a bounded conflict-detection structure used when appending events with consistency requirements; it does not grow with event volume.
+The `snapshots` table holds entity snapshots.
+It is part of the schema even when your application does not use snapshots.
 
 [NOTE]
 .Table and sequence names are fixed

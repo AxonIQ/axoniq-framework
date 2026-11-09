@@ -44,9 +44,8 @@ import java.util.function.Function;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
 
 /**
  * Test class validating the {@link MultiTenantPersistentStreamEventSourceFactory}.
@@ -189,6 +188,38 @@ class MultiTenantPersistentStreamEventSourceFactoryTest {
             // then
             assertThat(logAppender.getEvents())
                     .noneMatch(event -> event.getLevel() == Level.WARN);
+        }
+    }
+
+    @Nested
+    class StreamIdResolverLookup {
+
+        @Test
+        void usesTheStreamIdResolverRegisteredInTheConfiguration() {
+            // given
+            tenantProvider.addTenant(TENANT_A);
+            Configuration configuration = configuration();
+            when(configuration.getOptionalComponent(MultiTenantPersistentStreamIdResolver.class))
+                    .thenReturn(Optional.of((name, tenant) -> name + "@" + tenant.tenantId()));
+
+            // when
+            testSubject.build(STREAM_NAME, properties(STREAM_NAME), schedulerFactory, 100, configuration)
+                       .subscribe(noOpConsumer());
+
+            // then
+            assertThat(streams.openedStreamIds("tenant-a")).containsExactly(STREAM_NAME + "@tenant-a");
+        }
+
+        @Test
+        void fallsBackToTheConfiguredNameWithoutARegisteredResolver() {
+            // given
+            tenantProvider.addTenant(TENANT_A);
+
+            // when
+            build(STREAM_NAME).subscribe(noOpConsumer());
+
+            // then
+            assertThat(streams.openedStreamIds("tenant-a")).containsExactly(STREAM_NAME);
         }
     }
 

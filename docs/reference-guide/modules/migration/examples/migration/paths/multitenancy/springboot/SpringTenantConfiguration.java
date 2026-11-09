@@ -13,6 +13,7 @@ import io.axoniq.framework.messaging.multitenancy.api.TenantComponentProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantConnectPredicate;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantResolver;
+import io.axoniq.framework.messaging.multitenancy.axonserver.eventstreaming.MultiTenantPersistentStreamIdResolver;
 import migration.paths.multitenancy.CourseStatisticsStore;
 import migration.paths.multitenancy.JdbcCourseStatisticsStore;
 import org.springframework.context.annotation.Bean;
@@ -49,6 +50,13 @@ public class SpringTenantConfiguration {
                 tenant -> new JdbcCourseStatisticsStore(dataSourceFor(tenant)));
     }
     // end::register-tenant-scoped-store[]
+
+    // tag::extension-stream-ids[]
+    @Bean
+    public MultiTenantPersistentStreamIdResolver extensionStreamIds() {
+        return (name, tenant) -> name + "@" + tenant.tenantId();                     // <1>
+    }
+    // end::extension-stream-ids[]
 
     private DataSource dataSourceFor(TenantDescriptor tenant) {
         return null; // Elided: application-specific lookup of the tenant's datasource.
