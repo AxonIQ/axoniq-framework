@@ -30,6 +30,8 @@ import org.axonframework.messaging.core.unitofwork.StubProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
+import org.axonframework.messaging.eventhandling.processing.streaming.token.GlobalSequenceTrackingToken;
+import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.junit.jupiter.api.*;
 
 import java.time.Clock;
@@ -37,7 +39,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
 import static io.axoniq.framework.workflow.configuration.WorkflowConfigurationDefaults.WORKFLOW_ENGINE_EXECUTOR;
@@ -181,6 +185,31 @@ class WorkflowEngineClaimGapWakeTest {
                 .isTrue();
     }
 
+    @Test
+    void theEventEndingCatchUpRequestsACheckpointOnceTheRestoredInstanceRuns() {
+        // given: the segment is claimed behind the startup head, so its restored instance waits for catch-up, and a
+        // backlog event queues work on that waiting instance
+        var owner = owningSegment(RESIDENT_ID);
+        List<TrackingToken> requested = new CopyOnWriteArrayList<>();
+        workflowEngine.start(new GlobalSequenceTrackingToken(2));
+        checkpointingSupport.onSegmentClaimed(owner, new GlobalSequenceTrackingToken(0), requested::add);
+        workflowEngine.restoreWorkflowsFor(owner,
+                                           new GlobalSequenceTrackingToken(0),
+                                           sourcingContext(),
+                                           new StubProcessingContext())
+                      .orTimeout(5, TimeUnit.SECONDS)
+                      .join();
+        workflowEngine.handle(resumeEvent(), deliveryContext(owner, new GlobalSequenceTrackingToken(1)));
+        assertThat(restored.isRunning()).as("the instance waits for catch-up").isFalse();
+
+        // when: the event at the startup head ends catch-up
+        workflowEngine.handle(resumeEvent(), deliveryContext(owner, new GlobalSequenceTrackingToken(2)));
+
+        // then: the instance runs, so the checkpoint request at that event is no longer held back by it
+        assertThat(restored.isRunning()).isTrue();
+        assertThat(requested).containsExactly(new GlobalSequenceTrackingToken(2));
+    }
+
     /**
      * Stands in for the restored body arriving back at its {@code awaitEvent} call.
      */
@@ -250,6 +279,12 @@ class WorkflowEngineClaimGapWakeTest {
     private ProcessingContext deliveryContext(Segment segment) {
         var context = new StubProcessingContext();
         context.putResource(Segment.RESOURCE_KEY, segment);
+        return context;
+    }
+
+    private ProcessingContext deliveryContext(Segment segment, TrackingToken token) {
+        var context = deliveryContext(segment);
+        context.putResource(TrackingToken.RESOURCE_KEY, token);
         return context;
     }
 
