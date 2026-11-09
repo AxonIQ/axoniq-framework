@@ -58,8 +58,9 @@ class MongoSagaStoreAf4CompatibilityIT {
     private static final String SAGA_2 = "saga-2";
     private static final String SAGA_WITH_XSTREAM_SERIALIZATION = "saga-xstream-serialized";
 
+    // MongoDB 8.x refuses to start on the Ubuntu 7.0 kernel of the CI runner (SERVER-121912, SERVER-131779).
     @Container
-    private static final MongoDBContainer MONGO_CONTAINER = new MongoDBContainer("mongo:8.0");
+    private static final MongoDBContainer MONGO_CONTAINER = new MongoDBContainer("mongo:7.0");
 
     private static MongoClient mongoClient;
 

@@ -49,8 +49,9 @@ class MongoSagaStoreIT extends SagaStoreTestSuite {
 
     private static final AssociationValue ORDER_1 = new AssociationValue("orderId", "order-1");
 
+    // MongoDB 8.x refuses to start on the Ubuntu 7.0 kernel of the CI runner (SERVER-121912, SERVER-131779).
     @Container
-    private static final MongoDBContainer MONGO_CONTAINER = new MongoDBContainer("mongo:8.0");
+    private static final MongoDBContainer MONGO_CONTAINER = new MongoDBContainer("mongo:7.0");
 
     private static MongoClient mongoClient;
 

@@ -29,8 +29,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 @Testcontainers
 class DefaultMongoTemplateIT {
 
+    // MongoDB 8.x refuses to start on the Ubuntu 7.0 kernel of the CI runner (SERVER-121912, SERVER-131779).
     @Container
-    private static final MongoDBContainer MONGO_CONTAINER = new MongoDBContainer("mongo:8.0");
+    private static final MongoDBContainer MONGO_CONTAINER = new MongoDBContainer("mongo:7.0");
 
     private static MongoClient mongoClient;
 
