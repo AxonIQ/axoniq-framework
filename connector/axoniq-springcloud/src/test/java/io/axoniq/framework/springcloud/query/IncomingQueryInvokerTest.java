@@ -22,6 +22,9 @@ import org.axonframework.messaging.queryhandling.QueryResponseMessage;
 import org.axonframework.messaging.queryhandling.SubscriptionQueryUpdateMessage;
 import org.junit.jupiter.api.*;
 
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -33,6 +36,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.awaitility.Awaitility.await;
 
 /**
  * Tests how {@link IncomingQueryInvoker} answers a query from another member, and how it reports what it cannot
@@ -178,9 +182,11 @@ class IncomingQueryInvokerTest {
             responses.seal();
 
             // then
-            assertThat(sink.responses()).extracting(QueryDispatchResponse::identifier)
-                                        .containsExactly("response-1", "response-2");
-            assertThat(sink.completed()).isTrue();
+            await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
+                assertThat(sink.responses()).extracting(QueryDispatchResponse::identifier)
+                                            .containsExactly("response-1", "response-2");
+                assertThat(sink.completed()).isTrue();
+            });
         }
 
         @Test
@@ -196,8 +202,7 @@ class IncomingQueryInvokerTest {
                 }
             });
             int iterations = 20_000;
-            int written = 0;
-            int completed = 0;
+            List<RecordingQueryResponseSink> sinks = new ArrayList<>();
 
             try (ExecutorService handlerThread = Executors.newSingleThreadExecutor()) {
                 for (int i = 0; i < iterations; i++) {
@@ -217,14 +222,13 @@ class IncomingQueryInvokerTest {
                     testSubject.handle(request(), writing);
                     answer.get(5, TimeUnit.SECONDS);
 
-                    written += writing.responses().size();
-                    completed += writing.completed() ? 1 : 0;
+                    sinks.add(writing);
                 }
             }
 
-            // then
-            assertThat(written).isEqualTo(iterations);
-            assertThat(completed).isEqualTo(iterations);
+            // then every answer was written, which happens on threads of the invoker, so it is waited for
+            await().atMost(Duration.ofSeconds(30)).until(() -> sinks.stream().allMatch(RecordingQueryResponseSink::completed));
+            assertThat(sinks.stream().mapToInt(writing -> writing.responses().size()).sum()).isEqualTo(iterations);
         }
     }
 
@@ -263,13 +267,17 @@ class IncomingQueryInvokerTest {
             // given
             testSubject.handle(request(), sink);
             responses.offer(response("response-1"), Context.empty());
+            await().atMost(Duration.ofSeconds(5)).until(() -> sink.responses().size() == 1);
             sink.becomeUnavailable();
 
             // when a response arrives after the member stopped reading
             responses.offer(response("response-2"), Context.empty());
 
-            // then
-            assertThat(sink.responses()).extracting(QueryDispatchResponse::identifier).containsExactly("response-1");
+            // then nothing further is written, however long it is given
+            await().during(Duration.ofMillis(200)).atMost(Duration.ofSeconds(2)).untilAsserted(
+                    () -> assertThat(sink.responses()).extracting(QueryDispatchResponse::identifier)
+                                                      .containsExactly("response-1")
+            );
         }
 
         @Test
@@ -291,6 +299,7 @@ class IncomingQueryInvokerTest {
             testSubject.handle(request(), sink);
             responses.offer(response("response-1"), Context.empty());
             responses.seal();
+            await().atMost(Duration.ofSeconds(5)).until(sink::completed);
 
             // when the container reports completion, as it does for every stream it closes
             sink.becomeUnavailable();

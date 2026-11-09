@@ -11,6 +11,7 @@ package io.axoniq.framework.springcloud.query;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.json.JsonMapper;
+import io.axoniq.framework.messaging.distributed.CallbackHandOff;
 import io.axoniq.framework.springcloud.query.RemoteQueryDispatcher.SubscriptionListener;
 import io.axoniq.framework.springcloud.routing.Member;
 import org.axonframework.common.ExceptionUtils;
@@ -46,6 +47,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.Executors;
@@ -603,13 +605,16 @@ class HttpRemoteQueryDispatcherTest {
         @Test
         void carriesOnWhenTheConsumerKeepsUp() throws IOException {
             // given the same small buffer, and a consumer draining as responses arrive
-            List<QueryResponseMessage> received = new ArrayList<>();
+            List<QueryResponseMessage> received = new CopyOnWriteArrayList<>();
             MessageStream<QueryResponseMessage> responses = dispatcher(2).dispatch(MEMBER, query());
-            responses.setCallback(() -> drainInto(responses, received));
+            responses.setCallback(CallbackHandOff.handOff(() -> drainInto(responses, received)));
 
-            // when more responses than the buffer holds are streamed
+            // when more responses than the buffer holds are streamed, each one once the consumer has taken the last
             for (int i = 1; i <= 20; i++) {
                 body.write(responseEvent("response-" + i));
+
+                int expected = i;
+                awaitUntil(() -> received.size() == expected);
             }
             body.end();
 

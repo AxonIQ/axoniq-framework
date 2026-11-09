@@ -29,6 +29,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -40,6 +41,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.awaitility.Awaitility.await;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 
 /**
@@ -231,9 +233,11 @@ class SseQueryResponseSinkFramingTest {
             responses.seal();
 
             // then each arrival was framed on its own rather than batched into one event at the end
-            List<ServerSentEvent> wire = wireOf(result);
-            assertThat(wire).hasSize(3);
-            assertThat(wire).extracting(ServerSentEvent::event).containsOnly(QueryConverter.RESPONSE_EVENT);
+            await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
+                List<ServerSentEvent> wire = wireOf(result);
+                assertThat(wire).hasSize(3);
+                assertThat(wire).extracting(ServerSentEvent::event).containsOnly(QueryConverter.RESPONSE_EVENT);
+            });
         }
     }
 
@@ -257,9 +261,11 @@ class SseQueryResponseSinkFramingTest {
             responses.sealExceptionally(new QueryExecutionException("The course store is unavailable.", null));
 
             // then the response and the failure are separate events, told apart by their type
-            List<ServerSentEvent> wire = wireOf(result);
-            assertThat(wire).extracting(ServerSentEvent::event)
-                            .containsExactly(QueryConverter.RESPONSE_EVENT, QueryConverter.ERROR_EVENT);
+            await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
+                List<ServerSentEvent> wire = wireOf(result);
+                assertThat(wire).extracting(ServerSentEvent::event)
+                                .containsExactly(QueryConverter.RESPONSE_EVENT, QueryConverter.ERROR_EVENT);
+            });
         }
 
         @Test

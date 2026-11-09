@@ -53,6 +53,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.locks.LockSupport;
+import java.util.function.Predicate;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -117,6 +119,26 @@ class SpringCloudQueryBusConnectorTest {
             stream.next().ifPresent(entry -> collected.add(entry.message()));
         }
         return collected;
+    }
+
+    /**
+     * Drains the stream until what it has carried so far satisfies {@code done}, or it takes too long. The connector
+     * moves the updates of the members onto the stream on a thread of its own, so they arrive some time after the
+     * member emitted them.
+     */
+    private static <M extends Message> List<M> drainUntil(MessageStream<M> stream, Predicate<List<M>> done) {
+        List<M> collected = new ArrayList<>();
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+
+        while (true) {
+            collected.addAll(drain(stream));
+
+            if (done.test(collected) || System.nanoTime() > deadline) {
+                return collected;
+            }
+
+            LockSupport.parkNanos(50_000);
+        }
     }
 
     private static SubscriptionQueryUpdateMessage update(String identifier) {
@@ -502,9 +524,11 @@ class SpringCloudQueryBusConnectorTest {
                                 new QueryExecutionException("node-c is unreachable.", null));
 
                 // then the subscription could never be complete, so no initial result is asked for
-                drain(responses);
+                await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
+                    drain(responses);
+                    assertThat(responses.error()).isPresent();
+                });
                 assertThat(dispatcher.dispatches()).isEmpty();
-                assertThat(responses.error()).isPresent();
                 assertThat(responses.error().orElseThrow()).hasMessageContaining("node-c is unreachable.");
             }
 
@@ -523,7 +547,7 @@ class SpringCloudQueryBusConnectorTest {
                 received.addAll(drain(responses));
                 initialResult.offer(response("initial-1"), Context.empty());
                 initialResult.seal();
-                received.addAll(drain(responses));
+                received.addAll(drainUntil(responses, drained -> received.size() + drained.size() >= 2));
 
                 // then the update is not lost, and arrives after the initial result it may or may not be part of
                 assertThat(received).extracting(QueryResponseMessage::identifier)
@@ -545,9 +569,13 @@ class SpringCloudQueryBusConnectorTest {
 
                 // then no member left to register can emit an update that matters, so the initial result is the
                 // final state, and the subscription completes after it rather than failing
-                assertThat(drain(responses)).extracting(QueryResponseMessage::identifier)
-                                            .containsExactly("initial-1");
-                assertThat(responses.isCompleted()).isTrue();
+                List<QueryResponseMessage> received = new ArrayList<>();
+
+                await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
+                    received.addAll(drain(responses));
+                    assertThat(responses.isCompleted()).isTrue();
+                });
+                assertThat(received).extracting(QueryResponseMessage::identifier).containsExactly("initial-1");
                 assertThat(responses.error()).isEmpty();
             }
         }
@@ -578,7 +606,7 @@ class SpringCloudQueryBusConnectorTest {
             MessageStream<QueryResponseMessage> responses = testSubject.subscriptionQuery(query(), null, 16);
             List<QueryResponseMessage> received = new ArrayList<>(drain(responses));
             dispatcher.emit(remoteMember(), response("update-1"));
-            received.addAll(drain(responses));
+            received.addAll(drainUntil(responses, updates -> !updates.isEmpty()));
 
             // then
             assertThat(received).extracting(QueryResponseMessage::identifier)
@@ -597,8 +625,9 @@ class SpringCloudQueryBusConnectorTest {
             dispatcher.emit(otherRemoteMember(), response("update-from-c"));
 
             // then a subscriber sees one stream of updates however many members produce them
-            assertThat(drain(responses)).extracting(QueryResponseMessage::identifier)
-                                        .containsExactlyInAnyOrder("update-from-b", "update-from-c");
+            assertThat(drainUntil(responses, updates -> updates.size() >= 2))
+                    .extracting(QueryResponseMessage::identifier)
+                    .containsExactlyInAnyOrder("update-from-b", "update-from-c");
         }
 
         @Test
@@ -631,7 +660,9 @@ class SpringCloudQueryBusConnectorTest {
                     MessageStream<QueryResponseMessage> responses = connector.subscriptionQuery(query(), null, 16);
                     emitting.get(5, TimeUnit.SECONDS);
 
-                    if (drain(responses).stream().anyMatch(update -> update.identifier().equals("update-1"))) {
+                    if (drainUntil(responses, updates -> updates.stream().anyMatch(
+                            update -> update.identifier().equals("update-1")
+                    )).stream().anyMatch(update -> update.identifier().equals("update-1"))) {
                         carried++;
                     }
                     responses.close();
@@ -745,8 +776,10 @@ class SpringCloudQueryBusConnectorTest {
             dispatcher.fail(remoteMember(), new QueryExecutionException("The course store is unavailable.", null));
 
             // then
-            drain(responses);
-            assertThat(responses.error()).isPresent();
+            await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
+                drain(responses);
+                assertThat(responses.error()).isPresent();
+            });
             assertThat(responses.error().orElseThrow()).hasMessageContaining("The course store is unavailable.");
         }
 
@@ -759,10 +792,12 @@ class SpringCloudQueryBusConnectorTest {
 
             // when one of them fails
             dispatcher.fail(remoteMember(), new QueryExecutionException("The course store is unavailable.", null));
-            drain(responses);
 
             // then the member still standing is not left emitting into a subscription that has already failed
-            assertThat(dispatcher.subscriptions()).allMatch(RecordingRemoteQueryDispatcher.Subscription::released);
+            await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
+                drain(responses);
+                assertThat(dispatcher.subscriptions()).allMatch(RecordingRemoteQueryDispatcher.Subscription::released);
+            });
         }
 
         @Test
@@ -774,13 +809,16 @@ class SpringCloudQueryBusConnectorTest {
 
             // when one of them leaves the cluster
             dispatcher.leave(remoteMember());
-            drain(responses);
 
             // then the other still has updates to give
-            assertThat(responses.isCompleted()).isFalse();
+            await().during(Duration.ofMillis(200)).atMost(Duration.ofSeconds(2)).untilAsserted(() -> {
+                drain(responses);
+                assertThat(responses.isCompleted()).isFalse();
+            });
             dispatcher.emit(otherRemoteMember(), response("update-from-c"));
-            assertThat(drain(responses)).extracting(QueryResponseMessage::identifier)
-                                        .containsExactly("update-from-c");
+            assertThat(drainUntil(responses, updates -> !updates.isEmpty()))
+                    .extracting(QueryResponseMessage::identifier)
+                    .containsExactly("update-from-c");
         }
 
         @Test
@@ -792,10 +830,12 @@ class SpringCloudQueryBusConnectorTest {
 
             // when one of them reports the subscription over, which says there will never be another update
             dispatcher.completeSubscription(remoteMember());
-            drain(responses);
 
             // then waiting on the other members would be waiting for updates that are never coming
-            assertThat(responses.isCompleted()).isTrue();
+            await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
+                drain(responses);
+                assertThat(responses.isCompleted()).isTrue();
+            });
             assertThat(responses.error()).isEmpty();
         }
 
@@ -809,10 +849,12 @@ class SpringCloudQueryBusConnectorTest {
             // when
             dispatcher.leave(remoteMember());
             dispatcher.leave(otherRemoteMember());
-            drain(responses);
 
             // then nobody said the subscription is over; it only has nobody left to emit its updates
-            assertThat(responses.error()).get().isInstanceOf(SubscriptionQueryMembersChangedException.class);
+            await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
+                drain(responses);
+                assertThat(responses.error()).get().isInstanceOf(SubscriptionQueryMembersChangedException.class);
+            });
         }
 
         @Test
@@ -827,7 +869,9 @@ class SpringCloudQueryBusConnectorTest {
 
             // then a local subscription carries updates just as a remote one does
             assertThat(handler.subscriptions()).hasSize(1);
-            assertThat(drain(responses)).extracting(QueryResponseMessage::identifier).containsExactly("update-1");
+            assertThat(drainUntil(responses, updates -> !updates.isEmpty()))
+                    .extracting(QueryResponseMessage::identifier)
+                    .containsExactly("update-1");
         }
 
         @Test

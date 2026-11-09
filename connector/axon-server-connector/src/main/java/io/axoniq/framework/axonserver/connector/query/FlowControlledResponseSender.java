@@ -11,6 +11,7 @@ package io.axoniq.framework.axonserver.connector.query;
 import io.axoniq.axonserver.connector.FlowControl;
 import io.axoniq.axonserver.connector.ReplyChannel;
 import io.axoniq.axonserver.grpc.query.QueryResponse;
+import io.axoniq.framework.messaging.distributed.CallbackHandOff;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.conversion.Converter;
 import org.axonframework.messaging.core.MessageStream;
@@ -73,7 +74,8 @@ class FlowControlledResponseSender implements FlowControl {
         if (requests.getAndUpdate(current ->
                                           current > Long.MAX_VALUE - requested ? Long.MAX_VALUE :
                                                   current + requested) == 0) {
-            upstream.setCallback(this::responseSendingLoop);
+            // The stream calls back on the thread of whoever produced a response, which may not read from it, or block
+            upstream.setCallback(CallbackHandOff.handOff(this::responseSendingLoop));
         }
         responseSendingLoop();
     }

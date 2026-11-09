@@ -8,6 +8,7 @@
 
 package io.axoniq.framework.springcloud.query;
 
+import io.axoniq.framework.messaging.distributed.CallbackHandOff;
 import io.axoniq.framework.messaging.queryhandling.distributed.QueryBusConnector;
 import io.axoniq.framework.messaging.queryhandling.distributed.QueryBusConnector.Handler;
 import org.axonframework.common.FutureUtils;
@@ -344,7 +345,8 @@ public class IncomingQueryInvoker {
 
         private void start() {
             sink.onUnavailable(this::cancel);
-            responses.setCallback(this::drain);
+            // The stream calls back on the thread of whoever produced a response, which may not read from it, or block
+            responses.setCallback(CallbackHandOff.handOff(this::drain));
             drain();
         }
 
@@ -380,8 +382,8 @@ public class IncomingQueryInvoker {
                     sink.response(QueryConverter.convertResponseMessage(next.get().message(), requestIdentifier));
                     hasNext = responses.hasNextAvailable();
                 }
-                // Reading a stream that has just ended reports its completion, which drains it again from inside
-                // this drain. That nested drain already finished the answer, so finishing it here would do so twice.
+                // Reading a stream that has just ended reports its completion, which schedules another drain. That one
+                // waits for this one and then finds the answer finished, so the answer is finished only once.
                 if (!hasNext && !terminated && responses.isCompleted()) {
                     responses.error().ifPresentOrElse(this::fail, this::finish);
                 }
