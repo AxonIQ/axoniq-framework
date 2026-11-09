@@ -70,7 +70,7 @@
         <micrometer-tracing.version>1.7.2</micrometer-tracing.version>
         <context-propagation.version>1.2.1</context-propagation.version>
         <!-- Other -->
-        <byte-buddy.version>1.18.16</byte-buddy.version>
+        <byte-buddy.version>1.18.17</byte-buddy.version>
         <commons-io.version>2.22.0</commons-io.version>
         <findbugs-jsr305.version>3.0.2</findbugs-jsr305.version>
         <javassist.version>3.33.0-GA</javassist.version>
@@ -100,11 +100,11 @@
         <mockito.version>5.24.0</mockito.version>
         <testcontainers.version>2.0.5</testcontainers.version>
         <!-- Validation -->
-        <hibernate-validator.version>9.1.5.Final</hibernate-validator.version>
+        <hibernate-validator.version>9.1.6.Final</hibernate-validator.version>
 
         <!-- Maven plugins -->
         <checkstyle-maven-plugin.version>3.6.0</checkstyle-maven-plugin.version>
-        <checkstyle.version>14.3.0</checkstyle.version>
+        <checkstyle.version>14.4.0</checkstyle.version>
     </properties>
 
     <dependencyManagement>
