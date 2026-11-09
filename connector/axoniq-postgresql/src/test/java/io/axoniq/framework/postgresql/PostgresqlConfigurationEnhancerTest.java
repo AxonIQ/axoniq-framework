@@ -102,8 +102,8 @@ class PostgresqlConfigurationEnhancerTest {
 
     @Test
     void enhanceHonorsAPreRegisteredSchemaInitialization() throws SQLException {
-        // given — VALIDATE is pre-registered, and the mocked result set reports an incomplete schema
-        // (its next()/getBoolean(1) default to false), so the engine's construction must fail fast
+        // given — VALIDATE is pre-registered, and the mocked result set reports one schema problem
+        // (a single row naming the offending object), so the engine's construction must fail fast
         // instead of falling back to the enhancer's own CREATE_IF_MISSING default.
         Statement mockedStatement = mock(Statement.class);
         Connection mockedConnection = mock(Connection.class);
@@ -112,8 +112,8 @@ class PostgresqlConfigurationEnhancerTest {
         when(mockedDataSource.getConnection()).thenReturn(mockedConnection);
         when(mockedConnection.createStatement()).thenReturn(mockedStatement);
         when(mockedStatement.executeQuery(anyString())).thenReturn(mockedResultSet);
-        when(mockedResultSet.next()).thenReturn(true);
-        when(mockedResultSet.getBoolean(1)).thenReturn(false);
+        when(mockedResultSet.next()).thenReturn(true, false);
+        when(mockedResultSet.getString(1)).thenReturn("table events");
 
         assertThatThrownBy(() ->
             EventSourcingConfigurer.create()
