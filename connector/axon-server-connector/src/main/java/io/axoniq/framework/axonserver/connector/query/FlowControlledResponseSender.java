@@ -11,12 +11,16 @@ package io.axoniq.framework.axonserver.connector.query;
 import io.axoniq.axonserver.connector.FlowControl;
 import io.axoniq.axonserver.connector.ReplyChannel;
 import io.axoniq.axonserver.grpc.query.QueryResponse;
+import io.axoniq.framework.messaging.distributed.CallbackHandOff;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.conversion.Converter;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.queryhandling.QueryResponseMessage;
 import org.jspecify.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+import java.lang.invoke.MethodHandles;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -31,6 +35,8 @@ import static io.axoniq.framework.axonserver.connector.query.QueryConverter.*;
  */
 @Internal
 class FlowControlledResponseSender implements FlowControl {
+
+    private static final Logger logger = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
 
     private final String clientId;
     private final String queryIdentifier;
@@ -73,7 +79,8 @@ class FlowControlledResponseSender implements FlowControl {
         if (requests.getAndUpdate(current ->
                                           current > Long.MAX_VALUE - requested ? Long.MAX_VALUE :
                                                   current + requested) == 0) {
-            upstream.setCallback(this::responseSendingLoop);
+            // The stream calls back on the thread of whoever produced a response, which may not read from it, or block
+            upstream.setCallback(CallbackHandOff.handOff(this::responseSendingLoop));
         }
         responseSendingLoop();
     }
@@ -123,8 +130,36 @@ class FlowControlledResponseSender implements FlowControl {
                         }
                 );
             }
+        } catch (RuntimeException e) {
+            fail(e);
         } finally {
             sendingGate.set(false);
+        }
+    }
+
+    /*
+     * Ends the query with the given failure, as nothing reads the stream after this, and nobody else would tell
+     * the client: it would wait for the query to time out.
+     */
+    private void fail(RuntimeException failure) {
+        if (closed.getAndSet(true)) {
+            // The terminal response was already being sent when this failed; there is nothing left to tell the client
+            logger.warn("Failed to complete the response to query [{}].", queryIdentifier, failure);
+            return;
+        }
+
+        upstream.close();
+
+        try {
+            downstream.sendLast(buildErrorResponse(clientId, queryIdentifier, failure, converter));
+        } catch (RuntimeException e) {
+            // Most likely the failure's details could not be converted: retry without them
+            try {
+                downstream.sendLast(buildErrorResponse(clientId, queryIdentifier, failure, null));
+            } catch (RuntimeException ex) {
+                ex.addSuppressed(failure);
+                logger.warn("Failed to report a failure to the client for query [{}].", queryIdentifier, ex);
+            }
         }
     }
 
