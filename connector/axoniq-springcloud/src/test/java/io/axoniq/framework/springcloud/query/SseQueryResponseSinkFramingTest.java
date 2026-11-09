@@ -29,6 +29,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -40,6 +41,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.awaitility.Awaitility.await;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 
 /**
@@ -117,6 +119,13 @@ class SseQueryResponseSinkFramingTest {
     /**
      * Reads what went onto the wire the way the member that asked would.
      */
+    // The responses are written on a thread of the invoker, after the request returned
+    private List<ServerSentEvent> wireOf(MvcResult result, int events) throws IOException {
+        await().until(() -> wireOf(result).size() >= events);
+
+        return wireOf(result);
+    }
+
     private List<ServerSentEvent> wireOf(MvcResult result) throws IOException {
         List<ServerSentEvent> events = new ArrayList<>();
         ServerSentEventReader.read(
@@ -141,7 +150,7 @@ class SseQueryResponseSinkFramingTest {
                                                 response("response-3")));
 
             // when
-            List<ServerSentEvent> wire = wireOf(dispatch());
+            List<ServerSentEvent> wire = wireOf(dispatch(), 3);
 
             // then three responses came back as three events, not as one run-together answer
             assertThat(wire).hasSize(3);
@@ -155,7 +164,7 @@ class SseQueryResponseSinkFramingTest {
                                  .answeringWith(response("response-1"), response("response-2")));
 
             // when
-            List<ServerSentEvent> wire = wireOf(dispatch());
+            List<ServerSentEvent> wire = wireOf(dispatch(), 2);
 
             // then each event carries exactly one response, in the order the handler produced them
             List<QueryDispatchResponse> responses = new ArrayList<>();
@@ -173,7 +182,7 @@ class SseQueryResponseSinkFramingTest {
             invoker.bind(new RecordingQueryHandler().answeringWith(response("response-1")));
 
             // when
-            List<ServerSentEvent> wire = wireOf(dispatch());
+            List<ServerSentEvent> wire = wireOf(dispatch(), 1);
 
             // then
             assertThat(wire).hasSize(1);
@@ -200,7 +209,7 @@ class SseQueryResponseSinkFramingTest {
             invoker.bind(new RecordingQueryHandler().answeringWith(response("response-1", metadata)));
 
             // when
-            List<ServerSentEvent> wire = wireOf(dispatch());
+            List<ServerSentEvent> wire = wireOf(dispatch(), 1);
 
             // then the content did not split one response across several events
             assertThat(wire).hasSize(1);
@@ -231,9 +240,11 @@ class SseQueryResponseSinkFramingTest {
             responses.seal();
 
             // then each arrival was framed on its own rather than batched into one event at the end
-            List<ServerSentEvent> wire = wireOf(result);
-            assertThat(wire).hasSize(3);
-            assertThat(wire).extracting(ServerSentEvent::event).containsOnly(QueryConverter.RESPONSE_EVENT);
+            await().untilAsserted(() -> {
+                List<ServerSentEvent> wire = wireOf(result);
+                assertThat(wire).hasSize(3);
+                assertThat(wire).extracting(ServerSentEvent::event).containsOnly(QueryConverter.RESPONSE_EVENT);
+            });
         }
     }
 
@@ -257,9 +268,11 @@ class SseQueryResponseSinkFramingTest {
             responses.sealExceptionally(new QueryExecutionException("The course store is unavailable.", null));
 
             // then the response and the failure are separate events, told apart by their type
-            List<ServerSentEvent> wire = wireOf(result);
-            assertThat(wire).extracting(ServerSentEvent::event)
-                            .containsExactly(QueryConverter.RESPONSE_EVENT, QueryConverter.ERROR_EVENT);
+            await().untilAsserted(() -> {
+                List<ServerSentEvent> wire = wireOf(result);
+                assertThat(wire).extracting(ServerSentEvent::event)
+                                .containsExactly(QueryConverter.RESPONSE_EVENT, QueryConverter.ERROR_EVENT);
+            });
         }
 
         @Test
@@ -268,10 +281,13 @@ class SseQueryResponseSinkFramingTest {
             invoker.bind(new RecordingQueryHandler().answeringWith(response("response-1")));
 
             // when
-            List<ServerSentEvent> wire = wireOf(dispatch());
+            MvcResult result = dispatch();
 
-            // then a stream that ends without an error event is how success is reported
-            assertThat(wire).extracting(ServerSentEvent::event).containsExactly(QueryConverter.RESPONSE_EVENT);
+            // then a stream that ends without an error event is how success is reported, however long it is given
+            await().during(Duration.ofMillis(200)).untilAsserted(
+                    () -> assertThat(wireOf(result)).extracting(ServerSentEvent::event)
+                                                    .containsExactly(QueryConverter.RESPONSE_EVENT)
+            );
         }
 
         @Test
@@ -281,7 +297,7 @@ class SseQueryResponseSinkFramingTest {
                                  .failingWith(new QueryExecutionException("The course store is unavailable.", null)));
 
             // when
-            List<ServerSentEvent> wire = wireOf(dispatch());
+            List<ServerSentEvent> wire = wireOf(dispatch(), 1);
 
             // then
             assertThat(wire).hasSize(1);

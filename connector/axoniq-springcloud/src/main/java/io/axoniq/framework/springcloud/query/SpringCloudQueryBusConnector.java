@@ -8,6 +8,7 @@
 
 package io.axoniq.framework.springcloud.query;
 
+import io.axoniq.framework.messaging.distributed.CallbackHandOff;
 import io.axoniq.framework.messaging.queryhandling.distributed.QueryBusConnector;
 import io.axoniq.framework.springcloud.query.RemoteQueryDispatcher.SubscriptionListener;
 import io.axoniq.framework.springcloud.routing.Member;
@@ -49,6 +50,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * A {@link QueryBusConnector} distributing queries over the members a Spring Cloud discovery implementation reports.
@@ -212,29 +214,31 @@ public class SpringCloudQueryBusConnector implements QueryBusConnector {
         private void add(Member member, MessageStream<QueryResponseMessage> updates) {
             Source source = new Source(member, updates);
             sources.add(source);
-            updates.setCallback(() -> drain(source));
-            drain(source);
+            // The stream calls back on the thread of whoever produced an update, which may not read from it, or block.
+            // It also calls back at once when it has an update already, or has ended, so nothing is drained here.
+            updates.setCallback(CallbackHandOff.handOff(() -> drain(source)));
         }
 
         /**
          * Moves what the given {@code source} has available onto the merged stream.
          * <p>
-         * Synchronised on the source, because a stream reports availability on whichever thread produced the update
-         * and two of those draining the same source would take entries out from under each other.
+         * Serialised per source by its lock, because a signal arriving while a drain runs schedules the next one, and
+         * two of them draining the same source would take entries out from under each other. It is a lock as a virtual
+         * thread that waits for a monitor holds on to its carrier thread on JDK 21.
          */
         private void drain(Source source) {
-            synchronized (source) {
+            source.lock.lock();
+
+            try {
                 if (source.counted) {
                     return;
                 }
                 try {
-                    // Asked once per decision: a second ask can take an update that arrived in between, swallowing
-                    // the notification that would have drained it, and leave it stranded.
-                    boolean hasNext = source.stream.hasNextAvailable();
-                    while (hasNext) {
+                    // Reads until the stream has nothing available: an update it reported and that is left unread is
+                    // not announced by another callback.
+                    while (source.stream.hasNextAvailable()) {
                         Optional<MessageStream.Entry<QueryResponseMessage>> next = source.stream.next();
                         if (next.isEmpty()) {
-                            hasNext = false;
                             break;
                         }
                         if (!merged.offer(next.get().message(), Context.empty())) {
@@ -245,9 +249,8 @@ public class SpringCloudQueryBusConnector implements QueryBusConnector {
                             )));
                             return;
                         }
-                        hasNext = source.stream.hasNextAvailable();
                     }
-                    if (!hasNext && source.stream.isCompleted()) {
+                    if (source.stream.isCompleted()) {
                         // A stream that ends without a failure is one whose member said it is leaving: the
                         // dispatcher fails a stream that ends without saying why. A member reporting the subscription
                         // over has already ended the merged updates, so counting it changes nothing.
@@ -259,15 +262,18 @@ public class SpringCloudQueryBusConnector implements QueryBusConnector {
                     end(source, () -> fail(e));
                 }
             }
+            finally {
+                source.lock.unlock();
+            }
         }
 
         /**
          * Accounts for the given {@code source} having ended, unless it already has been.
          * <p>
-         * Reading a stream that has just been sealed reports its completion, which drains that same source again
-         * from inside this drain. Checking on the way in is not enough, because the nested drain reaches the end
-         * first and the outer one has already passed that check: both would count the same member, taking the tally
-         * past zero and cutting off the members still holding subscriptions.
+         * Reading a stream that has just been sealed reports its completion, which schedules another drain of that
+         * same source. Checking on the way in is not enough, because that drain can reach the end first once this one
+         * has released the source, and this one has already passed the check: both would count the same member, taking
+         * the tally past zero and cutting off the members still holding subscriptions.
          */
         private static void end(Source source, Runnable ended) {
             if (!source.counted) {
@@ -339,7 +345,8 @@ public class SpringCloudQueryBusConnector implements QueryBusConnector {
             private final Member member;
             private final MessageStream<QueryResponseMessage> stream;
 
-            // Guarded by this source's monitor, which every drain holds.
+            // Guarded by the lock, which every drain holds.
+            private final ReentrantLock lock = new ReentrantLock();
             private boolean counted;
 
             private Source(Member member, MessageStream<QueryResponseMessage> stream) {
