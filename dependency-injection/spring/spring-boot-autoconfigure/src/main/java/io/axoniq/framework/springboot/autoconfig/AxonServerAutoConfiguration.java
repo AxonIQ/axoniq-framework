@@ -15,6 +15,7 @@ import io.axoniq.framework.axonserver.connector.api.TagsConfiguration;
 import io.axoniq.framework.axonserver.connector.configuration.AxonServerConfigurationEnhancer;
 import io.axoniq.framework.messaging.commandhandling.distributed.DistributedCommandBusConfiguration;
 import io.axoniq.framework.messaging.queryhandling.distributed.DistributedQueryBusConfiguration;
+import io.axoniq.framework.springboot.AxonServerProperties;
 import io.axoniq.framework.springboot.TagsConfigurationProperties;
 import io.axoniq.framework.springboot.service.connection.AxonServerConnectionDetails;
 import org.axonframework.common.configuration.ComponentDecorator;
@@ -25,6 +26,7 @@ import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.AutoConfigureBefore;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.ApplicationContext;
@@ -36,8 +38,8 @@ import org.springframework.lang.Nullable;
 /**
  * Base Axon Server Autoconfiguration.
  * <p>
- * Constructs the {@link AxonServerConfiguration}, allowing for further configuration of Axon Server components through
- * property files or complete disablement of Axon Server.
+ * Constructs the {@link AxonServerConfiguration} from the {@link AxonServerProperties}, allowing for further
+ * configuration of Axon Server components through property files or complete disablement of Axon Server.
  *
  * @author Marc Gathier
  * @since 4.0.0
@@ -49,7 +51,7 @@ import org.springframework.lang.Nullable;
 })
 @ConditionalOnClass(AxonServerConfiguration.class)
 @EnableConfigurationProperties(value = {
-        AxonServerConfiguration.class,
+        AxonServerProperties.class,
         TagsConfigurationProperties.class
 })
 public class AxonServerAutoConfiguration implements ApplicationContextAware {
@@ -62,7 +64,36 @@ public class AxonServerAutoConfiguration implements ApplicationContextAware {
      */
     public static final int AXON_SERVER_CONFIGURATION_ENHANCEMENT_ORDER = -100;
 
+    /**
+     * The name of the {@link AxonServerConfiguration} bean.
+     * <p>
+     * This is the name Spring Boot gave the bean back when {@link AxonServerConfiguration} was bound directly, being
+     * the {@code axon.axonserver} prefix and the fully qualified class name. It is kept to stay compatible with
+     * anything that looks the bean up by name.
+     */
+    public static final String AXON_SERVER_CONFIGURATION_BEAN_NAME =
+            "axon.axonserver-io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration";
+
     private ApplicationContext applicationContext;
+
+    /**
+     * Bean creation method constructing the {@link AxonServerConfiguration} from the bound
+     * {@link AxonServerProperties}.
+     * <p>
+     * The {@link AxonServerConfigurationEnhancer} only registers a default {@link AxonServerConfiguration} when the
+     * application context holds none yet. As this bean definition is available from the start, that default is skipped
+     * and the {@code axon.axonserver} properties apply. This bean is not conditional on
+     * {@code axon.axonserver.enabled}, as the properties are expected to be available even when Axon Server is
+     * disabled. It backs off when the application provides its own {@link AxonServerConfiguration}.
+     *
+     * @param properties the bound {@link AxonServerProperties}
+     * @return the {@link AxonServerConfiguration} holding the values of the given {@code properties}
+     */
+    @Bean(AXON_SERVER_CONFIGURATION_BEAN_NAME)
+    @ConditionalOnMissingBean
+    public AxonServerConfiguration axonServerConfiguration(AxonServerProperties properties) {
+        return properties.toConfiguration();
+    }
 
     /**
      * Bean creation method constructing a {@link ConfigurationEnhancer} that disables Axon Server that is only
