@@ -9,6 +9,7 @@
 package io.axoniq.framework.axonserver.connector.shared;
 
 import io.axoniq.axonserver.grpc.MetaDataValue;
+import io.axoniq.axonserver.grpc.SerializedObject;
 import org.junit.jupiter.api.*;
 
 import java.util.HashMap;
@@ -107,5 +108,36 @@ class MetadataConverterTest {
                 .containsEntry(doubleKey,String.valueOf(doubleValue))
                 .containsEntry(numberKey,String.valueOf(numberValue))
                 .containsEntry(booleanKey, String.valueOf(booleanValue));
+    }
+
+    @Test
+    void dropsBytesValueEntriesWhenConvertingToMetadata() {
+        // Given
+        Map<String, MetaDataValue> source = Map.of(
+                "textKey", MetaDataValue.newBuilder().setTextValue("textValue").build(),
+                "bytesKey", MetaDataValue.newBuilder().setBytesValue(
+                        SerializedObject.newBuilder().setType("java.util.UUID").build()
+                ).build()
+        );
+
+        // When
+        Map<String, String> result = MetadataConverter.convertMetadataValuesToGrpc(source);
+
+        // Then
+        assertThat(result)
+                .containsOnlyKeys("textKey")
+                .containsEntry("textKey", "textValue");
+    }
+
+    @Test
+    void dropsEntriesWithoutValueWhenConvertingToMetadata() {
+        // Given
+        Map<String, MetaDataValue> source = Map.of("emptyKey", MetaDataValue.getDefaultInstance());
+
+        // When
+        Map<String, String> result = MetadataConverter.convertMetadataValuesToGrpc(source);
+
+        // Then
+        assertThat(result).isEmpty();
     }
 }

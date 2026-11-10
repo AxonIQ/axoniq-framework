@@ -11,7 +11,8 @@ package io.axoniq.framework.axonserver.connector.shared;
 import io.axoniq.axonserver.grpc.MetaDataValue;
 import org.axonframework.common.annotation.Internal;
 import org.jspecify.annotations.Nullable;
-
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -29,6 +30,8 @@ import java.util.Map;
  */
 @Internal
 public final class MetadataConverter {
+
+    private static final Logger logger = LoggerFactory.getLogger(MetadataConverter.class);
 
     private MetadataConverter() {
         // Utility class
@@ -67,6 +70,10 @@ public final class MetadataConverter {
             String convertedValue = convertFromMetaDataValue(v);
             if (convertedValue != null) {
                 result.put(k, convertedValue);
+            } else if (v.getDataCase() != MetaDataValue.DataCase.DATA_NOT_SET) {
+                logger.warn("Dropping metadata entry with key [{}], since its value type [{}] is not supported. "
+                                    + "Only text, double, number and boolean metadata values are converted.",
+                            k, v.getDataCase());
             }
         });
         return result;
