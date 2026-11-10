@@ -95,7 +95,7 @@ public class WaitingForEventsExamples {
 
     public void sleepBasic(SimpleWorkflowContext context) {
         // tag::sleep-basic[]
-        context.sleep("cooldownPeriod", Duration.ofDays(10)); // <1>
+        context.awaitSleep("cooldownPeriod", Duration.ofDays(10)); // <1>
         // end::sleep-basic[]
     }
 
