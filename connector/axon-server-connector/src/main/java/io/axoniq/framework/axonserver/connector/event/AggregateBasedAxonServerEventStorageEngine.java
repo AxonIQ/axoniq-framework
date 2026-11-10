@@ -286,7 +286,7 @@ public class AggregateBasedAxonServerEventStorageEngine implements EventStorageE
     }
 
     private Metadata getMetadata(Map<String, MetaDataValue> metadataMap) {
-        return new Metadata(MetadataConverter.convertMetadataValuesToGrpc(metadataMap));
+        return new Metadata(MetadataConverter.convertMetadataValuesToGrpc(metadataMap, converter));
     }
 
     @Override

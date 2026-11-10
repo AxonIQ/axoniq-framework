@@ -8,10 +8,14 @@
 
 package io.axoniq.framework.axonserver.connector.shared;
 
+import com.google.protobuf.ByteString;
 import io.axoniq.axonserver.grpc.MetaDataValue;
 import io.axoniq.axonserver.grpc.SerializedObject;
+import org.axonframework.conversion.Converter;
+import org.axonframework.conversion.jackson.JacksonConverter;
 import org.junit.jupiter.api.*;
 
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -23,6 +27,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * @author Jens Mayer
  */
 class MetadataConverterTest {
+
+    private final Converter converter = new JacksonConverter();
 
     @Test
     void convertsEmptyMap() {
@@ -69,7 +75,7 @@ class MetadataConverterTest {
         Map<String, MetaDataValue> source = new HashMap<>();
 
         // When
-        Map<String, String> result = MetadataConverter.convertMetadataValuesToGrpc(source);
+        Map<String, String> result = MetadataConverter.convertMetadataValuesToGrpc(source, converter);
 
         // Then
         assertThat(result)
@@ -97,7 +103,7 @@ class MetadataConverterTest {
         );
 
         // When
-        Map<String, String> result = MetadataConverter.convertMetadataValuesToGrpc(source);
+        Map<String, String> result = MetadataConverter.convertMetadataValuesToGrpc(source, converter);
 
         // Then
         assertThat(result)
@@ -111,33 +117,84 @@ class MetadataConverterTest {
     }
 
     @Test
-    void dropsBytesValueEntriesWhenConvertingToMetadata() {
-        // Given
+    void rendersBytesValueEntriesThroughConverterWhenConvertingToMetadata() {
+        // given
         Map<String, MetaDataValue> source = Map.of(
-                "textKey", MetaDataValue.newBuilder().setTextValue("textValue").build(),
-                "bytesKey", MetaDataValue.newBuilder().setBytesValue(
-                        SerializedObject.newBuilder().setType("java.util.UUID").build()
-                ).build()
+                "mapKey", bytesValue("{\"key\":\"v\"}".getBytes(StandardCharsets.UTF_8)),
+                "listKey", bytesValue("[1,2]".getBytes(StandardCharsets.UTF_8))
         );
 
-        // When
-        Map<String, String> result = MetadataConverter.convertMetadataValuesToGrpc(source);
+        // when
+        Map<String, String> result = MetadataConverter.convertMetadataValuesToGrpc(source, converter);
 
-        // Then
+        // then
         assertThat(result)
-                .containsOnlyKeys("textKey")
-                .containsEntry("textKey", "textValue");
+                .hasSize(2)
+                .containsEntry("mapKey", "{\"key\":\"v\"}")
+                .containsEntry("listKey", "[1,2]");
     }
 
     @Test
-    void dropsEntriesWithoutValueWhenConvertingToMetadata() {
+    void decodesBytesValueEntriesAsTextWithoutConverterWhenConvertingToMetadata() {
+        // given
+        Map<String, MetaDataValue> source = Map.of(
+                "xmlKey", bytesValue("<map><entry>v</entry></map>".getBytes(StandardCharsets.UTF_8))
+        );
+
+        // when
+        Map<String, String> result = MetadataConverter.convertMetadataValuesToGrpc(source, null);
+
+        // then
+        assertThat(result).containsOnly(Map.entry("xmlKey", "<map><entry>v</entry></map>"));
+    }
+
+    @Test
+    void decodesBytesValueEntriesAsTextWhenConverterCannotReadThemWhenConvertingToMetadata() {
+        // given XML, which a Jackson converter cannot read
+        Map<String, MetaDataValue> source = Map.of(
+                "xmlKey", bytesValue("<map><entry>v</entry></map>".getBytes(StandardCharsets.UTF_8))
+        );
+
+        // when
+        Map<String, String> result = MetadataConverter.convertMetadataValuesToGrpc(source, converter);
+
+        // then
+        assertThat(result).containsOnly(Map.entry("xmlKey", "<map><entry>v</entry></map>"));
+    }
+
+    @Test
+    void convertsNonTextBytesValueEntriesToNullWhenConvertingToMetadata() {
+        // given
+        Map<String, MetaDataValue> source = Map.of(
+                "textKey", MetaDataValue.newBuilder().setTextValue("textValue").build(),
+                "binaryKey", bytesValue(new byte[]{(byte) 0xAC, (byte) 0xED, (byte) 0xFF, (byte) 0xFE})
+        );
+
+        // when
+        Map<String, String> result = MetadataConverter.convertMetadataValuesToGrpc(source, converter);
+
+        // then
+        assertThat(result)
+                .hasSize(2)
+                .containsEntry("textKey", "textValue")
+                .containsEntry("binaryKey", null);
+    }
+
+    private static MetaDataValue bytesValue(byte[] data) {
+        return MetaDataValue.newBuilder().setBytesValue(
+                SerializedObject.newBuilder().setType("java.util.Map").setData(ByteString.copyFrom(data)).build()
+        ).build();
+    }
+
+    @Test
+    void convertsEntriesWithoutValueToNullWhenConvertingToMetadata() {
         // Given
         Map<String, MetaDataValue> source = Map.of("emptyKey", MetaDataValue.getDefaultInstance());
 
         // When
-        Map<String, String> result = MetadataConverter.convertMetadataValuesToGrpc(source);
+        Map<String, String> result = MetadataConverter.convertMetadataValuesToGrpc(source, converter);
 
         // Then
-        assertThat(result).isEmpty();
+        assertThat(result).hasSize(1).containsEntry("emptyKey", null);
     }
 }
