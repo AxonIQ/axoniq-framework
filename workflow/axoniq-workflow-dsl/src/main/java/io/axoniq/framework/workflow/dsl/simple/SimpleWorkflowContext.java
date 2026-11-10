@@ -129,16 +129,30 @@ public class SimpleWorkflowContext extends BaseWorkflowContext {
     }
 
     /**
-     * Blocks for the given duration without waiting for an external event.
+     * Starts a sleep step for the given duration and returns immediately, without blocking. Use
+     * {@link #awaitSleep(String, Duration)} to block until the duration has elapsed.
      *
      * @param stepName logical name of the sleep step
-     * @param timeout  time to wait before continuing
+     * @param timeout  duration of the sleep
      */
     public void sleep(
             String stepName,
             Duration timeout
     ) {
         sleep(stepName, step -> step.timeout(timeout));
+    }
+
+    /**
+     * Starts a sleep step and blocks until the given duration has elapsed.
+     *
+     * @param stepName logical name of the sleep step
+     * @param timeout  time to wait before continuing
+     */
+    public void awaitSleep(
+            String stepName,
+            Duration timeout
+    ) {
+        awaitSleep(stepName, step -> step.timeout(timeout));
     }
 
     /**

@@ -289,7 +289,24 @@ class Kontext(
      * @param timeout sleep duration
      * @param eventNameCustomizer customizer for published event names
      */
+    @Deprecated(
+        "Blocks, unlike the non-blocking sleep of the Java DSL. Use awaitSleep instead.",
+        ReplaceWith("awaitSleep(stepName, timeout, eventNameCustomizer)")
+    )
     fun sleep(
+        stepName: String,
+        timeout: Duration,
+        eventNameCustomizer: EventNameCustomizer = defaults()
+    ) = awaitSleep(stepName, timeout, eventNameCustomizer)
+
+    /**
+     * Starts a durable sleep step and blocks until the timeout expires.
+     *
+     * @param stepName logical step name
+     * @param timeout sleep duration
+     * @param eventNameCustomizer customizer for published event names
+     */
+    fun awaitSleep(
         stepName: String,
         timeout: Duration,
         eventNameCustomizer: EventNameCustomizer = defaults()
