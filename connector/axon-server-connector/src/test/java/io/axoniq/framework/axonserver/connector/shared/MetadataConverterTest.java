@@ -11,8 +11,6 @@ package io.axoniq.framework.axonserver.connector.shared;
 import com.google.protobuf.ByteString;
 import io.axoniq.axonserver.grpc.MetaDataValue;
 import io.axoniq.axonserver.grpc.SerializedObject;
-import org.axonframework.conversion.Converter;
-import org.axonframework.conversion.jackson.JacksonConverter;
 import org.junit.jupiter.api.*;
 
 import java.nio.charset.StandardCharsets;
@@ -27,8 +25,6 @@ import static org.assertj.core.api.Assertions.assertThat;
  * @author Jens Mayer
  */
 class MetadataConverterTest {
-
-    private final Converter converter = new JacksonConverter();
 
     @Test
     void convertsEmptyMap() {
@@ -75,7 +71,7 @@ class MetadataConverterTest {
         Map<String, MetaDataValue> source = new HashMap<>();
 
         // When
-        Map<String, String> result = MetadataConverter.convertGrpcToMetadataMap(source, converter);
+        Map<String, String> result = MetadataConverter.convertGrpcToMetadataMap(source);
 
         // Then
         assertThat(result)
@@ -103,7 +99,7 @@ class MetadataConverterTest {
         );
 
         // When
-        Map<String, String> result = MetadataConverter.convertGrpcToMetadataMap(source, converter);
+        Map<String, String> result = MetadataConverter.convertGrpcToMetadataMap(source);
 
         // Then
         assertThat(result)
@@ -117,46 +113,14 @@ class MetadataConverterTest {
     }
 
     @Test
-    void rendersBytesValueEntriesThroughConverterWhenConvertingToMetadata() {
-        // given
-        Map<String, MetaDataValue> source = Map.of(
-                "mapKey", bytesValue("{\"key\":\"v\"}".getBytes(StandardCharsets.UTF_8)),
-                "listKey", bytesValue("[1,2]".getBytes(StandardCharsets.UTF_8))
-        );
-
-        // when
-        Map<String, String> result = MetadataConverter.convertGrpcToMetadataMap(source, converter);
-
-        // then
-        assertThat(result)
-                .hasSize(2)
-                .containsEntry("mapKey", "{\"key\":\"v\"}")
-                .containsEntry("listKey", "[1,2]");
-    }
-
-    @Test
-    void decodesBytesValueEntriesAsTextWithoutConverterWhenConvertingToMetadata() {
+    void decodesBytesValueEntriesAsTextWhenConvertingToMetadata() {
         // given
         Map<String, MetaDataValue> source = Map.of(
                 "xmlKey", bytesValue("<map><entry>v</entry></map>".getBytes(StandardCharsets.UTF_8))
         );
 
         // when
-        Map<String, String> result = MetadataConverter.convertGrpcToMetadataMap(source, null);
-
-        // then
-        assertThat(result).containsOnly(Map.entry("xmlKey", "<map><entry>v</entry></map>"));
-    }
-
-    @Test
-    void decodesBytesValueEntriesAsTextWhenConverterCannotReadThemWhenConvertingToMetadata() {
-        // given XML, which a Jackson converter cannot read
-        Map<String, MetaDataValue> source = Map.of(
-                "xmlKey", bytesValue("<map><entry>v</entry></map>".getBytes(StandardCharsets.UTF_8))
-        );
-
-        // when
-        Map<String, String> result = MetadataConverter.convertGrpcToMetadataMap(source, converter);
+        Map<String, String> result = MetadataConverter.convertGrpcToMetadataMap(source);
 
         // then
         assertThat(result).containsOnly(Map.entry("xmlKey", "<map><entry>v</entry></map>"));
@@ -171,7 +135,7 @@ class MetadataConverterTest {
         );
 
         // when
-        Map<String, String> result = MetadataConverter.convertGrpcToMetadataMap(source, converter);
+        Map<String, String> result = MetadataConverter.convertGrpcToMetadataMap(source);
 
         // then
         assertThat(result)
@@ -192,7 +156,7 @@ class MetadataConverterTest {
         Map<String, MetaDataValue> source = Map.of("emptyKey", MetaDataValue.getDefaultInstance());
 
         // When
-        Map<String, String> result = MetadataConverter.convertGrpcToMetadataMap(source, converter);
+        Map<String, String> result = MetadataConverter.convertGrpcToMetadataMap(source);
 
         // Then
         assertThat(result).hasSize(1).containsEntry("emptyKey", null);

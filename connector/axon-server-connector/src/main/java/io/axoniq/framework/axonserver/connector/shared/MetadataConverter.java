@@ -11,8 +11,6 @@ package io.axoniq.framework.axonserver.connector.shared;
 import com.google.protobuf.ByteString;
 import io.axoniq.axonserver.grpc.MetaDataValue;
 import org.axonframework.common.annotation.Internal;
-import org.axonframework.conversion.ConversionException;
-import org.axonframework.conversion.Converter;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -74,21 +72,18 @@ public final class MetadataConverter {
      * <p>
      * Text, double, number and boolean values are converted to their {@code String} representation. A
      * {@code bytes_value}, which Axon Framework 4 used for anything that was not text, a number or a boolean, is
-     * rendered as a {@code String} through the given {@code converter}. When the {@code converter} cannot do so, or is
-     * {@code null}, the bytes are used as UTF-8 text, such as JSON or XML. When these bytes are not valid text, for
+     * converted by using its bytes as UTF-8 text, such as JSON or XML. When these bytes are not valid text, for
      * example due to a binary serializer, the key is kept with a {@code null} value and a warning is logged <b>once</b>
      * per key. A {@link MetaDataValue} without any value is converted to a {@code null} value as well, without a
      * warning.
      *
-     * @param source    the source map containing Axon Server {@link MetaDataValue} objects
-     * @param converter the converter used to render {@code bytes_value} entries as a {@code String}, if any
+     * @param source the source map containing Axon Server {@link MetaDataValue} objects
      * @return a map where each value is converted to a String representation, or {@code null} if it cannot be converted
      */
-    public static Map<String, @Nullable String> convertGrpcToMetadataMap(Map<String, MetaDataValue> source,
-                                                                         @Nullable Converter converter) {
+    public static Map<String, @Nullable String> convertGrpcToMetadataMap(Map<String, MetaDataValue> source) {
         Map<String, @Nullable String> result = new HashMap<>();
         source.forEach((k, v) -> {
-            String convertedValue = convertFromMetaDataValue(v, converter);
+            String convertedValue = convertFromMetaDataValue(v);
             if (convertedValue == null && v.getDataCase() != MetaDataValue.DataCase.DATA_NOT_SET
                     && firstKeyEncounter(k)) {
                 logger.warn("Metadata entry with key [{}] has a value of type [{}] that cannot be converted to a "
@@ -107,31 +102,15 @@ public final class MetadataConverter {
     }
 
     @Nullable
-    private static String convertFromMetaDataValue(MetaDataValue value, @Nullable Converter converter) {
+    private static String convertFromMetaDataValue(MetaDataValue value) {
         return switch (value.getDataCase()) {
             case TEXT_VALUE -> value.getTextValue();
             case DOUBLE_VALUE -> Double.toString(value.getDoubleValue());
             case NUMBER_VALUE -> Long.toString(value.getNumberValue());
             case BOOLEAN_VALUE -> Boolean.toString(value.getBooleanValue());
-            case BYTES_VALUE -> renderBytes(value.getBytesValue().getData(), converter);
+            case BYTES_VALUE -> decodeUtf8(value.getBytesValue().getData());
             default -> null;
         };
-    }
-
-    @Nullable
-    private static String renderBytes(ByteString data, @Nullable Converter converter) {
-        String text = decodeUtf8(data);
-        if (text == null || converter == null) {
-            return text;
-        }
-        try {
-            String rendered = converter.convert(data.toByteArray(), String.class);
-            return rendered != null ? rendered : text;
-        } catch (ConversionException e) {
-            logger.debug("Converter could not render serialized metadata value as a String. Using its text instead.",
-                         e);
-            return text;
-        }
     }
 
     @Nullable

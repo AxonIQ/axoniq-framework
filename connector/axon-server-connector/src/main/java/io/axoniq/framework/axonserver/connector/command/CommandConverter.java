@@ -140,7 +140,7 @@ public final class CommandConverter {
                 : new MessageType(commandResponsePayload.getType(), revisionOrDefault(commandResponsePayload));
         byte[] payload = isEmptyResult(commandResponsePayload) ? null : commandResponsePayload.getData().toByteArray();
         Map<String, @Nullable String> metadata =
-                convertGrpcToMetadataMap(commandResponse.getMetaDataMap(), converter);
+                convertGrpcToMetadataMap(commandResponse.getMetaDataMap());
         return CompletableFuture.completedFuture(new GenericCommandResultMessage(new GenericMessage(
                 commandResponse.getMessageIdentifier(),
                 resultType,
@@ -168,7 +168,7 @@ public final class CommandConverter {
                         command.getMessageIdentifier(),
                         new MessageType(commandPayload.getType(), revision),
                         commandPayload.getData().toByteArray(),
-                        convertGrpcToMetadataMap(command.getMetaDataMap(), converter)
+                        convertGrpcToMetadataMap(command.getMetaDataMap())
                 ),
                 routingKey,
                 priority
