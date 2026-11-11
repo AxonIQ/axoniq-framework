@@ -36,7 +36,7 @@ class MetadataConverterTest {
         Map<String, String> source = new HashMap<>();
 
         // When
-        Map<String, MetaDataValue> result = MetadataConverter.convertGrpcToMetadataValues(source);
+        Map<String, MetaDataValue> result = MetadataConverter.convertMetadataMapToGrpc(source);
 
         // Then
         assertThat(result)
@@ -54,7 +54,7 @@ class MetadataConverterTest {
         );
 
         // When
-        Map<String, MetaDataValue> result = MetadataConverter.convertGrpcToMetadataValues(source);
+        Map<String, MetaDataValue> result = MetadataConverter.convertMetadataMapToGrpc(source);
 
         // Then
         assertThat(result)
@@ -75,7 +75,7 @@ class MetadataConverterTest {
         Map<String, MetaDataValue> source = new HashMap<>();
 
         // When
-        Map<String, String> result = MetadataConverter.convertMetadataValuesToGrpc(source, converter);
+        Map<String, String> result = MetadataConverter.convertGrpcToMetadataMap(source, converter);
 
         // Then
         assertThat(result)
@@ -103,7 +103,7 @@ class MetadataConverterTest {
         );
 
         // When
-        Map<String, String> result = MetadataConverter.convertMetadataValuesToGrpc(source, converter);
+        Map<String, String> result = MetadataConverter.convertGrpcToMetadataMap(source, converter);
 
         // Then
         assertThat(result)
@@ -125,7 +125,7 @@ class MetadataConverterTest {
         );
 
         // when
-        Map<String, String> result = MetadataConverter.convertMetadataValuesToGrpc(source, converter);
+        Map<String, String> result = MetadataConverter.convertGrpcToMetadataMap(source, converter);
 
         // then
         assertThat(result)
@@ -142,7 +142,7 @@ class MetadataConverterTest {
         );
 
         // when
-        Map<String, String> result = MetadataConverter.convertMetadataValuesToGrpc(source, null);
+        Map<String, String> result = MetadataConverter.convertGrpcToMetadataMap(source, null);
 
         // then
         assertThat(result).containsOnly(Map.entry("xmlKey", "<map><entry>v</entry></map>"));
@@ -156,7 +156,7 @@ class MetadataConverterTest {
         );
 
         // when
-        Map<String, String> result = MetadataConverter.convertMetadataValuesToGrpc(source, converter);
+        Map<String, String> result = MetadataConverter.convertGrpcToMetadataMap(source, converter);
 
         // then
         assertThat(result).containsOnly(Map.entry("xmlKey", "<map><entry>v</entry></map>"));
@@ -171,7 +171,7 @@ class MetadataConverterTest {
         );
 
         // when
-        Map<String, String> result = MetadataConverter.convertMetadataValuesToGrpc(source, converter);
+        Map<String, String> result = MetadataConverter.convertGrpcToMetadataMap(source, converter);
 
         // then
         assertThat(result)
@@ -192,7 +192,7 @@ class MetadataConverterTest {
         Map<String, MetaDataValue> source = Map.of("emptyKey", MetaDataValue.getDefaultInstance());
 
         // When
-        Map<String, String> result = MetadataConverter.convertMetadataValuesToGrpc(source, converter);
+        Map<String, String> result = MetadataConverter.convertGrpcToMetadataMap(source, converter);
 
         // Then
         assertThat(result).hasSize(1).containsEntry("emptyKey", null);
