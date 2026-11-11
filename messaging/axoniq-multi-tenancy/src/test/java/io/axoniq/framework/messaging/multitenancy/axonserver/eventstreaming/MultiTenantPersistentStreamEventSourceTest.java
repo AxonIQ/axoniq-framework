@@ -519,6 +519,40 @@ class MultiTenantPersistentStreamEventSourceTest {
         }
 
         @Test
+        void leavesNoStreamOpenWhenTheResolverFailsForOneOfSeveralKnownTenantsAtStartup() {
+            // given
+            IllegalStateException failure = new IllegalStateException("resolution failed");
+            AtomicBoolean resolverFails = new AtomicBoolean(true);
+            tenantProvider.addTenant(TENANT_A);
+            tenantProvider.addTenant(TENANT_B);
+            MultiTenantPersistentStreamEventSource source = sourceWith(
+                    tenantProvider,
+                    (name, tenant) -> {
+                        if (resolverFails.get() && tenant.equals(TENANT_B)) {
+                            throw failure;
+                        }
+                        return name;
+                    });
+
+            // when
+            Throwable thrown = catchThrowable(() -> source.subscribe(recordingConsumer()));
+
+            // then
+            assertThat(thrown).isSameAs(failure);
+            assertThat(streams.hasOpenStream("tenant-a", STREAM_NAME)).isFalse();
+            assertThat(describedTenants(source)).isEmpty();
+            assertThat((Boolean) describe(source).getProperty("subscribed")).isFalse();
+
+            // when the resolver works again, a different consumer subscribes
+            resolverFails.set(false);
+            source.subscribe(recordingConsumer());
+
+            // then
+            assertThat(streams.hasOpenStream("tenant-a", STREAM_NAME)).isTrue();
+            assertThat(streams.hasOpenStream("tenant-b", STREAM_NAME)).isTrue();
+        }
+
+        @Test
         void keepsNoStateOfATenantWhoseStreamCannotBeOpened() {
             assertFailedTenantIsDroppedAndCanBeRegisteredAgain(MultiTenantPersistentStreamEventSource::registerTenant);
         }
