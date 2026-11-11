@@ -33,7 +33,6 @@ import org.axonframework.eventsourcing.eventstore.TaggedEventMessage;
 import org.axonframework.messaging.core.Context;
 import org.axonframework.messaging.core.LegacyResources;
 import org.axonframework.messaging.core.MessageStream;
-import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.Metadata;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
@@ -286,7 +285,7 @@ public class AggregateBasedAxonServerEventStorageEngine implements EventStorageE
     }
 
     private Metadata getMetadata(Map<String, MetaDataValue> metadataMap) {
-        return new Metadata(MetadataConverter.convertMetadataValuesToGrpc(metadataMap, converter));
+        return new Metadata(MetadataConverter.convertGrpcToMetadataMap(metadataMap, converter));
     }
 
     @Override

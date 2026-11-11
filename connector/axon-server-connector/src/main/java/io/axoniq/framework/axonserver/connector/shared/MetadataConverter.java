@@ -49,7 +49,7 @@ public final class MetadataConverter {
      * @param source The source map containing String key-value pairs.
      * @return A map where each value is converted to an Axon Server {@link MetaDataValue}.
      */
-    public static Map<String, MetaDataValue> convertGrpcToMetadataValues(Map<String, @Nullable String> source) {
+    public static Map<String, MetaDataValue> convertMetadataMapToGrpc(Map<String, @Nullable String> source) {
         Map<String, MetaDataValue> result = new HashMap<>();
         source.forEach((k, v) -> {
             if (v != null) {
@@ -76,11 +76,10 @@ public final class MetadataConverter {
      *
      * @param source    the source map containing Axon Server {@link MetaDataValue} objects
      * @param converter the converter used to render {@code bytes_value} entries as a {@code String}, if any
-     * @return a map where each value is converted to a String representation, or {@code null} if it cannot be
-     * converted
+     * @return a map where each value is converted to a String representation, or {@code null} if it cannot be converted
      */
-    public static Map<String, @Nullable String> convertMetadataValuesToGrpc(Map<String, MetaDataValue> source,
-                                                                            @Nullable Converter converter) {
+    public static Map<String, @Nullable String> convertGrpcToMetadataMap(Map<String, MetaDataValue> source,
+                                                                         @Nullable Converter converter) {
         Map<String, @Nullable String> result = new HashMap<>();
         source.forEach((k, v) -> {
             String convertedValue = convertFromMetaDataValue(v, converter);
