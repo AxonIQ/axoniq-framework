@@ -20,14 +20,22 @@ import org.junit.jupiter.api.*;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 import java.sql.Connection;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.awaitility.Awaitility.await;
 
 /**
  * Test class validating the {@link PostgresqlSnapshotStore}.
@@ -199,6 +207,134 @@ class PostgresqlSnapshotStoreTest {
             assertThatThrownBy(() -> testSubject.store(QUALIFIED_NAME, IDENTIFIER, snapshot, null))
                     .isInstanceOf(IllegalArgumentException.class)
                     .hasMessageContaining("Unsupported position type");
+        }
+    }
+
+    @Nested
+    @Timeout(60)
+    class StoreInTheBackground {
+
+        private HikariDataSource singleConnectionPool;
+        private PostgresqlSnapshotStore backgroundSubject;
+
+        @BeforeEach
+        void setUp() {
+            HikariConfig config = new HikariConfig();
+
+            config.setJdbcUrl(postgresContainer.getJdbcUrl());
+            config.setUsername(postgresContainer.getUsername());
+            config.setPassword(postgresContainer.getPassword());
+            config.setAutoCommit(false);
+            config.setMaximumPoolSize(1);
+            config.setMinimumIdle(1);
+            config.setConnectionTimeout(60_000);
+
+            singleConnectionPool = new HikariDataSource(config);
+            backgroundSubject = new PostgresqlSnapshotStore(
+                    singleConnectionPool, new JacksonConverter(), new JdbcTransactionalExecutorProvider(singleConnectionPool)
+            );
+        }
+
+        @AfterEach
+        void tearDown() {
+            backgroundSubject.close();
+            singleConnectionPool.close();
+        }
+
+        @Test
+        void store_returnsWithoutWaitingForAConnection_andWritesWhenOneIsAvailable() throws SQLException {
+            // given
+            Connection held = singleConnectionPool.getConnection();
+
+            // when
+            CompletableFuture<Void> result =
+                    backgroundSubject.store(QUALIFIED_NAME, IDENTIFIER, snapshot(42, "1.0"), null);
+
+            // then
+            assertThat(result).isNotDone();
+
+            held.close();
+
+            assertThat(result).succeedsWithin(Duration.ofSeconds(10));
+            assertThat(testSubject.load(QUALIFIED_NAME, IDENTIFIER, null).orTimeout(5, TimeUnit.SECONDS).join())
+                    .isNotNull();
+        }
+
+        @Test
+        void store_isRejectedWhenTooManySnapshotsAreWaiting() throws SQLException {
+            // given
+            Connection held = singleConnectionPool.getConnection();
+            List<CompletableFuture<Void>> accepted = new ArrayList<>();
+
+            accepted.add(backgroundSubject.store(QUALIFIED_NAME, "entity-0", snapshot(1, "1.0"), null));
+
+            // the writer has taken the first snapshot, and waits for the connection that is held
+            await().atMost(10, TimeUnit.SECONDS)
+                   .until(() -> singleConnectionPool.getHikariPoolMXBean().getThreadsAwaitingConnection() == 1);
+
+            for (int i = 1; i <= PostgresqlSnapshotStore.WRITE_QUEUE_CAPACITY; i++) {
+                accepted.add(backgroundSubject.store(QUALIFIED_NAME, "entity-" + i, snapshot(1, "1.0"), null));
+            }
+
+            // when
+            CompletableFuture<Void> rejected =
+                    backgroundSubject.store(QUALIFIED_NAME, "one-too-many", snapshot(1, "1.0"), null);
+
+            // then
+            assertThat(rejected)
+                    .failsWithin(Duration.ofSeconds(5))
+                    .withThrowableOfType(ExecutionException.class)
+                    .withCauseInstanceOf(RejectedExecutionException.class);
+
+            held.close();
+
+            CompletableFuture.allOf(accepted.toArray(CompletableFuture[]::new)).orTimeout(30, TimeUnit.SECONDS).join();
+
+            assertThat(countSnapshots()).isEqualTo(PostgresqlSnapshotStore.WRITE_QUEUE_CAPACITY + 1);
+        }
+
+        @Test
+        void store_isRejectedAfterTheStoreWasClosed() {
+            // given
+            backgroundSubject.close();
+
+            // when
+            CompletableFuture<Void> result =
+                    backgroundSubject.store(QUALIFIED_NAME, IDENTIFIER, snapshot(42, "1.0"), null);
+
+            // then
+            assertThat(result)
+                    .failsWithin(Duration.ofSeconds(5))
+                    .withThrowableOfType(ExecutionException.class)
+                    .withCauseInstanceOf(RejectedExecutionException.class);
+        }
+
+        @Test
+        void store_reportsAFailedWriteThroughTheFuture() {
+            // given
+            singleConnectionPool.close();
+
+            // when
+            CompletableFuture<Void> result =
+                    backgroundSubject.store(QUALIFIED_NAME, IDENTIFIER, snapshot(42, "1.0"), null);
+
+            // then
+            assertThat(result)
+                    .failsWithin(Duration.ofSeconds(10))
+                    .withThrowableOfType(ExecutionException.class)
+                    .withCauseInstanceOf(SQLException.class);
+        }
+    }
+
+    private static long countSnapshots() throws SQLException {
+        try (
+            Connection connection = dataSource.getConnection();
+            Statement statement = connection.createStatement();
+            ResultSet resultSet = statement.executeQuery("SELECT COUNT(*) FROM snapshots")
+        ) {
+            resultSet.next();
+
+            return resultSet.getLong(1);
         }
     }
 

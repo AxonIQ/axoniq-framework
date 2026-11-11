@@ -28,7 +28,11 @@ import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import javax.sql.DataSource;
 
 /**
@@ -44,6 +48,11 @@ import javax.sql.DataSource;
  * <p>
  * Only {@link GlobalIndexPosition} is supported as a position type. Snapshots with any other
  * position type are rejected.
+ * <p>
+ * Snapshots are written in the background, by a single writer that takes a connection of its own for each snapshot
+ * and does not use the connection of any unit of work. {@link #store} therefore returns without waiting for a
+ * connection. The future it returns completes when the snapshot was written, and completes exceptionally when writing
+ * failed, or with a {@link RejectedExecutionException} when too many snapshots are waiting to be written.
  *
  * @author John Hendrikx
  * @since 5.2.0
@@ -95,9 +104,26 @@ class PostgresqlSnapshotStore implements SnapshotStore {
           LIMIT 1
         """;
 
+    /*
+     * The number of snapshots that can wait to be written. A snapshot is a cache of committed state, so when the
+     * writer cannot keep up, snapshots that arrive while this many are waiting are rejected, instead of piling up
+     * in memory and in line for connections ahead of real work. Each waiting snapshot holds its payload bytes.
+     */
+    static final int WRITE_QUEUE_CAPACITY = 128;
+
     private final DataSource dataSource;
     private final Converter converter;
     private final TransactionalExecutorProvider<Connection> transactionalExecutorProvider;
+
+    /*
+     * A single writer, so that at most one connection is in use for snapshots, and snapshots are written in the order
+     * they were handed over. Each write takes a connection of its own and returns it right after.
+     */
+    private final ThreadPoolExecutor writer = new ThreadPoolExecutor(
+        1, 1, 0L, TimeUnit.MILLISECONDS,
+        new ArrayBlockingQueue<>(WRITE_QUEUE_CAPACITY),
+        Thread.ofVirtual().name("PG-SnapshotWriter").factory()
+    );
 
     /**
      * Constructs a new instance. The {@code snapshots} table is part of the engine's schema, so it is created
@@ -121,38 +147,96 @@ class PostgresqlSnapshotStore implements SnapshotStore {
         Objects.requireNonNull(identifier, "identifier");
         Objects.requireNonNull(snapshot, "snapshot");
 
-        // Validate and extract position eagerly to fail fast on unsupported position types
-        String positionType = toPositionType(snapshot.position());
-        long positionValue = GlobalIndexPosition.toIndex(snapshot.position());
-        byte[] payload = converter.convert(snapshot.payload(), byte[].class);
-        String metadata = MetadataSerializer.toJson(snapshot.metadata());
+        /*
+         * Everything that can fail on the caller's thread is done before the write is handed over: unsupported
+         * position types are rejected right away, and the payload is converted now, as it can be the live entity,
+         * which may still change once this method returns.
+         */
 
+        SnapshotRow row = new SnapshotRow(
+            qualifiedName.fullName(),
+            String.valueOf(identifier),
+            snapshot.version(),
+            toPositionType(snapshot.position()),
+            GlobalIndexPosition.toIndex(snapshot.position()),
+            converter.convert(snapshot.payload(), byte[].class),
+            Timestamp.from(snapshot.timestamp()),
+            MetadataSerializer.toJson(snapshot.metadata())
+        );
+        CompletableFuture<Void> result = new CompletableFuture<>();
+
+        try {
+            writer.execute(() -> {
+                try {
+                    write(row).whenComplete((unused, e) -> {
+                        if (e == null) {
+                            result.complete(null);
+                        }
+                        else {
+                            result.completeExceptionally(e);
+                        }
+                    });
+                }
+                catch (RuntimeException e) {
+                    result.completeExceptionally(e);
+                }
+            });
+        }
+        catch (RejectedExecutionException e) {
+            result.completeExceptionally(new RejectedExecutionException(
+                "Snapshot of " + qualifiedName + " with identifier " + identifier
+                    + " was not written, as the snapshot writer is busy or closed", e
+            ));
+        }
+
+        return result;
+    }
+
+    void close() {  // for testing purposes, to avoid junk exceptions
+        writer.shutdown();
+
+        try {
+            if (!writer.awaitTermination(10, TimeUnit.SECONDS)) {
+                writer.shutdownNow();
+            }
+        }
+        catch (InterruptedException e) {
+            writer.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    private CompletableFuture<Void> write(SnapshotRow row) {
         return transactionalExecutorProvider.getTransactionalExecutor(null).<Void>apply(connection -> {
             try (
                 PreparedStatement del = connection.prepareStatement(SNAPSHOT_DELETE);
                 PreparedStatement ins = connection.prepareStatement(SNAPSHOT_INSERT)
             ) {
-                del.setString(1, qualifiedName.fullName());
-                del.setString(2, String.valueOf(identifier));
+                del.setString(1, row.qualifiedName());
+                del.setString(2, row.identifier());
                 del.executeUpdate();
 
-                ins.setString(1, qualifiedName.fullName());
-                ins.setString(2, String.valueOf(identifier));
-                ins.setString(3, snapshot.version());
-                ins.setString(4, positionType);
-                ins.setLong(5, positionValue);
-                ins.setBytes(6, payload);
-                ins.setTimestamp(7, Timestamp.from(snapshot.timestamp()));
-                ins.setString(8, metadata);
+                ins.setString(1, row.qualifiedName());
+                ins.setString(2, row.identifier());
+                ins.setString(3, row.version());
+                ins.setString(4, row.positionType());
+                ins.setLong(5, row.positionValue());
+                ins.setBytes(6, row.payload());
+                ins.setTimestamp(7, row.timestamp());
+                ins.setString(8, row.metadata());
                 ins.executeUpdate();
 
                 return null;
             }
             catch (SQLException e) {
                 throw new IllegalStateException(
-                        "Failed to store snapshot for " + qualifiedName + " with identifier " + identifier, e);
+                        "Failed to store snapshot for " + row.qualifiedName() + " with identifier " + row.identifier(), e);
             }
         });
+    }
+
+    private record SnapshotRow(String qualifiedName, String identifier, String version, String positionType,
+                               long positionValue, byte[] payload, Timestamp timestamp, String metadata) {
     }
 
     @Override
