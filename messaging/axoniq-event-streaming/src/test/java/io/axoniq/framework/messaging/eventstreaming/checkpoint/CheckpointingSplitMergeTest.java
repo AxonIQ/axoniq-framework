@@ -11,6 +11,7 @@ package io.axoniq.framework.messaging.eventstreaming.checkpoint;
 import org.axonframework.common.FutureUtils;
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.messaging.core.configuration.MessagingConfigurer;
+import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.AsyncInMemoryStreamableEventSource;
 import org.axonframework.messaging.eventhandling.EventTestUtils;
 import org.axonframework.messaging.eventhandling.annotation.EventHandler;
@@ -136,8 +137,12 @@ class CheckpointingSplitMergeTest {
                                                             .get(PROCESSOR_NAME);
     }
 
-    private static long storedPosition(TokenStore tokenStore, int segmentId) {
-        TrackingToken token = FutureUtils.joinAndUnwrap(tokenStore.fetchToken(PROCESSOR_NAME, segmentId, null));
+    private long storedPosition(TokenStore tokenStore, int segmentId) {
+        TrackingToken token = FutureUtils.joinAndUnwrap(
+                configuration.getComponent(UnitOfWorkFactory.class).create().executeWithResult(
+                        context -> tokenStore.fetchToken(PROCESSOR_NAME, segmentId, context)
+                )
+        );
         return token == null ? -1L : token.position().orElse(-1L);
     }
 
