@@ -16,6 +16,11 @@ import org.axonframework.common.infra.DescribableComponent;
  * Implementations must keep nothing of a tenant whose registration throws: release whatever was allocated for it
  * before rethrowing, since the caller only holds the registrations that were returned. Releasing is best effort: if it
  * fails, attach that failure to the original one with {@code addSuppressed} and rethrow the original.
+ * <p>
+ * A returned registration may be cancelled right after it was returned, when another component fails to register the
+ * same tenant and the tenant provider rolls the registration back. Implementers must therefore expect that a tenant
+ * they started is withdrawn again. In the window before that rollback, a component that is already live may handle a
+ * command (its events stay) or open a subscription query (the rollback ends it). At-least-once handling accepts this.
  *
  * @author Stefan Dragisic
  * @since 4.6.0
