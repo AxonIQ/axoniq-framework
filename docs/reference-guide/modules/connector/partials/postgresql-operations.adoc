@@ -105,6 +105,17 @@ Prefer `VALIDATE` when the schema is managed independently (for example through 
 The engine holds one dedicated connection open for the lifetime of the application to receive event arrival notifications from other instances.
 When sizing your connection pool, add one to whatever your application otherwise requires.
 
+=== Writing snapshots
+
+The engine writes snapshots in the background, on a connection of its own, so storing a snapshot never makes a unit of work wait for a connection.
+By default a single thread writes the snapshots, one at a time, so they need at most one more connection of your pool at a time.
+A snapshot is a cache of state that is already committed: when too many snapshots are waiting to be written, new ones are dropped, and a snapshot that fails to be written is logged and not retried.
+
+To control the executor service that writes the snapshots, for example the number of its threads, or how it is started and shut down, pass a `SnapshotWriterExecutorFactory` as an optional constructor argument of the engine, or register one as a component.
+The factory is given the bounded queue that holds the waiting snapshots, and returns the executor service to use it with.
+Every thread writes one snapshot at a time, so the number of threads is the number of connections that snapshots can use at the same time.
+The executor service must run its tasks on threads of its own, otherwise the engine refuses it when it is created.
+
 === Multi-instance coordination
 
 Multiple instances sharing the same PostgreSQL database coordinate automatically.
