@@ -20,8 +20,10 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.function.LongConsumer;
 import javax.sql.DataSource;
@@ -133,8 +135,13 @@ final class PostgresqlFinalizer {
           FROM latest;
         """;
 
+    private static final long INITIAL_BACKOFF_MILLIS = 100;
+    private static final long MAX_BACKOFF_MILLIS = 5000;
+    private static final long LOG_INTERVAL_NANOS = TimeUnit.MINUTES.toNanos(1);
+
     private final DataSource dataSource;
     private final LongConsumer onFinalized;
+    private final CountDownLatch closed = new CountDownLatch(1);
     private final ExecutorService finalizerExecutor =
             Executors.newSingleThreadExecutor(Thread.ofVirtual().name("PG-Finalizer").factory());  // must be a single thread
 
@@ -174,7 +181,12 @@ final class PostgresqlFinalizer {
         return queuedFinalization;
     }
 
-    void close() {  // for testing purposes, to avoid junk exceptions
+    /**
+     * Stops this finalizer. A finalization that is currently retrying after a failure gives up and
+     * completes exceptionally; one that is in progress and not failing is allowed to complete.
+     */
+    void close() {
+        closed.countDown();
         finalizerExecutor.shutdown();
 
         try {
@@ -190,23 +202,11 @@ final class PostgresqlFinalizer {
 
     private ConsistencyMarker runFinalizationTask() {
         try {
-            long latestGlobalIndex = finalizeAndReturnLatestIndex();
+            long latestGlobalIndex = finalizeWithRetry();
 
             onFinalized.accept(latestGlobalIndex);  // will notify callbacks if needed
 
             return new GlobalIndexConsistencyMarker(latestGlobalIndex + 1);
-        }
-        catch (SQLException e) {
-
-            /*
-             * Throwing an exception here means that the AppendCondition#afterCommit
-             * method will return a failed future, and no consistency marker. The
-             * framework should deal with this. Note that the events are still
-             * already committed and permanent, we're just unable to determine the
-             * correct marker.
-             */
-
-            throw new IllegalStateException("Finalization failed", e);
         }
         finally {
             synchronized (this) {
@@ -217,6 +217,76 @@ final class PostgresqlFinalizer {
                     queuedFinalization = null;
                 }
             }
+        }
+    }
+
+    /*
+     * The events being finalized are already committed, so a failure here would be reported to
+     * the caller as a failed append even though it succeeded, and the caller cannot continue
+     * without the consistency marker. Failures (typically connection pool exhaustion or the
+     * database being unavailable) are therefore retried until they succeed or this finalizer is
+     * closed; only an operator can resolve a prolonged outage. A retry is harmless as the
+     * finalization statement is idempotent.
+     */
+    private long finalizeWithRetry() {
+        long backoffMillis = INITIAL_BACKOFF_MILLIS;
+        long firstFailureNanos = 0;
+        long lastLoggedNanos = 0;
+        int attempts = 0;
+
+        while (true) {
+            try {
+                long globalIndex = finalizeAndReturnLatestIndex();
+
+                if (attempts > 0) {
+                    LOGGER.info("Finalization succeeded after {} failed attempts over {} seconds", attempts,
+                                TimeUnit.NANOSECONDS.toSeconds(System.nanoTime() - firstFailureNanos));
+                }
+
+                return globalIndex;
+            }
+            catch (SQLException e) {
+                long now = System.nanoTime();
+
+                if (attempts++ == 0) {
+                    firstFailureNanos = now;
+                    lastLoggedNanos = now - LOG_INTERVAL_NANOS;
+                }
+
+                if (now - lastLoggedNanos >= LOG_INTERVAL_NANOS) {
+                    lastLoggedNanos = now;
+
+                    LOGGER.warn("Finalization failed (attempt {}, failing for {} seconds); events are committed "
+                                + "but not yet finalized, retrying", attempts,
+                                TimeUnit.NANOSECONDS.toSeconds(now - firstFailureNanos), e);
+                }
+
+                if (!awaitBackoff(backoffMillis, e)) {
+                    throw new IllegalStateException(
+                        "Finalization abandoned after " + attempts + " failed attempts as the finalizer was closed;"
+                        + " the events are committed but not finalized", e);
+                }
+
+                backoffMillis = Math.min(backoffMillis * 2, MAX_BACKOFF_MILLIS);
+            }
+        }
+    }
+
+    /*
+     * Sleeps for a randomized fraction (50-100%) of the given backoff. Returns false if the
+     * finalizer was closed or the thread was interrupted, in which case retrying should stop.
+     */
+    private boolean awaitBackoff(long backoffMillis, SQLException failure) {
+        long sleepMillis = ThreadLocalRandom.current().nextLong(backoffMillis / 2, backoffMillis + 1);
+
+        try {
+            return !closed.await(sleepMillis, TimeUnit.MILLISECONDS);
+        }
+        catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            failure.addSuppressed(e);
+
+            return false;
         }
     }
 

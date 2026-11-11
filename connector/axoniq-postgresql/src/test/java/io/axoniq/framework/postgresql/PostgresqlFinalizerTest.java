@@ -15,17 +15,22 @@ import org.axonframework.eventsourcing.eventstore.GlobalIndexConsistencyMarker;
 import org.junit.jupiter.api.*;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Proxy;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.SQLTransientConnectionException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import javax.sql.DataSource;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -246,6 +251,100 @@ class PostgresqlFinalizerTest {
         finally {
             finalizerA.close();
             finalizerB.close();
+        }
+    }
+
+    @Nested
+    class WhenConnectionsFail {
+
+        private final AtomicInteger remainingFailures = new AtomicInteger();
+        private final AtomicInteger connectionAttempts = new AtomicInteger();
+        private PostgresqlFinalizer flakyFinalizer;
+
+        @BeforeEach
+        void setUpFlakyFinalizer() {
+            flakyFinalizer = new PostgresqlFinalizer(flakyDataSource(), notifiedGlobalIndex::set);
+        }
+
+        @AfterEach
+        void closeFlakyFinalizer() {
+            flakyFinalizer.close();
+        }
+
+        @Test
+        void shouldRetryUntilConnectionSucceedsAndFinalizeEvents() {
+            // given
+            insertEvent(-1);
+            remainingFailures.set(3);
+
+            // when
+            ConsistencyMarker marker = join(flakyFinalizer.scheduleFinalization());
+
+            // then
+            assertThat(connectionAttempts.get()).isEqualTo(4);
+            assertThat(queryAllGlobalIndices()).hasSize(1).allMatch(index -> index > 0);
+            assertThat(notifiedGlobalIndex.get()).isEqualTo(GlobalIndexConsistencyMarker.position(marker) - 1);
+        }
+
+        @Test
+        void shouldCompleteCoalescedRequestsOnceConnectionRecovers() {
+            // given
+            insertEvent(-1);
+            remainingFailures.set(2);
+
+            // when
+            CompletableFuture<ConsistencyMarker> first = flakyFinalizer.scheduleFinalization();
+            CompletableFuture<ConsistencyMarker> second = flakyFinalizer.scheduleFinalization();
+
+            // then
+            assertThat(join(first)).isNotNull();
+            assertThat(join(second)).isNotNull();
+            assertThat(queryAllGlobalIndices()).hasSize(1).allMatch(index -> index > 0);
+        }
+
+        @Test
+        void shouldStopRetryingAndFailWhenClosed() throws InterruptedException {
+            // given
+            insertEvent(-1);
+            remainingFailures.set(Integer.MAX_VALUE);
+
+            CompletableFuture<ConsistencyMarker> future = flakyFinalizer.scheduleFinalization();
+
+            while (connectionAttempts.get() < 2) {
+                Thread.sleep(10);
+            }
+
+            // when
+            flakyFinalizer.close();
+
+            // then
+            assertThatThrownBy(() -> join(future))
+                .hasCauseInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("committed but not finalized");
+            assertThat(queryAllGlobalIndices()).containsExactly(-1L);
+        }
+
+        private DataSource flakyDataSource() {
+            return (DataSource) Proxy.newProxyInstance(
+                DataSource.class.getClassLoader(),
+                new Class<?>[] {DataSource.class},
+                (proxy, method, args) -> {
+                    if (method.getName().equals("getConnection")) {
+                        connectionAttempts.incrementAndGet();
+
+                        if (remainingFailures.getAndUpdate(n -> n > 0 ? n - 1 : 0) > 0) {
+                            throw new SQLTransientConnectionException("simulated pool exhaustion");
+                        }
+                    }
+
+                    try {
+                        return method.invoke(dataSource, args);
+                    }
+                    catch (InvocationTargetException e) {
+                        throw e.getCause();
+                    }
+                }
+            );
         }
     }
 
