@@ -10,24 +10,41 @@ package io.axoniq.framework.postgresql;
 
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
+import org.axonframework.common.function.ThrowingFunction;
+import org.axonframework.common.tx.TransactionalExecutor;
 import org.axonframework.conversion.jackson.JacksonConverter;
 import org.axonframework.eventsourcing.eventstore.AggregateSequenceNumberPosition;
 import org.axonframework.eventsourcing.eventstore.GlobalIndexPosition;
 import org.axonframework.eventsourcing.snapshot.api.Snapshot;
 import org.axonframework.messaging.core.QualifiedName;
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.axonframework.messaging.core.unitofwork.transaction.TransactionalExecutorProvider;
 import org.axonframework.messaging.core.unitofwork.transaction.jdbc.JdbcTransactionalExecutorProvider;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.*;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 import java.sql.Connection;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.awaitility.Awaitility.await;
 
 /**
  * Test class validating the {@link PostgresqlSnapshotStore}.
@@ -199,6 +216,265 @@ class PostgresqlSnapshotStoreTest {
             assertThatThrownBy(() -> testSubject.store(QUALIFIED_NAME, IDENTIFIER, snapshot, null))
                     .isInstanceOf(IllegalArgumentException.class)
                     .hasMessageContaining("Unsupported position type");
+        }
+    }
+
+    @Nested
+    @Timeout(60)
+    class StoreInTheBackground {
+
+        private HikariDataSource singleConnectionPool;
+        private PostgresqlSnapshotStore backgroundSubject;
+
+        @BeforeEach
+        void setUp() {
+            HikariConfig config = new HikariConfig();
+
+            config.setJdbcUrl(postgresContainer.getJdbcUrl());
+            config.setUsername(postgresContainer.getUsername());
+            config.setPassword(postgresContainer.getPassword());
+            config.setAutoCommit(false);
+            config.setMaximumPoolSize(1);
+            config.setMinimumIdle(1);
+            config.setConnectionTimeout(60_000);
+
+            singleConnectionPool = new HikariDataSource(config);
+            backgroundSubject = new PostgresqlSnapshotStore(
+                    singleConnectionPool, new JacksonConverter(), new JdbcTransactionalExecutorProvider(singleConnectionPool)
+            );
+        }
+
+        @AfterEach
+        void tearDown() {
+            backgroundSubject.close();
+            singleConnectionPool.close();
+        }
+
+        @Test
+        void store_returnsWithoutWaitingForAConnection_andWritesWhenOneIsAvailable() throws SQLException {
+            // given
+            Connection held = singleConnectionPool.getConnection();
+
+            // when
+            CompletableFuture<Void> result =
+                    backgroundSubject.store(QUALIFIED_NAME, IDENTIFIER, snapshot(42, "1.0"), null);
+
+            // then
+            assertThat(result).isNotDone();
+
+            held.close();
+
+            assertThat(result).succeedsWithin(Duration.ofSeconds(10));
+            assertThat(testSubject.load(QUALIFIED_NAME, IDENTIFIER, null).orTimeout(5, TimeUnit.SECONDS).join())
+                    .isNotNull();
+        }
+
+        @Test
+        void store_isRejectedWhenTooManySnapshotsAreWaiting() throws SQLException {
+            // given
+            Connection held = singleConnectionPool.getConnection();
+            List<CompletableFuture<Void>> accepted = new ArrayList<>();
+
+            accepted.add(backgroundSubject.store(QUALIFIED_NAME, "entity-0", snapshot(1, "1.0"), null));
+
+            // the writer has taken the first snapshot, and waits for the connection that is held
+            await().atMost(10, TimeUnit.SECONDS)
+                   .until(() -> singleConnectionPool.getHikariPoolMXBean().getThreadsAwaitingConnection() == 1);
+
+            for (int i = 1; i <= PostgresqlSnapshotStore.WRITE_QUEUE_CAPACITY; i++) {
+                accepted.add(backgroundSubject.store(QUALIFIED_NAME, "entity-" + i, snapshot(1, "1.0"), null));
+            }
+
+            // when
+            CompletableFuture<Void> rejected =
+                    backgroundSubject.store(QUALIFIED_NAME, "one-too-many", snapshot(1, "1.0"), null);
+
+            // then
+            assertThat(rejected)
+                    .failsWithin(Duration.ofSeconds(5))
+                    .withThrowableOfType(ExecutionException.class)
+                    .withCauseInstanceOf(RejectedExecutionException.class);
+
+            held.close();
+
+            CompletableFuture.allOf(accepted.toArray(CompletableFuture[]::new)).orTimeout(30, TimeUnit.SECONDS).join();
+
+            assertThat(countSnapshots()).isEqualTo(PostgresqlSnapshotStore.WRITE_QUEUE_CAPACITY + 1);
+        }
+
+        @Test
+        void store_isRejectedAfterTheStoreWasClosed() {
+            // given
+            backgroundSubject.close();
+
+            // when
+            CompletableFuture<Void> result =
+                    backgroundSubject.store(QUALIFIED_NAME, IDENTIFIER, snapshot(42, "1.0"), null);
+
+            // then
+            assertThat(result)
+                    .failsWithin(Duration.ofSeconds(5))
+                    .withThrowableOfType(ExecutionException.class)
+                    .withCauseInstanceOf(RejectedExecutionException.class);
+        }
+
+        @Test
+        void store_reportsAFailedWriteThroughTheFuture() {
+            // given
+            singleConnectionPool.close();
+
+            // when
+            CompletableFuture<Void> result =
+                    backgroundSubject.store(QUALIFIED_NAME, IDENTIFIER, snapshot(42, "1.0"), null);
+
+            // then
+            assertThat(result)
+                    .failsWithin(Duration.ofSeconds(10))
+                    .withThrowableOfType(ExecutionException.class)
+                    .withCauseInstanceOf(SQLException.class);
+        }
+
+        @Test
+        void store_keepsTheOldSnapshotWhenReplacingItFails() {
+            // given a snapshot that is stored
+            assertThat(backgroundSubject.store(QUALIFIED_NAME, IDENTIFIER, snapshot(42, "1.0"), null))
+                    .succeedsWithin(Duration.ofSeconds(10));
+
+            // when its replacement fails to insert, after the old one was deleted in the same transaction
+            CompletableFuture<Void> replacement =
+                    backgroundSubject.store(QUALIFIED_NAME, IDENTIFIER, snapshot(43, "bad\u0000version"), null);
+
+            // then
+            assertThat(replacement).failsWithin(Duration.ofSeconds(10));
+
+            Snapshot kept = testSubject.load(QUALIFIED_NAME, IDENTIFIER, null).orTimeout(5, TimeUnit.SECONDS).join();
+
+            assertThat(kept).isNotNull();
+            assertThat(kept.version()).isEqualTo("1.0");
+            assertThat(kept.position()).isEqualTo(new GlobalIndexPosition(42));
+        }
+
+        @Test
+        void store_writesOneSnapshotAtATimeWhenTheProviderCompletesAsynchronously() throws SQLException {
+            // given a provider that runs every write on a thread of its own
+            ExecutorService threads = Executors.newCachedThreadPool();
+            AtomicInteger inFlight = new AtomicInteger();
+            AtomicInteger mostInFlight = new AtomicInteger();
+            JdbcTransactionalExecutorProvider jdbc = new JdbcTransactionalExecutorProvider(dataSource);
+            TransactionalExecutorProvider<Connection> asynchronous = new TransactionalExecutorProvider<>() {
+                @Override
+                public @Nullable TransactionalExecutor<Connection> findTransactionalExecutor(
+                        @Nullable ProcessingContext processingContext
+                ) {
+                    TransactionalExecutor<Connection> delegate = jdbc.getTransactionalExecutor(processingContext);
+
+                    return new TransactionalExecutor<>() {
+                        @Override
+                        public <R> CompletableFuture<R> apply(ThrowingFunction<Connection, R, Exception> function) {
+                            return CompletableFuture.supplyAsync(() -> {
+                                mostInFlight.accumulateAndGet(inFlight.incrementAndGet(), Math::max);
+
+                                try {
+                                    Thread.sleep(100);
+
+                                    return delegate.apply(function).join();
+                                }
+                                catch (InterruptedException e) {
+                                    Thread.currentThread().interrupt();
+
+                                    throw new IllegalStateException(e);
+                                }
+                                finally {
+                                    inFlight.decrementAndGet();
+                                }
+                            }, threads);
+                        }
+                    };
+                }
+            };
+            PostgresqlSnapshotStore asynchronousSubject =
+                    new PostgresqlSnapshotStore(dataSource, new JacksonConverter(), asynchronous);
+
+            try {
+                // when
+                List<CompletableFuture<Void>> results = new ArrayList<>();
+
+                for (int i = 0; i < 5; i++) {
+                    results.add(asynchronousSubject.store(QUALIFIED_NAME, "entity-" + i, snapshot(1, "1.0"), null));
+                }
+
+                CompletableFuture.allOf(results.toArray(CompletableFuture[]::new)).orTimeout(30, TimeUnit.SECONDS).join();
+
+                // then
+                assertThat(mostInFlight).as("writes in flight at the same time").hasValue(1);
+                assertThat(countSnapshots()).isEqualTo(5);
+            }
+            finally {
+                asynchronousSubject.close();
+                threads.shutdownNow();
+            }
+        }
+
+        @Test
+        void store_completesTheFutureWhenTheProviderThrowsAnError_andKeepsWriting() throws SQLException {
+            // given a provider that fails with an error on its first use
+            AtomicBoolean failing = new AtomicBoolean(true);
+            JdbcTransactionalExecutorProvider jdbc = new JdbcTransactionalExecutorProvider(dataSource);
+            TransactionalExecutorProvider<Connection> failingProvider = new TransactionalExecutorProvider<>() {
+                @Override
+                public @Nullable TransactionalExecutor<Connection> findTransactionalExecutor(
+                        @Nullable ProcessingContext processingContext
+                ) {
+                    TransactionalExecutor<Connection> delegate = jdbc.getTransactionalExecutor(processingContext);
+
+                    return new TransactionalExecutor<>() {
+                        @Override
+                        public <R> CompletableFuture<R> apply(ThrowingFunction<Connection, R, Exception> function) {
+                            if (failing.get()) {
+                                throw new NoClassDefFoundError("simulated");
+                            }
+
+                            return delegate.apply(function);
+                        }
+                    };
+                }
+            };
+            PostgresqlSnapshotStore failingSubject =
+                    new PostgresqlSnapshotStore(dataSource, new JacksonConverter(), failingProvider);
+
+            try {
+                // when
+                CompletableFuture<Void> failed =
+                        failingSubject.store(QUALIFIED_NAME, "entity-1", snapshot(1, "1.0"), null);
+
+                // then
+                assertThat(failed)
+                        .failsWithin(Duration.ofSeconds(10))
+                        .withThrowableOfType(ExecutionException.class)
+                        .withCauseInstanceOf(NoClassDefFoundError.class);
+
+                // and the next snapshot is still written
+                failing.set(false);
+
+                assertThat(failingSubject.store(QUALIFIED_NAME, "entity-2", snapshot(1, "1.0"), null))
+                        .succeedsWithin(Duration.ofSeconds(10));
+                assertThat(countSnapshots()).isEqualTo(1);
+            }
+            finally {
+                failingSubject.close();
+            }
+        }
+    }
+
+    private static long countSnapshots() throws SQLException {
+        try (
+            Connection connection = dataSource.getConnection();
+            Statement statement = connection.createStatement();
+            ResultSet resultSet = statement.executeQuery("SELECT COUNT(*) FROM snapshots")
+        ) {
+            resultSet.next();
+
+            return resultSet.getLong(1);
         }
     }
 
