@@ -536,7 +536,7 @@ public class PersistentStreamConnection {
                     event.getMessageIdentifier(),
                     eventTypeResolver.resolve(payload.getType(), payload.getRevision()),
                     payload.getData().toByteArray(),
-                    new Metadata(MetadataConverter.convertMetadataValuesToGrpc(event.getMetaDataMap())),
+                    new Metadata(MetadataConverter.convertGrpcToMetadataMap(event.getMetaDataMap())),
                     Instant.ofEpochMilli(event.getTimestamp())
             ).withConverter(converter);
         }
