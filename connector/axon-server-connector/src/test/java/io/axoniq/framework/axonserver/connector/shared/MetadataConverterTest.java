@@ -8,9 +8,12 @@
 
 package io.axoniq.framework.axonserver.connector.shared;
 
+import com.google.protobuf.ByteString;
 import io.axoniq.axonserver.grpc.MetaDataValue;
+import io.axoniq.axonserver.grpc.SerializedObject;
 import org.junit.jupiter.api.*;
 
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -29,7 +32,7 @@ class MetadataConverterTest {
         Map<String, String> source = new HashMap<>();
 
         // When
-        Map<String, MetaDataValue> result = MetadataConverter.convertGrpcToMetadataValues(source);
+        Map<String, MetaDataValue> result = MetadataConverter.convertMetadataMapToGrpc(source);
 
         // Then
         assertThat(result)
@@ -47,7 +50,7 @@ class MetadataConverterTest {
         );
 
         // When
-        Map<String, MetaDataValue> result = MetadataConverter.convertGrpcToMetadataValues(source);
+        Map<String, MetaDataValue> result = MetadataConverter.convertMetadataMapToGrpc(source);
 
         // Then
         assertThat(result)
@@ -68,7 +71,7 @@ class MetadataConverterTest {
         Map<String, MetaDataValue> source = new HashMap<>();
 
         // When
-        Map<String, String> result = MetadataConverter.convertMetadataValuesToGrpc(source);
+        Map<String, String> result = MetadataConverter.convertGrpcToMetadataMap(source);
 
         // Then
         assertThat(result)
@@ -96,7 +99,7 @@ class MetadataConverterTest {
         );
 
         // When
-        Map<String, String> result = MetadataConverter.convertMetadataValuesToGrpc(source);
+        Map<String, String> result = MetadataConverter.convertGrpcToMetadataMap(source);
 
         // Then
         assertThat(result)
@@ -107,5 +110,55 @@ class MetadataConverterTest {
                 .containsEntry(doubleKey,String.valueOf(doubleValue))
                 .containsEntry(numberKey,String.valueOf(numberValue))
                 .containsEntry(booleanKey, String.valueOf(booleanValue));
+    }
+
+    @Test
+    void decodesBytesValueEntriesAsTextWhenConvertingToMetadata() {
+        // given
+        Map<String, MetaDataValue> source = Map.of(
+                "xmlKey", bytesValue("<map><entry>v</entry></map>".getBytes(StandardCharsets.UTF_8))
+        );
+
+        // when
+        Map<String, String> result = MetadataConverter.convertGrpcToMetadataMap(source);
+
+        // then
+        assertThat(result).containsOnly(Map.entry("xmlKey", "<map><entry>v</entry></map>"));
+    }
+
+    @Test
+    void convertsNonTextBytesValueEntriesToNullWhenConvertingToMetadata() {
+        // given
+        Map<String, MetaDataValue> source = Map.of(
+                "textKey", MetaDataValue.newBuilder().setTextValue("textValue").build(),
+                "binaryKey", bytesValue(new byte[]{(byte) 0xAC, (byte) 0xED, (byte) 0xFF, (byte) 0xFE})
+        );
+
+        // when
+        Map<String, String> result = MetadataConverter.convertGrpcToMetadataMap(source);
+
+        // then
+        assertThat(result)
+                .hasSize(2)
+                .containsEntry("textKey", "textValue")
+                .containsEntry("binaryKey", null);
+    }
+
+    private static MetaDataValue bytesValue(byte[] data) {
+        return MetaDataValue.newBuilder().setBytesValue(
+                SerializedObject.newBuilder().setType("java.util.Map").setData(ByteString.copyFrom(data)).build()
+        ).build();
+    }
+
+    @Test
+    void convertsEntriesWithoutValueToNullWhenConvertingToMetadata() {
+        // Given
+        Map<String, MetaDataValue> source = Map.of("emptyKey", MetaDataValue.getDefaultInstance());
+
+        // When
+        Map<String, String> result = MetadataConverter.convertGrpcToMetadataMap(source);
+
+        // Then
+        assertThat(result).hasSize(1).containsEntry("emptyKey", null);
     }
 }
