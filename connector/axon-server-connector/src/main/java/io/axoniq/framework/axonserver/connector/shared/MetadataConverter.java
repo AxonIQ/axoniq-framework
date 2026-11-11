@@ -22,6 +22,8 @@ import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Utility class to convert between Axon Server metadata values and a simple {@link Map} of String key-value pairs.
@@ -38,6 +40,9 @@ import java.util.Map;
 public final class MetadataConverter {
 
     private static final Logger logger = LoggerFactory.getLogger(MetadataConverter.class);
+
+    private static final int MAX_LOGGED_KEY_COUNT = 1_000;
+    private static final Set<String> loggedNoneConvertedKeys = ConcurrentHashMap.newKeySet();
 
     private MetadataConverter() {
         // Utility class
@@ -71,8 +76,9 @@ public final class MetadataConverter {
      * {@code bytes_value}, which Axon Framework 4 used for anything that was not text, a number or a boolean, is
      * rendered as a {@code String} through the given {@code converter}. When the {@code converter} cannot do so, or is
      * {@code null}, the bytes are used as UTF-8 text, such as JSON or XML. When these bytes are not valid text, for
-     * example due to a binary serializer, the key is kept with a {@code null} value and a warning is logged. A
-     * {@link MetaDataValue} without any value is converted to a {@code null} value as well, without a warning.
+     * example due to a binary serializer, the key is kept with a {@code null} value and a warning is logged <b>once</b>
+     * per key. A {@link MetaDataValue} without any value is converted to a {@code null} value as well, without a
+     * warning.
      *
      * @param source    the source map containing Axon Server {@link MetaDataValue} objects
      * @param converter the converter used to render {@code bytes_value} entries as a {@code String}, if any
@@ -83,7 +89,8 @@ public final class MetadataConverter {
         Map<String, @Nullable String> result = new HashMap<>();
         source.forEach((k, v) -> {
             String convertedValue = convertFromMetaDataValue(v, converter);
-            if (convertedValue == null && v.getDataCase() != MetaDataValue.DataCase.DATA_NOT_SET) {
+            if (convertedValue == null && v.getDataCase() != MetaDataValue.DataCase.DATA_NOT_SET
+                    && firstKeyEncounter(k)) {
                 logger.warn("Metadata entry with key [{}] has a value of type [{}] that cannot be converted to a "
                                     + "String and will be [null].",
                             k, v.getDataCase());
@@ -91,6 +98,12 @@ public final class MetadataConverter {
             result.put(k, convertedValue);
         });
         return result;
+    }
+
+    private static boolean firstKeyEncounter(String key) {
+        // Warn once per key to prevent flooding the log when replaying many messages with the same unconvertible key.
+        // The tracked keys are capped, so arbitrary keys cannot grow this set indefinitely.
+        return loggedNoneConvertedKeys.size() < MAX_LOGGED_KEY_COUNT && loggedNoneConvertedKeys.add(key);
     }
 
     @Nullable
