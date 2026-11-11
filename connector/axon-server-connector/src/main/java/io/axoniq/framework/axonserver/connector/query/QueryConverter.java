@@ -92,7 +92,7 @@ public final class QueryConverter {
                         queryRequest.getMessageIdentifier(),
                         type,
                         payload.getData().toByteArray(),
-                        MetadataConverter.convertGrpcToMetadataMap(queryRequest.getMetaDataMap(), converter)
+                        MetadataConverter.convertGrpcToMetadataMap(queryRequest.getMetaDataMap())
                 ),
                 priority
         ).withConverter(converter);
@@ -175,7 +175,7 @@ public final class QueryConverter {
                 queryResponse.getMessageIdentifier(),
                 new MessageType(responsePayload.getType(), revision),
                 payloadOrNull(responsePayload),
-                MetadataConverter.convertGrpcToMetadataMap(queryResponse.getMetaDataMap(), converter)
+                MetadataConverter.convertGrpcToMetadataMap(queryResponse.getMetaDataMap())
         );
 
         return new GenericQueryResponseMessage(message)
@@ -283,7 +283,7 @@ public final class QueryConverter {
                 query.getSubscriptionIdentifier(),
                 new MessageType(responsePayload.getType(), revision),
                 responsePayload.getData().toByteArray(),
-                MetadataConverter.convertGrpcToMetadataMap(query.getQueryRequest().getMetaDataMap(), converter)
+                MetadataConverter.convertGrpcToMetadataMap(query.getQueryRequest().getMetaDataMap())
         );
 
         return new GenericQueryMessage(message)
@@ -334,7 +334,7 @@ public final class QueryConverter {
                 queryUpdate.getMessageIdentifier(),
                 new MessageType(payload.getType(), revision),
                 payloadOrNull(payload),
-                MetadataConverter.convertGrpcToMetadataMap(queryUpdate.getMetaDataMap(), converter)
+                MetadataConverter.convertGrpcToMetadataMap(queryUpdate.getMetaDataMap())
         );
 
         return new GenericSubscriptionQueryUpdateMessage(message)
