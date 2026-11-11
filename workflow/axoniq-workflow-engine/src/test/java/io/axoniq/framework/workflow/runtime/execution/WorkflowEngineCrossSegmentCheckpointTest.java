@@ -15,10 +15,12 @@ import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowConfigurationRegistry.PredicatedWorkflowConfiguration;
 import org.axonframework.common.TypeReference;
+import org.axonframework.messaging.core.EmptyApplicationContext;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.Metadata;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.axonframework.messaging.core.unitofwork.SimpleUnitOfWorkFactory;
 import org.axonframework.messaging.core.unitofwork.StubProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventMessage;
@@ -35,6 +37,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.stream.IntStream;
@@ -68,6 +71,9 @@ import static org.mockito.Mockito.*;
  * events.
  */
 class WorkflowEngineCrossSegmentCheckpointTest {
+
+    private static final SimpleUnitOfWorkFactory UNIT_OF_WORK_FACTORY =
+            new SimpleUnitOfWorkFactory(EmptyApplicationContext.INSTANCE);
 
     private static final String PROCESSOR = "Workflow";
 
@@ -117,7 +123,12 @@ class WorkflowEngineCrossSegmentCheckpointTest {
     @BeforeEach
     void setUp() {
         tokenStore = new InMemoryTokenStore();
-        tokenStore.initializeTokenSegments(PROCESSOR, SEGMENT_COUNT, null, null).join();
+        UNIT_OF_WORK_FACTORY.create()
+                            .executeWithResult(ctx -> tokenStore.initializeTokenSegments(
+                                    PROCESSOR, SEGMENT_COUNT, null, ctx
+                            ))
+                            .orTimeout(5, TimeUnit.SECONDS)
+                            .join();
         configurationRegistry = mock(WorkflowConfigurationRegistry.class);
         repository = new InMemoryWorkflowExecutionRepository();
         workflowEngine = new WorkflowEngine(configurationRegistry,
@@ -283,7 +294,12 @@ class WorkflowEngineCrossSegmentCheckpointTest {
     }
 
     private TrackingToken storedToken(Segment segment) {
-        return tokenStore.fetchToken(PROCESSOR, segment.getSegmentId(), null).join();
+        return UNIT_OF_WORK_FACTORY.create()
+                                   .executeWithResult(ctx -> tokenStore.fetchToken(
+                                           PROCESSOR, segment.getSegmentId(), ctx
+                                   ))
+                                   .orTimeout(5, TimeUnit.SECONDS)
+                                   .join();
     }
 
     /**
