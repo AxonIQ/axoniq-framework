@@ -12,6 +12,10 @@ import org.axonframework.common.infra.DescribableComponent;
 
 /**
  * Interface for components that can be registered with a {@link TenantProvider}.
+ * <p>
+ * Implementations must keep nothing of a tenant whose registration throws: release whatever was allocated for it
+ * before rethrowing, since the caller only holds the registrations that were returned. Releasing is best effort: if it
+ * fails, attach that failure to the original one with {@code addSuppressed} and rethrow the original.
  *
  * @author Stefan Dragisic
  * @since 4.6.0
@@ -23,6 +27,8 @@ public interface MultiTenantAwareComponent extends DescribableComponent {
      * <p>
      * The caller must retain the returned {@link Registration} and cancel it when the tenant is removed, since
      * releasing the component's per-tenant resources rides on that cancellation.
+     * <p>
+     * If this method throws, the failure rule in the interface documentation applies.
      *
      * @param tenantDescriptor The {@link TenantDescriptor} to register with this component.
      * @return A {@link Registration} used to deregister the given {@code tenantDescriptor}.
@@ -32,6 +38,8 @@ public interface MultiTenantAwareComponent extends DescribableComponent {
     /**
      * Registers the given {@code tenantDescriptor} as a known tenant with this multi-tenant aware component. If
      * applicable, this task will construct a tenant segment and start it.
+     * <p>
+     * If this method throws, the failure rule in the interface documentation applies.
      *
      * @param tenantDescriptor The {@link TenantDescriptor} to register with this component.
      * @return A {@link Registration} used to deregister the given {@code tenantDescriptor}.
