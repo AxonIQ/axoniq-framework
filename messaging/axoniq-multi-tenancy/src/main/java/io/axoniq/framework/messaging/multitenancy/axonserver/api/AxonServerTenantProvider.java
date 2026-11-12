@@ -230,14 +230,7 @@ public class AxonServerTenantProvider implements TenantProvider {
             refreshTenantsView();
             throw failure;
         }
-        if (!tenantDescriptors.contains(tenantDescriptor)) {
-            // A component removed the tenant while it registered it. The removal could not see this attempt's
-            // registrations, so they are cancelled here rather than stored for a tenant that is no longer known.
-            cancelAttempt(attempt, e -> {
-            });
-            return;
-        }
-        registrations.addAll(attempt);
+        storeRegistrationsOfKnownTenants(attempt);
     }
 
     /**
@@ -297,7 +290,7 @@ public class AxonServerTenantProvider implements TenantProvider {
             throw failure;
         }
         tenantAwareComponents.add(component);
-        registrations.addAll(attempt);
+        storeRegistrationsOfKnownTenants(attempt);
 
         // Cancelling covers every registration made on the component's behalf, including tenants added after
         // subscribing, as the TenantProvider#subscribe contract requires.
@@ -333,6 +326,20 @@ public class AxonServerTenantProvider implements TenantProvider {
             if (e != failure) {
                 failure.addSuppressed(e);
             }
+        });
+    }
+
+    // A component may remove a tenant while it registers it; that removal cannot see this attempt, so cancel here.
+    private void storeRegistrationsOfKnownTenants(List<TenantRegistration> attempt) {
+        List<TenantRegistration> removed = new ArrayList<>();
+        for (TenantRegistration tenantRegistration : attempt) {
+            if (tenantDescriptors.contains(tenantRegistration.tenant())) {
+                registrations.add(tenantRegistration);
+            } else {
+                removed.add(tenantRegistration);
+            }
+        }
+        cancelAttempt(removed, e -> {
         });
     }
 

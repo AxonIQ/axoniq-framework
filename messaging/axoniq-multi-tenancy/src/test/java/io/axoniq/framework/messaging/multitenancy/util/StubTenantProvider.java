@@ -47,7 +47,7 @@ public class StubTenantProvider implements TenantProvider {
             throw failure;
         }
         subscribedComponents.add(component);
-        registrations.addAll(attempt);
+        storeRegistrationsOfKnownTenants(attempt);
         return () -> {
             subscribedComponents.remove(component);
             cancelRegistrationsMatching(registration -> registration.component() == component);
@@ -75,7 +75,7 @@ public class StubTenantProvider implements TenantProvider {
             tenantDescriptors.remove(tenant);
             throw failure;
         }
-        registrations.addAll(attempt);
+        storeRegistrationsOfKnownTenants(attempt);
     }
 
     public void removeTenant(TenantDescriptor tenant) {
@@ -102,6 +102,19 @@ public class StubTenantProvider implements TenantProvider {
         List<TenantRegistration> matching = registrations.stream().filter(criterion).toList();
         registrations.removeAll(matching);
         matching.reversed().forEach(tenantRegistration -> tenantRegistration.registration().cancel());
+    }
+
+    // A component may remove a tenant while it registers it; that removal cannot see this attempt, so cancel here.
+    private void storeRegistrationsOfKnownTenants(List<TenantRegistration> attempt) {
+        List<TenantRegistration> removed = new ArrayList<>();
+        for (TenantRegistration tenantRegistration : attempt) {
+            if (tenantDescriptors.contains(tenantRegistration.tenant())) {
+                registrations.add(tenantRegistration);
+            } else {
+                removed.add(tenantRegistration);
+            }
+        }
+        removed.reversed().forEach(tenantRegistration -> tenantRegistration.registration().cancel());
     }
 
     // Undoes a failed attempt in reverse order. Unlike removal, cancel failures are attached to the original failure.
