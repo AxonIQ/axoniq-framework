@@ -8,6 +8,7 @@
 
 package io.axoniq.framework.messaging.eventstreaming.checkpoint;
 
+import org.axonframework.messaging.core.unitofwork.UnitOfWorkTestUtils;
 import org.axonframework.messaging.eventhandling.processing.streaming.pooled.SegmentProgressStrategyTestSupport;
 import org.axonframework.messaging.eventhandling.processing.streaming.progress.SegmentProgressStrategyFactory;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
@@ -489,9 +490,12 @@ public abstract class CheckpointingProgressStrategyTestSuite extends SegmentProg
         }
 
         private TrackingToken storedToken() {
-            return tokenStore().fetchToken(PROCESSOR_NAME, segment().getSegmentId(), null)
-                               .orTimeout(5, TimeUnit.SECONDS)
-                               .join();
+            return UnitOfWorkTestUtils.SIMPLE_FACTORY.create()
+                                                     .executeWithResult(context -> tokenStore().fetchToken(
+                                                             PROCESSOR_NAME, segment().getSegmentId(), context
+                                                     ))
+                                                     .orTimeout(5, TimeUnit.SECONDS)
+                                                     .join();
         }
     }
 
