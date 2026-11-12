@@ -228,7 +228,7 @@ class WorkflowExecutionCheckpointingSupportTest {
             Thread.ofPlatform().daemon().start(() -> tasks.forEach(task -> {
                 queueLockHeld.countDown();
                 try {
-                    releaseQueueLock.await();
+                    releaseQueueLock.await(10, TimeUnit.SECONDS);
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                 }

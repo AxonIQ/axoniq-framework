@@ -18,6 +18,7 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 import static java.util.Objects.requireNonNull;
 
@@ -139,40 +140,32 @@ import static java.util.Objects.requireNonNull;
      */
     public void addCheckpointLatch(Runnable latch) {
         requireNonNull(latch, "The when-complete runnable must not be null");
-        boolean idle;
-        lock.lock();
-        try {
-            idle = !executionTaskQueue.isRunning() && !unsafe();
-        } finally {
-            lock.unlock();
-        }
+        boolean idle = locked(() -> !executionTaskQueue.isRunning() && !unsafe());
         if (idle) {
             latch.run();
             return;
         }
 
-        lock.lock();
-        try {
+        boolean latchAlreadyQueued = locked(() -> {
             latchCallbacks.add(latch);
             if (latchQueued) {
-                return;
+                return true;
             }
             latchQueued = true;
             reportCheckpointWorkUnsafe();
-        } finally {
-            lock.unlock();
+            return false;
+        });
+        if (latchAlreadyQueued) {
+            return;
         }
 
         try {
             executionTaskQueue.appendTask(new CheckpointLatch());
         } catch (RuntimeException e) {
-            lock.lock();
-            try {
+            locked(() -> {
                 latchQueued = false;
                 reportCheckpointWorkState();
-            } finally {
-                lock.unlock();
-            }
+            });
             throw e;
         }
     }
@@ -194,12 +187,7 @@ import static java.util.Objects.requireNonNull;
      * @return {@code true} if checkpoint advancement must still wait, otherwise {@code false}
      */
     public boolean hasUnsafeCheckpointWork() {
-        lock.lock();
-        try {
-            return unsafe();
-        } finally {
-            lock.unlock();
-        }
+        return locked(this::unsafe);
     }
 
     /**
@@ -220,8 +208,7 @@ import static java.util.Objects.requireNonNull;
      * @param listener the {@code CheckpointWorkStateListener} to register
      */
     public void registerListener(CheckpointWorkStateListener listener) {
-        lock.lock();
-        try {
+        locked(() -> {
             checkpointWorkStateListener = requireNonNull(listener, "Checkpoint work state listener must not be null");
             checkpointWorkUnsafe = unsafe();
             if (checkpointWorkUnsafe) {
@@ -229,23 +216,15 @@ import static java.util.Objects.requireNonNull;
             } else {
                 checkpointWorkStateListener.onMarkedSafe();
             }
-        } finally {
-            lock.unlock();
-        }
+        });
     }
 
     void refreshCheckpointWorkState() {
-        lock.lock();
-        try {
-            reportCheckpointWorkState();
-        } finally {
-            lock.unlock();
-        }
+        locked(this::reportCheckpointWorkState);
     }
 
     void appendTask(Consumer<WorkflowExecution> task) {
-        lock.lock();
-        try {
+        locked(() -> {
             reportCheckpointWorkUnsafe();
             try {
                 executionTaskQueue.appendTask(task);
@@ -253,9 +232,7 @@ import static java.util.Objects.requireNonNull;
                 reportCheckpointWorkState();
                 throw e;
             }
-        } finally {
-            lock.unlock();
-        }
+        });
     }
 
     private void reportCheckpointWorkUnsafe() {
@@ -283,23 +260,13 @@ import static java.util.Objects.requireNonNull;
                  WorkflowExecution execution) {
         List<Runnable> afterTask;
         taskActive.set(true);
-        lock.lock();
-        try {
-            reportCheckpointWorkUnsafe();
-        } finally {
-            lock.unlock();
-        }
+        locked(this::reportCheckpointWorkUnsafe);
         try {
             task.accept(execution);
             afterTask = task instanceof CheckpointLatch checkpointLatch ? checkpointLatch.whenComplete() : List.of();
         } finally {
             taskActive.set(false);
-            lock.lock();
-            try {
-                reportCheckpointWorkState();
-            } finally {
-                lock.unlock();
-            }
+            locked(this::reportCheckpointWorkState);
         }
         runLatchCallbacks(afterTask);
     }
@@ -365,16 +332,42 @@ import static java.util.Objects.requireNonNull;
      * the callbacks prevents a checkpoint waiter from being stranded by terminal cleanup.
      */
     void completePendingCheckpointLatch() {
-        List<Runnable> callbacks;
-        lock.lock();
-        try {
+        List<Runnable> callbacks = locked(() -> {
             checkpointWorkUnsafe = false;
             latchQueued = false;
-            callbacks = takeLatchCallbacks();
+            return takeLatchCallbacks();
+        });
+        runLatchCallbacks(callbacks);
+    }
+
+    /**
+     * Runs the given {@code action} while holding this instance's lock.
+     *
+     * @param action the action to run
+     */
+    private void locked(Runnable action) {
+        lock.lock();
+        try {
+            action.run();
         } finally {
             lock.unlock();
         }
-        runLatchCallbacks(callbacks);
+    }
+
+    /**
+     * Runs the given {@code action} while holding this instance's lock and returns its result.
+     *
+     * @param action the action to run
+     * @param <T>    the type of the result
+     * @return the result of the {@code action}
+     */
+    private <T> T locked(Supplier<T> action) {
+        lock.lock();
+        try {
+            return action.get();
+        } finally {
+            lock.unlock();
+        }
     }
 
     /**
@@ -440,13 +433,10 @@ import static java.util.Objects.requireNonNull;
          */
         @Override
         public void accept(WorkflowExecution ignored) {
-            lock.lock();
-            try {
+            locked(() -> {
                 latchQueued = false;
                 whenComplete = takeLatchCallbacks();
-            } finally {
-                lock.unlock();
-            }
+            });
         }
 
         /**
