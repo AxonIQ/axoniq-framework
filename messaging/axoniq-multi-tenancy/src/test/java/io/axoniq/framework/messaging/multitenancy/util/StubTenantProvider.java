@@ -37,17 +37,17 @@ public class StubTenantProvider implements TenantProvider {
 
     @Override
     public synchronized Registration subscribe(MultiTenantAwareComponent component) {
-        List<TenantRegistration> attempt = new ArrayList<>();
+        List<TenantRegistration> registrationAttempt = new ArrayList<>();
         try {
             for (TenantDescriptor tenant : tenantDescriptors) {
-                attempt.add(new TenantRegistration(tenant, component, component.registerTenant(tenant)));
+                registrationAttempt.add(new TenantRegistration(tenant, component, component.registerTenant(tenant)));
             }
         } catch (Throwable failure) {
-            rollBack(attempt, failure);
+            rollBack(registrationAttempt, failure);
             throw failure;
         }
         subscribedComponents.add(component);
-        storeRegistrationsOfKnownTenants(attempt);
+        storeRegistrationsOfKnownTenants(registrationAttempt);
         return () -> {
             subscribedComponents.remove(component);
             cancelRegistrationsMatching(registration -> registration.component() == component);
@@ -65,17 +65,19 @@ public class StubTenantProvider implements TenantProvider {
             return;
         }
         tenantDescriptors.add(tenant);
-        List<TenantRegistration> attempt = new ArrayList<>();
+        List<TenantRegistration> registrationAttempt = new ArrayList<>();
         try {
             for (MultiTenantAwareComponent component : subscribedComponents) {
-                attempt.add(new TenantRegistration(tenant, component, component.registerAndStartTenant(tenant)));
+                registrationAttempt.add(new TenantRegistration(
+                        tenant, component, component.registerAndStartTenant(tenant)
+                ));
             }
         } catch (Throwable failure) {
-            rollBack(attempt, failure);
+            rollBack(registrationAttempt, failure);
             tenantDescriptors.remove(tenant);
             throw failure;
         }
-        storeRegistrationsOfKnownTenants(attempt);
+        storeRegistrationsOfKnownTenants(registrationAttempt);
     }
 
     public void removeTenant(TenantDescriptor tenant) {
@@ -105,9 +107,9 @@ public class StubTenantProvider implements TenantProvider {
     }
 
     // A component may remove a tenant while it registers it; that removal cannot see this attempt, so cancel here.
-    private void storeRegistrationsOfKnownTenants(List<TenantRegistration> attempt) {
+    private void storeRegistrationsOfKnownTenants(List<TenantRegistration> registrationAttempt) {
         List<TenantRegistration> removed = new ArrayList<>();
-        for (TenantRegistration tenantRegistration : attempt) {
+        for (TenantRegistration tenantRegistration : registrationAttempt) {
             if (tenantDescriptors.contains(tenantRegistration.tenant())) {
                 registrations.add(tenantRegistration);
             } else {
@@ -118,13 +120,13 @@ public class StubTenantProvider implements TenantProvider {
     }
 
     // Undoes a failed attempt in reverse order. Unlike removal, cancel failures are attached to the original failure.
-    private static void rollBack(List<TenantRegistration> attempt, Throwable failure) {
-        for (TenantRegistration tenantRegistration : attempt.reversed()) {
+    private static void rollBack(List<TenantRegistration> registrationAttempt, Throwable failure) {
+        for (TenantRegistration tenantRegistration : registrationAttempt.reversed()) {
             try {
                 tenantRegistration.registration().cancel();
-            } catch (Throwable e) {
-                if (e != failure) {
-                    failure.addSuppressed(e);
+            } catch (Throwable exception) {
+                if (exception != failure) {
+                    failure.addSuppressed(exception);
                 }
             }
         }

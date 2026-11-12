@@ -199,10 +199,7 @@ public class AxonServerTenantProvider implements TenantProvider {
      * registration starts, so components that are already live can route its messages. It is withdrawn again if a
      * component fails.
      * <p>
-     * Undo is best effort: a cancel that itself fails can leave a resource behind. It is logged and attached to the
-     * original exception as suppressed. In the window before the rollback, a component that is already live may handle
-     * a command (its events stay) or open a subscription query (the rollback ends it). At-least-once handling accepts
-     * this.
+     * What a rollback cannot undo is described on {@link MultiTenantAwareComponent}.
      * <p>
      * When a registration throws an exception during a runtime context update, it is logged and the tenant stays
      * unknown (an {@link Error} propagates). The tenant is not retried, since Axon Server sends the creation update
@@ -217,20 +214,20 @@ public class AxonServerTenantProvider implements TenantProvider {
         }
         // Known before the components register it, so a component that is already live can route its messages.
         refreshTenantsView();
-        List<TenantRegistration> attempt = new ArrayList<>();
+        List<TenantRegistration> registrationAttempt = new ArrayList<>();
         try {
             for (MultiTenantAwareComponent component : tenantAwareComponents) {
-                attempt.add(new TenantRegistration(
+                registrationAttempt.add(new TenantRegistration(
                         tenantDescriptor, component, component.registerAndStartTenant(tenantDescriptor)
                 ));
             }
         } catch (Throwable failure) {
-            rollBack(attempt, failure);
+            rollBack(registrationAttempt, failure);
             tenantDescriptors.remove(tenantDescriptor);
             refreshTenantsView();
             throw failure;
         }
-        storeRegistrationsOfKnownTenants(attempt);
+        storeRegistrationsOfKnownTenants(registrationAttempt);
     }
 
     /**
@@ -271,26 +268,23 @@ public class AxonServerTenantProvider implements TenantProvider {
      * already made for it are cancelled in reverse order, the failure is rethrown as is, and the component is not
      * subscribed. Registrations of an earlier, successful subscription of the same component are left untouched.
      * <p>
-     * Undo is best effort: a cancel that itself fails can leave a resource behind. It is logged and attached to the
-     * original exception as suppressed. In the window before the rollback, a component that is already live may handle
-     * a command (its events stay) or open a subscription query (the rollback ends it). At-least-once handling accepts
-     * this.
+     * What a rollback cannot undo is described on {@link MultiTenantAwareComponent}.
      */
     @Override
     public synchronized Registration subscribe(MultiTenantAwareComponent component) {
-        List<TenantRegistration> attempt = new ArrayList<>();
+        List<TenantRegistration> registrationAttempt = new ArrayList<>();
         try {
             for (TenantDescriptor tenantDescriptor : tenantDescriptors) {
-                attempt.add(new TenantRegistration(
+                registrationAttempt.add(new TenantRegistration(
                         tenantDescriptor, component, component.registerTenant(tenantDescriptor)
                 ));
             }
         } catch (Throwable failure) {
-            rollBack(attempt, failure);
+            rollBack(registrationAttempt, failure);
             throw failure;
         }
         tenantAwareComponents.add(component);
-        storeRegistrationsOfKnownTenants(attempt);
+        storeRegistrationsOfKnownTenants(registrationAttempt);
 
         // Cancelling covers every registration made on the component's behalf, including tenants added after
         // subscribing, as the TenantProvider#subscribe contract requires.
@@ -317,46 +311,47 @@ public class AxonServerTenantProvider implements TenantProvider {
         }
     }
 
-    // Undoes a failed registration attempt, whose registrations were never added to 'registrations', so nothing is
-    // cancelled twice later. Any Throwable from a cancel is logged and attached to the attempt's failure, so it neither
-    // skips the remaining cancels nor replaces the original failure.
-    private void rollBack(List<TenantRegistration> attempt, Throwable failure) {
-        cancelAttempt(attempt, e -> {
+    private void rollBack(List<TenantRegistration> registrationAttempt, Throwable failure) {
+        cancelAttempt(registrationAttempt, exception -> {
             // A cancel may throw the very object that is the failure, which cannot be suppressed by itself.
-            if (e != failure) {
-                failure.addSuppressed(e);
+            if (exception != failure) {
+                failure.addSuppressed(exception);
             }
         });
     }
 
-    // A component may remove a tenant while it registers it; that removal cannot see this attempt, so cancel here.
-    private void storeRegistrationsOfKnownTenants(List<TenantRegistration> attempt) {
+    /** A component may remove a tenant while it registers it; that removal cannot see this attempt, so cancel here. */
+    private void storeRegistrationsOfKnownTenants(List<TenantRegistration> registrationAttempt) {
         List<TenantRegistration> removed = new ArrayList<>();
-        for (TenantRegistration tenantRegistration : attempt) {
+        for (TenantRegistration tenantRegistration : registrationAttempt) {
             if (tenantDescriptors.contains(tenantRegistration.tenant())) {
                 registrations.add(tenantRegistration);
             } else {
                 removed.add(tenantRegistration);
             }
         }
-        cancelAttempt(removed, e -> {
+        cancelAttempt(removed);
+    }
+
+    private void cancelAttempt(List<TenantRegistration> registrationAttempt) {
+        cancelAttempt(registrationAttempt, ignored -> {
         });
     }
 
-    private void cancelAttempt(List<TenantRegistration> attempt, Consumer<Throwable> onCancelFailure) {
-        for (TenantRegistration tenantRegistration : attempt.reversed()) {
+    private void cancelAttempt(List<TenantRegistration> registrationAttempt, Consumer<Throwable> onCancelFailure) {
+        for (TenantRegistration tenantRegistration : registrationAttempt.reversed()) {
             try {
                 tenantRegistration.registration().cancel();
-            } catch (Throwable e) {
-                logCancelFailure(tenantRegistration, e);
-                onCancelFailure.accept(e);
+            } catch (Throwable exception) {
+                logCancelFailure(tenantRegistration, exception);
+                onCancelFailure.accept(exception);
             }
         }
     }
 
-    private static void logCancelFailure(TenantRegistration tenantRegistration, Throwable e) {
+    private static void logCancelFailure(TenantRegistration tenantRegistration, Throwable exception) {
         logger.warn("Error while cancelling the tenant [{}] registration of component [{}].",
-                    tenantRegistration.tenant().tenantId(), tenantRegistration.component(), e);
+                    tenantRegistration.tenant().tenantId(), tenantRegistration.component(), exception);
     }
 
     /**
