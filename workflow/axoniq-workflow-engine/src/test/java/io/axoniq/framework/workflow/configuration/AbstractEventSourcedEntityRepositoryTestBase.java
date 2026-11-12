@@ -24,6 +24,7 @@ import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.*;
 
 import java.util.Map;
+import java.util.function.Consumer;
 
 import static org.mockito.Mockito.*;
 
@@ -44,6 +45,11 @@ abstract class AbstractEventSourcedEntityRepositoryTestBase {
     }
 
     protected AxonConfiguration configuration(String moduleName) {
+        return configuration(moduleName, configurer -> {
+        });
+    }
+
+    protected AxonConfiguration configuration(String moduleName, Consumer<WorkflowConfigurer> customization) {
         var module = WorkflowModule.defaults(moduleName, TestContext.class)
                                    .definition(d -> d
                                            .declarative(c -> ctx -> {
@@ -56,6 +62,7 @@ abstract class AbstractEventSourcedEntityRepositoryTestBase {
 
         var configurer = WorkflowConfigurer.create();
         configurer.componentRegistry(cr -> cr.registerModule(module));
+        customization.accept(configurer);
         return configurer.build();
     }
 

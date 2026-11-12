@@ -24,14 +24,17 @@ import io.axoniq.framework.workflow.runtime.util.FutureResolver;
 import org.axonframework.common.ClockUtils;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.annotation.RegistrationScope;
+import org.axonframework.common.configuration.ComponentBuilder;
 import org.axonframework.common.configuration.ComponentDefinition;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.axonframework.common.configuration.DecoratorDefinition;
 import org.axonframework.common.lifecycle.Phase;
+import org.axonframework.eventsourcing.configuration.EventSourcedEntityModule;
 import org.axonframework.eventsourcing.configuration.EventSourcingConfigurationDefaults;
 import org.axonframework.eventsourcing.eventstore.MultiTagResolver;
 import org.axonframework.eventsourcing.eventstore.TagResolver;
+import org.axonframework.eventsourcing.snapshot.api.SnapshotPolicy;
 import org.axonframework.messaging.core.Metadata;
 import org.axonframework.modelling.repository.Repository;
 import org.jspecify.annotations.Nullable;
@@ -65,6 +68,20 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
      * that isolation or size their executor for the configured resolver timeout.
      */
     public static final String WORKFLOW_ENGINE_EXECUTOR = "WorkflowEngineExecutor";
+    /**
+     * Name of the {@link SnapshotPolicy} component of the running-workflow list.
+     * <p>
+     * The list is snapshotted only when a component is registered under this name. Snapshotting then requires a
+     * {@link org.axonframework.eventsourcing.snapshot.store.SnapshotStore} component.
+     */
+    public static final String RUNNING_WORKFLOWS_SNAPSHOT_POLICY = "RunningWorkflowsSnapshotPolicy";
+    /**
+     * Name of the {@link SnapshotPolicy} component of the workflow state.
+     * <p>
+     * The state of each workflow instance is snapshotted only when a component is registered under this name.
+     * Snapshotting then requires a {@link org.axonframework.eventsourcing.snapshot.store.SnapshotStore} component.
+     */
+    public static final String WORKFLOW_STATE_SNAPSHOT_POLICY = "WorkflowStateSnapshotPolicy";
     /**
      * Order for this enhancer.
      * <p>
@@ -167,20 +184,22 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
     }
 
     void registerRunningWorkflowsModule(ComponentRegistry componentRegistry) {
-        componentRegistry.registerModule(
+        componentRegistry.registerModule(withSnapshotPolicy(
                 declarative(String.class, EventSourcedRunningWorkflows.class)
                         .messagingModel((c, model) -> model.entityEvolver((entity, event, context) -> {
                             entity.evolve(event.metadata());
                             return entity;
                         }).build())
                         .entityFactory(c -> (identifier, firstEvent, context) -> new EventSourcedRunningWorkflows())
-                        .criteriaResolver(c -> (identifier, context) -> EventSourcedRunningWorkflows.criteriaBuilder())
-                        .build());
+                        .criteriaResolver(c -> (identifier, context) -> EventSourcedRunningWorkflows.criteriaBuilder()),
+                componentRegistry,
+                RUNNING_WORKFLOWS_SNAPSHOT_POLICY
+        ));
         componentRegistry.registerIfNotPresent(Clock.class, cfg -> ClockUtils.get());
     }
 
     void registerWorkflowStateModule(ComponentRegistry componentRegistry) {
-        componentRegistry.registerModule(
+        componentRegistry.registerModule(withSnapshotPolicy(
                 declarative(String.class, EventSourcedWorkflowState.class)
                         .messagingModel((c, model) -> model.entityEvolver((entity, event, context) ->
                                                                                   EventSourcedWorkflowState.requireEventSourcedState(
@@ -197,8 +216,23 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
                                                 "Workflow state for '%s' cannot be created without workflowDefinitionId metadata.".formatted(
                                                         identifier)))))
                         .criteriaResolver(c -> (identifier, context) -> EventSourcedWorkflowState.criteriaBuilder(
-                                identifier))
-                        .build());
+                                identifier)),
+                componentRegistry,
+                WORKFLOW_STATE_SNAPSHOT_POLICY
+        ));
+    }
+
+    private static <E> EventSourcedEntityModule<String, E> withSnapshotPolicy(
+            EventSourcedEntityModule.OptionalPhase<String, E> module,
+            ComponentRegistry componentRegistry,
+            String snapshotPolicyName
+    ) {
+        if (componentRegistry.hasComponent(SnapshotPolicy.class, snapshotPolicyName)) {
+            ComponentBuilder<SnapshotPolicy> snapshotPolicy =
+                    config -> config.getComponent(SnapshotPolicy.class, snapshotPolicyName);
+            module.snapshotPolicy(snapshotPolicy);
+        }
+        return module.build();
     }
 
     void registerWorkflowEngineExecutor(ComponentRegistry componentRegistry) {

@@ -8,6 +8,7 @@
 package io.axoniq.framework.workflow.runtime.execution;
 
 import io.axoniq.framework.workflow.dsl.api.StepRetryInfo;
+import io.axoniq.framework.workflow.dsl.api.StepStatus;
 import io.axoniq.framework.workflow.dsl.api.WorkflowCancelledException;
 import io.axoniq.framework.workflow.dsl.api.WorkflowContext;
 import io.axoniq.framework.workflow.dsl.api.WorkflowError;
@@ -23,6 +24,7 @@ import io.axoniq.framework.workflow.runtime.util.WorkflowStateUtils;
 import org.axonframework.common.TypeReference;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.infra.ComponentDescriptor;
+import org.axonframework.messaging.core.Context;
 import org.axonframework.messaging.core.Metadata;
 import org.axonframework.messaging.core.VersionedType;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
@@ -33,6 +35,7 @@ import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Instant;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -61,7 +64,7 @@ public class EventSourcedWorkflowState implements WorkflowState {
 
     private final static Logger logger = LoggerFactory.getLogger(EventSourcedWorkflowState.class);
 
-    private final String workflowId;
+    private String workflowId;
     private final WorkflowStateListenerSupport listenerSupport;
     private final Map<String, WorkflowStep> steps = new ConcurrentHashMap<>();
     private final Map<String, String> versions = new ConcurrentHashMap<>();
@@ -70,6 +73,14 @@ public class EventSourcedWorkflowState implements WorkflowState {
     private WorkflowStatus status = WorkflowStatus.NONE;
     private volatile Throwable terminationCause;
 
+
+    /**
+     * Creates a workflow state without values, for a converter reading the state from a snapshot. The converter sets
+     * the values through {@link #setStateSnapshot(StateSnapshot)}.
+     */
+    private EventSourcedWorkflowState() {
+        this.listenerSupport = WorkflowStateListenerSupport.EMPTY;
+    }
 
     /**
      * Creates a new workflow state without reference to a workflow context and with an empty initial payload.
@@ -174,6 +185,41 @@ public class EventSourcedWorkflowState implements WorkflowState {
                             state.getClass().getName()));
         }
         return sourcedState;
+    }
+
+    /**
+     * Returns the plain values of this state, for a converter writing the state as a snapshot.
+     *
+     * @return the plain values of this state
+     */
+    public StateSnapshot getStateSnapshot() {
+        return new StateSnapshot(
+                workflowId,
+                payload(),
+                workflowDefinition.name(),
+                workflowDefinition.version(),
+                status,
+                WorkflowError.from(terminationCause),
+                versionMigrations(),
+                steps.values().stream().map(StepSnapshot::of).toList()
+        );
+    }
+
+    /**
+     * Sets the plain values of this state, for a converter reading the state from a snapshot.
+     *
+     * @param stateSnapshot the plain values of this state
+     */
+    public void setStateSnapshot(StateSnapshot stateSnapshot) {
+        this.workflowId = stateSnapshot.workflowId();
+        this.payload = stateSnapshot.payload();
+        this.workflowDefinition = VersionedType.of(stateSnapshot.definitionName(), stateSnapshot.definitionVersion());
+        this.status = stateSnapshot.status();
+        this.terminationCause = stateSnapshot.terminationCause() == null
+                ? null
+                : stateSnapshot.terminationCause().toThrowable();
+        this.versions.putAll(stateSnapshot.versions());
+        stateSnapshot.steps().forEach(step -> addStep(step.toStep()));
     }
 
     /**
@@ -539,6 +585,79 @@ public class EventSourcedWorkflowState implements WorkflowState {
                 ", steps=" + steps +
                 ", payload=" + payload +
                 '}';
+    }
+
+    /**
+     * The plain values of an {@link EventSourcedWorkflowState}, which a converter can write and read.
+     *
+     * @param workflowId        the identifier of the workflow execution
+     * @param payload           the workflow payload
+     * @param definitionName    the name of the workflow definition
+     * @param definitionVersion the version of the workflow definition
+     * @param status            the status of the workflow
+     * @param terminationCause  the cause the workflow terminated with, if any
+     * @param versions          the version per version change identifier
+     * @param steps             the plain values of the workflow steps
+     */
+    public record StateSnapshot(
+            String workflowId,
+            Map<String, @Nullable Object> payload,
+            String definitionName,
+            String definitionVersion,
+            WorkflowStatus status,
+            @Nullable WorkflowError terminationCause,
+            Map<String, String> versions,
+            List<StepSnapshot> steps
+    ) {
+
+    }
+
+    /**
+     * The plain values of a {@link WorkflowStep}, which a converter can write and read.
+     * <p>
+     * A step result is kept in the form it has: {@code rawResult} for the bytes of a sourced event payload,
+     * {@code retryInfo} for a retried step, and {@code result} for any other value.
+     *
+     * @param stepName  the name of the step
+     * @param status    the status of the step
+     * @param result    the result of the step, if it is neither bytes nor a {@link StepRetryInfo}
+     * @param rawResult the result of the step, if it is bytes
+     * @param retryInfo the result of the step, if it is a {@link StepRetryInfo}
+     * @param error     the error of the step, if any
+     * @param timestamp the time the step reached its status
+     */
+    public record StepSnapshot(
+            String stepName,
+            StepStatus status,
+            @Nullable Object result,
+            byte @Nullable [] rawResult,
+            @Nullable StepRetryInfo retryInfo,
+            @Nullable WorkflowError error,
+            Instant timestamp
+    ) {
+
+        private static StepSnapshot of(WorkflowStep step) {
+            return new StepSnapshot(
+                    step.stepName(),
+                    step.status(),
+                    step.result() instanceof byte[] || step.result() instanceof StepRetryInfo ? null : step.result(),
+                    step.result() instanceof byte[] rawResult ? rawResult : null,
+                    step.result() instanceof StepRetryInfo retryInfo ? retryInfo : null,
+                    WorkflowError.from(step.error()),
+                    step.timestamp()
+            );
+        }
+
+        private WorkflowStep toStep() {
+            return new WorkflowStep(
+                    stepName,
+                    status,
+                    rawResult != null ? rawResult : retryInfo != null ? retryInfo : result,
+                    error == null ? null : error.toThrowable(),
+                    timestamp,
+                    Context.empty()
+            );
+        }
     }
 
     /**

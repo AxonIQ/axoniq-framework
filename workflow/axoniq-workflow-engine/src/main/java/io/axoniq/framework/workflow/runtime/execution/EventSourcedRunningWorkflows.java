@@ -56,6 +56,25 @@ public class EventSourcedRunningWorkflows implements RunningWorkflows {
                      .ifPresent(status -> applyLifecycle(MetadataUtils.getWorkflowId(metadata), status));
     }
 
+    /**
+     * Returns the identifiers of the running workflows, for a converter writing this collection as a snapshot.
+     *
+     * @return the identifiers of the running workflows
+     */
+    public Set<String> getWorkflowIds() {
+        return workflowIds();
+    }
+
+    /**
+     * Sets the identifiers of the running workflows, for a converter reading this collection from a snapshot.
+     *
+     * @param workflowIds the identifiers of the running workflows
+     */
+    public void setWorkflowIds(Set<String> workflowIds) {
+        this.workflowIds.clear();
+        this.workflowIds.addAll(workflowIds);
+    }
+
     @Override
     public Set<String> workflowIds() {
         return Set.copyOf(workflowIds);
