@@ -9,7 +9,9 @@ package io.axoniq.framework.springboot.autoconfig;
 
 import io.axoniq.framework.springboot.WorkflowProperties;
 import io.axoniq.framework.springboot.workflow.WorkflowDefinitionLookup;
+import io.axoniq.framework.workflow.configuration.WorkflowConfigurationDefaults;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowEngine;
+import org.axonframework.eventsourcing.snapshot.api.SnapshotPolicy;
 import org.springframework.beans.factory.config.BeanDefinition;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
@@ -39,5 +41,29 @@ public class WorkflowAutoConfiguration {
     @Bean
     public static WorkflowDefinitionLookup workflowDefinitionLookup() {
         return new WorkflowDefinitionLookup();
+    }
+
+    /**
+     * Provides the {@link SnapshotPolicy} of the running-workflow list when snapshots are enabled.
+     *
+     * @param workflowProperties the {@link WorkflowProperties} holding the snapshot settings
+     * @return the {@link SnapshotPolicy} of the running-workflow list
+     */
+    @Bean(WorkflowConfigurationDefaults.RUNNING_WORKFLOWS_SNAPSHOT_POLICY)
+    @ConditionalOnProperty(prefix = "axon.workflow.snapshots", name = "enabled", havingValue = "true")
+    public SnapshotPolicy runningWorkflowsSnapshotPolicy(WorkflowProperties workflowProperties) {
+        return SnapshotPolicy.afterEvents(workflowProperties.getSnapshots().getRunningWorkflows().getAfterEvents());
+    }
+
+    /**
+     * Provides the {@link SnapshotPolicy} of the state of each workflow instance when snapshots are enabled.
+     *
+     * @param workflowProperties the {@link WorkflowProperties} holding the snapshot settings
+     * @return the {@link SnapshotPolicy} of the state of each workflow instance
+     */
+    @Bean(WorkflowConfigurationDefaults.WORKFLOW_STATE_SNAPSHOT_POLICY)
+    @ConditionalOnProperty(prefix = "axon.workflow.snapshots", name = "enabled", havingValue = "true")
+    public SnapshotPolicy workflowStateSnapshotPolicy(WorkflowProperties workflowProperties) {
+        return SnapshotPolicy.afterEvents(workflowProperties.getSnapshots().getWorkflowState().getAfterEvents());
     }
 }

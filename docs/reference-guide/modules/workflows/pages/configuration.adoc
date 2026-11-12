@@ -208,6 +208,31 @@ When a node stops, another node claims its segments and resumes the unfinished w
 Every event an instance appends carries an append condition on its workflow id.
 A node that lost its claim without noticing has its append rejected, logs a warning, and stops that instance.
 
+[[snapshots]]
+=== Snapshots
+
+The engine sources two event-sourced entities: the list of running workflows and the state of each workflow instance.
+Without snapshots, a node that takes over replays the full event history of both.
+Snapshots are off by default.
+Enable them on the `WorkflowConfigurer`:
+
+[source,java]
+----
+include::example$workflows/configuration/ConfigurationExamples.java[tag=snapshots,indent=0]
+----
+<.> The policy for the list of running workflows. There is one list, so there is one snapshot of it.
+<.> The policy for the workflow state. Each workflow instance has a snapshot of its own, stored under its workflow id.
+
+Both policies default to a snapshot after 100 sourced events.
+The setting applies to every `WorkflowModule` of the application, because all modules share both entities.
+The history projector does not source these entities, so snapshots do not affect it.
+
+Snapshots need a `SnapshotStore` component.
+Axon Server and PostgreSQL each register one.
+An application that enables snapshots without a `SnapshotStore` fails to start.
+A snapshot is taken while an entity is sourced, so the first restore after enabling snapshots still replays the full history.
+See xref:snapshotting:index.adoc[Snapshotting] for snapshot policies and snapshot stores.
+
 [[spring-boot]]
 == Spring Boot
 
@@ -254,7 +279,26 @@ The history processor uses the same properties under `axon.workflow.history.*`.
 |Minimum milliseconds between two checkpoint requests of one segment. Engine processor only.
 |===
 
-See <<running-on-several-nodes,Running on several nodes>> for the token store and failover, and <<performance-tuning,Performance tuning>> for choosing these values.
+<<snapshots,Snapshots>> are configured with `axon.workflow.snapshots.*` properties.
+
+[cols="2,1,3"]
+|===
+|Property |Default |Description
+
+|`enabled`
+|`false`
+|Whether snapshots are taken.
+
+|`running-workflows.after-events`
+|`100`
+|Number of sourced events after which the list of running workflows is snapshotted.
+
+|`workflow-state.after-events`
+|`100`
+|Number of sourced events after which the state of a workflow instance is snapshotted.
+|===
+
+See <<running-on-several-nodes,Running on several nodes>> for the token store, failover and snapshots, and <<performance-tuning,Performance tuning>> for choosing the processor values.
 
 [[performance-tuning]]
 == Performance tuning

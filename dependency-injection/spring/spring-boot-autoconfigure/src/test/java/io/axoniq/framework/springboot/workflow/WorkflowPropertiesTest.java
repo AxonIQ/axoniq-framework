@@ -8,7 +8,11 @@
 package io.axoniq.framework.springboot.workflow;
 
 import io.axoniq.framework.springboot.WorkflowProperties;
+import io.axoniq.framework.springboot.autoconfig.WorkflowAutoConfiguration;
+import io.axoniq.framework.workflow.configuration.WorkflowConfigurationDefaults;
+import org.axonframework.eventsourcing.snapshot.api.SnapshotPolicy;
 import org.junit.jupiter.api.*;
+import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Configuration;
@@ -100,6 +104,53 @@ class WorkflowPropertiesTest {
             assertThat(properties.getClaimExtensionThreshold()).isEqualTo(5000L);
             assertThat(properties.getCoordinatorClaimExtension()).isFalse();
         });
+    }
+
+    @Nested
+    class Snapshots {
+
+        private final ApplicationContextRunner autoConfigurationRunner = new ApplicationContextRunner()
+                .withConfiguration(AutoConfigurations.of(WorkflowAutoConfiguration.class));
+
+        @Test
+        void snapshotsAreDisabledWithOneHundredEventsPerSnapshotByDefault() {
+            contextRunner.run(context -> {
+                // when
+                var snapshots = context.getBean(WorkflowProperties.class).getSnapshots();
+
+                // then
+                assertThat(snapshots.isEnabled()).isFalse();
+                assertThat(snapshots.getRunningWorkflows().getAfterEvents()).isEqualTo(100);
+                assertThat(snapshots.getWorkflowState().getAfterEvents()).isEqualTo(100);
+            });
+        }
+
+        @Test
+        void snapshotPropertiesBindFromTheApplicationProperties() {
+            contextRunner.withPropertyValues(
+                    "axon.workflow.snapshots.enabled=true",
+                    "axon.workflow.snapshots.running-workflows.after-events=250",
+                    "axon.workflow.snapshots.workflow-state.after-events=50"
+            ).run(context -> {
+                // when
+                var snapshots = context.getBean(WorkflowProperties.class).getSnapshots();
+
+                // then
+                assertThat(snapshots.isEnabled()).isTrue();
+                assertThat(snapshots.getRunningWorkflows().getAfterEvents()).isEqualTo(250);
+                assertThat(snapshots.getWorkflowState().getAfterEvents()).isEqualTo(50);
+            });
+        }
+
+        @Test
+        void snapshotPoliciesAreRegisteredOnlyWhenSnapshotsAreEnabled() {
+            autoConfigurationRunner.run(context -> assertThat(context).doesNotHaveBean(SnapshotPolicy.class));
+
+            autoConfigurationRunner.withPropertyValues("axon.workflow.snapshots.enabled=true")
+                                   .run(context -> assertThat(context)
+                                           .hasBean(WorkflowConfigurationDefaults.RUNNING_WORKFLOWS_SNAPSHOT_POLICY)
+                                           .hasBean(WorkflowConfigurationDefaults.WORKFLOW_STATE_SNAPSHOT_POLICY));
+        }
     }
 
     @Configuration

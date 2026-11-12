@@ -12,9 +12,11 @@ import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.LifecycleRegistry;
 import org.axonframework.eventsourcing.configuration.EventSourcingConfigurer;
+import org.axonframework.eventsourcing.snapshot.api.SnapshotPolicy;
 
 import java.util.Objects;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 import static java.util.Objects.requireNonNull;
 
@@ -106,6 +108,37 @@ public class WorkflowConfigurer implements ApplicationConfigurer {
     public WorkflowConfigurer registerWorkflowModule(WorkflowModule<?> workflowModule) {
         Objects.requireNonNull(workflowModule, "Workflow module must not be null");
         delegate.componentRegistry(cr -> cr.registerModule(workflowModule));
+        return this;
+    }
+
+    /**
+     * Applies the given {@code snapshotConfiguration} function to the {@link WorkflowSnapshotConfiguration} of the
+     * workflow engine.
+     * <p>
+     * Snapshots are disabled by default. Enabling them requires a
+     * {@link org.axonframework.eventsourcing.snapshot.store.SnapshotStore} component.
+     *
+     * @param snapshotConfiguration a function customizing the {@link WorkflowSnapshotConfiguration}
+     * @return the current instance of the {@code Configurer} for a fluent API
+     */
+    public WorkflowConfigurer snapshots(
+            Function<WorkflowSnapshotConfiguration, WorkflowSnapshotConfiguration> snapshotConfiguration
+    ) {
+        var snapshots = requireNonNull(snapshotConfiguration, "The snapshot configuration function must not be null.")
+                .apply(new WorkflowSnapshotConfiguration());
+        if (snapshots.enabled()) {
+            delegate.componentRegistry(cr -> cr
+                    .registerComponent(
+                            SnapshotPolicy.class,
+                            WorkflowConfigurationDefaults.RUNNING_WORKFLOWS_SNAPSHOT_POLICY,
+                            c -> snapshots.runningWorkflows()
+                    )
+                    .registerComponent(
+                            SnapshotPolicy.class,
+                            WorkflowConfigurationDefaults.WORKFLOW_STATE_SNAPSHOT_POLICY,
+                            c -> snapshots.workflowState()
+                    ));
+        }
         return this;
     }
 

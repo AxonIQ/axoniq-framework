@@ -10,16 +10,25 @@ package io.axoniq.framework.workflow.configuration;
 import io.axoniq.framework.workflow.runtime.execution.DefaultEventNameCustomizer;
 import io.axoniq.framework.workflow.runtime.execution.EventSourcedRunningWorkflows;
 import io.axoniq.framework.workflow.runtime.util.EventMessageUtils;
+import org.axonframework.common.FutureUtils;
+import org.axonframework.common.configuration.ComponentRegistry;
+import org.axonframework.conversion.jackson.JacksonConverter;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
 import org.axonframework.eventsourcing.eventstore.SourcingCondition;
 import org.axonframework.eventsourcing.eventstore.TerminalEventMessage;
+import org.axonframework.eventsourcing.snapshot.api.Snapshot;
+import org.axonframework.eventsourcing.snapshot.api.SnapshotPolicy;
+import org.axonframework.eventsourcing.snapshot.inmemory.InMemorySnapshotStore;
+import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
 import org.axonframework.messaging.core.MessageStream;
+import org.axonframework.messaging.core.MessageTypeResolver;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.VersionedType;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventstreaming.EventCriteria;
 import org.axonframework.messaging.eventstreaming.Tag;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.*;
 
 import java.time.Instant;
@@ -30,6 +39,7 @@ import java.util.Set;
 import static io.axoniq.framework.workflow.runtime.execution.WorkflowEventTags.TAG_VALUE_EVENT_TYPE_LIFECYCLE;
 import static io.axoniq.framework.workflow.runtime.execution.WorkflowEventTags.TAG_WORKFLOW_EVENT_TYPE;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * RunningWorkflows integration test.
@@ -72,6 +82,101 @@ class RunningWorkflowsRepositoryIntegrationTest extends AbstractEventSourcedEnti
         configuration.start();
 
         assertThat(load().workflowIds()).isEmpty();
+    }
+
+    @Nested
+    class Snapshots {
+
+        private static final VersionedType DEFINITION_ID =
+                VersionedType.of(new QualifiedName("OrderWorkflow"), "0.0.1");
+
+        @Test
+        void repositoryRestoresRunningWorkflowIdsFromSnapshot() {
+            // given
+            configuration = configuration("running-workflows-module", configurer -> configurer
+                    .componentRegistry(Snapshots::registerSnapshotStore)
+                    .snapshots(snapshots -> snapshots.enabled(true).runningWorkflows(SnapshotPolicy.afterEvents(1))));
+            configuration.start();
+            publishTwoStartedAndOneCompletedWorkflow();
+
+            // when - sourcing more events than the policy allows stores a snapshot
+            load();
+
+            // then - the snapshot went through the converter and still holds the running workflow
+            var snapshot = storedSnapshot();
+            assertThat(snapshot).isNotNull();
+            assertThat(((EventSourcedRunningWorkflows) snapshot.payload()).workflowIds()).contains("wf-2");
+
+            // and - a later load continues from the snapshot
+            publish(startedWorkflow("wf-3"));
+            assertThat(load().workflowIds()).isEqualTo(Set.of("wf-2", "wf-3"));
+        }
+
+        @Test
+        void repositoryStoresNoSnapshotWhenSnapshotsAreNotEnabled() {
+            // given
+            configuration = configuration(
+                    "running-workflows-module",
+                    configurer -> configurer.componentRegistry(Snapshots::registerSnapshotStore)
+            );
+            configuration.start();
+            publishTwoStartedAndOneCompletedWorkflow();
+
+            // when
+            var runningWorkflows = load();
+
+            // then
+            assertThat(runningWorkflows.workflowIds()).isEqualTo(Set.of("wf-2"));
+            assertThat(storedSnapshot()).isNull();
+        }
+
+        @Test
+        void startFailsWhenSnapshotsAreEnabledWithoutSnapshotStore() {
+            // given
+            configuration = configuration(
+                    "running-workflows-module", configurer -> configurer.snapshots(snapshots -> snapshots.enabled(true))
+            );
+
+            // when / then
+            assertThatThrownBy(() -> configuration.start())
+                    .hasStackTraceContaining("A SnapshotStore must be configured to use snapshotting.");
+        }
+
+        private static void registerSnapshotStore(ComponentRegistry componentRegistry) {
+            componentRegistry.registerComponent(
+                    SnapshotStore.class, c -> new InMemorySnapshotStore(new JacksonConverter())
+            );
+        }
+
+        private void publishTwoStartedAndOneCompletedWorkflow() {
+            publish(startedWorkflow("wf-1"));
+            publish(startedWorkflow("wf-2"));
+            publish(EventMessageUtils.completedWorkflow(
+                    workflowExecutionOperations("wf-1"),
+                    "OrderWorkflow",
+                    DEFINITION_ID,
+                    DefaultEventNameCustomizer.Builder.defaults()
+            ));
+        }
+
+        private EventMessage startedWorkflow(String workflowId) {
+            return EventMessageUtils.startedWorkflow(
+                    workflowExecutionOperations(workflowId),
+                    "OrderWorkflow",
+                    DEFINITION_ID,
+                    DefaultEventNameCustomizer.Builder.defaults()
+            );
+        }
+
+        @Nullable
+        private Snapshot storedSnapshot() {
+            var snapshotName = configuration.getComponent(MessageTypeResolver.class)
+                                            .resolveOrThrow(EventSourcedRunningWorkflows.class)
+                                            .qualifiedName();
+            return FutureUtils.joinAndUnwrap(configuration.getComponent(SnapshotStore.class).load(
+                    snapshotName, EventSourcedRunningWorkflows.ENTITY_ID, null
+            ));
+        }
     }
 
     private EventSourcedRunningWorkflows load() {
