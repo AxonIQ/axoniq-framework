@@ -102,6 +102,8 @@ class WorkflowEngineRestoreFaultIsolationTest {
         workflowEngine.setCheckpointingSupport(new WorkflowEngineCheckpointingSupport(workflowEngine));
         when(workflowStore.loadRunningWorkflows(any()))
                 .thenReturn(CompletableFuture.completedFuture(runningWorkflows));
+        when(workflowStore.loadWaitAssociations(any()))
+                .thenReturn(CompletableFuture.completedFuture(new EventSourcedWaitAssociations()));
     }
 
     /**

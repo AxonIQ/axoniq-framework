@@ -258,6 +258,11 @@ class SimpleWorkflowManagerTest {
             }
 
             @Override
+            public CompletableFuture<WaitAssociations> loadWaitAssociations(ProcessingContext processingContext) {
+                throw new UnsupportedOperationException("not used by the manager");
+            }
+
+            @Override
             public CompletableFuture<WorkflowState> loadWorkflow(String workflowId,
                                                                  ProcessingContext processingContext) {
                 return findWorkflow(workflowId, processingContext).thenApply(state -> state.orElseGet(

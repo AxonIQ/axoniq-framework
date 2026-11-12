@@ -73,6 +73,8 @@ Use xref:payload-and-state.adoc[`setPayload`] when the published data should als
 
 A published event is routed like any business event.
 Another workflow can start on it or wait for it with xref:waiting-for-events.adoc[`awaitEvent`].
+The event reaches the publisher, which records its step, the workflows whose wait matches it, and, when a workflow definition starts on its type, the workflows it starts.
+See xref:configuration.adoc#event-routing[Event routing].
 
 [source,java]
 ----

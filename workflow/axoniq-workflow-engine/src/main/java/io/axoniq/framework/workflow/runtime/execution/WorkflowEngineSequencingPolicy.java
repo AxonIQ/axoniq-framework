@@ -12,12 +12,15 @@ import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.sequencing.SequencingPolicy;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
+import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.HashSet;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.BooleanSupplier;
 import java.util.stream.Collectors;
 
 /**
@@ -25,9 +28,8 @@ import java.util.stream.Collectors;
  * instance, implementing the {@link SequencingPolicy} the workflow event handling components run with.
  * <p>
  * Placement follows {@link WorkflowSegmentOwnership}, the ownership rule the {@link WorkflowEngine} decides on as well,
- * so sequencing and handling never disagree about which segment an instance belongs to. Events that do not map to a
- * single instance are sequenced by {@link SequencingPolicy#BROADCAST} and thus delivered to every segment; each segment
- * then acts only on the instances it owns.
+ * so sequencing and handling never disagree about which segment an instance belongs to. A business event goes to the
+ * workflows waiting for it, found in the {@link WaitAssociationIndex}; when unsure, it is broadcast.
  *
  * @author Stefan Dragisic
  * @since 5.4.0
@@ -37,15 +39,23 @@ import java.util.stream.Collectors;
     private static final Logger logger = LoggerFactory.getLogger(WorkflowEngineSequencingPolicy.class);
 
     private final WorkflowConfigurationRegistry<?> workflowConfigurationRegistry;
+    private final WaitAssociationIndex waitIndex;
+    private final BooleanSupplier allClaimedSegmentsCaughtUp;
 
     /**
      * Creates the routing for the workflow definitions held by the given registry.
      *
      * @param workflowConfigurationRegistry registry consulted to derive start-candidate workflow ids from business
      *                                      events
+     * @param waitIndex                     the open waits of the workflows on this node's claimed segments
+     * @param allClaimedSegmentsCaughtUp    tells whether every claimed segment consumed its startup backlog
      */
-    WorkflowEngineSequencingPolicy(WorkflowConfigurationRegistry<?> workflowConfigurationRegistry) {
+    WorkflowEngineSequencingPolicy(WorkflowConfigurationRegistry<?> workflowConfigurationRegistry,
+                                   WaitAssociationIndex waitIndex,
+                                   BooleanSupplier allClaimedSegmentsCaughtUp) {
         this.workflowConfigurationRegistry = workflowConfigurationRegistry;
+        this.waitIndex = waitIndex;
+        this.allClaimedSegmentsCaughtUp = allClaimedSegmentsCaughtUp;
     }
 
     /**
@@ -55,16 +65,15 @@ import java.util.stream.Collectors;
      *   <li>Events published by a workflow through the publish primitive ({@code stepPrimitive=PUBLISH}) carry
      *   {@code workflowId} metadata, but are business events for every other instance: they may start or wake
      *   instances resident in any segment, and the publisher itself must observe them to complete its step. They are
-     *   always sequenced by {@link SequencingPolicy#BROADCAST}, decided before any other rule; candidate routing would
-     *   deliver them to one segment only and leave a publisher on another segment waiting forever.</li>
+     *   routed like the business events below, with the publisher counted as a waiting workflow.</li>
      *   <li>Every other engine-emitted event (carrying {@code workflowId} metadata) is sequenced by that id, the key
      *   {@link WorkflowSegmentOwnership} decides ownership on.</li>
      *   <li>Business events are sequenced by the start-candidate workflow id when exactly one registered definition
      *   would start from the event, so new instances are created on the segment that owns them.</li>
-     *   <li>All other events (no or multiple start candidates) may need to wake waiting instances resident in any
-     *   segment; without a durable wait-association table the only correct routing is delivery to all segments, so
-     *   they are sequenced by {@link SequencingPolicy#BROADCAST}. Each segment then evaluates the wait conditions of
-     *   the instances it owns.</li>
+     *   <li>All other events may need to wake waiting instances resident in any segment. They are sequenced by the
+     *   single workflow waiting for them in the {@link WaitAssociationIndex}, and by {@link SequencingPolicy#BROADCAST}
+     *   when more workflows may need them or the index is not reliable yet. Each segment then evaluates the wait
+     *   conditions of the instances it owns.</li>
      * </ul>
      *
      * @param eventMessage      the event to sequence
@@ -75,19 +84,51 @@ import java.util.stream.Collectors;
     @Override
     public Optional<Object> sequenceIdentifierFor(EventMessage eventMessage,
                                                   ProcessingContext processingContext) {
-        var metadata = eventMessage.metadata();
-        if (MetadataUtils.isPublishStep(metadata)) {
-            // A published event carries the publisher's workflowId, but it is a business event for every other
-            // instance: decide this first, before the owner-only routing below can claim it.
-            return Optional.of(SequencingPolicy.BROADCAST);
+        if (Segment.fromContext(processingContext).isEmpty()) {
+            // The scheduling evaluation is the one the processor makes in stream order, ahead of handling.
+            waitIndex.evolve(eventMessage);
         }
-        if (MetadataUtils.hasWorkflowId().test(metadata)) {
+        var metadata = eventMessage.metadata();
+        boolean publish = MetadataUtils.isPublishStep(metadata);
+        if (!publish && MetadataUtils.hasWorkflowId().test(metadata)) {
             return Optional.of(MetadataUtils.getWorkflowId(metadata));
         }
-        var candidates = newInstanceCandidateIds(eventMessage, processingContext);
-        return candidates.size() == 1
-                ? Optional.of(candidates.iterator().next())
-                : Optional.of(SequencingPolicy.BROADCAST);
+        try {
+            return Optional.of(route(eventMessage, processingContext, publish));
+        } catch (RuntimeException e) {
+            // Sequencing runs before the event reaches a handler, so a value the index reads from the event may not be
+            // available yet. Routing must not fail the work package for that: broadcasting is always correct.
+            logger.debug("Could not route event {} through the wait associations; broadcasting it to every segment.",
+                         eventMessage.type(), e);
+            return Optional.of(SequencingPolicy.BROADCAST);
+        }
+    }
+
+    private Object route(EventMessage eventMessage, ProcessingContext processingContext, boolean publish) {
+        var targets = new HashSet<String>();
+        if (isStartEvent(eventMessage)) {
+            var candidates = newInstanceCandidateIds(eventMessage, processingContext);
+            if (publish || candidates.size() != 1) {
+                return SequencingPolicy.BROADCAST;
+            }
+            targets.addAll(candidates);
+        } else if (publish) {
+            targets.add(MetadataUtils.getWorkflowId(eventMessage.metadata()));
+        }
+        if (!waitIndex.allClaimedSegmentsLoaded() || !allClaimedSegmentsCaughtUp.getAsBoolean()) {
+            return SequencingPolicy.BROADCAST;
+        }
+        targets.addAll(waitIndex.match(eventMessage, processingContext));
+        return switch (targets.size()) {
+            // no workflow needs the event: the event's own identifier hands it to a single segment
+            case 0 -> eventMessage.identifier();
+            case 1 -> targets.iterator().next();
+            default -> SequencingPolicy.BROADCAST;
+        };
+    }
+
+    private boolean isStartEvent(EventMessage eventMessage) {
+        return !workflowConfigurationRegistry.getHighestVersionConfigurations(eventMessage.type()).isEmpty();
     }
 
     /**

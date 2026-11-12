@@ -75,8 +75,8 @@ class WorkflowEventTagResolverTest {
                 "awaitPayment",
                 Map.of(
                         "startTime", Instant.parse("2026-07-08T10:00:00Z"),
-                        "eventQualifiedName", "io.acme.PaymentConfirmed",
-                        "criteria", Set.of("payload:orderId=123"),
+                        "eventName", "io.acme.PaymentConfirmed",
+                        "associations", Set.of("payload:orderId=123"),
                         "timeoutTime", Instant.parse("2026-07-08T10:15:00Z")
                 ),
                 customizer
@@ -94,6 +94,23 @@ class WorkflowEventTagResolverTest {
                 Tag.of(TAG_WORKFLOW_EVENT_TYPE, TAG_VALUE_EVENT_TYPE_WAIT_STEP)
         ));
         assertThat(resolver.resolve(completed)).isEqualTo(Set.of(
+                Tag.of(TAG_WORKFLOW_ID, "wf-123"),
+                Tag.of(TAG_WORKFLOW_EVENT_TYPE, TAG_VALUE_EVENT_TYPE_WAIT_STEP)
+        ));
+    }
+
+    @Test
+    void cancelledAndTimedOutWaitForEventStepEventsGetWorkflowWaitTag() {
+        var cancelled = EventMessageUtils.cancelledWaitForEventStep(context, "awaitPayment", null, customizer);
+        var timedOut = EventMessageUtils.timeoutWaitForEventStep(
+                context, "awaitPayment", Instant.parse("2026-07-08T10:15:00Z"), customizer
+        );
+
+        assertThat(resolver.resolve(cancelled)).isEqualTo(Set.of(
+                Tag.of(TAG_WORKFLOW_ID, "wf-123"),
+                Tag.of(TAG_WORKFLOW_EVENT_TYPE, TAG_VALUE_EVENT_TYPE_WAIT_STEP)
+        ));
+        assertThat(resolver.resolve(timedOut)).isEqualTo(Set.of(
                 Tag.of(TAG_WORKFLOW_ID, "wf-123"),
                 Tag.of(TAG_WORKFLOW_EVENT_TYPE, TAG_VALUE_EVENT_TYPE_WAIT_STEP)
         ));
