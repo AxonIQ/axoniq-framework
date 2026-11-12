@@ -478,6 +478,37 @@ class AxonServerTenantProviderTest {
         }
 
         @Test
+        void aTenantRemovedByAComponentWhileItSubscribesIsCancelledAndNotStored() {
+            // given two known tenants and a component that removes the first tenant it saw while registering the second
+            testSubject.addTenant(TENANT);
+            testSubject.addTenant(TenantDescriptor.tenantWithId("tenant-b"));
+            List<TenantDescriptor> seen = new ArrayList<>();
+            FailingTenantAwareComponent component = component("remover").onRegister(tenant -> {
+                seen.add(tenant);
+                if (seen.size() == 2) {
+                    testSubject.removeTenant(seen.getFirst());
+                }
+            });
+
+            // when
+            testSubject.subscribe(component);
+
+            // then the removed tenant is unknown, the component dropped it and its registration was cancelled once
+            TenantDescriptor removed = seen.getFirst();
+            TenantDescriptor kept = seen.getLast();
+            assertThat(testSubject.isKnown(removed)).isFalse();
+            assertThat(component.tenants()).containsExactly(kept);
+            assertThat(eventLog).containsOnlyOnce("cancel remover " + removed.tenantId());
+
+            // when
+            eventLog.clear();
+            testSubject.shutdown().orTimeout(5, TimeUnit.SECONDS).join();
+
+            // then the removed tenant is not cancelled a second time
+            assertThat(eventLog).containsExactly("cancel remover " + kept.tenantId());
+        }
+
+        @Test
         void anErrorFromACancelDuringRollbackDoesNotStopTheOtherCancelsAndIsSuppressed() {
             // given
             RegistrationError cancelError = new RegistrationError();
