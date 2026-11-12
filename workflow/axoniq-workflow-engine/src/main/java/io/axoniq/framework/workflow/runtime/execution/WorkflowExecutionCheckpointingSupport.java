@@ -16,6 +16,7 @@ import org.axonframework.messaging.eventhandling.processing.streaming.token.Trac
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 
 import static java.util.Objects.requireNonNull;
@@ -80,10 +81,10 @@ import static java.util.Objects.requireNonNull;
  * queue; this class only needs to protect its own bookkeeping about whether such a latch has been queued and
  * which callbacks should fire when it is crossed.
  * <p>
- * The queued-latch state and pending callbacks are guarded by this instance's monitor. {@code taskActive} is an
- * {@link AtomicBoolean} because it is set around arbitrary workflow task execution, which must not hold that monitor,
+ * The queued-latch state and pending callbacks are guarded by this instance's lock. {@code taskActive} is an
+ * {@link AtomicBoolean} because it is set around arbitrary workflow task execution, which must not hold that lock,
  * while checkpoint safety may be queried concurrently. Latch callbacks are captured while coordinated but always run
- * after task execution and outside the monitor.
+ * after task execution and outside the lock.
  *
  * @author Simon Zambrovski
  * @author Steven van Beelen
@@ -92,6 +93,9 @@ import static java.util.Objects.requireNonNull;
 @Internal final class WorkflowExecutionCheckpointingSupport {
 
     private final ExecutionTaskQueue executionTaskQueue;
+    // A lock instead of this instance's monitor: the task queue blocks on a lock of its own, and on Java 21 a virtual
+    // thread that blocks while holding a monitor keeps its carrier thread.
+    private final ReentrantLock lock = new ReentrantLock();
     private final AtomicBoolean taskActive = new AtomicBoolean(false);
     private boolean latchQueued;
     private List<Runnable> latchCallbacks = new ArrayList<>();
@@ -128,37 +132,46 @@ import static java.util.Objects.requireNonNull;
      * added to the pending {@link #latchCallbacks} so they all fire, in registration order, when the single queued
      * latch is consumed.
      * <p>
-     * The latch is appended outside the synchronized block. The synchronized section only decides whether a new latch
-     * is needed; once that decision is made, queueing the task does not need to hold this object's monitor.
+     * The latch is appended outside the locked section. The locked section only decides whether a new latch
+     * is needed; once that decision is made, queueing the task does not need to hold this instance's lock.
      *
      * @param latch callback invoked after the queued checkpoint latch has been consumed
      */
     public void addCheckpointLatch(Runnable latch) {
         requireNonNull(latch, "The when-complete runnable must not be null");
         boolean idle;
-        synchronized (this) {
+        lock.lock();
+        try {
             idle = !executionTaskQueue.isRunning() && !unsafe();
+        } finally {
+            lock.unlock();
         }
         if (idle) {
             latch.run();
             return;
         }
 
-        synchronized (this) {
+        lock.lock();
+        try {
             latchCallbacks.add(latch);
             if (latchQueued) {
                 return;
             }
             latchQueued = true;
             reportCheckpointWorkUnsafe();
+        } finally {
+            lock.unlock();
         }
 
         try {
             executionTaskQueue.appendTask(new CheckpointLatch());
         } catch (RuntimeException e) {
-            synchronized (this) {
+            lock.lock();
+            try {
                 latchQueued = false;
                 reportCheckpointWorkState();
+            } finally {
+                lock.unlock();
             }
             throw e;
         }
@@ -181,8 +194,11 @@ import static java.util.Objects.requireNonNull;
      * @return {@code true} if checkpoint advancement must still wait, otherwise {@code false}
      */
     public boolean hasUnsafeCheckpointWork() {
-        synchronized (this) {
+        lock.lock();
+        try {
             return unsafe();
+        } finally {
+            lock.unlock();
         }
     }
 
@@ -203,22 +219,33 @@ import static java.util.Objects.requireNonNull;
      *
      * @param listener the {@code CheckpointWorkStateListener} to register
      */
-    public synchronized void registerListener(CheckpointWorkStateListener listener) {
-        checkpointWorkStateListener = requireNonNull(listener, "Checkpoint work state listener must not be null");
-        checkpointWorkUnsafe = unsafe();
-        if (checkpointWorkUnsafe) {
-            checkpointWorkStateListener.onMarkedUnsafe();
-        } else {
-            checkpointWorkStateListener.onMarkedSafe();
+    public void registerListener(CheckpointWorkStateListener listener) {
+        lock.lock();
+        try {
+            checkpointWorkStateListener = requireNonNull(listener, "Checkpoint work state listener must not be null");
+            checkpointWorkUnsafe = unsafe();
+            if (checkpointWorkUnsafe) {
+                checkpointWorkStateListener.onMarkedUnsafe();
+            } else {
+                checkpointWorkStateListener.onMarkedSafe();
+            }
+        } finally {
+            lock.unlock();
         }
     }
 
-    synchronized void refreshCheckpointWorkState() {
-        reportCheckpointWorkState();
+    void refreshCheckpointWorkState() {
+        lock.lock();
+        try {
+            reportCheckpointWorkState();
+        } finally {
+            lock.unlock();
+        }
     }
 
     void appendTask(Consumer<WorkflowExecution> task) {
-        synchronized (this) {
+        lock.lock();
+        try {
             reportCheckpointWorkUnsafe();
             try {
                 executionTaskQueue.appendTask(task);
@@ -226,6 +253,8 @@ import static java.util.Objects.requireNonNull;
                 reportCheckpointWorkState();
                 throw e;
             }
+        } finally {
+            lock.unlock();
         }
     }
 
@@ -254,16 +283,22 @@ import static java.util.Objects.requireNonNull;
                  WorkflowExecution execution) {
         List<Runnable> afterTask;
         taskActive.set(true);
-        synchronized (this) {
+        lock.lock();
+        try {
             reportCheckpointWorkUnsafe();
+        } finally {
+            lock.unlock();
         }
         try {
             task.accept(execution);
             afterTask = task instanceof CheckpointLatch checkpointLatch ? checkpointLatch.whenComplete() : List.of();
         } finally {
             taskActive.set(false);
-            synchronized (this) {
+            lock.lock();
+            try {
                 reportCheckpointWorkState();
+            } finally {
+                lock.unlock();
             }
         }
         runLatchCallbacks(afterTask);
@@ -271,10 +306,10 @@ import static java.util.Objects.requireNonNull;
 
     /**
      * Takes the pending latch callbacks, leaving a fresh empty list in place. Must be called while holding this
-     * instance's monitor.
+     * instance's lock.
      * <p>
      * The returned list is no longer reachable through this instance, so it can safely be iterated outside the
-     * monitor.
+     * lock.
      *
      * @return the pending latch callbacks in registration order, possibly empty
      */
@@ -331,10 +366,13 @@ import static java.util.Objects.requireNonNull;
      */
     void completePendingCheckpointLatch() {
         List<Runnable> callbacks;
-        synchronized (this) {
+        lock.lock();
+        try {
             checkpointWorkUnsafe = false;
             latchQueued = false;
             callbacks = takeLatchCallbacks();
+        } finally {
+            lock.unlock();
         }
         runLatchCallbacks(callbacks);
     }
@@ -402,9 +440,12 @@ import static java.util.Objects.requireNonNull;
          */
         @Override
         public void accept(WorkflowExecution ignored) {
-            synchronized (WorkflowExecutionCheckpointingSupport.this) {
+            lock.lock();
+            try {
                 latchQueued = false;
                 whenComplete = takeLatchCallbacks();
+            } finally {
+                lock.unlock();
             }
         }
 
