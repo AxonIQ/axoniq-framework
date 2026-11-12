@@ -320,7 +320,10 @@ public class AxonServerTenantProvider implements TenantProvider {
         });
     }
 
-    /** A component may remove a tenant while it registers it; that removal cannot see this attempt, so cancel here. */
+    /**
+     * Stores the registrations of tenants that are still known and cancels the others: a component may remove a tenant
+     * while it registers it, and that removal cannot see this attempt.
+     */
     private void storeRegistrationsOfKnownTenants(List<TenantRegistration> registrationAttempt) {
         List<TenantRegistration> removed = new ArrayList<>();
         for (TenantRegistration tenantRegistration : registrationAttempt) {

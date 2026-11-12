@@ -106,7 +106,10 @@ public class StubTenantProvider implements TenantProvider {
         matching.reversed().forEach(tenantRegistration -> tenantRegistration.registration().cancel());
     }
 
-    // A component may remove a tenant while it registers it; that removal cannot see this attempt, so cancel here.
+    /**
+     * Stores the registrations of tenants that are still known and cancels the others: a component may remove a tenant
+     * while it registers it, and that removal cannot see this attempt.
+     */
     private void storeRegistrationsOfKnownTenants(List<TenantRegistration> registrationAttempt) {
         List<TenantRegistration> removed = new ArrayList<>();
         for (TenantRegistration tenantRegistration : registrationAttempt) {
@@ -119,7 +122,9 @@ public class StubTenantProvider implements TenantProvider {
         removed.reversed().forEach(tenantRegistration -> tenantRegistration.registration().cancel());
     }
 
-    // Undoes a failed attempt in reverse order. Unlike removal, cancel failures are attached to the original failure.
+    /**
+     * Undoes a failed attempt in reverse order. Unlike removal, a cancel failure is attached to the original failure.
+     */
     private static void rollBack(List<TenantRegistration> registrationAttempt, Throwable failure) {
         for (TenantRegistration tenantRegistration : registrationAttempt.reversed()) {
             try {
