@@ -32,6 +32,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
@@ -201,6 +202,57 @@ class WaitForDelegateTest {
 
         assertThat(runningSteps.stepNames()).isEmpty();
         assertThat(workflowScheduler.pendingTaskCount()).isZero();
+    }
+
+    @Nested
+    class ReplayOfAStartedWait {
+
+        @Test
+        void keepsThePersistedDeadlineWhenTheWorkflowPassesADifferentTimeout() {
+            // given a wait that started 5 minutes ago with a 15 minute timeout, as the event store returns it
+            var condition = mock(EventCondition.class);
+            when(condition.qualifiedName()).thenReturn(new QualifiedName("io.acme.PaymentConfirmed"));
+            when(condition.associations()).thenReturn(Set.of());
+            startedStep.set(WorkflowStep.started(
+                    "awaitPayment",
+                    Map.of("startTime", "2026-07-08T09:55:00Z",
+                           "eventName", "io.acme.PaymentConfirmed",
+                           "associations", List.of(),
+                           "timeoutTime", "2026-07-08T10:10:00Z"),
+                    Instant.parse("2026-07-08T09:55:00Z"),
+                    processingContext
+            ));
+
+            // when the replayed workflow passes the 10 minutes that remain
+            delegate.waitForEvent(new PrimitiveCommands.WorkflowStepResultWaitForCommand(
+                    "awaitPayment", condition, GlobalOnlyPayloadReducer.INSTANCE, Duration.ofMinutes(10),
+                    DefaultEventNameCustomizer.Builder.defaults()
+            ));
+
+            // then
+            assertThat(workflowScheduler.pendingDeadlines()).containsExactly(Instant.parse("2026-07-08T10:10:00Z"));
+        }
+
+        @Test
+        void countsTheDeadlineFromTheStepStartWhenTheStepCarriesNoWaitDetails() {
+            // given a started wait whose state holds no wait details
+            var condition = mock(EventCondition.class);
+            when(condition.qualifiedName()).thenReturn(new QualifiedName("io.acme.PaymentConfirmed"));
+            when(condition.associations()).thenReturn(Set.of());
+            startedStep.set(WorkflowStep.started(
+                    "awaitPayment", Map.of(), Instant.parse("2026-07-08T09:55:00Z"), processingContext
+            ));
+
+            // when
+            delegate.waitForEvent(new PrimitiveCommands.WorkflowStepResultWaitForCommand(
+                    "awaitPayment", condition, GlobalOnlyPayloadReducer.INSTANCE, Duration.ofMinutes(15),
+                    DefaultEventNameCustomizer.Builder.defaults()
+            ));
+
+            // then the wait is registered and times out 15 minutes after the step start
+            verify(eventWaitConditions).add(anyString(), any(EventCondition.class), any(), any());
+            assertThat(workflowScheduler.pendingDeadlines()).containsExactly(Instant.parse("2026-07-08T10:10:00Z"));
+        }
     }
 
     private void stubUnitOfWorkFactory() {
