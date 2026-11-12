@@ -229,17 +229,23 @@ class WorkflowHistoryRestartTest {
         await().atMost(5, TimeUnit.SECONDS)
                .until(() -> historyStatus(configuration, workflowId) == WorkflowStatus.COMPLETED);
         TrackingToken head = storageEngine.latestToken().orTimeout(5, TimeUnit.SECONDS).join();
-        await().atMost(5, TimeUnit.SECONDS).until(() -> durableHistoryTokenCovers(head));
+        await().atMost(5, TimeUnit.SECONDS).until(() -> durableHistoryTokenCovers(configuration, head));
         return workflowId;
     }
 
-    private boolean durableHistoryTokenCovers(TrackingToken position) {
-        var segments = durableTokenStore.fetchSegments(HISTORY_PROCESSOR, null)
+    private boolean durableHistoryTokenCovers(AxonConfiguration configuration, TrackingToken position) {
+        var unitOfWorkFactory = configuration.getComponent(UnitOfWorkFactory.class);
+        var segments = unitOfWorkFactory.create()
+                                        .executeWithResult(ctx -> durableTokenStore.fetchSegments(HISTORY_PROCESSOR,
+                                                                                                 ctx))
                                         .orTimeout(5, TimeUnit.SECONDS)
                                         .join();
         // No segments means the history processor runs on another token store, which leaves nothing to wait for.
         return segments.stream().allMatch(segment -> {
-            var stored = durableTokenStore.fetchToken(HISTORY_PROCESSOR, segment.getSegmentId(), null)
+            var stored = unitOfWorkFactory.create()
+                                          .executeWithResult(ctx -> durableTokenStore.fetchToken(
+                                                  HISTORY_PROCESSOR, segment.getSegmentId(), ctx
+                                          ))
                                           .orTimeout(5, TimeUnit.SECONDS)
                                           .join();
             return stored != null && stored.covers(position);

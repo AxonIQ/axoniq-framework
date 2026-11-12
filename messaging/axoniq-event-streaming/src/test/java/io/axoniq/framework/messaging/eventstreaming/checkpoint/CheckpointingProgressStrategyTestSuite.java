@@ -16,9 +16,8 @@ import org.axonframework.messaging.eventhandling.processing.streaming.token.Repl
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
-import org.junit.jupiter.api.Nested;
-import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
+import org.junit.jupiter.api.*;
+import org.mockito.*;
 
 import java.time.Duration;
 import java.util.ArrayList;
@@ -33,26 +32,19 @@ import java.util.function.Function;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyInt;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.clearInvocations;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
 
 /**
- * Abstract test suite validating the checkpoint protocol end-to-end through a real {@link
- * org.axonframework.messaging.eventhandling.processing.streaming.pooled.WorkPackage WorkPackage} wired to a
+ * Abstract test suite validating the checkpoint protocol end-to-end through a real {@code WorkPackage} wired to a
  * {@link CheckpointingProgressStrategy} implementation: a self-checkpointing {@link Checkpointing participant} drives
  * when the stored {@link TrackingToken} advances, while the work package retains control of the transaction and the
  * token write.
  * <p>
  * The strategy implementation under test is supplied by {@link #checkpointingStrategy(boolean, List)}, so the same
  * scenarios run against the framework's strategy here and against any out-of-module (for example, commercial) strategy
- * that subclasses this suite. The {@link org.axonframework.messaging.eventhandling.processing.streaming.pooled.WorkPackage
- * WorkPackage} access comes from {@link SegmentProgressStrategyTestSupport} (published in the messaging test-jar),
- * through its public {@code WorkPackageHarness} bridge.
+ * that subclasses this suite. The {@code WorkPackage} access comes from {@link SegmentProgressStrategyTestSupport}
+ * (published in the messaging test-jar), through its public {@code WorkPackageHarness} bridge.
  *
  * @author Allard Buijze
  */
@@ -93,7 +85,8 @@ public abstract class CheckpointingProgressStrategyTestSuite extends SegmentProg
             testSubject.scheduleEvent(eventAt(1L));
 
             // then -- the batch is processed, but no token is stored without a checkpoint request
-            await().atMost(TIMEOUT).untilAsserted(() -> assertThat(testSubject.batchProcessor().processed()).hasSize(1));
+            await().atMost(TIMEOUT).untilAsserted(() -> assertThat(testSubject.batchProcessor()
+                                                                              .processed()).hasSize(1));
             verify(tokenStore(), never()).storeToken(any(), anyString(), anyInt(), any());
         }
 
@@ -152,7 +145,8 @@ public abstract class CheckpointingProgressStrategyTestSuite extends SegmentProg
         void aReturnedTokenThatDoesNotCoverTheRequestedPositionFailsTheCheckpointWithoutStoring() {
             // given -- the participant reports a position BEHIND the requested one (contract violation)
             RecordingCheckpointing participant = new RecordingCheckpointing();
-            participant.advanceResult = requested -> CompletableFuture.completedFuture(new GlobalSequenceTrackingToken(3L));
+            participant.advanceResult = requested -> CompletableFuture.completedFuture(new GlobalSequenceTrackingToken(
+                    3L));
             WorkPackageHarness testSubject = deferred(participant);
             testSubject.onSegmentClaimed();
 
@@ -257,7 +251,8 @@ public abstract class CheckpointingProgressStrategyTestSuite extends SegmentProg
             WorkPackageHarness testSubject = deferred(participant);
             testSubject.onSegmentClaimed();
             testSubject.scheduleEvent(eventAt(1L));
-            await().atMost(TIMEOUT).untilAsserted(() -> assertThat(testSubject.batchProcessor().processed()).hasSize(1));
+            await().atMost(TIMEOUT).untilAsserted(() -> assertThat(testSubject.batchProcessor()
+                                                                              .processed()).hasSize(1));
 
             // when -- the component requests a checkpoint at LATEST rather than naming a token
             participant.trigger.requestCheckpoint(TrackingToken.LATEST);
@@ -278,7 +273,8 @@ public abstract class CheckpointingProgressStrategyTestSuite extends SegmentProg
             WorkPackageHarness testSubject = deferred(participant);
             testSubject.onSegmentClaimed();
             testSubject.scheduleEvent(eventAt(1L));
-            await().atMost(TIMEOUT).untilAsserted(() -> assertThat(testSubject.batchProcessor().processed()).hasSize(1));
+            await().atMost(TIMEOUT).untilAsserted(() -> assertThat(testSubject.batchProcessor()
+                                                                              .processed()).hasSize(1));
 
             // when -- the component requests a checkpoint without naming a token
             participant.trigger.requestCheckpoint();
@@ -321,7 +317,8 @@ public abstract class CheckpointingProgressStrategyTestSuite extends SegmentProg
             testSubject.scheduleEvent(eventAt(1L));
 
             // then -- the segment is exposed in the handling context, so a handler may declare a Segment parameter
-            await().atMost(TIMEOUT).untilAsserted(() -> assertThat(testSubject.batchProcessor().segmentInContext()).isNotNull());
+            await().atMost(TIMEOUT).untilAsserted(() -> assertThat(testSubject.batchProcessor()
+                                                                              .segmentInContext()).isNotNull());
             assertThat(testSubject.batchProcessor().segmentInContext()).isEqualTo(testSubject.segment());
         }
 
@@ -393,7 +390,10 @@ public abstract class CheckpointingProgressStrategyTestSuite extends SegmentProg
                     new GlobalSequenceTrackingToken(5L), new GlobalSequenceTrackingToken(8L)
             ));
             verify(tokenStore()).storeToken(eq(new GlobalSequenceTrackingToken(8L)), anyString(), anyInt(), any());
-            verify(tokenStore(), never()).storeToken(eq(new GlobalSequenceTrackingToken(3L)), anyString(), anyInt(), any());
+            verify(tokenStore(), never()).storeToken(eq(new GlobalSequenceTrackingToken(3L)),
+                                                     anyString(),
+                                                     anyInt(),
+                                                     any());
         }
 
         @Test
@@ -405,7 +405,8 @@ public abstract class CheckpointingProgressStrategyTestSuite extends SegmentProg
             WorkPackageHarness testSubject = deferred(participant);
             testSubject.onSegmentClaimed();
             testSubject.scheduleEvent(eventAt(1L));
-            await().atMost(TIMEOUT).untilAsserted(() -> assertThat(testSubject.batchProcessor().processed()).hasSize(1));
+            await().atMost(TIMEOUT).untilAsserted(() -> assertThat(testSubject.batchProcessor()
+                                                                              .processed()).hasSize(1));
 
             // when -- a checkpoint is requested at position 1
             participant.trigger.requestCheckpoint(new GlobalSequenceTrackingToken(1L));
@@ -443,7 +444,8 @@ public abstract class CheckpointingProgressStrategyTestSuite extends SegmentProg
         void aParticipantThatCannotCoverTheBatchEndTokenFailsTheBatchAndStoresNothing() {
             // given -- auto mode with a participant that cannot reach the batch-end token (reports position 0)
             RecordingCheckpointing participant = new RecordingCheckpointing();
-            participant.advanceResult = requested -> CompletableFuture.completedFuture(new GlobalSequenceTrackingToken(0L));
+            participant.advanceResult = requested -> CompletableFuture.completedFuture(new GlobalSequenceTrackingToken(
+                    0L));
             WorkPackageHarness testSubject = auto(participant);
             testSubject.onSegmentClaimed();
 
@@ -560,7 +562,8 @@ public abstract class CheckpointingProgressStrategyTestSuite extends SegmentProg
             WorkPackageHarness testSubject = deferred(participant);
             testSubject.onSegmentClaimed();
             testSubject.scheduleEvent(eventAt(1L));
-            await().atMost(TIMEOUT).untilAsserted(() -> assertThat(testSubject.batchProcessor().processed()).hasSize(1));
+            await().atMost(TIMEOUT).untilAsserted(() -> assertThat(testSubject.batchProcessor()
+                                                                              .processed()).hasSize(1));
 
             // when -- on release the component reports LATEST ("everything you gave me")
             testSubject.release().orTimeout(TIMEOUT.toMillis(), TimeUnit.MILLISECONDS).join();
@@ -757,11 +760,11 @@ public abstract class CheckpointingProgressStrategyTestSuite extends SegmentProg
     }
 
     /**
-     * A minimal two-axis {@link TrackingToken}, a deliberately simplified stand-in for a multi-source token (such as the
-     * {@code MultiSourceTrackingToken} provided by an extension). It {@link #covers(TrackingToken) covers} another
+     * A minimal two-axis {@link TrackingToken}, a deliberately simplified stand-in for a multi-source token (such as
+     * the {@code MultiSourceTrackingToken} provided by an extension). It {@link #covers(TrackingToken) covers} another
      * two-axis token only when BOTH axes are at or beyond the other's, so two tokens where one axis advanced while the
-     * other regressed are mutually non-covering (incomparable) -- the partial-regression case that must never be stored,
-     * as doing so would rewind progress on the regressed axis.
+     * other regressed are mutually non-covering (incomparable) -- the partial-regression case that must never be
+     * stored, as doing so would rewind progress on the regressed axis.
      */
     protected record TwoAxisToken(long a, long b) implements TrackingToken {
 

@@ -11,6 +11,7 @@ package io.axoniq.framework.messaging.eventstreaming.checkpoint;
 import org.axonframework.common.FutureUtils;
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.messaging.core.configuration.MessagingConfigurer;
+import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.AsyncInMemoryStreamableEventSource;
 import org.axonframework.messaging.eventhandling.EventTestUtils;
 import org.axonframework.messaging.eventhandling.annotation.EventHandler;
@@ -99,8 +100,12 @@ class AnnotatedCheckpointingProjectionTest {
         assertThat(projection.released).isNotEmpty();
     }
 
-    private static long positionOf(TokenStore tokenStore) {
-        TrackingToken token = FutureUtils.joinAndUnwrap(tokenStore.fetchToken(PROCESSOR_NAME, 0, null));
+    private long positionOf(TokenStore tokenStore) {
+        TrackingToken token = FutureUtils.joinAndUnwrap(
+                configuration.getComponent(UnitOfWorkFactory.class).create().executeWithResult(
+                        context -> tokenStore.fetchToken(PROCESSOR_NAME, 0, context)
+                )
+        );
         return token == null ? -1L : token.position().orElse(-1L);
     }
 

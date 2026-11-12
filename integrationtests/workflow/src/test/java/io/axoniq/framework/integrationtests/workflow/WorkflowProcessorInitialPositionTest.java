@@ -14,6 +14,7 @@ import io.axoniq.framework.workflow.configuration.WorkflowConfigurer;
 import io.axoniq.framework.workflow.configuration.WorkflowModule;
 import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContext;
 import org.axonframework.common.configuration.AxonConfiguration;
+import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.gateway.EventGateway;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.ReplayToken;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
@@ -74,9 +75,13 @@ class WorkflowProcessorInitialPositionTest {
                .untilAsserted(() -> assertThat(started).as("history must not start workflows").doesNotContain("before"));
     }
 
-    private static TrackingToken storedToken(InMemoryTokenStore tokenStore) {
+    private TrackingToken storedToken(InMemoryTokenStore tokenStore) {
         try {
-            return tokenStore.fetchToken("Recording", 0, null).orTimeout(5, TimeUnit.SECONDS).join();
+            return configuration.getComponent(UnitOfWorkFactory.class)
+                                .create()
+                                .executeWithResult(ctx -> tokenStore.fetchToken("Recording", 0, ctx))
+                                .orTimeout(5, TimeUnit.SECONDS)
+                                .join();
         } catch (Exception notInitializedYet) {
             return null;
         }

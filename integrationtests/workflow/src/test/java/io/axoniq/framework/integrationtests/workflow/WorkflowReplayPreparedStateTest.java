@@ -29,11 +29,13 @@ import org.axonframework.eventsourcing.eventstore.AppendCondition;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
 import org.axonframework.eventsourcing.eventstore.GenericTaggedEventMessage;
 import org.axonframework.eventsourcing.eventstore.inmemory.InMemoryEventStorageEngine;
+import org.axonframework.messaging.core.EmptyApplicationContext;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.MessageTypeResolver;
 import org.axonframework.messaging.core.Metadata;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.VersionedType;
+import org.axonframework.messaging.core.unitofwork.SimpleUnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.EventSink;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
@@ -54,6 +56,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.TimeUnit;
 
 import static io.axoniq.framework.workflow.dsl.api.EventAssociationsUtils.equalsTo;
 import static io.axoniq.framework.workflow.runtime.association.Associations.associate;
@@ -304,15 +307,20 @@ class WorkflowReplayPreparedStateTest {
         }
 
         private void seedProcessorToken(TrackingToken token) {
-            var segments = processingTokenStore.fetchSegments(MODULE_NAME, null)
-                                               .join();
-            if (segments.isEmpty()) {
-                processingTokenStore.initializeTokenSegments(MODULE_NAME, 1, token, null)
-                                    .join();
-            } else {
-                processingTokenStore.storeToken(token, MODULE_NAME, 0, null)
-                                    .join();
-            }
+            var unitOfWorkFactory = new SimpleUnitOfWorkFactory(EmptyApplicationContext.INSTANCE);
+            var segments = unitOfWorkFactory.create()
+                                            .executeWithResult(ctx -> processingTokenStore.fetchSegments(MODULE_NAME,
+                                                                                                         ctx))
+                                            .orTimeout(5, TimeUnit.SECONDS)
+                                            .join();
+            unitOfWorkFactory.create()
+                             .executeWithResult(ctx -> segments.isEmpty()
+                                     ? processingTokenStore.initializeTokenSegments(MODULE_NAME, 1, token, ctx)
+                                                           .thenApply(initialized -> (Object) initialized)
+                                     : processingTokenStore.storeToken(token, MODULE_NAME, 0, ctx)
+                                                           .thenApply(stored -> (Object) stored))
+                             .orTimeout(5, TimeUnit.SECONDS)
+                             .join();
         }
 
         private TrackingToken tokenAt(int index) {
