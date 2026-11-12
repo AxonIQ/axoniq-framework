@@ -10,6 +10,7 @@ package io.axoniq.framework.workflow.runtime.execution;
 import io.axoniq.framework.workflow.dsl.api.EventCondition;
 import io.axoniq.framework.workflow.dsl.api.EventNameCustomizer;
 import io.axoniq.framework.workflow.dsl.api.StepCancellationException;
+import io.axoniq.framework.workflow.dsl.api.StepWaitInfo;
 import io.axoniq.framework.workflow.dsl.api.WorkflowState;
 import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
 import io.axoniq.framework.workflow.dsl.api.WorkflowStep;
@@ -24,7 +25,6 @@ import org.axonframework.messaging.core.unitofwork.UnitOfWork;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.conversion.EventConverter;
-import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.*;
 import org.mockito.*;
 
@@ -127,11 +127,11 @@ class WaitForDelegateTest {
         ArgumentCaptor<EventMessage> eventCaptor = ArgumentCaptor.forClass(EventMessage.class);
         verify(workflowExecution).appendWorkflowEvent(eventCaptor.capture(), any(ProcessingContext.class));
 
-        assertThat(eventCaptor.getValue().payload()).isEqualTo(Map.of(
-                "startTime", Instant.parse("2026-07-08T10:00:00Z"),
-                "eventName", "io.acme.PaymentConfirmed",
-                "associations", Set.of("payload:orderId=123", "metadata:tenantId=eu"),
-                "timeoutTime", Instant.parse("2026-07-08T10:15:00Z")
+        assertThat(eventCaptor.getValue().payload()).isEqualTo(new StepWaitInfo(
+                Instant.parse("2026-07-08T10:00:00Z"),
+                "io.acme.PaymentConfirmed",
+                Set.of("payload:orderId=123", "metadata:tenantId=eu"),
+                Instant.parse("2026-07-08T10:15:00Z")
         ));
         verify(eventWaitConditions).add(anyString(), any(EventCondition.class), any(), any());
     }
@@ -270,13 +270,11 @@ class WaitForDelegateTest {
         when(workflowExecution.appendWorkflowEvent(any(EventMessage.class), any(ProcessingContext.class)))
                 .thenAnswer(invocation -> {
                     EventMessage message = invocation.getArgument(0);
-                    if (message.payload() instanceof Map<?, ?> payload) {
-                        @SuppressWarnings("unchecked")
-                        Map<String, @Nullable Object> startPayload = (Map<String, @Nullable Object>) payload;
+                    if (message.payload() instanceof StepWaitInfo waitInfo) {
                         startedStep.set(WorkflowStep.started(
                                 "awaitPayment",
-                                startPayload,
-                                (Instant) startPayload.get("startTime"),
+                                waitInfo,
+                                waitInfo.startTime(),
                                 processingContext
                         ));
                     }

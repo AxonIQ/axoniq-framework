@@ -19,15 +19,12 @@ import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecut
 import io.axoniq.framework.workflow.runtime.util.FutureResolver;
 import io.axoniq.framework.workflow.runtime.util.WorkflowStateUtils;
 import org.axonframework.common.annotation.Internal;
-import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.LinkedHashMap;
-import java.util.Map;
 import java.util.Objects;
 
 
@@ -171,14 +168,10 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
         });
     }
 
-    private Map<String, @Nullable Object> startedPayload(EventCondition eventCondition,
-                                                         Instant startedAt,
-                                                         Duration timeout) {
-        var payload = new LinkedHashMap<String, @Nullable Object>();
-        payload.put("startTime", startedAt);
-        payload.put("eventName", eventCondition.qualifiedName().toString());
-        payload.put("associations", eventCondition.associations());
-        payload.put("timeoutTime", startedAt.plus(timeout));
-        return payload;
+    private StepWaitInfo startedPayload(EventCondition eventCondition, Instant startedAt, Duration timeout) {
+        return new StepWaitInfo(startedAt,
+                                eventCondition.qualifiedName().toString(),
+                                eventCondition.associations(),
+                                startedAt.plus(timeout));
     }
 }
