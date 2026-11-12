@@ -10,6 +10,7 @@ package io.axoniq.framework.workflow.runtime.execution;
 import io.axoniq.framework.workflow.dsl.api.EventCondition;
 import io.axoniq.framework.workflow.dsl.api.EventNameCustomizer;
 import io.axoniq.framework.workflow.dsl.api.StepCancellationException;
+import io.axoniq.framework.workflow.dsl.api.StepWaitInfo;
 import io.axoniq.framework.workflow.dsl.api.WorkflowState;
 import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
 import io.axoniq.framework.workflow.dsl.api.WorkflowStep;
@@ -24,7 +25,6 @@ import org.axonframework.messaging.core.unitofwork.UnitOfWork;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.conversion.EventConverter;
-import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.*;
 import org.mockito.*;
 
@@ -32,6 +32,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
@@ -126,11 +127,11 @@ class WaitForDelegateTest {
         ArgumentCaptor<EventMessage> eventCaptor = ArgumentCaptor.forClass(EventMessage.class);
         verify(workflowExecution).appendWorkflowEvent(eventCaptor.capture(), any(ProcessingContext.class));
 
-        assertThat(eventCaptor.getValue().payload()).isEqualTo(Map.of(
-                "startTime", Instant.parse("2026-07-08T10:00:00Z"),
-                "eventName", "io.acme.PaymentConfirmed",
-                "associations", Set.of("payload:orderId=123", "metadata:tenantId=eu"),
-                "timeoutTime", Instant.parse("2026-07-08T10:15:00Z")
+        assertThat(eventCaptor.getValue().payload()).isEqualTo(new StepWaitInfo(
+                Instant.parse("2026-07-08T10:00:00Z"),
+                "io.acme.PaymentConfirmed",
+                Set.of("payload:orderId=123", "metadata:tenantId=eu"),
+                Instant.parse("2026-07-08T10:15:00Z")
         ));
         verify(eventWaitConditions).add(anyString(), any(EventCondition.class), any(), any());
     }
@@ -203,6 +204,57 @@ class WaitForDelegateTest {
         assertThat(workflowScheduler.pendingTaskCount()).isZero();
     }
 
+    @Nested
+    class ReplayOfAStartedWait {
+
+        @Test
+        void keepsThePersistedDeadlineWhenTheWorkflowPassesADifferentTimeout() {
+            // given a wait that started 5 minutes ago with a 15 minute timeout, as the event store returns it
+            var condition = mock(EventCondition.class);
+            when(condition.qualifiedName()).thenReturn(new QualifiedName("io.acme.PaymentConfirmed"));
+            when(condition.associations()).thenReturn(Set.of());
+            startedStep.set(WorkflowStep.started(
+                    "awaitPayment",
+                    Map.of("startTime", "2026-07-08T09:55:00Z",
+                           "eventName", "io.acme.PaymentConfirmed",
+                           "associations", List.of(),
+                           "timeoutTime", "2026-07-08T10:10:00Z"),
+                    Instant.parse("2026-07-08T09:55:00Z"),
+                    processingContext
+            ));
+
+            // when the replayed workflow passes the 10 minutes that remain
+            delegate.waitForEvent(new PrimitiveCommands.WorkflowStepResultWaitForCommand(
+                    "awaitPayment", condition, GlobalOnlyPayloadReducer.INSTANCE, Duration.ofMinutes(10),
+                    DefaultEventNameCustomizer.Builder.defaults()
+            ));
+
+            // then
+            assertThat(workflowScheduler.pendingDeadlines()).containsExactly(Instant.parse("2026-07-08T10:10:00Z"));
+        }
+
+        @Test
+        void countsTheDeadlineFromTheStepStartWhenTheStepCarriesNoWaitDetails() {
+            // given a started wait whose state holds no wait details
+            var condition = mock(EventCondition.class);
+            when(condition.qualifiedName()).thenReturn(new QualifiedName("io.acme.PaymentConfirmed"));
+            when(condition.associations()).thenReturn(Set.of());
+            startedStep.set(WorkflowStep.started(
+                    "awaitPayment", Map.of(), Instant.parse("2026-07-08T09:55:00Z"), processingContext
+            ));
+
+            // when
+            delegate.waitForEvent(new PrimitiveCommands.WorkflowStepResultWaitForCommand(
+                    "awaitPayment", condition, GlobalOnlyPayloadReducer.INSTANCE, Duration.ofMinutes(15),
+                    DefaultEventNameCustomizer.Builder.defaults()
+            ));
+
+            // then the wait is registered and times out 15 minutes after the step start
+            verify(eventWaitConditions).add(anyString(), any(EventCondition.class), any(), any());
+            assertThat(workflowScheduler.pendingDeadlines()).containsExactly(Instant.parse("2026-07-08T10:10:00Z"));
+        }
+    }
+
     private void stubUnitOfWorkFactory() {
         UnitOfWork unitOfWork = mock(UnitOfWork.class);
         when(unitOfWorkFactory.create(anyString(), any(Function.class))).thenReturn(unitOfWork);
@@ -218,13 +270,11 @@ class WaitForDelegateTest {
         when(workflowExecution.appendWorkflowEvent(any(EventMessage.class), any(ProcessingContext.class)))
                 .thenAnswer(invocation -> {
                     EventMessage message = invocation.getArgument(0);
-                    if (message.payload() instanceof Map<?, ?> payload) {
-                        @SuppressWarnings("unchecked")
-                        Map<String, @Nullable Object> startPayload = (Map<String, @Nullable Object>) payload;
+                    if (message.payload() instanceof StepWaitInfo waitInfo) {
                         startedStep.set(WorkflowStep.started(
                                 "awaitPayment",
-                                startPayload,
-                                (Instant) startPayload.get("startTime"),
+                                waitInfo,
+                                waitInfo.startTime(),
                                 processingContext
                         ));
                     }
