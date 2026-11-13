@@ -283,7 +283,6 @@ public class MultiTenantAxonServerQueryBusConnector
     }
 
     private Registration addTenant(TenantDescriptor tenantDescriptor) {
-        tenantDescriptors.add(tenantDescriptor);
         tenantConnectors.computeIfAbsent(tenantDescriptor.tenantId(), tenantId -> {
             AxonServerQueryBusConnector connector = createConnector(tenantDescriptor);
             // Known subscriptions are replayed only while creating a new connector. An already-registered tenant's
@@ -293,6 +292,8 @@ public class MultiTenantAxonServerQueryBusConnector
             logger.info("Added query bus connection for tenant [{}]", tenantDescriptor.tenantId());
             return connector;
         });
+        // Only after the connector exists, so a tenant whose connector cannot be built is not left described.
+        tenantDescriptors.add(tenantDescriptor);
         return () -> removeTenant(tenantDescriptor);
     }
 
