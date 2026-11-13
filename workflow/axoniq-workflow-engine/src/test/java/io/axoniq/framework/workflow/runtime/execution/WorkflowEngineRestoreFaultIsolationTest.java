@@ -99,7 +99,7 @@ class WorkflowEngineRestoreFaultIsolationTest {
                 workflowStore,
                 restoreUnitOfWorkFactory()
         );
-        workflowEngine.setCheckpointingSupport(new WorkflowEngineCheckpointingSupport(workflowEngine));
+        workflowEngine.setCheckpointingSupport(new WorkflowEngineCheckpointingSupport(workflowEngine, 0L));
         when(workflowStore.loadRunningWorkflows(any()))
                 .thenReturn(CompletableFuture.completedFuture(runningWorkflows));
     }

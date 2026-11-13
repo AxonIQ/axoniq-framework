@@ -79,6 +79,14 @@ public class WorkflowProperties {
      * configuration instead.
      */
     private boolean coordinatorClaimExtension = false;
+
+    /**
+     * The minimum time, in milliseconds, between two checkpoint requests of one segment of the workflow event
+     * processor.
+     * <p>
+     * Defaults to {@code 0}, which requests a checkpoint after every event.
+     */
+    private long checkpointInterval = 0L;
     private final HistoryProcessorProperties history = new HistoryProcessorProperties();
 
     /**
@@ -189,6 +197,31 @@ public class WorkflowProperties {
      */
     public void setCoordinatorClaimExtension(boolean coordinatorClaimExtension) {
         this.coordinatorClaimExtension = coordinatorClaimExtension;
+    }
+
+    /**
+     * Returns the minimum time, in milliseconds, between two checkpoint requests of one segment of the workflow event
+     * processor.
+     * <p>
+     * Defaults to {@code 0}, which requests a checkpoint after every event.
+     *
+     * @return the checkpoint interval, in milliseconds, where {@code 0} requests a checkpoint after every event
+     */
+    public long getCheckpointInterval() {
+        return checkpointInterval;
+    }
+
+    /**
+     * Sets the minimum time, in milliseconds, between two checkpoint requests of one segment of the workflow event
+     * processor.
+     * <p>
+     * Defaults to {@code 0}, which requests a checkpoint after every event.
+     *
+     * @param checkpointInterval the checkpoint interval, in milliseconds, where {@code 0} requests a checkpoint after
+     *                           every event
+     */
+    public void setCheckpointInterval(long checkpointInterval) {
+        this.checkpointInterval = checkpointInterval;
     }
 
     /**

@@ -56,6 +56,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.function.Function;
 
 import static java.util.Objects.requireNonNull;
+import static org.axonframework.common.BuilderUtils.assertPositive;
 
 /**
  * Workflow module used to create multiple {@link WorkflowConfiguration} (one per workflow definition) defined for the
@@ -95,6 +96,7 @@ class SimpleWorkflowModule<C extends WorkflowContext>
     private Function<PooledStreamingEventProcessorConfiguration, PooledStreamingEventProcessorConfiguration> engineConfigCustomizer =
             psepConfig -> psepConfig;
     private boolean useHistory = true;
+    private long checkpointInterval = 0L;
     private ComponentBuilder<MutableWorkflowHistoryRepository> historyRepository =
             config -> new InMemoryWorkflowHistoryRepository();
     private Function<PooledStreamingEventProcessorConfiguration, PooledStreamingEventProcessorConfiguration> historyConfigCustomizer =
@@ -178,6 +180,13 @@ class SimpleWorkflowModule<C extends WorkflowContext>
     }
 
     @Override
+    public OptionalPhase<C> checkpointInterval(long checkpointInterval) {
+        assertPositive(checkpointInterval, "The checkpoint interval must not be negative.");
+        this.checkpointInterval = checkpointInterval;
+        return this;
+    }
+
+    @Override
     public OptionalPhase<C> withHistory(
             ComponentBuilder<MutableWorkflowHistoryRepository> historyRepository
     ) {
@@ -244,7 +253,8 @@ class SimpleWorkflowModule<C extends WorkflowContext>
             cr.registerComponent(workflowCancellationService());
             cr.registerIfNotPresent(
                     WorkflowEngineCheckpointingSupport.class,
-                    c -> new WorkflowEngineCheckpointingSupport(c.getComponent(WorkflowEngine.class, engineName()))
+                    c -> new WorkflowEngineCheckpointingSupport(c.getComponent(WorkflowEngine.class, engineName()),
+                                                                checkpointInterval)
             );
             cr.registerComponent(workflowEngine());
             cr.registerComponent(workflowHistoryRepository());

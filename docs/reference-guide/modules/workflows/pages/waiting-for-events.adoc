@@ -217,6 +217,13 @@ This may trigger a third-party provider that eventually publishes a `PaymentConf
 By subscribing to the event *before* calling the service that produces it, you guarantee no events are missed—even if the external service responds instantly.
 ====
 
+[NOTE]
+====
+A workflow is imperative: it subscribes to an event only when it reaches the wait.
+It does not see events that occurred before the wait.
+For a message-driven approach, combine an event handler with a Dynamic Consistency Boundary (DCB) entity.
+====
+
 Here's the full event store for this workflow:
 
 ++++
