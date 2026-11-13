@@ -107,13 +107,26 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
     /**
      * The parameters needed to bind one criterion's {@link #FILTER_SUB_QUERY} instance, in the
      * order its {@code ?} place-holders appear: the criterion's tag key/value pairs, then its
-     * type array (if it restricts by type), then the distinct key/value pair count for {@code HAVING}.
+     * type array (if it restricts by type), then the distinct key/value pair count for {@code HAVING}
+     * (only if it {@link #requiresGrouping() requires grouping}). The page size, which is not part
+     * of this record, is bound last.
      *
      * @param tagParameters    the criterion's tag keys and values, alternating, cannot be {@code null}, may be empty
      * @param typeParameters   the criterion's type names, cannot be {@code null}, empty if the criterion does not restrict by type
      * @param distinctTagCount the number of distinct tags required to match: one per tag, plus one more if typeParameters is non-empty
      */
-    private record CriterionFilter(List<String> tagParameters, List<String> typeParameters, int distinctTagCount) {}
+    private record CriterionFilter(List<String> tagParameters, List<String> typeParameters, int distinctTagCount) {
+
+        /**
+         * Tells whether the criterion has more than one condition. Only then its {@link #FILTER_SUB_QUERY}
+         * instance contains {@link #FILTER_GROUPING}, and only then {@code distinctTagCount} is bound.
+         *
+         * @return {@code true} if the criterion's sub query groups, {@code false} otherwise
+         */
+        boolean requiresGrouping() {
+            return distinctTagCount > 1;
+        }
+    }
 
     private record TagFilter(CharSequence sql, List<CriterionFilter> criterionFilters) {
         boolean isEmpty() {
@@ -256,8 +269,23 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
      * The {@code condition} place-holder must be replaced with the criterion's tag and/or type
      * condition, and the {@code grouping} place-holder with {@link #FILTER_GROUPING} or nothing -
      * see {@link #buildTagFilter(Set)}.
+     * <p>
+     * The {@code ORDER BY ... LIMIT} must stay inside this sub query. It lets a page read about one
+     * page of {@code tags} rows in index order and stop; with only the limit of the outer query,
+     * every page reads all matching {@code tags} rows after the start position. The result stays
+     * the same because of two invariants:
+     * <ul>
+     *     <li>Criteria combine with OR, and the first N rows of a union always lie within the union
+     *     of the first N rows of each part.
+     *     <li>A criterion with a single condition matches at most one {@code tags} row per event, so
+     *     it needs no grouping: the {@code tags} primary key guarantees that for a tag, and the
+     *     {@code tags_type_unique} index for the type - see {@link PostgresqlSchemaInitializer}.
+     *     Without that guarantee a page would return duplicate events.
+     * </ul>
      *
-     * <li>Parameter 1 {@code long}: maximum number of rows to query
+     * <li>Parameters: the criterion's tag/type bind parameters, see {@link #buildCriterionSql(EventCriterion)}
+     * <li>Parameter {@code int}: the criterion's distinct tag count, only with {@link #FILTER_GROUPING}
+     * <li>Final parameter {@code long}: maximum number of rows to query, the page size
      */
     private static final String FILTER_SUB_QUERY =
         """
@@ -273,7 +301,7 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
     /**
      * The grouping {@link #FILTER_SUB_QUERY} needs for a criterion with more than one condition.
      *
-     * <li>Parameter 1 {@code long}: the number of distinct key/value pairs that must match (one per
+     * <li>Parameter 1 {@code int}: the number of distinct key/value pairs that must match (one per
      * tag, plus one more for the reserved type tag if the criterion also restricts by type)
      */
     private static final String FILTER_GROUPING =
@@ -980,7 +1008,7 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
                         ps.setArray(parameterIndex++, connection.createArrayOf("varchar", criterionFilter.typeParameters().toArray()));
                     }
 
-                    if (criterionFilter.distinctTagCount() > 1) {
+                    if (criterionFilter.requiresGrouping()) {
                         ps.setInt(parameterIndex++, criterionFilter.distinctTagCount());  // HAVING COUNT in each grouped subquery
                     }
 
@@ -1066,6 +1094,8 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
      *     <li>types only - {@code t.key = '__T' AND t.value = ANY(?)}, no tags to join on at all
      *     <li>both - the two conditions above, combined with {@code OR}
      * </ul>
+     * Every sub query is limited to the page size. It only groups when its criterion
+     * {@link CriterionFilter#requiresGrouping() requires grouping}, that is, has more than one condition.
      *
      * @param criterions the criteria to filter events on, cannot be {@code null}
      * @return the resulting filter, never {@code null}
@@ -1094,7 +1124,7 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
             sql.append(
                 FILTER_SUB_QUERY
                     .replace("{condition}", criterionSql.condition())
-                    .replace("{grouping}", criterionSql.filter().distinctTagCount() > 1 ? FILTER_GROUPING : "")
+                    .replace("{grouping}", criterionSql.filter().requiresGrouping() ? FILTER_GROUPING : "")
             );
 
             firstCriterion = false;
