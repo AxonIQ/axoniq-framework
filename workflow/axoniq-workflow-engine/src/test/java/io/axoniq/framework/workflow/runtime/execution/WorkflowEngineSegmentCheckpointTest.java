@@ -92,7 +92,7 @@ class WorkflowEngineSegmentCheckpointTest {
                 mock(WorkflowStore.class),
                 mock(UnitOfWorkFactory.class)
         );
-        checkpointingSupport = new WorkflowEngineCheckpointingSupport(workflowEngine);
+        checkpointingSupport = new WorkflowEngineCheckpointingSupport(workflowEngine, 0L);
         workflowEngine.setCheckpointingSupport(checkpointingSupport);
         registerStartConfiguration(configurationRegistry);
         // Delivered on the segment that owns it, exactly as the routing sequences a unique start candidate.

@@ -136,7 +136,7 @@ class WorkflowEngineCrossSegmentCheckpointTest {
                                             mock(WorkflowCancellationService.class),
                                             mock(WorkflowStore.class),
                                             mock(UnitOfWorkFactory.class));
-        checkpointingSupport = new WorkflowEngineCheckpointingSupport(workflowEngine);
+        checkpointingSupport = new WorkflowEngineCheckpointingSupport(workflowEngine, 0L);
         workflowEngine.setCheckpointingSupport(checkpointingSupport);
     }
 

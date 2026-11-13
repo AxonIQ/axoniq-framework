@@ -136,7 +136,7 @@ class WorkflowEngineClaimGapWakeTest {
                 workflowStore,
                 restoreUnitOfWorkFactory()
         );
-        checkpointingSupport = new WorkflowEngineCheckpointingSupport(workflowEngine);
+        checkpointingSupport = new WorkflowEngineCheckpointingSupport(workflowEngine, 0L);
         workflowEngine.setCheckpointingSupport(checkpointingSupport);
         when(configurationRegistry.getHighestVersionConfigurations(new MessageType(RESUME_EVENT))).thenReturn(List.of());
         registerRestorableWorkflow();

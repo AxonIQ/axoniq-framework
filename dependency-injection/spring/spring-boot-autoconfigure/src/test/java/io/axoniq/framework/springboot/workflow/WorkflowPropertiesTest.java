@@ -72,6 +72,21 @@ class WorkflowPropertiesTest {
     }
 
     @Test
+    void checkpointIntervalBindsFromTheApplicationProperties() {
+        contextRunner.withPropertyValues("axon.workflow.checkpoint-interval=1000")
+                     .run(context -> assertThat(
+                             context.getBean(WorkflowProperties.class).getCheckpointInterval()
+                     ).isEqualTo(1000L));
+    }
+
+    @Test
+    void checkpointIntervalDefaultsToRequestingACheckpointAfterEveryEvent() {
+        contextRunner.run(context -> assertThat(
+                context.getBean(WorkflowProperties.class).getCheckpointInterval()
+        ).isZero());
+    }
+
+    @Test
     void everyPropertyDefaultsToTheSameValueAsEventProcessorPropertiesProcessorSettings() {
         contextRunner.run(context -> {
             var properties = context.getBean(WorkflowProperties.class);

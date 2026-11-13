@@ -236,7 +236,7 @@ The history processor uses the same properties under `axon.workflow.history.*`.
 
 |`thread-count`
 |`4`
-|Maximum number of segments claimed by one node.
+|Number of threads that process the claimed segments of one node.
 
 |`token-claim-interval`
 |`5000`
@@ -249,9 +249,87 @@ The history processor uses the same properties under `axon.workflow.history.*`.
 |`coordinator-claim-extension`
 |`false`
 |Whether the coordinator extends claims.
+
+|`checkpoint-interval`
+|`0`
+|Minimum milliseconds between two checkpoint requests of one segment. Engine processor only.
 |===
 
-See <<running-on-several-nodes,Running on several nodes>> for the token store and failover.
+See <<running-on-several-nodes,Running on several nodes>> for the token store and failover, and <<performance-tuning,Performance tuning>> for choosing these values.
+
+[[performance-tuning]]
+== Performance tuning
+
+The engine processor handles each segment on one thread at a time.
+After every batch it waits until every workflow of the segment is at a safe point, and only then stores its position.
+Throughput therefore grows with the number of segments processed in parallel, and with fewer of these waits.
+The event store usually sets the limit, so change one setting at a time and measure.
+
+=== Segments and threads
+
+The number of segments caps how many threads can process workflows at the same time, across all nodes.
+In most scenarios, a segment segment count matching the total number of threads of all nodes is advised for high-throughput applications.
+The initial segment count only applies when the token store has no tokens yet. To change it later, split or merge the stored tokens.
+
+The thread count sets how many threads process the claimed segments of one node.
+A node claims segments regardless of its thread count, so segments beyond it wait for a free thread.
+Raise segments and threads together.
+More threads help until the event store is busy. After that point they add load without adding throughput.
+
+=== Database connections
+
+With a JDBC or JPA event store or token store, every busy processor thread holds a database connection during its batch.
+Workflow steps that use the same database need connections of their own.
+Size the connection pool above the thread count, with room for those steps, so that threads never wait for a connection.
+
+=== Batch size
+
+The batch size sets how many events the processor handles before it commits and checkpoints.
+A larger batch means fewer commits and fewer waits for a safe point.
+Each wait can take longer, because a batch touches more workflows.
+
+=== Checkpoint interval
+
+The engine requests a checkpoint after every event it handles.
+A positive checkpoint interval forwards at most one request per segment within that interval, so the processor waits less often under load.
+The stored position then lags by at most the events of one interval, and those events are processed again after a crash.
+The interval is in milliseconds. It defaults to `0`, which forwards every request.
+
+=== Java version
+
+Workflow steps run on virtual threads.
+On Java 21 to 23, a virtual thread that blocks inside `synchronized` code keeps its carrier thread, and under load every carrier thread can end up blocked.
+Java 24 and later do not have this limitation, so prefer them for workflows under load.
+
+=== Example
+
+The example below raises the segments and threads to 32, the batch size to 100 and the checkpoint interval to 1 second.
+These values are a starting point for a load test, not a recommendation.
+
+[tabs]
+====
+Configuration API::
++
+--
+[source,java]
+----
+include::example$workflows/configuration/ConfigurationExamples.java[tag=performance-tuning,indent=0]
+----
+--
+
+Spring Boot::
++
+--
+[source,properties]
+----
+axon.workflow.initial-segment-count=32
+axon.workflow.thread-count=32
+axon.workflow.batch-size=100
+axon.workflow.checkpoint-interval=1000
+spring.datasource.hikari.maximum-pool-size=80
+----
+--
+====
 
 [[metadata-and-correlation-data]]
 == Metadata and correlation data
