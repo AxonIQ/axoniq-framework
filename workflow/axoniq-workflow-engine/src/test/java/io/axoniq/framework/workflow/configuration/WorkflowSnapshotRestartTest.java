@@ -67,6 +67,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -256,6 +257,70 @@ class WorkflowSnapshotRestartTest {
                     new PayloadMapping(LocalOnlyPayloadReducer.INSTANCE, CombineGlobalAndLocalPayloadReducer.INSTANCE),
                     new Timing(Duration.ofMinutes(5)),
                     RetryPolicy.maxRetries(1).withBackoff(BackoffStrategy.fixed(Duration.ofSeconds(5)))
+            );
+        }
+    }
+
+    @Nested
+    class StepResultOfNestedValues {
+
+        private static final Map<String, Object> QUOTE = Map.of(
+                "items", 3,
+                "weight", 2.5,
+                "express", true,
+                "address", Map.of("city", "Belgrade", "zip", 11000),
+                "tags", List.of("a", "b")
+        );
+
+        private final List<Map<String, Object>> quotesRead = new CopyOnWriteArrayList<>();
+
+        @Test
+        void readsTheSameAfterRestartFromItsSnapshot() {
+            // given - a workflow whose first step returned numbers and nested values, parked at its wait
+            var stopped = start(quoteWorkflow(), true);
+            var workflowId = startWorkflows(stopped, 1).getFirst();
+            awaitParked(stopped, List.of(workflowId));
+            assertThat(snapshotOf(stopped, EventSourcedWorkflowState.class, workflowId)).isNotNull();
+            stop(stopped);
+
+            // when
+            var restarted = start(quoteWorkflow(), true);
+            await().atMost(30, TimeUnit.SECONDS).until(() -> engine(restarted).workflowExecutions().size() == 1);
+            var replaying = build(quoteWorkflow(), false);
+
+            // then - the state continued from the snapshot equals the state replayed from every event
+            assertThat(describe(durableState(restarted, workflowId)))
+                    .isEqualTo(describe(durableState(replaying, workflowId)));
+
+            // and - the restored workflow read the step result as the first one did, without running the step again
+            publish(restarted, "paid");
+            await().atMost(30, TimeUnit.SECONDS)
+                   .ignoreExceptions()
+                   .until(() -> durableState(restarted, workflowId).workflowStatus() == WorkflowStatus.COMPLETED);
+            assertThat(quotesRead).hasSizeGreaterThanOrEqualTo(2).containsOnly(QUOTE);
+            assertThat(durableState(restarted, workflowId).payload()).containsAllEntriesOf(QUOTE);
+            assertThat(stepExecutions.get(workflowId + "/quote")).hasValue(1);
+        }
+
+        private Consumer<TestContext> quoteWorkflow() {
+            return ctx -> {
+                quotesRead.add(ctx.awaitExecute(quoteStep(ctx.workflowId())));
+                ctx.awaitEvent(AWAIT_PAID);
+                ctx.awaitExecute(countedStep(ctx.workflowId(), "ship"));
+            };
+        }
+
+        private ExecuteStepDefinition quoteStep(String workflowId) {
+            return new ExecuteStepDefinition(
+                    new PrimitiveMetadata("quote", DefaultEventNameCustomizer.Builder.defaults()),
+                    Map.of(),
+                    (processingContext, payload) -> {
+                        executionsOf(workflowId, "quote").incrementAndGet();
+                        return QUOTE;
+                    },
+                    new PayloadMapping(LocalOnlyPayloadReducer.INSTANCE, CombineGlobalAndLocalPayloadReducer.INSTANCE),
+                    new Timing(Duration.ofMinutes(5)),
+                    RetryPolicy.NONE
             );
         }
     }

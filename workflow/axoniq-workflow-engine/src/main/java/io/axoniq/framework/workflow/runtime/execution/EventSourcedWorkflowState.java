@@ -7,6 +7,8 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
+import com.fasterxml.jackson.annotation.JsonAutoDetect;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import io.axoniq.framework.workflow.dsl.api.StepRetryInfo;
 import io.axoniq.framework.workflow.dsl.api.StepStatus;
 import io.axoniq.framework.workflow.dsl.api.WorkflowCancelledException;
@@ -58,6 +60,12 @@ import static java.util.Objects.requireNonNull;
  */
 @Internal
 @Event(version = "1.0.0")
+@JsonAutoDetect(
+        fieldVisibility = JsonAutoDetect.Visibility.NONE,
+        getterVisibility = JsonAutoDetect.Visibility.NONE,
+        isGetterVisibility = JsonAutoDetect.Visibility.NONE,
+        setterVisibility = JsonAutoDetect.Visibility.NONE
+)
 public class EventSourcedWorkflowState implements WorkflowState {
 
     /**
@@ -196,6 +204,7 @@ public class EventSourcedWorkflowState implements WorkflowState {
      *
      * @return the plain values of this state
      */
+    @JsonProperty("stateSnapshot")
     public StateSnapshot getStateSnapshot() {
         return new StateSnapshot(
                 workflowId,
@@ -214,6 +223,7 @@ public class EventSourcedWorkflowState implements WorkflowState {
      *
      * @param stateSnapshot the plain values of this state
      */
+    @JsonProperty("stateSnapshot")
     public void setStateSnapshot(StateSnapshot stateSnapshot) {
         this.workflowId = stateSnapshot.workflowId();
         this.payload = stateSnapshot.payload();

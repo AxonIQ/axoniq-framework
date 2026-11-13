@@ -7,12 +7,15 @@
  */
 package io.axoniq.framework.workflow.configuration;
 
+import com.fasterxml.jackson.annotation.JsonAutoDetect;
 import io.axoniq.framework.workflow.dsl.api.EventConditions;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations;
 import io.axoniq.framework.workflow.runtime.execution.AbstractWorkflowContext;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowEngine;
 import org.axonframework.common.configuration.AxonConfiguration;
+import org.axonframework.conversion.Converter;
+import org.axonframework.conversion.jackson.JacksonConverter;
 import org.axonframework.eventsourcing.eventstore.EventStore;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
@@ -22,6 +25,7 @@ import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 import org.axonframework.modelling.repository.Repository;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.*;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.util.Map;
 import java.util.function.Consumer;
@@ -42,6 +46,17 @@ abstract class AbstractEventSourcedEntityRepositoryTestBase {
         if (configuration != null) {
             configuration.shutdown();
         }
+    }
+
+    /**
+     * Returns a converter whose mapper reads fields and ignores getters, the opposite of the default.
+     */
+    protected static Converter fieldReadingConverter() {
+        return new JacksonConverter(JsonMapper.builder().changeDefaultVisibility(
+                visibility -> visibility.withFieldVisibility(JsonAutoDetect.Visibility.ANY)
+                                        .withGetterVisibility(JsonAutoDetect.Visibility.NONE)
+                                        .withIsGetterVisibility(JsonAutoDetect.Visibility.NONE)
+        ).build());
     }
 
     protected AxonConfiguration configuration(String moduleName) {

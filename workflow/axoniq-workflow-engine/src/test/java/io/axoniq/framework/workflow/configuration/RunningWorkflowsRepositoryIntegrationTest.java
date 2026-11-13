@@ -102,7 +102,8 @@ class RunningWorkflowsRepositoryIntegrationTest extends AbstractEventSourcedEnti
 
         static Stream<Arguments> converters() {
             return Stream.of(Arguments.of(Named.of("JacksonConverter", new JacksonConverter())),
-                             Arguments.of(Named.of("Jackson2Converter", new Jackson2Converter())));
+                             Arguments.of(Named.of("Jackson2Converter", new Jackson2Converter())),
+                             Arguments.of(Named.of("JacksonConverter reading fields", fieldReadingConverter())));
         }
 
         @ParameterizedTest

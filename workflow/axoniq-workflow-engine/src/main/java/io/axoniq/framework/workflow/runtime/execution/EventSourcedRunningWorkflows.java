@@ -7,6 +7,8 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
+import com.fasterxml.jackson.annotation.JsonAutoDetect;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.util.MetadataUtils;
 import org.axonframework.common.annotation.Internal;
@@ -28,6 +30,12 @@ import java.util.Set;
  */
 @Internal
 @Event(version = "1.0.0")
+@JsonAutoDetect(
+        fieldVisibility = JsonAutoDetect.Visibility.NONE,
+        getterVisibility = JsonAutoDetect.Visibility.NONE,
+        isGetterVisibility = JsonAutoDetect.Visibility.NONE,
+        setterVisibility = JsonAutoDetect.Visibility.NONE
+)
 public class EventSourcedRunningWorkflows implements RunningWorkflows {
 
     /**
@@ -65,6 +73,7 @@ public class EventSourcedRunningWorkflows implements RunningWorkflows {
      *
      * @return the identifiers of the running workflows
      */
+    @JsonProperty("workflowIds")
     public Set<String> getWorkflowIds() {
         return workflowIds();
     }
@@ -74,6 +83,7 @@ public class EventSourcedRunningWorkflows implements RunningWorkflows {
      *
      * @param workflowIds the identifiers of the running workflows
      */
+    @JsonProperty("workflowIds")
     public void setWorkflowIds(Set<String> workflowIds) {
         this.workflowIds.clear();
         this.workflowIds.addAll(workflowIds);
