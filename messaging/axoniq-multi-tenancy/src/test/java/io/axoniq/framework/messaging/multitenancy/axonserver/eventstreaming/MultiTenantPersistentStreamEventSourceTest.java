@@ -12,7 +12,9 @@ import io.axoniq.axonserver.connector.event.PersistentStreamProperties;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
 import io.axoniq.framework.axonserver.connector.event.PersistentStreamScheduledExecutorBuilder;
+import io.axoniq.framework.messaging.multitenancy.api.MultiTenantAwareComponent;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
+import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
 import io.axoniq.framework.messaging.multitenancy.util.RecordingPersistentStreams;
 import io.axoniq.framework.messaging.multitenancy.util.StubTenantProvider;
 import org.axonframework.common.Registration;
@@ -36,12 +38,14 @@ import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.awaitility.Awaitility.await;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
@@ -474,6 +478,138 @@ class MultiTenantPersistentStreamEventSourceTest {
     }
 
     @Nested
+    class FailedRegistration {
+
+        @Test
+        void releasesTheConsumerClaimWhenTheTenantProviderFailsToSubscribe() {
+            // given
+            IllegalStateException failure = new IllegalStateException("provider unavailable");
+            AtomicBoolean providerFails = new AtomicBoolean(true);
+            TenantProvider flakyProvider = new TenantProvider() {
+                @Override
+                public Registration subscribe(MultiTenantAwareComponent component) {
+                    if (providerFails.get()) {
+                        throw failure;
+                    }
+                    return tenantProvider.subscribe(component);
+                }
+
+                @Override
+                public List<TenantDescriptor> tenants() {
+                    return tenantProvider.tenants();
+                }
+            };
+            tenantProvider.addTenant(TENANT_A);
+            MultiTenantPersistentStreamEventSource source =
+                    sourceWith(flakyProvider, MultiTenantPersistentStreamIdResolver.CONFIGURED_NAME);
+
+            // when
+            Throwable thrown = catchThrowable(() -> source.subscribe(recordingConsumer()));
+
+            // then
+            assertThat(thrown).isSameAs(failure);
+            assertThat((Boolean) describe(source).getProperty("subscribed")).isFalse();
+
+            // when the provider works again, a different consumer subscribes
+            providerFails.set(false);
+            source.subscribe(recordingConsumer());
+
+            // then
+            assertThat(streams.hasOpenStream("tenant-a", STREAM_NAME)).isTrue();
+        }
+
+        @Test
+        void leavesNoStreamOpenWhenTheResolverFailsForOneOfSeveralKnownTenantsAtStartup() {
+            // given
+            IllegalStateException failure = new IllegalStateException("resolution failed");
+            AtomicBoolean resolverFails = new AtomicBoolean(true);
+            tenantProvider.addTenant(TENANT_A);
+            tenantProvider.addTenant(TENANT_B);
+            MultiTenantPersistentStreamEventSource source = sourceWith(
+                    tenantProvider,
+                    (name, tenant) -> {
+                        if (resolverFails.get() && tenant.equals(TENANT_B)) {
+                            throw failure;
+                        }
+                        return name;
+                    });
+
+            // when
+            Throwable thrown = catchThrowable(() -> source.subscribe(recordingConsumer()));
+
+            // then
+            assertThat(thrown).isSameAs(failure);
+            assertThat(streams.hasOpenStream("tenant-a", STREAM_NAME)).isFalse();
+            assertThat(describedTenants(source)).isEmpty();
+            assertThat((Boolean) describe(source).getProperty("subscribed")).isFalse();
+
+            // when the resolver works again, a different consumer subscribes
+            resolverFails.set(false);
+            source.subscribe(recordingConsumer());
+
+            // then
+            assertThat(streams.hasOpenStream("tenant-a", STREAM_NAME)).isTrue();
+            assertThat(streams.hasOpenStream("tenant-b", STREAM_NAME)).isTrue();
+        }
+
+        @Test
+        void keepsNoStateOfATenantWhoseStreamCannotBeOpened() {
+            assertFailedTenantIsDroppedAndCanBeRegisteredAgain(MultiTenantPersistentStreamEventSource::registerTenant);
+        }
+
+        @Test
+        void keepsNoStateOfATenantWhoseStreamCannotBeOpenedWhenRegisteredAndStarted() {
+            assertFailedTenantIsDroppedAndCanBeRegisteredAgain(
+                    MultiTenantPersistentStreamEventSource::registerAndStartTenant);
+        }
+
+        private void assertFailedTenantIsDroppedAndCanBeRegisteredAgain(
+                BiFunction<MultiTenantPersistentStreamEventSource, TenantDescriptor, Registration> entryPoint
+        ) {
+            // given
+            IllegalStateException failure = new IllegalStateException("resolution failed");
+            AtomicBoolean resolverFails = new AtomicBoolean(false);
+            MultiTenantPersistentStreamEventSource source = sourceWith(
+                    tenantProvider,
+                    (name, tenant) -> {
+                        if (resolverFails.get() && tenant.equals(TENANT_A)) {
+                            throw failure;
+                        }
+                        return name;
+                    });
+            source.subscribe(recordingConsumer());
+            entryPoint.apply(source, TENANT_B);
+            resolverFails.set(true);
+
+            // when
+            Throwable thrown = catchThrowable(() -> entryPoint.apply(source, TENANT_A));
+
+            // then
+            assertThat(thrown).isSameAs(failure);
+            assertThat(describedTenants(source)).containsExactly(TENANT_B);
+            assertThat(streams.hasOpenStream("tenant-b", STREAM_NAME)).isTrue();
+
+            // when the resolver works again
+            resolverFails.set(false);
+            entryPoint.apply(source, TENANT_A);
+
+            // then
+            assertThat(streams.hasOpenStream("tenant-a", STREAM_NAME)).isTrue();
+            assertThat(describedTenants(source)).containsExactlyInAnyOrder(TENANT_A, TENANT_B);
+        }
+
+        private MockComponentDescriptor describe(MultiTenantPersistentStreamEventSource source) {
+            MockComponentDescriptor descriptor = new MockComponentDescriptor();
+            source.describeTo(descriptor);
+            return descriptor;
+        }
+
+        private List<TenantDescriptor> describedTenants(MultiTenantPersistentStreamEventSource source) {
+            return describe(source).getProperty("tenants");
+        }
+    }
+
+    @Nested
     class ConstructorValidation {
 
         @Test
@@ -563,6 +699,19 @@ class MultiTenantPersistentStreamEventSourceTest {
             assertThat((Boolean) descriptor.getProperty("subscribed")).isTrue();
             assertThat((List<TenantDescriptor>) descriptor.getProperty("tenants")).containsExactly(TENANT_A);
         }
+    }
+
+    private MultiTenantPersistentStreamEventSource sourceWith(TenantProvider provider,
+                                                              MultiTenantPersistentStreamIdResolver resolver) {
+        return new MultiTenantPersistentStreamEventSource(
+                STREAM_NAME,
+                new PersistentStreamProperties(STREAM_NAME, 1, "Seq", Collections.emptyList(), "0", null),
+                schedulerFactory,
+                100,
+                configurationWith(streams.connectionManager()),
+                provider,
+                resolver
+        );
     }
 
     private static BiFunction<List<? extends EventMessage>, ProcessingContext, CompletableFuture<?>> recordingConsumer() {
