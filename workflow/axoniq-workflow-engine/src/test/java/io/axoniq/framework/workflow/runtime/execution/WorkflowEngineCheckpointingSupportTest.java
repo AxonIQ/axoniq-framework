@@ -7,10 +7,10 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
+import org.axonframework.common.AxonConfigurationException;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.GlobalSequenceTrackingToken;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
-import org.awaitility.Awaitility;
 import org.junit.jupiter.api.*;
 
 import java.time.Duration;
@@ -19,6 +19,7 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.awaitility.Awaitility.await;
 
 /**
  * Tests for {@link WorkflowEngineCheckpointingSupport}.
@@ -29,7 +30,7 @@ class WorkflowEngineCheckpointingSupportTest {
     void waitsForTheInlineBarrierBeforeCompletingCheckpointAdvancement() {
         var coordinator = new InlineCheckpointLatchCoordinator();
         coordinator.pendingWork = true;
-        var support = new WorkflowEngineCheckpointingSupport(coordinator);
+        var support = new WorkflowEngineCheckpointingSupport(coordinator, 0L);
         var requested = new GlobalSequenceTrackingToken(42);
 
         var result = support.onCheckpointAdvanced(Segment.ROOT_SEGMENT, requested);
@@ -45,7 +46,7 @@ class WorkflowEngineCheckpointingSupportTest {
 
     @Test
     void completesImmediatelyWhenNoCheckpointWorkIsPending() {
-        var support = new WorkflowEngineCheckpointingSupport(new InlineCheckpointLatchCoordinator());
+        var support = new WorkflowEngineCheckpointingSupport(new InlineCheckpointLatchCoordinator(), 0L);
         var requested = new GlobalSequenceTrackingToken(42);
 
         var result = support.onCheckpointAdvanced(Segment.ROOT_SEGMENT, requested);
@@ -56,7 +57,7 @@ class WorkflowEngineCheckpointingSupportTest {
     @Test
     void retriesCheckpointBarrierWhenWorkAppearsAfterAnEmptyBarrierSchedule() {
         var coordinator = new ConcurrentWorkCoordinator();
-        var support = new WorkflowEngineCheckpointingSupport(coordinator);
+        var support = new WorkflowEngineCheckpointingSupport(coordinator, 0L);
         var requested = new GlobalSequenceTrackingToken(42);
 
         var result = support.onCheckpointAdvanced(Segment.ROOT_SEGMENT, requested);
@@ -73,7 +74,7 @@ class WorkflowEngineCheckpointingSupportTest {
             // given
             var coordinator = new InlineCheckpointLatchCoordinator();
             coordinator.held = true;
-            var support = new WorkflowEngineCheckpointingSupport(coordinator);
+            var support = new WorkflowEngineCheckpointingSupport(coordinator, 0L);
             var requests = new ArrayList<TrackingToken>();
             support.onSegmentClaimed(Segment.ROOT_SEGMENT, null, requests::add);
 
@@ -89,7 +90,7 @@ class WorkflowEngineCheckpointingSupportTest {
             // given
             var coordinator = new InlineCheckpointLatchCoordinator();
             coordinator.held = true;
-            var support = new WorkflowEngineCheckpointingSupport(coordinator);
+            var support = new WorkflowEngineCheckpointingSupport(coordinator, 0L);
 
             // when
             var released = support.onSegmentReleased(Segment.ROOT_SEGMENT, new GlobalSequenceTrackingToken(42));
@@ -108,7 +109,7 @@ class WorkflowEngineCheckpointingSupportTest {
         @Test
         void forwardsEveryRequestWithoutAnInterval() {
             // given
-            var support = new WorkflowEngineCheckpointingSupport(new InlineCheckpointLatchCoordinator());
+            var support = new WorkflowEngineCheckpointingSupport(new InlineCheckpointLatchCoordinator(), 0L);
             support.onSegmentClaimed(Segment.ROOT_SEGMENT, null, requests::add);
 
             // when
@@ -143,7 +144,7 @@ class WorkflowEngineCheckpointingSupportTest {
             support.requestCheckpoint(Segment.ROOT_SEGMENT, new GlobalSequenceTrackingToken(1));
 
             // when / then
-            Awaitility.await().atMost(Duration.ofSeconds(2)).untilAsserted(() -> {
+            await().atMost(Duration.ofSeconds(2)).untilAsserted(() -> {
                 support.requestCheckpoint(Segment.ROOT_SEGMENT, new GlobalSequenceTrackingToken(2));
                 assertThat(requests).contains(new GlobalSequenceTrackingToken(2));
             });
@@ -192,7 +193,7 @@ class WorkflowEngineCheckpointingSupportTest {
 
             // when / then
             assertThatThrownBy(() -> new WorkflowEngineCheckpointingSupport(coordinator, -1L))
-                    .isInstanceOf(IllegalArgumentException.class);
+                    .isInstanceOf(AxonConfigurationException.class);
         }
     }
 
@@ -203,7 +204,7 @@ class WorkflowEngineCheckpointingSupportTest {
         void completesTheRequestOnceTheWorkTurnsSafeAfterManyRounds() {
             // given
             var coordinator = new PendingExecutionsCoordinator(1);
-            var support = new WorkflowEngineCheckpointingSupport(coordinator);
+            var support = new WorkflowEngineCheckpointingSupport(coordinator, 0L);
             var requested = new GlobalSequenceTrackingToken(42);
             var result = support.onCheckpointAdvanced(Segment.ROOT_SEGMENT, requested);
             // Large enough that completing one nested future per round would overflow the stack.
@@ -226,7 +227,7 @@ class WorkflowEngineCheckpointingSupportTest {
             int executions = 8;
             int rounds = 2;
             var coordinator = new PendingExecutionsCoordinator(executions);
-            var support = new WorkflowEngineCheckpointingSupport(coordinator);
+            var support = new WorkflowEngineCheckpointingSupport(coordinator, 0L);
             var requested = new GlobalSequenceTrackingToken(42);
             var result = support.onCheckpointAdvanced(Segment.ROOT_SEGMENT, requested);
 
@@ -244,7 +245,7 @@ class WorkflowEngineCheckpointingSupportTest {
         void failsTheRequestWhenAFollowUpLatchCannotBeAttached() {
             // given
             var coordinator = new PendingExecutionsCoordinator(2);
-            var support = new WorkflowEngineCheckpointingSupport(coordinator);
+            var support = new WorkflowEngineCheckpointingSupport(coordinator, 0L);
             var result = support.onCheckpointAdvanced(Segment.ROOT_SEGMENT, new GlobalSequenceTrackingToken(42));
             var failure = new IllegalStateException("execution queue closed");
             coordinator.latchFailure = failure;

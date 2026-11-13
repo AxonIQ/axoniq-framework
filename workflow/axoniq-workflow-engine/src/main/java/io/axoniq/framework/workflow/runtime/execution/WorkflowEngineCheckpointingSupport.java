@@ -10,6 +10,7 @@ package io.axoniq.framework.workflow.runtime.execution;
 import io.axoniq.framework.messaging.eventstreaming.checkpoint.CheckpointTrigger;
 import io.axoniq.framework.messaging.eventstreaming.checkpoint.Checkpointing;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
+import org.axonframework.common.AxonConfigurationException;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
@@ -21,9 +22,9 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicLong;
 
 import static java.util.Objects.requireNonNull;
+import static org.axonframework.common.BuilderUtils.assertPositive;
 
 /**
  * A {@link Checkpointing} implementation dedicated for a {@link WorkflowEngine}, to separate check pointing behavior
@@ -40,6 +41,10 @@ import static java.util.Objects.requireNonNull;
  * callbacks while a claim is being recorded or dropped. The coordinator callback supplied to
  * {@link #onCheckpointAdvanced(Segment, TrackingToken)} re-enters the support only after all the
  * {@link WorkflowExecution} latches (attached by the {@link CheckpointLatchCoordinator}) have been crossed.
+ * <p>
+ * A positive checkpoint interval forwards at most one checkpoint request per segment within that interval, so the
+ * processor waits for safe points less often under load. The stored token then lags by at most the events of one
+ * interval, and those events are processed again after a crash.
  *
  * @author Simon Zambrovski
  * @author Steven van Beelen
@@ -51,40 +56,30 @@ public class WorkflowEngineCheckpointingSupport implements Checkpointing {
     private final CheckpointLatchCoordinator checkpointLatchCoordinator;
     private final Map<Integer, CheckpointTrigger> segmentIdToTrigger = new ConcurrentHashMap<>();
     private final long checkpointIntervalNanos;
-    private final Map<Integer, AtomicLong> lastRequestNanos = new ConcurrentHashMap<>();
-
-    /**
-     * Creates checkpointing support for a {@link WorkflowEngine} using the given {@code checkpointLatchCoordinator}.
-     * Every checkpoint request is forwarded to the event processor.
-     *
-     * @param checkpointLatchCoordinator adds a latch to coordinated {@link WorkflowExecution WorkflowExecutions} to
-     *                                   ensure all have reached a safe point to advance the checkpoint
-     */
-    public WorkflowEngineCheckpointingSupport(CheckpointLatchCoordinator checkpointLatchCoordinator) {
-        this(checkpointLatchCoordinator, 0L);
-    }
+    private final Map<Integer, Long> lastForwardNanos = new ConcurrentHashMap<>();
 
     /**
      * Creates checkpointing support for a {@link WorkflowEngine} that forwards at most one checkpoint request per
      * segment within the given {@code checkpointInterval}.
      * <p>
      * Every forwarded request makes the event processor wait, at its next batch commit, until all workflows of the
-     * segment reached a safe point. A request that is not forwarded leaves the stored position behind until the next
-     * forwarded request or the release of the segment, so events after it are processed again after a restart.
+     * segment reached a safe point. A request that is not forwarded is dropped, not deferred: the stored token stays
+     * at the last forwarded request until the next one or the release of the segment. So the stored token lags by at
+     * most the events of one interval, also on a segment that goes idle, and those events are processed again after a
+     * crash.
      *
      * @param checkpointLatchCoordinator adds a latch to coordinated {@link WorkflowExecution WorkflowExecutions} to
      *                                   ensure all have reached a safe point to advance the checkpoint
      * @param checkpointInterval         the minimum time, in milliseconds, between two forwarded checkpoint requests
      *                                   of the same segment, where {@code 0} forwards every request
+     * @throws AxonConfigurationException if {@code checkpointInterval} is negative
      */
     public WorkflowEngineCheckpointingSupport(CheckpointLatchCoordinator checkpointLatchCoordinator,
                                               long checkpointInterval) {
         this.checkpointLatchCoordinator = requireNonNull(
                 checkpointLatchCoordinator, "The CheckpointLatchCoordinator must not be null."
         );
-        if (checkpointInterval < 0) {
-            throw new IllegalArgumentException("The checkpoint interval must not be negative.");
-        }
+        assertPositive(checkpointInterval, "The checkpoint interval must not be negative.");
         this.checkpointIntervalNanos = TimeUnit.MILLISECONDS.toNanos(checkpointInterval);
     }
 
@@ -151,7 +146,7 @@ public class WorkflowEngineCheckpointingSupport implements Checkpointing {
                 // Only this segment's trigger dies with its claim; the segments still held keep checkpointing.
                 .whenComplete((ignored, cause) -> {
                     segmentIdToTrigger.remove(segment.getSegmentId());
-                    lastRequestNanos.remove(segment.getSegmentId());
+                    lastForwardNanos.remove(segment.getSegmentId());
                 });
     }
 
@@ -188,20 +183,26 @@ public class WorkflowEngineCheckpointingSupport implements Checkpointing {
             return;
         }
         var trigger = segmentIdToTrigger.get(segment.getSegmentId());
-        if (trigger != null && intervalElapsed(segment)) {
+        if (trigger != null && tryClaimForwardSlot(segment)) {
             trigger.requestCheckpoint(token);
         }
     }
 
-    private boolean intervalElapsed(Segment segment) {
+    /**
+     * Claims the right to forward a checkpoint request for the given {@code segment}, recording the time of the claim.
+     * The map updates are compare-and-set, so of concurrent requests within one interval exactly one claims the slot.
+     */
+    private boolean tryClaimForwardSlot(Segment segment) {
         if (checkpointIntervalNanos == 0) {
             return true;
         }
-        AtomicLong last = lastRequestNanos.computeIfAbsent(segment.getSegmentId(), id -> new AtomicLong());
-        long previous = last.get();
+        int segmentId = segment.getSegmentId();
         long now = System.nanoTime();
-        // 0 means no request was forwarded yet for this segment.
-        return (previous == 0 || now - previous >= checkpointIntervalNanos) && last.compareAndSet(previous, now);
+        Long last = lastForwardNanos.putIfAbsent(segmentId, now);
+        if (last == null) {
+            return true;
+        }
+        return now - last >= checkpointIntervalNanos && lastForwardNanos.replace(segmentId, last, now);
     }
 
     /**
