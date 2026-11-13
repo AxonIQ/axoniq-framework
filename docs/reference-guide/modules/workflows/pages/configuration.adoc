@@ -249,9 +249,18 @@ The history processor uses the same properties under `axon.workflow.history.*`.
 |`coordinator-claim-extension`
 |`false`
 |Whether the coordinator extends claims.
+
+|`checkpoint-interval`
+|`0`
+|Minimum milliseconds between two checkpoint requests of one segment. Engine processor only.
 |===
 
 See <<running-on-several-nodes,Running on several nodes>> for the token store and failover.
+
+The engine requests a checkpoint after every event it handles, and the processor then waits until every workflow of the segment is at a safe point.
+A positive `checkpoint-interval` makes the processor wait less often under load.
+The stored position then lags further behind, so more events are processed again after a restart.
+Without Spring Boot, set the same value with `checkpointInterval(long)` on the `WorkflowModule`.
 
 [[metadata-and-correlation-data]]
 == Metadata and correlation data

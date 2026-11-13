@@ -10,6 +10,7 @@ package io.axoniq.framework.workflow.runtime.execution;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.GlobalSequenceTrackingToken;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.*;
 
 import java.time.Duration;
@@ -17,6 +18,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Tests for {@link WorkflowEngineCheckpointingSupport}.
@@ -95,6 +97,102 @@ class WorkflowEngineCheckpointingSupportTest {
             // then
             assertThat(released).isCompletedExceptionally();
             assertThat(coordinator.scheduledBarriers).isZero();
+        }
+    }
+
+    @Nested
+    class WithACheckpointInterval {
+
+        private final List<TrackingToken> requests = new ArrayList<>();
+
+        @Test
+        void forwardsEveryRequestWithoutAnInterval() {
+            // given
+            var support = new WorkflowEngineCheckpointingSupport(new InlineCheckpointLatchCoordinator());
+            support.onSegmentClaimed(Segment.ROOT_SEGMENT, null, requests::add);
+
+            // when
+            support.requestCheckpoint(Segment.ROOT_SEGMENT, new GlobalSequenceTrackingToken(1));
+            support.requestCheckpoint(Segment.ROOT_SEGMENT, new GlobalSequenceTrackingToken(2));
+
+            // then
+            assertThat(requests).containsExactly(new GlobalSequenceTrackingToken(1),
+                                                 new GlobalSequenceTrackingToken(2));
+        }
+
+        @Test
+        void forwardsOnlyTheFirstRequestWithinTheInterval() {
+            // given
+            var support = new WorkflowEngineCheckpointingSupport(new InlineCheckpointLatchCoordinator(),
+                                                                 Duration.ofHours(1).toMillis());
+            support.onSegmentClaimed(Segment.ROOT_SEGMENT, null, requests::add);
+
+            // when
+            support.requestCheckpoint(Segment.ROOT_SEGMENT, new GlobalSequenceTrackingToken(1));
+            support.requestCheckpoint(Segment.ROOT_SEGMENT, new GlobalSequenceTrackingToken(2));
+
+            // then
+            assertThat(requests).containsExactly(new GlobalSequenceTrackingToken(1));
+        }
+
+        @Test
+        void forwardsTheNextRequestOnceTheIntervalPassed() {
+            // given
+            var support = new WorkflowEngineCheckpointingSupport(new InlineCheckpointLatchCoordinator(), 20L);
+            support.onSegmentClaimed(Segment.ROOT_SEGMENT, null, requests::add);
+            support.requestCheckpoint(Segment.ROOT_SEGMENT, new GlobalSequenceTrackingToken(1));
+
+            // when / then
+            Awaitility.await().atMost(Duration.ofSeconds(2)).untilAsserted(() -> {
+                support.requestCheckpoint(Segment.ROOT_SEGMENT, new GlobalSequenceTrackingToken(2));
+                assertThat(requests).contains(new GlobalSequenceTrackingToken(2));
+            });
+        }
+
+        @Test
+        void keepsTheIntervalPerSegment() {
+            // given
+            var support = new WorkflowEngineCheckpointingSupport(new InlineCheckpointLatchCoordinator(),
+                                                                 Duration.ofHours(1).toMillis());
+            Segment[] halves = Segment.ROOT_SEGMENT.split();
+            support.onSegmentClaimed(halves[0], null, requests::add);
+            support.onSegmentClaimed(halves[1], null, requests::add);
+
+            // when
+            support.requestCheckpoint(halves[0], new GlobalSequenceTrackingToken(1));
+            support.requestCheckpoint(halves[1], new GlobalSequenceTrackingToken(2));
+
+            // then
+            assertThat(requests).containsExactly(new GlobalSequenceTrackingToken(1),
+                                                 new GlobalSequenceTrackingToken(2));
+        }
+
+        @Test
+        void forwardsTheFirstRequestOfASegmentClaimedAgainAfterItsRelease() {
+            // given
+            var support = new WorkflowEngineCheckpointingSupport(new InlineCheckpointLatchCoordinator(),
+                                                                 Duration.ofHours(1).toMillis());
+            support.onSegmentClaimed(Segment.ROOT_SEGMENT, null, requests::add);
+            support.requestCheckpoint(Segment.ROOT_SEGMENT, new GlobalSequenceTrackingToken(1));
+            support.onSegmentReleased(Segment.ROOT_SEGMENT, new GlobalSequenceTrackingToken(1));
+            support.onSegmentClaimed(Segment.ROOT_SEGMENT, null, requests::add);
+
+            // when
+            support.requestCheckpoint(Segment.ROOT_SEGMENT, new GlobalSequenceTrackingToken(2));
+
+            // then
+            assertThat(requests).containsExactly(new GlobalSequenceTrackingToken(1),
+                                                 new GlobalSequenceTrackingToken(2));
+        }
+
+        @Test
+        void rejectsANegativeInterval() {
+            // given
+            var coordinator = new InlineCheckpointLatchCoordinator();
+
+            // when / then
+            assertThatThrownBy(() -> new WorkflowEngineCheckpointingSupport(coordinator, -1L))
+                    .isInstanceOf(IllegalArgumentException.class);
         }
     }
 

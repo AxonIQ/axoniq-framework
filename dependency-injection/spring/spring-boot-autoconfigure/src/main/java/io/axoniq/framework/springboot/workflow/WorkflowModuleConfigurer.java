@@ -81,6 +81,7 @@ public class WorkflowModuleConfigurer implements ConfigurationEnhancer, Applicat
                 WorkflowModule.configure(moduleName, workflowContextType)
                               .definition(d -> d.autodetected(firstBuilder))
                               .processorConfiguration(psepConfig -> applyProperties(workflowProperties, psepConfig))
+                              .checkpointInterval(workflowProperties.getCheckpointInterval())
                               .historyProcessorConfiguration(processorConfiguration -> applyHistoryProperties(
                                       workflowProperties, processorConfiguration
                               ))

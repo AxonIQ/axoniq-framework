@@ -19,7 +19,9 @@ import org.jspecify.annotations.Nullable;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static java.util.Objects.requireNonNull;
 
@@ -48,17 +50,42 @@ public class WorkflowEngineCheckpointingSupport implements Checkpointing {
 
     private final CheckpointLatchCoordinator checkpointLatchCoordinator;
     private final Map<Integer, CheckpointTrigger> segmentIdToTrigger = new ConcurrentHashMap<>();
+    private final long checkpointIntervalNanos;
+    private final Map<Integer, AtomicLong> lastRequestNanos = new ConcurrentHashMap<>();
 
     /**
      * Creates checkpointing support for a {@link WorkflowEngine} using the given {@code checkpointLatchCoordinator}.
+     * Every checkpoint request is forwarded to the event processor.
      *
      * @param checkpointLatchCoordinator adds a latch to coordinated {@link WorkflowExecution WorkflowExecutions} to
      *                                   ensure all have reached a safe point to advance the checkpoint
      */
     public WorkflowEngineCheckpointingSupport(CheckpointLatchCoordinator checkpointLatchCoordinator) {
+        this(checkpointLatchCoordinator, 0L);
+    }
+
+    /**
+     * Creates checkpointing support for a {@link WorkflowEngine} that forwards at most one checkpoint request per
+     * segment within the given {@code checkpointInterval}.
+     * <p>
+     * Every forwarded request makes the event processor wait, at its next batch commit, until all workflows of the
+     * segment reached a safe point. A request that is not forwarded leaves the stored position behind until the next
+     * forwarded request or the release of the segment, so events after it are processed again after a restart.
+     *
+     * @param checkpointLatchCoordinator adds a latch to coordinated {@link WorkflowExecution WorkflowExecutions} to
+     *                                   ensure all have reached a safe point to advance the checkpoint
+     * @param checkpointInterval         the minimum time, in milliseconds, between two forwarded checkpoint requests
+     *                                   of the same segment, where {@code 0} forwards every request
+     */
+    public WorkflowEngineCheckpointingSupport(CheckpointLatchCoordinator checkpointLatchCoordinator,
+                                              long checkpointInterval) {
         this.checkpointLatchCoordinator = requireNonNull(
                 checkpointLatchCoordinator, "The CheckpointLatchCoordinator must not be null."
         );
+        if (checkpointInterval < 0) {
+            throw new IllegalArgumentException("The checkpoint interval must not be negative.");
+        }
+        this.checkpointIntervalNanos = TimeUnit.MILLISECONDS.toNanos(checkpointInterval);
     }
 
     @Override
@@ -122,7 +149,10 @@ public class WorkflowEngineCheckpointingSupport implements Checkpointing {
                 : onCheckpointAdvanced(segment, requested);
         return released
                 // Only this segment's trigger dies with its claim; the segments still held keep checkpointing.
-                .whenComplete((ignored, cause) -> segmentIdToTrigger.remove(segment.getSegmentId()));
+                .whenComplete((ignored, cause) -> {
+                    segmentIdToTrigger.remove(segment.getSegmentId());
+                    lastRequestNanos.remove(segment.getSegmentId());
+                });
     }
 
     /**
@@ -158,9 +188,20 @@ public class WorkflowEngineCheckpointingSupport implements Checkpointing {
             return;
         }
         var trigger = segmentIdToTrigger.get(segment.getSegmentId());
-        if (trigger != null) {
+        if (trigger != null && intervalElapsed(segment)) {
             trigger.requestCheckpoint(token);
         }
+    }
+
+    private boolean intervalElapsed(Segment segment) {
+        if (checkpointIntervalNanos == 0) {
+            return true;
+        }
+        AtomicLong last = lastRequestNanos.computeIfAbsent(segment.getSegmentId(), id -> new AtomicLong());
+        long previous = last.get();
+        long now = System.nanoTime();
+        // 0 means no request was forwarded yet for this segment.
+        return (previous == 0 || now - previous >= checkpointIntervalNanos) && last.compareAndSet(previous, now);
     }
 
     /**

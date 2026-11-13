@@ -119,6 +119,16 @@ class WorkflowModuleTest {
     }
 
     @Test
+    void checkpointIntervalRejectsANegativeValue() {
+        // given
+        var module = WorkflowModule.defaults(UUID.randomUUID().toString(), TestWorkflowContext.class)
+                                   .definition(d -> d.autodetected(c -> new TestAutodetectedWorkflow()));
+
+        // when / then
+        assertThatThrownBy(() -> module.checkpointInterval(-1L)).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
     @SuppressWarnings("unchecked")
     void testDeclarativeWorkflowDefinition() {
         EventCondition startCondition = EventConditions.fromQualifiedName(new QualifiedName("startEvent"));
