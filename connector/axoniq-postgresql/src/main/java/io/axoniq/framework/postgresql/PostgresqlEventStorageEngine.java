@@ -325,23 +325,28 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
         """;
 
     /**
-     * Locks one or more attribute hashes for a single criterion using only the fast, same-row
+     * Locks the attribute hashes of a whole append in ascending order using only the fast, same-row
      * check - no fallback. This is the first of up to two round trips - see {@link #lockCriterion}
      * for why the fallback-aware statement ({@link #CONSISTENCY_TAGS_LOCK}) must always be a
      * separate, later round trip rather than be embedded here.
      * <p>
-     * The {@code {values}} place-holder must be replaced with one {@code (?, ?)} group per
-     * attribute hash to lock.
+     * A hash that is not part of the append condition is upserted unconditionally. Locking every
+     * hash of the append here, in the same ascending order {@link PostgresqlFinalizer} uses, is
+     * what keeps concurrent appends and the finalizer from deadlocking on this table.
      *
-     * <li>Parameter group, repeated once per attribute hash: {@code int} the tag hash, {@code long} the temporary global index
-     * <li>Final parameter {@code long}: the marker position
+     * <li>Parameter 1 {@code long}: the temporary global index
+     * <li>Parameter 2 {@code int[]}: the tag hashes to lock
+     * <li>Parameter 3 {@code long}: the marker position
+     * <li>Parameter 4 {@code int[]}: the tag hashes of the append condition
      */
     private static final String CONSISTENCY_TAGS_FAST_LOCK =
         """
-        INSERT INTO consistency_tags (tag_hash, global_index) VALUES {values}
+        INSERT INTO consistency_tags (tag_hash, global_index)
+          SELECT tag_hash, ? FROM unnest(?) AS tag_hash ORDER BY tag_hash
           ON CONFLICT (tag_hash) DO UPDATE
             SET global_index = LEAST(consistency_tags.global_index, EXCLUDED.global_index)
-            WHERE consistency_tags.global_index < ? AND consistency_tags.global_index >= 0
+            WHERE (consistency_tags.global_index < ? AND consistency_tags.global_index >= 0)
+               OR consistency_tags.tag_hash <> ALL(?)
           RETURNING tag_hash
         """;
 
@@ -686,6 +691,7 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
             PreparedStatement tagInsert = connection.prepareStatement(TAG_INSERT);
         ) {
             Set<Integer> batchLockedHashes = new HashSet<>();
+            Set<Integer> fastLockedHashes = null;
 
             for (TaggedEventMessage<?> tem : events) {
                 EventMessage message = tem.event();
@@ -705,7 +711,13 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
                     }
 
                     long temporaryGlobalIndex = keys.getLong(1);
-                    Set<Integer> lockedHashes = lock(connection, condition, temporaryGlobalIndex, batchLockedHashes);
+                    boolean firstEvent = fastLockedHashes == null;
+
+                    if (firstEvent) {  // locks every hash of this append, including this event's unconditional tags
+                        fastLockedHashes = fastLock(connection, condition, events, temporaryGlobalIndex);
+                    }
+
+                    Set<Integer> lockedHashes = lock(connection, condition, temporaryGlobalIndex, batchLockedHashes, fastLockedHashes);
 
                     if (lockedHashes == null) {  // locking of some or all attributes failed, return that appending failed
                         return false;
@@ -717,7 +729,7 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
                     for (Tag tag : tem.tags()) {
                         int tagHash = consistencyHash(tag.key(), tag.value());
 
-                        if (!lockedHashes.contains(tagHash)) {
+                        if (!firstEvent && !lockedHashes.contains(tagHash)) {
                             unconditionalConsistencyTagsUpsert.setInt(1, tagHash);
                             unconditionalConsistencyTagsUpsert.setLong(2, temporaryGlobalIndex);
                             unconditionalConsistencyTagsUpsert.execute();
@@ -1144,10 +1156,11 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
      * @param condition the append condition, cannot be {@code null}
      * @param temporaryGlobalIndex the (temporary) index of a newly inserted event, always negative
      * @param batchLockedHashes attribute hashes already locked in this batch, cannot be {@code null}
+     * @param fastLockedHashes the attribute hashes {@link #fastLock} resolved for this append, cannot be {@code null}
      * @return the attribute hashes that were locked (possibly empty), or {@code null} if locking failed
      * @throws SQLException when a JDBC error occurred
      */
-    private Set<Integer> lock(Connection connection, AppendCondition condition, long temporaryGlobalIndex, Set<Integer> batchLockedHashes) throws SQLException {
+    private Set<Integer> lock(Connection connection, AppendCondition condition, long temporaryGlobalIndex, Set<Integer> batchLockedHashes, Set<Integer> fastLockedHashes) throws SQLException {
 
         /*
          * The position in a consistency marker is the position just after the last event it was consistent with,
@@ -1190,7 +1203,7 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
                 continue;  // every tag of this criterion was already locked earlier in this batch
             }
 
-            Set<Integer> locked = lockCriterion(connection, criterion, hashesToLock, temporaryGlobalIndex, globalIndex);
+            Set<Integer> locked = lockCriterion(connection, criterion, hashesToLock, fastLockedHashes, temporaryGlobalIndex, globalIndex);
 
             if (locked == null) {
                 return null;
@@ -1258,13 +1271,16 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
      * @param connection the connection to lock on, cannot be {@code null}
      * @param criterion the criterion {@code hashesToLock} belongs to, used to build the fallback's condition, cannot be {@code null}
      * @param hashesToLock the distinct attribute hashes to lock, cannot be {@code null} or empty
+     * @param fastLockedHashes the attribute hashes {@link #fastLock} resolved for this append, cannot be {@code null}
      * @param temporaryGlobalIndex the (temporary) index of a newly inserted event, always negative
      * @param globalIndex the marker position to check consistency against, never negative
      * @return the hashes that were locked, or {@code null} if a real conflict was confirmed
      * @throws SQLException when a JDBC error occurred
      */
-    private Set<Integer> lockCriterion(Connection connection, EventCriterion criterion, Set<Integer> hashesToLock, long temporaryGlobalIndex, long globalIndex) throws SQLException {
-        Set<Integer> resolved = fastLock(connection, hashesToLock, temporaryGlobalIndex, globalIndex);
+    private Set<Integer> lockCriterion(Connection connection, EventCriterion criterion, Set<Integer> hashesToLock, Set<Integer> fastLockedHashes, long temporaryGlobalIndex, long globalIndex) throws SQLException {
+        Set<Integer> resolved = new HashSet<>(hashesToLock);
+
+        resolved.retainAll(fastLockedHashes);
 
         if (resolved.size() == hashesToLock.size()) {
             return resolved;
@@ -1288,29 +1304,42 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
     }
 
     /**
-     * Attempts the cheap, same-row-only {@link #CONSISTENCY_TAGS_FAST_LOCK} for every given hash
+     * Attempts the cheap, same-row-only {@link #CONSISTENCY_TAGS_FAST_LOCK} for every hash of the append
      * in one round trip - the first phase of {@link #lockCriterion}.
      *
      * @param connection the connection to lock on, cannot be {@code null}
-     * @param hashesToLock the distinct attribute hashes to attempt, cannot be {@code null} or empty
+     * @param condition the append condition, cannot be {@code null}
+     * @param events all events of the append, cannot be {@code null}
      * @param temporaryGlobalIndex the (temporary) index of a newly inserted event, always negative
-     * @param globalIndex the marker position to check consistency against, never negative
      * @return the hashes that resolved via the fast check alone (possibly empty, never {@code null})
      * @throws SQLException when a JDBC error occurred
      */
-    private Set<Integer> fastLock(Connection connection, Set<Integer> hashesToLock, long temporaryGlobalIndex, long globalIndex) throws SQLException {
-        String values = String.join(", ", Collections.nCopies(hashesToLock.size(), "(?, ?)"));
-        String sql = CONSISTENCY_TAGS_FAST_LOCK.replace("{values}", values);
+    private Set<Integer> fastLock(Connection connection, AppendCondition condition, List<TaggedEventMessage<?>> events, long temporaryGlobalIndex) throws SQLException {
+        Set<Integer> conditionHashes = new HashSet<>();
 
-        try (PreparedStatement ps = connection.prepareStatement(sql)) {
-            int parameterIndex = 1;
-
-            for (int hash : hashesToLock) {
-                ps.setInt(parameterIndex++, hash);
-                ps.setLong(parameterIndex++, temporaryGlobalIndex);
+        for (EventCriterion criterion : condition.criteria().flatten()) {
+            for (Tag tag : criterion.tags()) {
+                conditionHashes.add(consistencyHash(tag.key(), tag.value()));
             }
+        }
 
-            ps.setLong(parameterIndex, globalIndex);
+        Set<Integer> hashesToLock = new TreeSet<>(conditionHashes);
+
+        for (TaggedEventMessage<?> tem : events) {
+            for (Tag tag : tem.tags()) {
+                hashesToLock.add(consistencyHash(tag.key(), tag.value()));
+            }
+        }
+
+        if (hashesToLock.isEmpty()) {
+            return Set.of();  // neither the condition nor the events carry a tag, nothing to lock
+        }
+
+        try (PreparedStatement ps = connection.prepareStatement(CONSISTENCY_TAGS_FAST_LOCK)) {
+            ps.setLong(1, temporaryGlobalIndex);
+            ps.setArray(2, connection.createArrayOf("int4", hashesToLock.toArray()));
+            ps.setLong(3, Math.max(0, GlobalIndexConsistencyMarker.position(condition.consistencyMarker())));
+            ps.setArray(4, connection.createArrayOf("int4", conditionHashes.toArray()));
 
             try (ResultSet resultSet = ps.executeQuery()) {
                 Set<Integer> lockedHashes = new HashSet<>();
