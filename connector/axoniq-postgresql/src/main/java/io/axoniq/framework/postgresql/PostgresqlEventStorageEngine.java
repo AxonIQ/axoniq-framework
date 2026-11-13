@@ -254,18 +254,31 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
      * table.
      * <p>
      * The {@code condition} place-holder must be replaced with the criterion's tag and/or type
-     * condition - see {@link #buildTagFilter(Set)}.
+     * condition, and the {@code grouping} place-holder with {@link #FILTER_GROUPING} or nothing -
+     * see {@link #buildTagFilter(Set)}.
+     *
+     * <li>Parameter 1 {@code long}: maximum number of rows to query
+     */
+    private static final String FILTER_SUB_QUERY =
+        """
+        (SELECT t.global_index
+          FROM tags t
+          WHERE t.global_index > (SELECT sort_index FROM snap)
+            AND ({condition})
+          {grouping}
+          ORDER BY t.global_index
+          LIMIT ?)
+        """;
+
+    /**
+     * The grouping {@link #FILTER_SUB_QUERY} needs for a criterion with more than one condition.
      *
      * <li>Parameter 1 {@code long}: the number of distinct key/value pairs that must match (one per
      * tag, plus one more for the reserved type tag if the criterion also restricts by type)
      */
-    private static final String FILTER_SUB_QUERY =
+    private static final String FILTER_GROUPING =
         """
-        SELECT t.global_index
-          FROM tags t
-          WHERE t.global_index > (SELECT sort_index FROM snap)
-            AND ({condition})
-          GROUP BY t.global_index
+        GROUP BY t.global_index
           HAVING COUNT(DISTINCT (t.key, t.value)) = ?
         """;
 
@@ -967,7 +980,11 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
                         ps.setArray(parameterIndex++, connection.createArrayOf("varchar", criterionFilter.typeParameters().toArray()));
                     }
 
-                    ps.setInt(parameterIndex++, criterionFilter.distinctTagCount());  // HAVING COUNT in each subquery
+                    if (criterionFilter.distinctTagCount() > 1) {
+                        ps.setInt(parameterIndex++, criterionFilter.distinctTagCount());  // HAVING COUNT in each grouped subquery
+                    }
+
+                    ps.setLong(parameterIndex++, limit);  // LIMIT ? in each subquery
                 }
 
                 ps.setLong(parameterIndex++, limit + 1L);  // LIMIT ?, +1 for the leading snap row
@@ -1074,7 +1091,11 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
             CriterionSql criterionSql = buildCriterionSql(criterion);
 
             criterionFilters.add(criterionSql.filter());
-            sql.append(FILTER_SUB_QUERY.replace("{condition}", criterionSql.condition()));
+            sql.append(
+                FILTER_SUB_QUERY
+                    .replace("{condition}", criterionSql.condition())
+                    .replace("{grouping}", criterionSql.filter().distinctTagCount() > 1 ? FILTER_GROUPING : "")
+            );
 
             firstCriterion = false;
         }
