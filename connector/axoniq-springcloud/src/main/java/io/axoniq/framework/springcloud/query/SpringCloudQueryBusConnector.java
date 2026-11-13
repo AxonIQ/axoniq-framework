@@ -8,6 +8,7 @@
 
 package io.axoniq.framework.springcloud.query;
 
+import io.axoniq.framework.messaging.distributed.CallbackHandOff;
 import io.axoniq.framework.messaging.queryhandling.distributed.QueryBusConnector;
 import io.axoniq.framework.springcloud.query.RemoteQueryDispatcher.SubscriptionListener;
 import io.axoniq.framework.springcloud.routing.Member;
@@ -212,15 +213,17 @@ public class SpringCloudQueryBusConnector implements QueryBusConnector {
         private void add(Member member, MessageStream<QueryResponseMessage> updates) {
             Source source = new Source(member, updates);
             sources.add(source);
-            updates.setCallback(() -> drain(source));
+            // The stream calls back on the thread of whoever produced an update, which may not read from it, or block
+            updates.setCallback(CallbackHandOff.handOff(() -> drain(source)));
             drain(source);
         }
 
         /**
          * Moves what the given {@code source} has available onto the merged stream.
          * <p>
-         * Synchronised on the source, because a stream reports availability on whichever thread produced the update
-         * and two of those draining the same source would take entries out from under each other.
+         * Synchronised on the source, because this runs both where the subscription is set up and on a thread of its own
+         * whenever the stream signals, and two of those draining the same source would take entries out from under each
+         * other.
          */
         private void drain(Source source) {
             synchronized (source) {
@@ -264,10 +267,10 @@ public class SpringCloudQueryBusConnector implements QueryBusConnector {
         /**
          * Accounts for the given {@code source} having ended, unless it already has been.
          * <p>
-         * Reading a stream that has just been sealed reports its completion, which drains that same source again
-         * from inside this drain. Checking on the way in is not enough, because the nested drain reaches the end
-         * first and the outer one has already passed that check: both would count the same member, taking the tally
-         * past zero and cutting off the members still holding subscriptions.
+         * Reading a stream that has just been sealed reports its completion, which schedules another drain of that
+         * same source. Checking on the way in is not enough, because that drain can reach the end first once this one
+         * has released the source, and this one has already passed the check: both would count the same member, taking
+         * the tally past zero and cutting off the members still holding subscriptions.
          */
         private static void end(Source source, Runnable ended) {
             if (!source.counted) {
