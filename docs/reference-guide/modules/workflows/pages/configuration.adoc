@@ -267,7 +267,7 @@ The event store usually sets the limit, so change one setting at a time and meas
 === Segments and threads
 
 The number of segments caps how many threads can process workflows at the same time, across all nodes.
-Use at least as many segments as the total number of threads of all nodes.
+In most scenarios, a segment segment count matching the total number of threads of all nodes is advised for high-throughput applications.
 The initial segment count only applies when the token store has no tokens yet. To change it later, split or merge the stored tokens.
 
 The thread count sets how many threads process the claimed segments of one node.
