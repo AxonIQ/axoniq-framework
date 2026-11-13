@@ -21,6 +21,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.HashMap;
+import java.util.concurrent.Executors;
 
 import static io.axoniq.framework.workflow.dsl.api.EventAssociationsUtils.equalsTo;
 import static io.axoniq.framework.workflow.dsl.api.EventAssociationsUtils.payloadProperty;
@@ -178,6 +179,18 @@ public class ConfigurationExamples {
                       .definition(d -> d.autodetected(c -> new OrderFulfillmentWorkflow()))
                       .processorConfiguration(processor -> processor.initialSegmentCount(8));
         // end::processor-settings[]
+    }
+
+    public void performanceTuning() {
+        // tag::performance-tuning[]
+        WorkflowModule.configure("order-workflows", SimpleWorkflowContext.class)
+                      .definition(d -> d.autodetected(c -> new OrderFulfillmentWorkflow()))
+                      .processorConfiguration(processor -> processor
+                              .initialSegmentCount(32)
+                              .workerExecutor(() -> Executors.newScheduledThreadPool(32))
+                              .batchSize(100))
+                      .checkpointInterval(1000);
+        // end::performance-tuning[]
     }
 
     public void correlationBuiltIn(WorkflowConfigurer configurer) {

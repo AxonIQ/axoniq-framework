@@ -56,6 +56,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.function.Function;
 
 import static java.util.Objects.requireNonNull;
+import static org.axonframework.common.BuilderUtils.assertPositive;
 
 /**
  * Workflow module used to create multiple {@link WorkflowConfiguration} (one per workflow definition) defined for the
@@ -180,9 +181,7 @@ class SimpleWorkflowModule<C extends WorkflowContext>
 
     @Override
     public OptionalPhase<C> checkpointInterval(long checkpointInterval) {
-        if (checkpointInterval < 0) {
-            throw new IllegalArgumentException("The checkpoint interval must not be negative.");
-        }
+        assertPositive(checkpointInterval, "The checkpoint interval must not be negative.");
         this.checkpointInterval = checkpointInterval;
         return this;
     }

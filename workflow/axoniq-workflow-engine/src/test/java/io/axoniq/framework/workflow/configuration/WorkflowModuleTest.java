@@ -27,6 +27,7 @@ import io.axoniq.framework.workflow.runtime.execution.PayloadPropertyWorkflowIdP
 import io.axoniq.framework.workflow.runtime.execution.WorkflowConfigurationRegistry;
 import io.axoniq.framework.workflow.runtime.util.DefaultTimeoutFutureResolver;
 import io.axoniq.framework.workflow.runtime.util.FutureResolver;
+import org.axonframework.common.AxonConfigurationException;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.MessageStream;
@@ -125,7 +126,7 @@ class WorkflowModuleTest {
                                    .definition(d -> d.autodetected(c -> new TestAutodetectedWorkflow()));
 
         // when / then
-        assertThatThrownBy(() -> module.checkpointInterval(-1L)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> module.checkpointInterval(-1L)).isInstanceOf(AxonConfigurationException.class);
     }
 
     @Test

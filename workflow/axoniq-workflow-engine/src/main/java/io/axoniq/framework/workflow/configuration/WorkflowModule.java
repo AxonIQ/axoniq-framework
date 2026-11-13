@@ -333,9 +333,13 @@ public interface WorkflowModule<C extends WorkflowContext> extends Module {
          * @param checkpointInterval the minimum time, in milliseconds, between two checkpoint requests of one segment,
          *                           where {@code 0} forwards every request
          * @return this phase, for further optional configuration
-         * @throws IllegalArgumentException if {@code checkpointInterval} is negative
+         * @throws org.axonframework.common.AxonConfigurationException if {@code checkpointInterval} is negative
+         * @throws UnsupportedOperationException                       if this phase does not support a checkpoint
+         *                                                             interval
          */
-        OptionalPhase<C> checkpointInterval(long checkpointInterval);
+        default OptionalPhase<C> checkpointInterval(long checkpointInterval) {
+            throw new UnsupportedOperationException();
+        }
 
         /**
          * Enables workflow history tracking, storing collected history in the given

@@ -230,7 +230,7 @@ class NewInstanceCandidateRoutingTest {
                                     mock(WorkflowCancellationService.class),
                                     mock(WorkflowStore.class),
                                     mock(UnitOfWorkFactory.class));
-        checkpointingSupport = new WorkflowEngineCheckpointingSupport(engine);
+        checkpointingSupport = new WorkflowEngineCheckpointingSupport(engine, 0L);
         engine.setCheckpointingSupport(checkpointingSupport);
     }
 
