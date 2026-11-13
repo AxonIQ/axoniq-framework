@@ -1,20 +1,9 @@
 /*
- * Copyright (c) 2010-2026. AxonIQ B.V.
+ * Copyright (c) 2010-2026. Axoniq B.V.
  *
- * Licensed under the AXONIQ TERMS OF SERVICE,
- * Version 29 April 2026 (the "License");
- *
- * The software is available for evaluation use without registration.
- * Continued use beyond the evaluation period requires registration
- * and a commercial license. See the License for the specific language
- * governing permissions and limitations under the License.
- * You may not use this file except in compliance with the License.
- *
- * You may obtain a copy of the License at:
- *  https://www.axoniq.io/legal/terms-of-service
- *
- * For licensing information and to register, visit:
- *  https://www.axoniq.io/pricing
+ * Licensed under the Axoniq Terms of Service (the "Terms"). You may not
+ * use this file except in compliance with the Terms, available at
+ * https://www.axoniq.io/legal/terms-of-service
  */
 
 package io.axoniq.framework.postgresql;
@@ -35,7 +24,6 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Statement;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.Map;
@@ -112,7 +100,8 @@ class PostgresqlSnapshotStore implements SnapshotStore {
     private final TransactionalExecutorProvider<Connection> transactionalExecutorProvider;
 
     /**
-     * Constructs a new instance, creating the {@code snapshots} table if it does not yet exist.
+     * Constructs a new instance. The {@code snapshots} table is part of the engine's schema, so it is created
+     * or validated by {@link PostgresqlSchemaInitializer} rather than by this class.
      *
      * @param dataSource a data source to connect to PostgreSQL, cannot be {@code null}
      * @param converter  a converter for snapshot payload serialization, cannot be {@code null}
@@ -123,32 +112,6 @@ class PostgresqlSnapshotStore implements SnapshotStore {
         this.dataSource = Objects.requireNonNull(dataSource, "dataSource");
         this.converter = Objects.requireNonNull(converter, "converter");
         this.transactionalExecutorProvider = Objects.requireNonNull(transactionalExecutorProvider, "transactionalExecutorProvider");
-
-        try (
-            Connection connection = dataSource.getConnection();
-            Statement statement = connection.createStatement()
-        ) {
-            statement.execute(
-                """
-                CREATE TABLE IF NOT EXISTS snapshots (
-                  qualified_name VARCHAR     NOT NULL,
-                  identifier     VARCHAR     NOT NULL,
-                  position_type  VARCHAR     NOT NULL,
-                  position_value INT8        NOT NULL,
-                  version        VARCHAR     NOT NULL,
-                  payload        BYTEA       NOT NULL,
-                  timestamp      TIMESTAMPTZ NOT NULL,
-                  metadata       JSON        NOT NULL,
-                  PRIMARY KEY (qualified_name, identifier, version)
-                )
-                """
-            );
-
-            connection.commit();
-        }
-        catch (SQLException e) {
-            throw new IllegalStateException("Could not initialize " + getClass().getSimpleName(), e);
-        }
     }
 
     @Override

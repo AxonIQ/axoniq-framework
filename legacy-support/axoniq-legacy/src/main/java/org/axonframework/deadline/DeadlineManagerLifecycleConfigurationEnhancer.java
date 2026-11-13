@@ -1,20 +1,9 @@
 /*
- * Copyright (c) 2010-2026. AxonIQ B.V.
+ * Copyright (c) 2010-2026. Axoniq B.V.
  *
- * Licensed under the AXONIQ TERMS OF SERVICE,
- * Version 29 April 2026 (the "License");
- *
- * The software is available for evaluation use without registration.
- * Continued use beyond the evaluation period requires registration
- * and a commercial license. See the License for the specific language
- * governing permissions and limitations under the License.
- * You may not use this file except in compliance with the License.
- *
- * You may obtain a copy of the License at:
- *  https://www.axoniq.io/legal/terms-of-service
- *
- * For licensing information and to register, visit:
- *  https://www.axoniq.io/pricing
+ * Licensed under the Axoniq Terms of Service (the "Terms"). You may not
+ * use this file except in compliance with the Terms, available at
+ * https://www.axoniq.io/legal/terms-of-service
  */
 
 package org.axonframework.deadline;
@@ -35,7 +24,8 @@ import org.axonframework.deadline.dbscheduler.DbSchedulerDeadlineManager;
  * stop firing before the components that handle them shut down. In the same start phase, it calls
  * {@link DbSchedulerDeadlineManager#start()} on a {@link DbSchedulerDeadlineManager}, which starts its scheduler unless
  * {@link DbSchedulerDeadlineManager.Builder#startScheduler(boolean) startScheduler} leaves that to the application. The
- * decorator applies to every component that is a {@code DeadlineManager}, under whichever type it is registered.
+ * decorator applies to every component that is a {@code DeadlineManager}, under whichever type it is registered. It
+ * runs before every other decorator, so it sees the manager itself rather than a wrapper of it.
  * <p>
  * Applications therefore do not start or shut down a {@code DeadlineManager} of the configuration themselves. A
  * {@code DeadlineManager} may still be shut down more than once, for example when Spring calls the
@@ -58,6 +48,7 @@ public class DeadlineManagerLifecycleConfigurationEnhancer implements Configurat
         registry.registerDecorator(
                 DecoratorDefinition.forType(DeadlineManager.class)
                                    .with((config, name, deadlineManager) -> deadlineManager)
+                                   .order(Integer.MIN_VALUE)
                                    .onStart(Phase.INBOUND_EVENT_CONNECTORS, deadlineManager -> {
                                        if (deadlineManager instanceof DbSchedulerDeadlineManager dbScheduler) {
                                            dbScheduler.start();

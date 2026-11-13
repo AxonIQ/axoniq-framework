@@ -40,6 +40,22 @@ Axon 5 includes fundamental architectural changes:
    - Add "**Changes applied:**" section listing all changes made
    - This tracking is MANDATORY - never skip this step
 
+## Docs Versions and Release Branches
+
+Docs versions follow Axon Framework: `main` builds `development`, release branch `axoniq-<major>.<minor>.x` builds
+`<major>.<minor>` together with `axon-<major>.<minor>.x` (AxonFramework) and `axoniq-data-protection-<major>.<minor>.x`
+(extension-data-protection). See [Versions and release branches](README.md#versions-and-release-branches) for details.
+
+- `_playbook/playbook.yaml`, `_playbook/localLinks/update.sh` and the `'*'` version fallback in `*/antora.yml`
+  intentionally differ between `main` and release branches. Don't "fix" them to match the other branch, and don't
+  carry them over when backporting.
+- When a minor release branch is cut from `main`, run `docs/_playbook/set-docs-version.sh <major.minor>` once on the new
+  branch and commit the result there. Never run it on `main`; patch releases need no changes.
+- The version in `antora.yml` takes precedence over a `version` key on a content source in the playbook, so set
+  versions in `antora.yml`, not in the playbook.
+- Antora doesn't clean `_playbook/build/site`, so components/versions left over from earlier builds remain there. Use
+  `npx antora --clean playbook.yaml` when checking which versions get built.
+
 ## Important Guidelines
 
 ### Terminology

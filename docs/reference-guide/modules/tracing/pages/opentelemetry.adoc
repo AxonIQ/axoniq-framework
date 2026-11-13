@@ -132,10 +132,11 @@ The worker-thread bridge restores a captured Micrometer context snapshot around 
 As a result, instrumented JDBC, WebClient, and gRPC calls can become children of the active Axon span.
 MDC-based trace and span identifiers also remain associated with that scoped work.
 
-== Reactor context propagation
+== Reactor context propagation for WebFlux
 
-The binding registers a `ProcessingContext` accessor with Micrometer's `ContextRegistry`.
-Reactor automatic context propagation must also be enabled so captured context survives scheduler changes.
+WebFlux applications can move request processing between Reactor threads.
+Enable Reactor automatic context propagation so the active Axon trace follows those thread changes.
+This keeps reactive database calls and other instrumented work connected to the handler trace.
 
 [tabs]
 ====
@@ -161,6 +162,9 @@ spring:
 ----
 --
 ====
+
+This setting only affects reactive WebFlux processing.
+Non-reactive handlers do not require it, and their tracing behavior is unchanged.
 
 The worker-thread bridge can be disabled independently:
 

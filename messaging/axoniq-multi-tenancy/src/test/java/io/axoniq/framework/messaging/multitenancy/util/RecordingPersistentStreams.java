@@ -1,20 +1,9 @@
 /*
- * Copyright (c) 2010-2026. AxonIQ B.V.
+ * Copyright (c) 2010-2026. Axoniq B.V.
  *
- * Licensed under the AXONIQ TERMS OF SERVICE,
- * Version 29 April 2026 (the "License");
- *
- * The software is available for evaluation use without registration.
- * Continued use beyond the evaluation period requires registration
- * and a commercial license. See the License for the specific language
- * governing permissions and limitations under the License.
- * You may not use this file except in compliance with the License.
- *
- * You may obtain a copy of the License at:
- *  https://www.axoniq.io/legal/terms-of-service
- *
- * For licensing information and to register, visit:
- *  https://www.axoniq.io/pricing
+ * Licensed under the Axoniq Terms of Service (the "Terms"). You may not
+ * use this file except in compliance with the Terms, available at
+ * https://www.axoniq.io/legal/terms-of-service
  */
 
 package io.axoniq.framework.messaging.multitenancy.util;
@@ -38,15 +27,13 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedDeque;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyInt;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
 
 /**
  * Test double serving an in-memory {@link PersistentStream} per Axon Server context, so a multi-tenant persistent stream
@@ -58,7 +45,7 @@ import static org.mockito.Mockito.when;
 public class RecordingPersistentStreams {
 
     private final AxonServerConnectionManager connectionManager = mock(AxonServerConnectionManager.class);
-    private final Map<String, RecordingPersistentStream> streamsByContext = new ConcurrentHashMap<>();
+    private final Map<String, List<RecordingPersistentStream>> streamsByContext = new ConcurrentHashMap<>();
 
     /**
      * Creates a recording set of persistent streams, wiring a mocked {@link AxonServerConnectionManager} that opens an
@@ -70,10 +57,14 @@ public class RecordingPersistentStreams {
             AxonServerConnection connection = mock(AxonServerConnection.class);
             EventChannel eventChannel = mock(EventChannel.class);
             when(eventChannel.openPersistentStream(anyString(), anyInt(), anyInt(), any(), any()))
-                    .thenAnswer(streamInvocation -> streamsByContext.compute(
-                            context,
-                            (ignored, previous) -> new RecordingPersistentStream(streamInvocation.getArgument(3))
-                    ));
+                    .thenAnswer(streamInvocation -> {
+                        RecordingPersistentStream newStream =
+                                new RecordingPersistentStream(streamInvocation.getArgument(0),
+                                                              streamInvocation.getArgument(3));
+                        streamsByContext.computeIfAbsent(context, (key) -> new CopyOnWriteArrayList<>())
+                                        .add(newStream);
+                        return newStream;
+                    });
             when(connection.eventChannel()).thenReturn(eventChannel);
             return connection;
         });
@@ -98,14 +89,33 @@ public class RecordingPersistentStreams {
     }
 
     /**
-     * Indicates whether the stream of the given {@code context} is currently open.
+     * Returns the ids of the streams opened in the given {@code context}, whether still open or already closed, in the
+     * order they were opened.
      *
      * @param context the Axon Server context to check
-     * @return {@code true} when a stream was opened for the given {@code context} and not closed since
+     * @return the ids of the streams opened in the given {@code context}, empty if none was opened
      */
-    public boolean hasOpenStream(String context) {
-        RecordingPersistentStream stream = streamsByContext.get(context);
-        return stream != null && !stream.closed.get();
+    public List<String> openedStreamIds(String context) {
+        return streamsOf(context).stream()
+                                 .map(stream -> stream.streamId)
+                                 .toList();
+    }
+
+    /**
+     * Indicates whether the stream with the given {@code streamId} is currently open in the given {@code context}.
+     *
+     * @param context  the Axon Server context to check
+     * @param streamId the id of the stream to check
+     * @return {@code true} when a stream with the given {@code streamId} was opened in the given {@code context} and not
+     * closed since
+     */
+    public boolean hasOpenStream(String context, String streamId) {
+        return streamsOf(context).stream()
+                                 .anyMatch(stream -> stream.streamId.equals(streamId) && !stream.closed.get());
+    }
+
+    private List<RecordingPersistentStream> streamsOf(String context) {
+        return streamsByContext.getOrDefault(context, List.of());
     }
 
     /**
@@ -121,20 +131,25 @@ public class RecordingPersistentStreams {
      * @throws IllegalStateException if no stream was opened for the given {@code context}
      */
     public void publish(String context, long token, String eventName) {
-        RecordingPersistentStream stream = streamsByContext.get(context);
-        if (stream == null) {
-            throw new IllegalStateException("No persistent stream was opened for context [" + context + "].");
+        List<RecordingPersistentStream> recordingPersistentStreams = streamsByContext.get(context);
+        if (recordingPersistentStreams == null || recordingPersistentStreams.isEmpty()) {
+            throw new IllegalStateException(
+                    "No persistent stream was opened for context [" + context + "].");
         }
-        stream.publish(token, eventName);
+        recordingPersistentStreams.stream()
+                                  .filter(stream -> !stream.closed.get())
+                                  .forEach(stream -> stream.publish(token, eventName));
     }
 
     private static final class RecordingPersistentStream implements PersistentStream {
 
+        private final String streamId;
         private final PersistentStreamCallbacks callbacks;
         private final AtomicBoolean closed = new AtomicBoolean();
         private final Map<Integer, RecordingPersistentStreamSegment> segments = new ConcurrentHashMap<>();
 
-        private RecordingPersistentStream(PersistentStreamCallbacks callbacks) {
+        private RecordingPersistentStream(String streamId, PersistentStreamCallbacks callbacks) {
+            this.streamId = streamId;
             this.callbacks = callbacks;
         }
 

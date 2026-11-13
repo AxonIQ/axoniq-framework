@@ -1,31 +1,23 @@
 /*
- * Copyright (c) 2010-2026. AxonIQ B.V.
+ * Copyright (c) 2010-2026. Axoniq B.V.
  *
- * Licensed under the AXONIQ TERMS OF SERVICE,
- * Version 29 April 2026 (the "License");
- *
- * The software is available for evaluation use without registration.
- * Continued use beyond the evaluation period requires registration
- * and a commercial license. See the License for the specific language
- * governing permissions and limitations under the License.
- * You may not use this file except in compliance with the License.
- *
- * You may obtain a copy of the License at:
- *  https://www.axoniq.io/legal/terms-of-service
- *
- * For licensing information and to register, visit:
- *  https://www.axoniq.io/pricing
+ * Licensed under the Axoniq Terms of Service (the "Terms"). You may not
+ * use this file except in compliance with the Terms, available at
+ * https://www.axoniq.io/legal/terms-of-service
  */
 
 package io.axoniq.framework.testcontainer;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.nio.channels.FileChannel;
 import java.nio.channels.FileLock;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
+import java.util.Optional;
 
 /**
  * Holds the single canonical {@link AxonServerContainer} configuration meant to be shared by every IT test suite in
@@ -49,9 +41,16 @@ import java.nio.file.StandardOpenOption;
 public final class SharedAxonServerContainer {
 
     /**
-     * Classpath resource name of the Axon Server Enterprise test license. Only present (and thus only mounted, see
-     * {@link #INSTANCE}) in modules whose test classpath includes it; absent elsewhere. Tests that don't need
-     * multi-context features work identically either way.
+     * Name of the environment variable holding the content of the Axoniq test license. Takes
+     * precedence over {@link #LICENSE_RESOURCE} when set. Because every module and forked JVM of a build sees the same
+     * environment, this makes all of them agree on whether {@link #INSTANCE} is licensed.
+     */
+    public static final String LICENSE_ENV_VARIABLE = "AXONIQ_LICENSE";
+
+    /**
+     * Classpath resource name of the Axon Server Enterprise test license, used when {@link #LICENSE_ENV_VARIABLE} is
+     * not set. Only present (and thus only mounted, see {@link #INSTANCE}) in modules whose test classpath includes
+     * it; absent elsewhere. Tests that don't need multi-context features work identically either way.
      */
     public static final String LICENSE_RESOURCE = "axon-server-test.license";
 
@@ -80,7 +79,8 @@ public final class SharedAxonServerContainer {
                     .withDevMode(true)
                     .withReuse(true)
                     .withDcbContext(true)
-                    .withLicense(licenseExists() ? LICENSE_RESOURCE : null);
+                    .withLicenseContent(resolveLicense()
+                                                .orElse(null));
 
     /**
      * Path of the cross-process lock file guarding {@link #ensureStarted()}. A fixed name is enough: there is only
@@ -123,13 +123,32 @@ public final class SharedAxonServerContainer {
     }
 
     /**
-     * Checks whether {@link #LICENSE_RESOURCE} is present on this JVM's classpath.
+     * Checks whether an Axoniq license is available, either through the {@link #LICENSE_ENV_VARIABLE}
+     * environment variable or as the {@link #LICENSE_RESOURCE} on this JVM's classpath.
      *
-     * @return {@code true} if the license resource is present and non-empty, {@code false} otherwise
+     * @return {@code true} if a non-empty license is available, {@code false} otherwise
      */
     public static boolean licenseExists() {
-        try (var resource = SharedAxonServerContainer.class.getResourceAsStream("/" + LICENSE_RESOURCE)) {
-            return resource != null && resource.read() != -1;
+        return resolveLicense().isPresent();
+    }
+
+    /**
+     * Resolves the license content, preferring the environment variable named {@code licenseContentEnvName} over the
+     * classpath resource named {@code resourceName}.
+     *
+     * @return the license content, or an empty {@link Optional} if neither source provides a non-blank license
+     */
+    private static Optional<String> resolveLicense() {
+        String licenseContent = System.getenv(LICENSE_ENV_VARIABLE);
+        if (licenseContent != null && !licenseContent.isBlank()) {
+            return Optional.of(licenseContent);
+        }
+        try (InputStream resource = SharedAxonServerContainer.class.getResourceAsStream("/" + LICENSE_RESOURCE)) {
+            if (resource == null) {
+                return Optional.empty();
+            }
+            String content = new String(resource.readAllBytes(), StandardCharsets.UTF_8);
+            return content.isBlank() ? Optional.empty() : Optional.of(content);
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }

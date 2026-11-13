@@ -1,20 +1,9 @@
 /*
- * Copyright (c) 2010-2026. AxonIQ B.V.
+ * Copyright (c) 2010-2026. Axoniq B.V.
  *
- * Licensed under the AXONIQ TERMS OF SERVICE,
- * Version 29 April 2026 (the "License");
- *
- * The software is available for evaluation use without registration.
- * Continued use beyond the evaluation period requires registration
- * and a commercial license. See the License for the specific language
- * governing permissions and limitations under the License.
- * You may not use this file except in compliance with the License.
- *
- * You may obtain a copy of the License at:
- *  https://www.axoniq.io/legal/terms-of-service
- *
- * For licensing information and to register, visit:
- *  https://www.axoniq.io/pricing
+ * Licensed under the Axoniq Terms of Service (the "Terms"). You may not
+ * use this file except in compliance with the Terms, available at
+ * https://www.axoniq.io/legal/terms-of-service
  */
 
 package io.axoniq.framework.springcloud.query;
@@ -34,6 +23,13 @@ import org.axonframework.messaging.queryhandling.SubscriptionQueryUpdateMessage;
 import org.junit.jupiter.api.*;
 
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -126,6 +122,26 @@ class IncomingQueryInvokerTest {
         }
 
         @Test
+        void completesTheAnswerOnce() {
+            // given
+            AtomicInteger completions = new AtomicInteger();
+            RecordingQueryResponseSink countingSink = new RecordingQueryResponseSink() {
+                @Override
+                public void complete() {
+                    completions.incrementAndGet();
+                    super.complete();
+                }
+            };
+            handler.answeringWith(response("response-1"));
+
+            // when
+            testSubject.handle(request(), countingSink);
+
+            // then
+            assertThat(completions).hasValue(1);
+        }
+
+        @Test
         void handsTheHandlerTheQueryThatWasSent() {
             // when
             testSubject.handle(request(), sink);
@@ -165,6 +181,50 @@ class IncomingQueryInvokerTest {
             assertThat(sink.responses()).extracting(QueryDispatchResponse::identifier)
                                         .containsExactly("response-1", "response-2");
             assertThat(sink.completed()).isTrue();
+        }
+
+        @Test
+        void writesAResponseArrivingWhileTheAnswerIsBeingSetUp() throws Exception {
+            // given a handler that starts answering on another thread as soon as it was handed the query
+            AtomicReference<QueueMessageStream<QueryResponseMessage>> answering = new AtomicReference<>();
+            AtomicReference<CountDownLatch> handedOver = new AtomicReference<>();
+            testSubject.bind(new RecordingQueryHandler() {
+                @Override
+                public MessageStream<QueryResponseMessage> query(QueryMessage query) {
+                    handedOver.get().countDown();
+                    return answering.get();
+                }
+            });
+            int iterations = 20_000;
+            int written = 0;
+            int completed = 0;
+
+            try (ExecutorService handlerThread = Executors.newSingleThreadExecutor()) {
+                for (int i = 0; i < iterations; i++) {
+                    QueueMessageStream<QueryResponseMessage> responses = new QueueMessageStream<>();
+                    CountDownLatch queryHandedOver = new CountDownLatch(1);
+                    answering.set(responses);
+                    handedOver.set(queryHandedOver);
+                    RecordingQueryResponseSink writing = new RecordingQueryResponseSink();
+                    Future<?> answer = handlerThread.submit(() -> {
+                        queryHandedOver.await();
+                        responses.offer(response("response-1"), Context.empty());
+                        responses.seal();
+                        return null;
+                    });
+
+                    // when the handler answers while the invoker starts reading its responses
+                    testSubject.handle(request(), writing);
+                    answer.get(5, TimeUnit.SECONDS);
+
+                    written += writing.responses().size();
+                    completed += writing.completed() ? 1 : 0;
+                }
+            }
+
+            // then
+            assertThat(written).isEqualTo(iterations);
+            assertThat(completed).isEqualTo(iterations);
         }
     }
 
@@ -491,6 +551,34 @@ class IncomingQueryInvokerTest {
             // then sending the same bytes again cannot succeed
             assertThat(sink.error()).isNotNull();
             assertThat(sink.error().errorCode()).isEqualTo(QueryErrorCode.QUERY_EXECUTION_NON_TRANSIENT_ERROR);
+        }
+
+        @Test
+        void reportsAHandlerFailingAfterItRespondedOnce() {
+            // given a handler that produced a response before it failed
+            QueueMessageStream<QueryResponseMessage> responses = new QueueMessageStream<>();
+            responses.offer(response("response-1"), Context.empty());
+            responses.sealExceptionally(new QueryExecutionException("The course store is unavailable.", null));
+            testSubject.bind(new RecordingQueryHandler() {
+                @Override
+                public MessageStream<QueryResponseMessage> query(QueryMessage query) {
+                    return responses;
+                }
+            });
+            AtomicInteger failures = new AtomicInteger();
+            RecordingQueryResponseSink countingSink = new RecordingQueryResponseSink() {
+                @Override
+                public void error(QueryDispatchFailure error) {
+                    failures.incrementAndGet();
+                    super.error(error);
+                }
+            };
+
+            // when
+            testSubject.handle(request(), countingSink);
+
+            // then
+            assertThat(failures).hasValue(1);
         }
 
         @Test

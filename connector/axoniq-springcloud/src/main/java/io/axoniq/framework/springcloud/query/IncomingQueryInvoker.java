@@ -1,20 +1,9 @@
 /*
- * Copyright (c) 2010-2026. AxonIQ B.V.
+ * Copyright (c) 2010-2026. Axoniq B.V.
  *
- * Licensed under the AXONIQ TERMS OF SERVICE,
- * Version 29 April 2026 (the "License");
- *
- * The software is available for evaluation use without registration.
- * Continued use beyond the evaluation period requires registration
- * and a commercial license. See the License for the specific language
- * governing permissions and limitations under the License.
- * You may not use this file except in compliance with the License.
- *
- * You may obtain a copy of the License at:
- *  https://www.axoniq.io/legal/terms-of-service
- *
- * For licensing information and to register, visit:
- *  https://www.axoniq.io/pricing
+ * Licensed under the Axoniq Terms of Service (the "Terms"). You may not
+ * use this file except in compliance with the Terms, available at
+ * https://www.axoniq.io/legal/terms-of-service
  */
 
 package io.axoniq.framework.springcloud.query;
@@ -379,14 +368,21 @@ public class IncomingQueryInvoker {
                 return;
             }
             try {
-                while (responses.hasNextAvailable()) {
+                // Asked once per decision: a second ask can take a response that arrived in between, swallowing the
+                // notification that would have drained it, and leave it unwritten.
+                boolean hasNext = responses.hasNextAvailable();
+                while (hasNext) {
                     Optional<MessageStream.Entry<QueryResponseMessage>> next = responses.next();
                     if (next.isEmpty()) {
+                        hasNext = false;
                         break;
                     }
                     sink.response(QueryConverter.convertResponseMessage(next.get().message(), requestIdentifier));
+                    hasNext = responses.hasNextAvailable();
                 }
-                if (!responses.hasNextAvailable() && responses.isCompleted()) {
+                // Reading a stream that has just ended reports its completion, which drains it again from inside
+                // this drain. That nested drain already finished the answer, so finishing it here would do so twice.
+                if (!hasNext && !terminated && responses.isCompleted()) {
                     responses.error().ifPresentOrElse(this::fail, this::finish);
                 }
             } catch (Exception e) {

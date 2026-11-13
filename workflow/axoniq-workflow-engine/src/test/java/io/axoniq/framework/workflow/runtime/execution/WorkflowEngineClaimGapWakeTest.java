@@ -1,20 +1,9 @@
 /*
- * Copyright (c) 2010-2026. AxonIQ B.V.
+ * Copyright (c) 2010-2026. Axoniq B.V.
  *
- * Licensed under the AXONIQ TERMS OF SERVICE,
- * Version 29 April 2026 (the "License");
- *
- * The software is available for evaluation use without registration.
- * Continued use beyond the evaluation period requires registration
- * and a commercial license. See the License for the specific language
- * governing permissions and limitations under the License.
- * You may not use this file except in compliance with the License.
- *
- * You may obtain a copy of the License at:
- *  https://www.axoniq.io/legal/terms-of-service
- *
- * For licensing information and to register, visit:
- *  https://www.axoniq.io/pricing
+ * Licensed under the Axoniq Terms of Service (the "Terms"). You may not
+ * use this file except in compliance with the Terms, available at
+ * https://www.axoniq.io/legal/terms-of-service
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
@@ -41,6 +30,8 @@ import org.axonframework.messaging.core.unitofwork.StubProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
+import org.axonframework.messaging.eventhandling.processing.streaming.token.GlobalSequenceTrackingToken;
+import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.junit.jupiter.api.*;
 
 import java.time.Clock;
@@ -48,7 +39,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
 import static io.axoniq.framework.workflow.configuration.WorkflowConfigurationDefaults.WORKFLOW_ENGINE_EXECUTOR;
@@ -192,6 +185,31 @@ class WorkflowEngineClaimGapWakeTest {
                 .isTrue();
     }
 
+    @Test
+    void theEventEndingCatchUpRequestsACheckpointOnceTheRestoredInstanceRuns() {
+        // given: the segment is claimed behind the startup head, so its restored instance waits for catch-up, and a
+        // backlog event queues work on that waiting instance
+        var owner = owningSegment(RESIDENT_ID);
+        List<TrackingToken> requested = new CopyOnWriteArrayList<>();
+        workflowEngine.start(new GlobalSequenceTrackingToken(2));
+        checkpointingSupport.onSegmentClaimed(owner, new GlobalSequenceTrackingToken(0), requested::add);
+        workflowEngine.restoreWorkflowsFor(owner,
+                                           new GlobalSequenceTrackingToken(0),
+                                           sourcingContext(),
+                                           new StubProcessingContext())
+                      .orTimeout(5, TimeUnit.SECONDS)
+                      .join();
+        workflowEngine.handle(resumeEvent(), deliveryContext(owner, new GlobalSequenceTrackingToken(1)));
+        assertThat(restored.isRunning()).as("the instance waits for catch-up").isFalse();
+
+        // when: the event at the startup head ends catch-up
+        workflowEngine.handle(resumeEvent(), deliveryContext(owner, new GlobalSequenceTrackingToken(2)));
+
+        // then: the instance runs, so the checkpoint request at that event is no longer held back by it
+        assertThat(restored.isRunning()).isTrue();
+        assertThat(requested).containsExactly(new GlobalSequenceTrackingToken(2));
+    }
+
     /**
      * Stands in for the restored body arriving back at its {@code awaitEvent} call.
      */
@@ -261,6 +279,12 @@ class WorkflowEngineClaimGapWakeTest {
     private ProcessingContext deliveryContext(Segment segment) {
         var context = new StubProcessingContext();
         context.putResource(Segment.RESOURCE_KEY, segment);
+        return context;
+    }
+
+    private ProcessingContext deliveryContext(Segment segment, TrackingToken token) {
+        var context = deliveryContext(segment);
+        context.putResource(TrackingToken.RESOURCE_KEY, token);
         return context;
     }
 

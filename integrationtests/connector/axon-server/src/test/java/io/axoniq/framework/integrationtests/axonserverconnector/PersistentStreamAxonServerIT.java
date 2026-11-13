@@ -1,20 +1,9 @@
 /*
- * Copyright (c) 2010-2026. AxonIQ B.V.
+ * Copyright (c) 2010-2026. Axoniq B.V.
  *
- * Licensed under the AXONIQ TERMS OF SERVICE,
- * Version 29 April 2026 (the "License");
- *
- * The software is available for evaluation use without registration.
- * Continued use beyond the evaluation period requires registration
- * and a commercial license. See the License for the specific language
- * governing permissions and limitations under the License.
- * You may not use this file except in compliance with the License.
- *
- * You may obtain a copy of the License at:
- *  https://www.axoniq.io/legal/terms-of-service
- *
- * For licensing information and to register, visit:
- *  https://www.axoniq.io/pricing
+ * Licensed under the Axoniq Terms of Service (the "Terms"). You may not
+ * use this file except in compliance with the Terms, available at
+ * https://www.axoniq.io/legal/terms-of-service
  */
 
 package io.axoniq.framework.integrationtests.axonserverconnector;
@@ -211,7 +200,11 @@ class PersistentStreamAxonServerIT {
                 segmentCount,
                 PersistentStreamSequencingPolicy.SEQUENTIAL_POLICY,
                 Collections.emptyList(),
-                "HEAD",
+                // Properties are only considered when Axon Server creates the stream. Opening the stream does not wait
+                // for that, so with HEAD the stream could start after the events a test publishes right after
+                // startup, and miss them. TAIL loses nothing: the context is purged before every test and the
+                // stream name is unique, so the stream only ever sees this test's events.
+                "TAIL",
                 null  // no server-side filter
         );
 

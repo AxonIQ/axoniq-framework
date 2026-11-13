@@ -1,21 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  ~ Copyright (c) 2010-2026. AxonIQ B.V.
+  ~ Copyright (c) 2010-2026. Axoniq B.V.
   ~
-  ~ Licensed under the AXONIQ TERMS OF SERVICE,
-  ~ Version 29 April 2026 (the "License");
-  ~
-  ~ The software is available for evaluation use without registration.
-  ~ Continued use beyond the evaluation period requires registration
-  ~ and a commercial license. See the License for the specific language
-  ~ governing permissions and limitations under the License.
-  ~ You may not use this file except in compliance with the License.
-  ~
-  ~ You may obtain a copy of the License at:
-  ~  https://www.axoniq.io/legal/terms-of-service
-  ~
-  ~ For licensing information and to register, visit:
-  ~  https://www.axoniq.io/pricing
+  ~ Licensed under the Axoniq Terms of Service (the "Terms"). You may not
+  ~ use this file except in compliance with the Terms, available at
+  ~ https://www.axoniq.io/legal/terms-of-service
   -->
 
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
@@ -48,6 +37,8 @@
         <quartz.version>2.5.2</quartz.version>
         <jobrunr.version>8.8.2</jobrunr.version>
         <db-scheduler.version>16.12.0</db-scheduler.version>
+        <!-- Spring is allowed for this module, as this module provides legacy AF4 Saga support which anybody would pair with Spring -->
+        <maven-enforcer.allow-spring-dependencies>true</maven-enforcer.allow-spring-dependencies>
     </properties>
 
     <dependencies>
@@ -291,12 +282,6 @@
                                     <destFileName>axon-messaging-af4.jar</destFileName>
                                 </artifactItem>
                                 <!-- The Axon Framework 4 scope descriptors, for the deadline compatibility tests. -->
-                                <artifactItem>
-                                    <groupId>org.axonframework</groupId>
-                                    <artifactId>axon-modelling</artifactId>
-                                    <version>${axon4.serializer.version}</version>
-                                    <destFileName>axon-modelling-af4.jar</destFileName>
-                                </artifactItem>
                                 <artifactItem>
                                     <groupId>org.axonframework</groupId>
                                     <artifactId>axon-modelling</artifactId>

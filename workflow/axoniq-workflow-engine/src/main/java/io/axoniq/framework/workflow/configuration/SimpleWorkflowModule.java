@@ -1,20 +1,9 @@
 /*
- * Copyright (c) 2010-2026. AxonIQ B.V.
+ * Copyright (c) 2010-2026. Axoniq B.V.
  *
- * Licensed under the AXONIQ TERMS OF SERVICE,
- * Version 29 April 2026 (the "License");
- *
- * The software is available for evaluation use without registration.
- * Continued use beyond the evaluation period requires registration
- * and a commercial license. See the License for the specific language
- * governing permissions and limitations under the License.
- * You may not use this file except in compliance with the License.
- *
- * You may obtain a copy of the License at:
- *  https://www.axoniq.io/legal/terms-of-service
- *
- * For licensing information and to register, visit:
- *  https://www.axoniq.io/pricing
+ * Licensed under the Axoniq Terms of Service (the "Terms"). You may not
+ * use this file except in compliance with the Terms, available at
+ * https://www.axoniq.io/legal/terms-of-service
  */
 package io.axoniq.framework.workflow.configuration;
 
@@ -55,6 +44,7 @@ import org.axonframework.messaging.eventhandling.processing.streaming.pooled.Poo
 import org.axonframework.messaging.eventhandling.processing.streaming.pooled.PooledStreamingEventProcessorModule;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.SequenceOverridingEventHandlingComponent;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.store.TokenStore;
+import org.axonframework.messaging.eventhandling.processing.streaming.token.store.inmemory.InMemoryTokenStore;
 import org.axonframework.messaging.eventstreaming.EventCriteria;
 import org.axonframework.messaging.eventstreaming.StreamableEventSource;
 import org.jspecify.annotations.Nullable;
@@ -464,7 +454,12 @@ class SimpleWorkflowModule<C extends WorkflowContext>
             Configuration config,
             PooledStreamingEventProcessorConfiguration psepConfig
     ) {
-        return historyConfigCustomizer.apply(defaultProcessorConfig(config, psepConfig))
+        defaultProcessorConfig(config, psepConfig);
+        if (config.getComponent(MutableWorkflowHistoryRepository.class, historyRepositoryName())
+                instanceof InMemoryWorkflowHistoryRepository) {
+            psepConfig.tokenStore(new InMemoryTokenStore());
+        }
+        return historyConfigCustomizer.apply(psepConfig)
                                       .eventCriteria(SimpleWorkflowModule::eventCriteria);
     }
 

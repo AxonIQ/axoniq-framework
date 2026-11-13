@@ -1,31 +1,27 @@
 /*
- * Copyright (c) 2010-2026. AxonIQ B.V.
+ * Copyright (c) 2010-2026. Axoniq B.V.
  *
- * Licensed under the AXONIQ TERMS OF SERVICE,
- * Version 29 April 2026 (the "License");
- *
- * The software is available for evaluation use without registration.
- * Continued use beyond the evaluation period requires registration
- * and a commercial license. See the License for the specific language
- * governing permissions and limitations under the License.
- * You may not use this file except in compliance with the License.
- *
- * You may obtain a copy of the License at:
- *  https://www.axoniq.io/legal/terms-of-service
- *
- * For licensing information and to register, visit:
- *  https://www.axoniq.io/pricing
+ * Licensed under the Axoniq Terms of Service (the "Terms"). You may not
+ * use this file except in compliance with the Terms, available at
+ * https://www.axoniq.io/legal/terms-of-service
  */
 
 package io.axoniq.framework.axonserver.connector.shared;
 
+import com.google.protobuf.ByteString;
 import io.axoniq.axonserver.grpc.MetaDataValue;
 import org.axonframework.common.annotation.Internal;
 import org.jspecify.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-
+import java.nio.charset.CharacterCodingException;
+import java.nio.charset.CodingErrorAction;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Utility class to convert between Axon Server metadata values and a simple {@link Map} of String key-value pairs.
@@ -41,6 +37,11 @@ import java.util.Map;
 @Internal
 public final class MetadataConverter {
 
+    private static final Logger logger = LoggerFactory.getLogger(MetadataConverter.class);
+
+    private static final int MAX_LOGGED_KEY_COUNT = 1_000;
+    private static final Set<String> loggedNoneConvertedKeys = ConcurrentHashMap.newKeySet();
+
     private MetadataConverter() {
         // Utility class
     }
@@ -51,7 +52,7 @@ public final class MetadataConverter {
      * @param source The source map containing String key-value pairs.
      * @return A map where each value is converted to an Axon Server {@link MetaDataValue}.
      */
-    public static Map<String, MetaDataValue> convertGrpcToMetadataValues(Map<String, @Nullable String> source) {
+    public static Map<String, MetaDataValue> convertMetadataMapToGrpc(Map<String, @Nullable String> source) {
         Map<String, MetaDataValue> result = new HashMap<>();
         source.forEach((k, v) -> {
             if (v != null) {
@@ -68,19 +69,36 @@ public final class MetadataConverter {
 
     /**
      * Converts a {@link Map} of Axon Server {@link MetaDataValue} objects to a {@link Map} of String key-value pairs.
+     * <p>
+     * Text, double, number and boolean values are converted to their {@code String} representation. A
+     * {@code bytes_value}, which Axon Framework 4 used for anything that was not text, a number or a boolean, is
+     * converted by using its bytes as UTF-8 text, such as JSON or XML. When these bytes are not valid text, for
+     * example due to a binary serializer, the key is kept with a {@code null} value and a warning is logged <b>once</b>
+     * per key. A {@link MetaDataValue} without any value is converted to a {@code null} value as well, without a
+     * warning.
      *
-     * @param source The source map containing Axon Server {@link MetaDataValue} objects.
-     * @return A map where each value is converted to a String representation.
+     * @param source the source map containing Axon Server {@link MetaDataValue} objects
+     * @return a map where each value is converted to a String representation, or {@code null} if it cannot be converted
      */
-    public static Map<String, String> convertMetadataValuesToGrpc(Map<String, MetaDataValue> source) {
-        Map<String, String> result = new HashMap<>();
+    public static Map<String, @Nullable String> convertGrpcToMetadataMap(Map<String, MetaDataValue> source) {
+        Map<String, @Nullable String> result = new HashMap<>();
         source.forEach((k, v) -> {
             String convertedValue = convertFromMetaDataValue(v);
-            if (convertedValue != null) {
-                result.put(k, convertedValue);
+            if (convertedValue == null && v.getDataCase() != MetaDataValue.DataCase.DATA_NOT_SET
+                    && firstKeyEncounter(k)) {
+                logger.warn("Metadata entry with key [{}] has a value of type [{}] that cannot be converted to a "
+                                    + "String and will be [null].",
+                            k, v.getDataCase());
             }
+            result.put(k, convertedValue);
         });
         return result;
+    }
+
+    private static boolean firstKeyEncounter(String key) {
+        // Warn once per key to prevent flooding the log when replaying many messages with the same unconvertible key.
+        // The tracked keys are capped, so arbitrary keys cannot grow this set indefinitely.
+        return loggedNoneConvertedKeys.size() < MAX_LOGGED_KEY_COUNT && loggedNoneConvertedKeys.add(key);
     }
 
     @Nullable
@@ -90,7 +108,21 @@ public final class MetadataConverter {
             case DOUBLE_VALUE -> Double.toString(value.getDoubleValue());
             case NUMBER_VALUE -> Long.toString(value.getNumberValue());
             case BOOLEAN_VALUE -> Boolean.toString(value.getBooleanValue());
+            case BYTES_VALUE -> decodeUtf8(value.getBytesValue().getData());
             default -> null;
         };
+    }
+
+    @Nullable
+    private static String decodeUtf8(ByteString data) {
+        try {
+            return StandardCharsets.UTF_8.newDecoder()
+                                         .onMalformedInput(CodingErrorAction.REPORT)
+                                         .onUnmappableCharacter(CodingErrorAction.REPORT)
+                                         .decode(data.asReadOnlyByteBuffer())
+                                         .toString();
+        } catch (CharacterCodingException e) {
+            return null;
+        }
     }
 }

@@ -1,20 +1,9 @@
 /*
- * Copyright (c) 2010-2026. AxonIQ B.V.
+ * Copyright (c) 2010-2026. Axoniq B.V.
  *
- * Licensed under the AXONIQ TERMS OF SERVICE,
- * Version 29 April 2026 (the "License");
- *
- * The software is available for evaluation use without registration.
- * Continued use beyond the evaluation period requires registration
- * and a commercial license. See the License for the specific language
- * governing permissions and limitations under the License.
- * You may not use this file except in compliance with the License.
- *
- * You may obtain a copy of the License at:
- *  https://www.axoniq.io/legal/terms-of-service
- *
- * For licensing information and to register, visit:
- *  https://www.axoniq.io/pricing
+ * Licensed under the Axoniq Terms of Service (the "Terms"). You may not
+ * use this file except in compliance with the Terms, available at
+ * https://www.axoniq.io/legal/terms-of-service
  */
 
 package io.axoniq.framework.axonserver.connector.query;
@@ -316,6 +305,53 @@ class AxonServerQueryBusConnectorTest {
             stream.close();
             verify(resultStream).close();
             verify(mockConverter).convert(any(), eq((Type)String.class));
+        }
+
+        @Test
+        void queryReportsCompletedOnceLastResponseIsConsumed() {
+            // given
+            QueryResponse response = QueryResponse.newBuilder()
+                                                  .setMessageIdentifier(UUID.randomUUID().toString())
+                                                  .setPayload(SerializedObject.newBuilder()
+                                                                              .setType("java.lang.String")
+                                                                              .setData(copyFromUtf8("ok"))
+                                                                              .build())
+                                                  .build();
+            when(mockQueryChannel.query(any())).thenReturn(new StubResultStream<>(response));
+
+            QueryMessage query = new GenericQueryMessage(
+                    new GenericMessage(new MessageType("QueryType", "1"),
+                                       "payload".getBytes(),
+                                       Metadata.emptyInstance())
+            );
+            MessageStream<QueryResponseMessage> stream = testSubject.query(query, null);
+
+            // when
+            assertThat(stream.next()).isPresent();
+
+            // then the result stream closed on handing out its last response, which needs no further read to notice
+            assertThat(stream.isCompleted()).isTrue();
+            assertThat(stream.error()).isNotPresent();
+        }
+
+        @Test
+        void queryReportsFailureWithoutReading() {
+            // given
+            RuntimeException failure = new RuntimeException("connection lost");
+            when(mockQueryChannel.query(any())).thenReturn(new StubResultStream<QueryResponse>(failure));
+
+            QueryMessage query = new GenericQueryMessage(
+                    new GenericMessage(new MessageType("QueryType", "1"),
+                                       "payload".getBytes(),
+                                       Metadata.emptyInstance())
+            );
+
+            // when
+            MessageStream<QueryResponseMessage> stream = testSubject.query(query, null);
+
+            // then
+            assertThat(stream.isCompleted()).isTrue();
+            assertThat(stream.error()).contains(failure);
         }
     }
 

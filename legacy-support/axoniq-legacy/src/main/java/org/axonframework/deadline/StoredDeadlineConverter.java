@@ -1,20 +1,9 @@
 /*
- * Copyright (c) 2010-2026. AxonIQ B.V.
+ * Copyright (c) 2010-2026. Axoniq B.V.
  *
- * Licensed under the AXONIQ TERMS OF SERVICE,
- * Version 29 April 2026 (the "License");
- *
- * The software is available for evaluation use without registration.
- * Continued use beyond the evaluation period requires registration
- * and a commercial license. See the License for the specific language
- * governing permissions and limitations under the License.
- * You may not use this file except in compliance with the License.
- *
- * You may obtain a copy of the License at:
- *  https://www.axoniq.io/legal/terms-of-service
- *
- * For licensing information and to register, visit:
- *  https://www.axoniq.io/pricing
+ * Licensed under the Axoniq Terms of Service (the "Terms"). You may not
+ * use this file except in compliance with the Terms, available at
+ * https://www.axoniq.io/legal/terms-of-service
  */
 
 package org.axonframework.deadline;
@@ -28,6 +17,8 @@ import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.MessageTypeResolver;
 import org.axonframework.messaging.core.Metadata;
 import org.jspecify.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import tools.jackson.core.JacksonException;
 import tools.jackson.core.JsonGenerator;
 import tools.jackson.core.JsonParser;
@@ -95,7 +86,7 @@ public final class StoredDeadlineConverter {
     public static final String EMPTY_TYPE = "empty";
 
     private static final String SERIALIZED_NULL = "null";
-
+    private static final Logger logger = LoggerFactory.getLogger(StoredDeadlineConverter.class);
     /**
      * The concrete type metadata is read into. A converter with default typing, such as a mirror of Axon Framework 4's
      * {@code Jackson3Serializer} with {@code defaultTyping()}, expects type information for an abstract target type,
@@ -463,12 +454,19 @@ public final class StoredDeadlineConverter {
             try {
                 probe = converter.convert(Boolean.TRUE, String.class);
             } catch (RuntimeException e) {
+                logger.debug("Converter [{}] failed to convert the format probe; its stored format is unknown.",
+                             converter, e);
                 return UNKNOWN;
             }
             if ("true".equals(probe)) {
                 return JSON;
             }
-            return "<boolean>true</boolean>".equals(probe) ? XSTREAM : UNKNOWN;
+            if ("<boolean>true</boolean>".equals(probe)) {
+                return XSTREAM;
+            }
+            logger.debug("Converter [{}] wrote the format probe as [{}], which is neither JSON nor XStream XML; "
+                                 + "its stored format is unknown.", converter, probe);
+            return UNKNOWN;
         }
 
         abstract String write(Object payload);

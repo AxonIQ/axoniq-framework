@@ -1,20 +1,9 @@
 /*
- * Copyright (c) 2010-2026. AxonIQ B.V.
+ * Copyright (c) 2010-2026. Axoniq B.V.
  *
- * Licensed under the AXONIQ TERMS OF SERVICE,
- * Version 29 April 2026 (the "License");
- *
- * The software is available for evaluation use without registration.
- * Continued use beyond the evaluation period requires registration
- * and a commercial license. See the License for the specific language
- * governing permissions and limitations under the License.
- * You may not use this file except in compliance with the License.
- *
- * You may obtain a copy of the License at:
- *  https://www.axoniq.io/legal/terms-of-service
- *
- * For licensing information and to register, visit:
- *  https://www.axoniq.io/pricing
+ * Licensed under the Axoniq Terms of Service (the "Terms"). You may not
+ * use this file except in compliance with the Terms, available at
+ * https://www.axoniq.io/legal/terms-of-service
  */
 package io.axoniq.framework.workflow.dsl.simple;
 
@@ -140,16 +129,30 @@ public class SimpleWorkflowContext extends BaseWorkflowContext {
     }
 
     /**
-     * Blocks for the given duration without waiting for an external event.
+     * Starts a sleep step for the given duration and returns immediately, without blocking. Use
+     * {@link #awaitSleep(String, Duration)} to block until the duration has elapsed.
      *
      * @param stepName logical name of the sleep step
-     * @param timeout  time to wait before continuing
+     * @param timeout  duration of the sleep
      */
     public void sleep(
             String stepName,
             Duration timeout
     ) {
         sleep(stepName, step -> step.timeout(timeout));
+    }
+
+    /**
+     * Starts a sleep step and blocks until the given duration has elapsed.
+     *
+     * @param stepName logical name of the sleep step
+     * @param timeout  time to wait before continuing
+     */
+    public void awaitSleep(
+            String stepName,
+            Duration timeout
+    ) {
+        awaitSleep(stepName, step -> step.timeout(timeout));
     }
 
     /**

@@ -1,20 +1,9 @@
 /*
- * Copyright (c) 2010-2026. AxonIQ B.V.
+ * Copyright (c) 2010-2026. Axoniq B.V.
  *
- * Licensed under the AXONIQ TERMS OF SERVICE,
- * Version 29 April 2026 (the "License");
- *
- * The software is available for evaluation use without registration.
- * Continued use beyond the evaluation period requires registration
- * and a commercial license. See the License for the specific language
- * governing permissions and limitations under the License.
- * You may not use this file except in compliance with the License.
- *
- * You may obtain a copy of the License at:
- *  https://www.axoniq.io/legal/terms-of-service
- *
- * For licensing information and to register, visit:
- *  https://www.axoniq.io/pricing
+ * Licensed under the Axoniq Terms of Service (the "Terms"). You may not
+ * use this file except in compliance with the Terms, available at
+ * https://www.axoniq.io/legal/terms-of-service
  */
 
 package org.axonframework.extensions.mongo.eventhandling.saga.repository;
@@ -60,8 +49,9 @@ class MongoSagaStoreIT extends SagaStoreTestSuite {
 
     private static final AssociationValue ORDER_1 = new AssociationValue("orderId", "order-1");
 
+    // MongoDB 8.x refuses to start on the Ubuntu 7.0 kernel of the CI runner (SERVER-121912, SERVER-131779).
     @Container
-    private static final MongoDBContainer MONGO_CONTAINER = new MongoDBContainer("mongo:8.0");
+    private static final MongoDBContainer MONGO_CONTAINER = new MongoDBContainer("mongo:7.0");
 
     private static MongoClient mongoClient;
 

@@ -8,23 +8,12 @@ Use a BDD fixture when you want to test workflow behavior as a sequence of obser
 
 [source,java]
 ----
-fixture.given()
-       .publishEvent(new RegistrationReceivedEvent("2", "piggy@muppets.biz", "vip"))
-       .execute("createUser");
-
-fixture.when()
-       .executeReturning("activateUser", Map.of());
-
-fixture.then()
-       .executionExists()
-       .waitingIn("sendWelcomeEmail");
+include::example$workflows/testingworkflows/TestingWorkflowsExamples.java[tag=bdd-overview,indent=0]
 ----
 
 The fixture is intentionally explicit.
-When a workflow reaches an `execute` step, the step is recorded as started and the workflow is visibly waiting in that
-step.
-In stepping mode, the step does not finish on its own: the fixture intercepts completion so the test can decide whether
-to run the production action, return a fake result, or fail the step explicitly.
+When a workflow reaches an `execute` step, the step is recorded as started and the workflow is visibly waiting in that step.
+In stepping mode, the step does not finish on its own: the fixture intercepts completion so the test can decide whether to run the production action, return a fake result, or fail the step explicitly.
 This keeps side effects out of fixture tests and makes each workflow transition visible.
 
 Fixture assertion methods use behavior-focused names such as `noExecution()`, `waitingIn(...)`, `hasSteps(...)`, and
@@ -72,8 +61,7 @@ The fixture has three phase entry points:
 Both phases also expose shared state-selection methods such as `executionExists()`, `historyExists(...)`, `noExecution()`, and `noHistory()`.
 
 The fixture starts in stepping mode.
-In stepping mode, execute steps start normally but remain in progress until the test finishes them explicitly, and
-fixture-controlled time drives timeout tasks.
+In stepping mode, execute steps start normally but remain in progress until the test finishes them explicitly, and fixture-controlled time drives timeout tasks.
 
 == Creating a BDD fixture
 
@@ -81,52 +69,10 @@ Create a fixture from a `WorkflowModule`.
 This is the default setup style because it matches the runtime configuration model and the lower-level
 `WorkflowTestDriver`.
 
-.src/test/java/io/axoniq/example/workflow/UserSignupFixtureTest.java
+.UserSignupFixtureTest.java
 [source,java]
 ----
-import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContext;
-import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContextFactory;
-import io.axoniq.framework.workflow.configuration.WorkflowModule;
-import io.axoniq.framework.workflow.runtime.test.fixture.GivenWhen;
-import io.axoniq.framework.workflow.runtime.test.fixture.Then;
-import io.axoniq.framework.workflow.runtime.test.fixture.WorkflowTestFixture;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-
-class UserSignupFixtureTest {
-
-    WorkflowTestFixture<GivenWhen.Phase, Then.Phase> fixture;
-
-    @BeforeEach
-    void setUp() {
-        WorkflowModule<SimpleWorkflowContext> module = WorkflowModule
-                .defaults("UserSignup", SimpleWorkflowContext.class)
-                .contextFactory(c -> new SimpleWorkflowContextFactory())
-                .definition(d -> d.autodetected(c -> new UserSignupWorkflow()));
-
-        fixture = WorkflowTestFixture.of(module);
-    }
-
-    @AfterEach
-    void tearDown() {
-        fixture.then().stop();
-    }
-
-    @Test
-    void vip_user_reaches_activation_step() {
-        fixture.given()
-               .noExecution();
-
-        fixture.when()
-               .publishEvent(new RegistrationReceivedEvent("2", "piggy@muppets.biz", "vip"))
-               .execute("createUser");
-
-        fixture.then()
-               .executionExists()
-               .waitingIn("activateUser");
-    }
-}
+include::example$workflows/testingworkflows/UserSignupFixtureTest.java[tag=user-signup-fixture-test,indent=0]
 ----
 
 The public fixture creation API is `WorkflowTestFixture.of(...)`.
@@ -150,19 +96,7 @@ Use the `customize` overload when the workflow under test needs test-specific co
 
 [source,java]
 ----
-WorkflowModule<SimpleWorkflowContext> module = WorkflowModule
-        .defaults("UserSignup", SimpleWorkflowContext.class)
-        .contextFactory(c -> new SimpleWorkflowContextFactory())
-        .definition(d -> d.autodetected(c -> new UserSignupWorkflow()));
-
-WorkflowTestFixture<GivenWhen.Phase, Then.Phase> fixture =
-        WorkflowTestFixture.of(
-                module,
-                configurer -> configurer.componentRegistry(registry -> registry.registerComponent(
-                        AuditSink.class,
-                        c -> new InMemoryAuditSink()
-                ))
-        );
+include::example$workflows/testingworkflows/TestingWorkflowsExamples.java[tag=customize-overload,indent=0]
 ----
 
 == BDD phase markers
@@ -172,15 +106,7 @@ They make the test read as a scenario while keeping the runtime interactions exp
 
 [source,java]
 ----
-fixture.given()
-       .publishEvent(startEvent)
-       .execute("prepare");
-
-fixture.when()
-       .publishEvent(domainEvent);
-
-fixture.then()
-       .workflowFinished(WorkflowStatus.COMPLETED);
+include::example$workflows/testingworkflows/TestingWorkflowsExamples.java[tag=phase-markers,indent=0]
 ----
 
 The action phase can move to the assertion phase with `then()`.
@@ -195,8 +121,7 @@ Payload events are wrapped in a `GenericEventMessage` and published through the 
 
 [source,java]
 ----
-fixture.when()
-       .publishEvent(new RegistrationReceivedEvent("2", "piggy@muppets.biz", "vip"));
+include::example$workflows/testingworkflows/TestingWorkflowsExamples.java[tag=publish-event-basic,indent=0]
 ----
 
 Events published through the fixture go through normal event conversion, workflow start conditions, correlation, and workflow history recording.
@@ -205,43 +130,33 @@ Events published through the fixture go through normal event conversion, workflo
 
 The fixture does not stop the workflow from entering an `execute` step.
 The step is started normally, and the workflow state shows that it is currently waiting in that step.
-What changes in stepping mode is how the step finishes: it will never complete by itself until the test tells the
-fixture what to do for that step name.
+What changes in stepping mode is how the step finishes: it will never complete by itself until the test tells the fixture what to do for that step name.
 
 Think of it like a worker reaching a checkpoint.
-The worker has arrived and checked in, so everyone can see which station it is at, but the checkpoint gate stays closed
-until the test opens it.
-The test can open the gate in three ways: let the real workflow-defined action run, provide a fake successful result,
-or force the step to fail.
+The worker has arrived and checked in, so everyone can see which station it is at, but the checkpoint gate stays closed until the test opens it.
+The test can open the gate in three ways: let the real workflow-defined action run, provide a fake successful result, or force the step to fail.
 
-This behavior lets a test inspect intermediate workflow state before any real side effect runs, while still using the
-normal runtime machinery for step events, payload reduction, and history recording.
+This behavior lets a test inspect intermediate workflow state before any real side effect runs, while still using the normal runtime machinery for step events, payload reduction, and history recording.
 
 To release the production action:
 
 [source,java]
 ----
-fixture.when()
-       .execute("createUser");
+include::example$workflows/testingworkflows/TestingWorkflowsExamples.java[tag=execute-release,indent=0]
 ----
 
 To replace the production action with a successful fake result and assert that the step completes:
 
 [source,java]
 ----
-fixture.when()
-       .executeReturning("activateUser", Map.of("activated", true));
+include::example$workflows/testingworkflows/TestingWorkflowsExamples.java[tag=execute-returning,indent=0]
 ----
 
 To provide a custom payload processor:
 
 [source,java]
 ----
-fixture.when()
-       .execute("reserveCredit", (processingContext, inputPayload) -> Map.of(
-               "reservationId", "res-123",
-               "amount", inputPayload.get("amount")
-       ));
+include::example$workflows/testingworkflows/TestingWorkflowsExamples.java[tag=execute-custom-processor,indent=0]
 ----
 
 The custom processor receives the real reduced input payload and the real `ProcessingContext`.
@@ -251,11 +166,7 @@ To make a step fail and assert that it failed:
 
 [source,java]
 ----
-fixture.when()
-       .executeFailing(
-               "reserveCredit",
-               new StepFailedException("credit denied")
-       );
+include::example$workflows/testingworkflows/TestingWorkflowsExamples.java[tag=execute-failing,indent=0]
 ----
 
 === Advancing time
@@ -265,17 +176,7 @@ Use `timePasses(...)` to advance fixture-controlled time and run timeout tasks t
 
 [source,java]
 ----
-fixture.given()
-       .publishEvent(new RegistrationReceivedEvent("2", "piggy@muppets.biz", "vip"))
-       .execute("createUser")
-       .executeReturning("activateUser", Map.of())
-       .executeReturning("sendWelcomeEmail", Map.of());
-
-fixture.when()
-       .timePasses(Duration.ofSeconds(1));
-
-fixture.then()
-       .waitingIn("waitForMagicToHappen");
+include::example$workflows/testingworkflows/TestingWorkflowsExamples.java[tag=advancing-time,indent=0]
 ----
 
 This is useful for `sleep`, `waitForEvent` timeouts, execute-step timeouts, and retry backoff behavior that is wired through the workflow scheduler.
@@ -393,87 +294,28 @@ The generic parameters connect both phases so fluent calls keep the custom type.
 
 [source,java]
 ----
-class SignupGivenWhen extends GivenWhen<SignupGivenWhen, SignupThen> {
-
-    SignupGivenWhen vipRegistrationReceived(String id, String email) {
-        return publishEvent(new RegistrationReceivedEvent(id, email, "vip"));
-    }
-
-    SignupGivenWhen customerRegistrationCompleted() {
-        return executionExists()
-                .execute("createUser")
-                .executeReturning("activateUser", Map.of())
-                .executeReturning("sendWelcomeEmail", Map.of());
-    }
-
-    SignupGivenWhen magicHappens(String magician) {
-        return publishEvent(new MagicHappenedEvent(magician));
-    }
-}
-
-class SignupThen extends Then<SignupThen, SignupGivenWhen> {
-
-    SignupThen customerWaitingForMagic() {
-        return executionExists()
-                .waitingIn("waitForMagicToHappen");
-    }
-
-    SignupThen signupCompletedFor(String id, String email, String magician) {
-        return workflowFinished(WorkflowStatus.COMPLETED)
-                .stepsPassed("activateUser", "sendWelcomeEmail", "waitForMagicToHappen", "modifyPayload")
-                .payloadContains(Map.of(
-                        "id", id,
-                        "email", email,
-                        "status", "vip",
-                        "magician", magician
-                ));
-    }
-}
+include::example$workflows/testingworkflows/CustomPhases.java[tag=custom-phases,indent=0]
 ----
 
 Pass the custom phase instances to the custom fixture factory:
 
 [source,java]
 ----
-WorkflowTestFixture<SignupGivenWhen, SignupThen> fixture =
-        WorkflowTestFixture.of(
-                WorkflowModule.defaults("UserSignup", SimpleWorkflowContext.class)
-                              .contextFactory(c -> new SimpleWorkflowContextFactory())
-                              .definition(d -> d.autodetected(c -> new UserSignupWorkflow())),
-                UnaryOperator.identity(),
-                new SignupGivenWhen(),
-                new SignupThen()
-        );
+include::example$workflows/testingworkflows/CustomFixtureFactoryExample.java[tag=custom-fixture-factory,indent=0]
 ----
 
 The test can now use business-level steps while the custom phases keep low-level workflow control in one place:
 
 [source,java]
 ----
-fixture.given()
-       .vipRegistrationReceived("2", "piggy@muppets.biz")
-       .customerRegistrationCompleted()
-       .timePasses(Duration.ofSeconds(1));
-
-fixture.then()
-       .customerWaitingForMagic();
-
-fixture.when()
-       .magicHappens("Merlin");
-
-fixture.then()
-       .signupCompletedFor("2", "piggy@muppets.biz", "Merlin");
+include::example$workflows/testingworkflows/TestingWorkflowsExamples.java[tag=business-level-flow,indent=0]
 ----
 
 Use `and()` when you want to keep a single chain and move from assertions back to the fixture:
 
 [source,java]
 ----
-fixture.then()
-       .customerWaitingForMagic()
-       .and()
-       .when()
-       .magicHappens("Merlin");
+include::example$workflows/testingworkflows/TestingWorkflowsExamples.java[tag=and-usage,indent=0]
 ----
 
 == Complete scenario
@@ -482,32 +324,7 @@ This example tests a workflow that starts for VIP registrations, waits for a del
 
 [source,java]
 ----
-@Test
-void vip_registration_completes_after_magic_event() {
-    fixture.given()
-           .publishEvent(new RegistrationReceivedEvent("2", "piggy@muppets.biz", "vip"))
-           .executionExists()
-           .execute("createUser")
-           .executeReturning("activateUser", Map.of())
-           .executeReturning("sendWelcomeEmail", Map.of())
-           .timePasses(Duration.ofSeconds(1))
-           .then()
-           .waitingIn("waitForMagicToHappen");
-
-    fixture.when()
-           .publishEvent(new MagicHappenedEvent("Merlin"));
-
-    fixture.then()
-           .workflowFinished(WorkflowStatus.COMPLETED)
-           .stepsPassed("activateUser", "sendWelcomeEmail", "waitForMagicToHappen", "modifyPayload")
-           .step("activateUser", StepStatus.COMPLETED)
-           .payloadEquals(Map.of(
-                   "magician", "Merlin",
-                   "email", "piggy@muppets.biz",
-                   "status", "vip",
-                   "id", "2"
-           ));
-}
+include::example$workflows/testingworkflows/CompleteScenarioTest.java[tag=complete-scenario,indent=0]
 ----
 
 == More fixture examples
@@ -518,32 +335,14 @@ This workflow waits 5 minutes for a confirmation and handles the timeout in a se
 
 [source,java]
 ----
-var confirmation = ctx.waitForEvent("waitForConfirmation", EventConditions.never(),
-        step -> step.timeout(Duration.ofMinutes(5)));
-confirmation.await();
-if (confirmation.timeout()) {
-    ctx.awaitExecute("handleTimeout", Map.of(), (pc, payload) -> Map.of("handledBy", "workflow"));
-}
+include::example$workflows/testingworkflows/ConfirmationTimeoutWorkflow.java[tag=timeout-workflow-body,indent=0]
 ----
 
 Advance fixture time past the timeout, then release the handling step:
 
 [source,java]
 ----
-fixture.when()
-       .publishEvent(new PaymentRequested("payment-1"))
-       .executionExists()
-       .timePasses(Duration.ofMinutes(5).plusSeconds(1));
-
-fixture.then()
-       .step("waitForConfirmation", StepStatus.TIMED_OUT)
-       .waitingIn("handleTimeout");
-
-fixture.when()
-       .executeReturning("handleTimeout", Map.of("handledBy", "test"));
-
-fixture.then()
-       .workflowFinished(WorkflowStatus.COMPLETED);
+include::example$workflows/testingworkflows/TimeoutFixtureTest.java[tag=timeout-fixture-test,indent=0]
 ----
 
 === A failed step
@@ -552,17 +351,7 @@ When the workflow body does not catch a step failure, the workflow ends `FAILED`
 
 [source,java]
 ----
-fixture.given()
-       .publishEvent(new RegistrationReceivedEvent("2", "piggy@muppets.biz", "vip"))
-       .execute("createUser");
-
-fixture.when()
-       .executeFailing("activateUser", new StepFailedException("activation service down"));
-
-fixture.then()
-       .workflowFinished(WorkflowStatus.FAILED)
-       .step("activateUser", StepStatus.FAILED)
-       .noStep("sendWelcomeEmail");
+include::example$workflows/testingworkflows/FailedStepTest.java[tag=failed-step-test,indent=0]
 ----
 
 === Several workflow instances
@@ -572,13 +361,7 @@ When several instances run, select one with a predicate or a workflow id:
 
 [source,java]
 ----
-fixture.given()
-       .publishEvent(new RegistrationReceivedEvent("2", "piggy@muppets.biz", "vip"))
-       .publishEvent(new RegistrationReceivedEvent("3", "kermit@muppets.biz", "vip"));
-
-fixture.then()
-       .executionExists(execution -> "3".equals(execution.state().payload().get("id")))
-       .waitingIn("createUser");
+include::example$workflows/testingworkflows/MultipleInstancesTest.java[tag=multiple-instances-test,indent=0]
 ----
 
 After an instance finishes, select its history with `historyExists(workflowId)`.
@@ -615,29 +398,14 @@ In stepping mode, use the driver directly when you want fixture behavior without
 
 [source,java]
 ----
-WorkflowModule<SimpleWorkflowContext> module = WorkflowModule
-        .defaults("TestModule", SimpleWorkflowContext.class)
-        .contextFactory(c -> new SimpleWorkflowContextFactory())
-        .definition(d -> d.autodetected(c -> new UserSignupWorkflow()));
-
-WorkflowTestDriver driver = WorkflowTestDriver.stepper(module, false, UnaryOperator.identity());
-
-try {
-    driver.publishEvent(new RegistrationReceivedEvent("2", "piggy@muppets.biz", "vip"));
-    driver.executionExists();
-    driver.testingState().waitingIn("createUser");
-    driver.executeStep("createUser");
-    driver.testingState().waitingIn("activateUser");
-} finally {
-    driver.shutdown();
-}
+include::example$workflows/testingworkflows/WorkflowTestDriverExamples.java[tag=driver-stepper-example,indent=0]
 ----
 
 In live mode, the same driver can be used for broader tests that do not need manual step release:
 
 [source,java]
 ----
-WorkflowTestDriver driver = WorkflowTestDriver.live(module, UnaryOperator.identity());
+include::example$workflows/testingworkflows/WorkflowTestDriverExamples.java[tag=driver-live-example,indent=0]
 ----
 
 In live mode, use `publishEvent(...)`, `executionExists()`, `historyExists()`, `noExecution()`, `noHistory()`, and `testingState()` for assertions over normally running workflows.
@@ -657,9 +425,7 @@ Register it yourself only when you build a custom test configuration and still w
 
 [source,java]
 ----
-WorkflowConfigurer configurer = WorkflowConfigurer.create()
-        .componentRegistry(registry -> new WorkflowTestSteppingModeEnhancer().enhance(registry))
-        .registerWorkflowModule(module);
+include::example$workflows/testingworkflows/WorkflowTestDriverExamples.java[tag=stepping-enhancer-example,indent=0]
 ----
 
 == When to use live-mode integration tests

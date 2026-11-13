@@ -3,6 +3,53 @@
 
 Any patch release made for an Axon project is tailored towards resolving bugs. This page aims to provide a dedicated overview of patch releases for Axoniq Framework features.
 
+[#release_5_4]
+== Release 5.4
+
+=== Release 5.4.1
+
+==== Features
+
+* Expand replay support for `DeadLetteringEventHandlingComponent` (https://github.com/AxonIQ/axoniq-framework/issues/515[#515], https://github.com/AxonIQ/axoniq-framework/pull/649[PR #649], by @smcvb)
+* Allow customizing persistent stream ids per tenant (https://github.com/AxonIQ/axoniq-framework/pull/694[PR #694], by @hatzlj)
+
+==== Enhancements
+
+* Name aggregate deadline commands after the aggregate type and deadline name (https://github.com/AxonIQ/axoniq-framework/issues/657[#657], https://github.com/AxonIQ/axoniq-framework/pull/659[PR #659], by @hatzlj)
+* Deadline review follow-ups: delivery tests, Quartz job failures and small fixes (https://github.com/AxonIQ/axoniq-framework/pull/645[PR #645], by @hatzlj)
+* Legacy deadline follow-ups and cleanup (https://github.com/AxonIQ/axoniq-framework/pull/679[PR #679], by @hatzlj)
+* Clean-up copyright header (https://github.com/AxonIQ/axoniq-framework/pull/681[PR #681], by @smcvb)
+* Allow to use an axoniq-license provided via the `AXONIQ_LICENSE` env for the shared Axon Server testcontainer (https://github.com/AxonIQ/axoniq-framework/pull/654[PR #654], by @hatzlj)
+* Rename secret from `AXON_SERVER_LICENSE` to `AXONIQ_LICENSE` (https://github.com/AxonIQ/axoniq-framework/pull/647[PR #647], by @smcvb)
+* Start the persistent stream IT's streams at the tail (https://github.com/AxonIQ/axoniq-framework/pull/696[PR #696], by @hatzlj)
+
+==== Bug fixes
+
+* Read Void-typed empty command results from Axon Server as null (https://github.com/AxonIQ/axoniq-framework/pull/637[PR #637], https://github.com/AxonIQ/axoniq-framework/pull/641[PR #641], by @MateuszNaKodach)
+* Read empty query results from Axon Server as null (https://github.com/AxonIQ/axoniq-framework/pull/648[PR #648], by @hatzlj)
+* Disable the single-round-trip snapshotted-source RPC by default (https://github.com/AxonIQ/axoniq-framework/pull/678[PR #678], by @hjohn)
+* Ensure `FlowControlledResponseSender` invokes `hasNextAvailable` once, preventing a lost query response when the handler result arrives mid-check (https://github.com/AxonIQ/axoniq-framework/issues/666[#666], https://github.com/AxonIQ/axoniq-framework/pull/685[PR #685], by @smcvb)
+* Fix lost responses and double completion in the Spring Cloud query drains (https://github.com/AxonIQ/axoniq-framework/pull/686[PR #686], by @MateuszNaKodach)
+* Tracing Micrometer: preserve spans across WebFlux context switches (https://github.com/AxonIQ/axoniq-framework/pull/688[PR #688], by @MateuszNaKodach)
+
+==== Documentation
+
+* Replace page aliases for the deadlines guide with a redirect in the library-site (https://github.com/AxonIQ/axoniq-framework/pull/684[PR #684], by @hatzlj)
+
+==== Dependency upgrades
+
+* Upgrade Axon Server Connector for Java to 2026.1.1 (https://github.com/AxonIQ/axoniq-framework/pull/690[PR #690], by @smcvb)
+* Upgrade Axon Framework to 5.4.1 (https://github.com/AxonIQ/axoniq-framework/pull/692[PR #692], by @smcvb)
+
+==== Contributors
+
+A heartfelt thank you to all contributors who worked on this section:
+
+* https://github.com/hatzlj[@hatzlj]
+* https://github.com/hjohn[@hjohn]
+* https://github.com/MateuszNaKodach[@MateuszNaKodach]
+* https://github.com/smcvb[@smcvb]
+
 [#release_5_3]
 == Release 5.3
 

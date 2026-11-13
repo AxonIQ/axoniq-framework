@@ -1,24 +1,14 @@
 /*
- * Copyright (c) 2010-2026. AxonIQ B.V.
+ * Copyright (c) 2010-2026. Axoniq B.V.
  *
- * Licensed under the AXONIQ TERMS OF SERVICE,
- * Version 29 April 2026 (the "License");
- *
- * The software is available for evaluation use without registration.
- * Continued use beyond the evaluation period requires registration
- * and a commercial license. See the License for the specific language
- * governing permissions and limitations under the License.
- * You may not use this file except in compliance with the License.
- *
- * You may obtain a copy of the License at:
- *  https://www.axoniq.io/legal/terms-of-service
- *
- * For licensing information and to register, visit:
- *  https://www.axoniq.io/pricing
+ * Licensed under the Axoniq Terms of Service (the "Terms"). You may not
+ * use this file except in compliance with the Terms, available at
+ * https://www.axoniq.io/legal/terms-of-service
  */
 
 package io.axoniq.framework.axonserver.connector.configuration;
 
+import io.axoniq.axonserver.connector.control.ControlChannel;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
 import io.axoniq.framework.axonserver.connector.command.AxonServerCommandBusConnector;
@@ -241,6 +231,42 @@ class AxonServerConfigurationEnhancerTest {
         await().pollDelay(Duration.ofMillis(50))
                .atMost(Duration.ofMillis(500))
                .untilAsserted(() -> verify(connectionManager, atLeastOnce()).getConnection());
+    }
+
+    @Test
+    void everyRegisteredTopologyChangeListenerIsRegisteredWithTheControlChannel() {
+        // given
+        AxonServerConnectionManager connectionManager = mock(AxonServerConnectionManager.class, RETURNS_DEEP_STUBS);
+        ControlChannel controlChannel = connectionManager.getConnection().controlChannel();
+        TopologyChangeListener listenerOne = mock(TopologyChangeListener.class);
+        TopologyChangeListener listenerTwo = mock(TopologyChangeListener.class);
+        AxonConfiguration result =
+                EventSourcingConfigurer.create()
+                                       .componentRegistry(ComponentRegistry::disableEnhancerScanning)
+                                       .componentRegistry(cr -> testSubject.enhance(cr))
+                                       .lifecycleRegistry(registry -> registry.registerLifecyclePhaseTimeout(
+                                               25, TimeUnit.MILLISECONDS
+                                       ))
+                                       .componentRegistry(registry -> registry.registerDecorator(
+                                               AxonServerConnectionManager.class,
+                                               Integer.MIN_VALUE,
+                                               (config, name, delegate) -> connectionManager
+                                       ))
+                                       .componentRegistry(registry -> registry
+                                               .registerComponent(TopologyChangeListener.class, "listenerOne",
+                                                                  c -> listenerOne)
+                                               .registerComponent(TopologyChangeListener.class, "listenerTwo",
+                                                                  c -> listenerTwo))
+                                       .build();
+
+        // when
+        result.start();
+
+        // then
+        await().atMost(Duration.ofMillis(500)).untilAsserted(() -> {
+            verify(controlChannel).registerTopologyChangeHandler(listenerOne);
+            verify(controlChannel).registerTopologyChangeHandler(listenerTwo);
+        });
     }
 
     @Nested

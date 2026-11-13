@@ -1,20 +1,9 @@
 /*
- * Copyright (c) 2010-2026. AxonIQ B.V.
+ * Copyright (c) 2010-2026. Axoniq B.V.
  *
- * Licensed under the AXONIQ TERMS OF SERVICE,
- * Version 29 April 2026 (the "License");
- *
- * The software is available for evaluation use without registration.
- * Continued use beyond the evaluation period requires registration
- * and a commercial license. See the License for the specific language
- * governing permissions and limitations under the License.
- * You may not use this file except in compliance with the License.
- *
- * You may obtain a copy of the License at:
- *  https://www.axoniq.io/legal/terms-of-service
- *
- * For licensing information and to register, visit:
- *  https://www.axoniq.io/pricing
+ * Licensed under the Axoniq Terms of Service (the "Terms"). You may not
+ * use this file except in compliance with the Terms, available at
+ * https://www.axoniq.io/legal/terms-of-service
  */
 
 package io.axoniq.framework.testcontainer;
@@ -83,6 +72,39 @@ class AxonServerContainerTest {
             assertThat(testSubject.getEnvMap().get("AXONIQ_AXONSERVER_HOSTNAME")).isEqualTo(testHostName);
             assertThat(testSubject.getEnvMap().get("AXONIQ_AXONSERVER_DEVMODE_ENABLED")).isEqualTo(Boolean.toString(
                     testDevMode));
+        }
+    }
+
+    @Nested
+    class License {
+
+        @Test
+        void configurePrefersLicenseContentOverLicensePath() {
+            try (
+                    AxonServerContainer testSubject = new AxonServerContainer()
+                            .withLicense("axon-server-test.license")
+                            .withLicenseContent("license-content")
+            ) {
+                // when
+                testSubject.configure();
+
+                // then
+                // The license path points to a resource that isn't on this test classpath, so falling back to it
+                // would already fail configure(); the absent file mapping confirms it was not used.
+                assertThat(testSubject.getCopyToFileContainerPathMap())
+                        .doesNotContainValue("/axonserver/config/axoniq.license");
+            }
+        }
+
+        @Test
+        void toStringDoesNotExposeLicenseContent() {
+            try (AxonServerContainer testSubject = new AxonServerContainer().withLicenseContent("secret-license")) {
+                // when
+                String result = testSubject.toString();
+
+                // then
+                assertThat(result).doesNotContain("secret-license");
+            }
         }
     }
 }

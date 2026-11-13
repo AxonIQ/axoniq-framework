@@ -1,37 +1,26 @@
 /*
- * Copyright (c) 2010-2026. AxonIQ B.V.
+ * Copyright (c) 2010-2026. Axoniq B.V.
  *
- * Licensed under the AXONIQ TERMS OF SERVICE,
- * Version 29 April 2026 (the "License");
- *
- * The software is available for evaluation use without registration.
- * Continued use beyond the evaluation period requires registration
- * and a commercial license. See the License for the specific language
- * governing permissions and limitations under the License.
- * You may not use this file except in compliance with the License.
- *
- * You may obtain a copy of the License at:
- *  https://www.axoniq.io/legal/terms-of-service
- *
- * For licensing information and to register, visit:
- *  https://www.axoniq.io/pricing
+ * Licensed under the Axoniq Terms of Service (the "Terms"). You may not
+ * use this file except in compliance with the Terms, available at
+ * https://www.axoniq.io/legal/terms-of-service
  */
 
 package io.axoniq.framework.messaging.eventhandling.deadletter;
 
-import org.axonframework.common.AxonConfigurationException;
-import org.axonframework.common.configuration.ConfigurationExtension;
-import org.axonframework.common.infra.ComponentDescriptor;
 import io.axoniq.framework.messaging.deadletter.Decisions;
 import io.axoniq.framework.messaging.deadletter.EnqueuePolicy;
 import io.axoniq.framework.messaging.deadletter.InMemorySequencedDeadLetterQueue;
 import io.axoniq.framework.messaging.deadletter.SequencedDeadLetterQueue;
+import org.axonframework.common.AxonConfigurationException;
+import org.axonframework.common.configuration.ConfigurationExtension;
+import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.processing.streaming.pooled.PooledStreamingEventProcessorConfiguration;
 
+import static io.axoniq.framework.messaging.deadletter.ThrowableCause.truncated;
 import static org.axonframework.common.BuilderUtils.assertNonNull;
 import static org.axonframework.common.BuilderUtils.assertPositive;
-import static io.axoniq.framework.messaging.deadletter.ThrowableCause.truncated;
 
 /**
  * Configuration class holding all settings related to Dead Letter Queue (DLQ) functionality.
@@ -147,11 +136,13 @@ public class DeadLetterQueueConfiguration
     /**
      * Sets whether to clear the dead-letter queue when the processor is reset.
      * <p>
-     * When {@code true} (the default), the dead-letter queue will be cleared when a processor
-     * reset is triggered. This ensures that dead-lettered events from before the reset are not
-     * processed again.
+     * When {@code true} (the default), the dead-letter queue will be cleared when a processor reset is triggered. This
+     * ensures that dead-lettered events from before the reset are not processed again.
      * <p>
-     * Set to {@code false} if you want to preserve dead-lettered events across resets.
+     * Set to {@code false} if you want to preserve dead-lettered events across resets. Replayed events of a sequence
+     * that still holds dead letters are then delivered, skipped, or enqueued in position order, as described on the
+     * {@link DeadLetteringEventHandlingComponent}. Note that resolving dead letters <b>before</b> a replay is typically
+     * recommended.
      *
      * @param clearOnReset Whether to clear the DLQ on reset.
      * @return This configuration instance for fluent chaining.

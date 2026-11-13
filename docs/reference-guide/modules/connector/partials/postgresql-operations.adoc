@@ -48,11 +48,25 @@ CREATE INDEX IF NOT EXISTS tags_global_index_idx
 
 CREATE UNIQUE INDEX IF NOT EXISTS tags_type_unique
   ON tags (global_index) WHERE key = '__T';
+
+CREATE TABLE IF NOT EXISTS snapshots (
+  qualified_name VARCHAR     NOT NULL,
+  identifier     VARCHAR     NOT NULL,
+  position_type  VARCHAR     NOT NULL,
+  position_value INT8        NOT NULL,
+  version        VARCHAR     NOT NULL,
+  payload        BYTEA       NOT NULL,
+  timestamp      TIMESTAMPTZ NOT NULL,
+  metadata       JSON        NOT NULL,
+  PRIMARY KEY (qualified_name, identifier, version)
+);
 ----
 
 The `events` table is the main event log; `payload` holds the serialized event as bytes, `metadata` is stored as JSON, and `type`/`type_version` together form the event's message type.
 The `tags` table associates DCB tags with events.
 The `consistency_tags` table is a bounded conflict-detection structure used when appending events with consistency requirements; it does not grow with event volume.
+The `snapshots` table holds entity snapshots.
+It is part of the schema even when your application does not use snapshots.
 
 [NOTE]
 .Table and sequence names are fixed
@@ -65,8 +79,12 @@ All tables and sequences use the fixed names shown above.
 
 The engine's schema handling is controlled by a `SchemaInitialization` value, passed as an optional constructor argument (or, in Spring Boot, through the `axon.postgresql.schema-initialization` property):
 
-* `CREATE_IF_MISSING` (the default)—creates or repairs any missing tables, indices, or migrations.
-* `VALIDATE`—checks that the schema is complete and fails startup with an exception if it is not, without creating or changing anything.
+* `CREATE_IF_MISSING` (the default)—creates any missing tables, indices, or migrations.
+It does not replace existing objects: if an existing object has an incompatible definition, startup fails with an exception naming it, and it must be corrected manually.
+* `VALIDATE`—checks that the schema is complete and fails startup with an exception naming the missing or incompatible objects, without creating or changing anything.
+The check reads only the system catalogs, so it needs no privileges on the event store's tables.
+Besides existence, it verifies the definitions of the type tag triggers (row-level, correct timing, enabled for ordinary writes, calling the expected function) and of the `tags_type_unique` index (unique, valid, on the expected column and predicate).
+It does not compare the bodies of the trigger functions.
 * `SKIP`—skips the check entirely, trusting that the schema is already complete and correct. This option is not recommended: see the warning below.
 
 [source,java]

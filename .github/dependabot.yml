@@ -77,6 +77,10 @@ updates:
         versions: [ "[5.0.0,)" ]
       - dependency-name: "org.jobrunr:jobrunr"
         versions: [ "[9.0.0,)" ]
+      - dependency-name: "org.quartz-scheduler:quartz"
+        versions: [ "[3.0.0,)" ]
+      - dependency-name: "com.github.kagkarlsson:db-scheduler"
+        versions: [ "[17.0.0,)" ]
 
   - package-ecosystem: npm
     directory: "/docs/_playbook"
@@ -94,3 +98,8 @@ updates:
           - "patch"
           - "minor"
           - "major"
+    ignore:
+      # asciidoctor-kroki 1.x and 2.x require Asciidoctor.js 4 (and 2.x requires Node 22+), but Antora 3.x
+      # bundles Asciidoctor.js 2.2. Stay on the 0.x line until Antora ships on Asciidoctor.js 4.
+      - dependency-name: "asciidoctor-kroki"
+        versions: [">=1.0.0"]

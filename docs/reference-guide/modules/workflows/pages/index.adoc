@@ -30,6 +30,18 @@ than the full runtime-operation surface.
 New to the engine? Start with the xref:axon-workflow-getting-started::index.adoc[Getting Started tutorial] first.
 ====
 
+== Example code
+
+The Java and Kotlin examples in this guide are available in the
+https://github.com/AxonIQ/axoniq-framework/tree/main/docs/reference-guide/modules/workflows/examples[workflow examples directory].
+They are compiled documentation samples, with supporting types for each topic.
+To compile them from the repository root with Java 21, run:
+
+[source,shell]
+----
+./mvnw -pl docs/_samples -am compile
+----
+
 == Steps
 
 * *xref:execute-steps.adoc[Execute Steps]*: Run actions synchronously (`awaitExecute`) or asynchronously (`execute`)

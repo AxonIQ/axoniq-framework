@@ -1,20 +1,9 @@
 /*
- * Copyright (c) 2010-2026. AxonIQ B.V.
+ * Copyright (c) 2010-2026. Axoniq B.V.
  *
- * Licensed under the AXONIQ TERMS OF SERVICE,
- * Version 29 April 2026 (the "License");
- *
- * The software is available for evaluation use without registration.
- * Continued use beyond the evaluation period requires registration
- * and a commercial license. See the License for the specific language
- * governing permissions and limitations under the License.
- * You may not use this file except in compliance with the License.
- *
- * You may obtain a copy of the License at:
- *  https://www.axoniq.io/legal/terms-of-service
- *
- * For licensing information and to register, visit:
- *  https://www.axoniq.io/pricing
+ * Licensed under the Axoniq Terms of Service (the "Terms"). You may not
+ * use this file except in compliance with the Terms, available at
+ * https://www.axoniq.io/legal/terms-of-service
  */
 
 package io.axoniq.framework.messaging.multitenancy.axonserver.api;
@@ -43,6 +32,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 import java.util.function.Predicate;
 
 import static io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration.ADMIN_CONTEXT;
@@ -202,6 +192,18 @@ public class AxonServerTenantProvider implements TenantProvider {
      * Adds the given {@code tenantDescriptor} as a known tenant, registering and starting every subscribed
      * {@link MultiTenantAwareComponent} for it. A tenant that is already known is ignored, so its components are never
      * registered twice.
+     * <p>
+     * Adding a tenant is all or nothing. When a component fails to register the tenant, the registrations made by the
+     * components before it are cancelled in reverse order and the failure is rethrown as is.
+     * The tenant becomes known, through {@link #isKnown(TenantDescriptor)} and {@link #tenants()}, when its
+     * registration starts, so components that are already live can route its messages. It is withdrawn again if a
+     * component fails.
+     * <p>
+     * What a rollback cannot undo is described on {@link MultiTenantAwareComponent}.
+     * <p>
+     * When a registration throws an exception during a runtime context update, it is logged and the tenant stays
+     * unknown (an {@link Error} propagates). The tenant is not retried, since Axon Server sends the creation update
+     * of a context only once. At {@link #start()}, a failing initial tenant fails the start.
      *
      * @param tenantDescriptor the {@link TenantDescriptor} representing the tenant to be added
      */
@@ -210,10 +212,22 @@ public class AxonServerTenantProvider implements TenantProvider {
         if (closed || !tenantDescriptors.add(tenantDescriptor)) {
             return;
         }
+        // Known before the components register it, so a component that is already live can route its messages.
         refreshTenantsView();
-        tenantAwareComponents.forEach(component -> registrations.add(new TenantRegistration(
-                tenantDescriptor, component, component.registerAndStartTenant(tenantDescriptor)
-        )));
+        List<TenantRegistration> registrationAttempt = new ArrayList<>();
+        try {
+            for (MultiTenantAwareComponent component : tenantAwareComponents) {
+                registrationAttempt.add(new TenantRegistration(
+                        tenantDescriptor, component, component.registerAndStartTenant(tenantDescriptor)
+                ));
+            }
+        } catch (Throwable failure) {
+            rollBack(registrationAttempt, failure);
+            tenantDescriptors.remove(tenantDescriptor);
+            refreshTenantsView();
+            throw failure;
+        }
+        storeRegistrationsOfKnownTenants(registrationAttempt);
     }
 
     /**
@@ -247,12 +261,30 @@ public class AxonServerTenantProvider implements TenantProvider {
         return true;
     }
 
+    /**
+     * {@inheritDoc}
+     * <p>
+     * Subscribing is all or nothing. When the component fails to register one of the known tenants, the registrations
+     * already made for it are cancelled in reverse order, the failure is rethrown as is, and the component is not
+     * subscribed. Registrations of an earlier, successful subscription of the same component are left untouched.
+     * <p>
+     * What a rollback cannot undo is described on {@link MultiTenantAwareComponent}.
+     */
     @Override
     public synchronized Registration subscribe(MultiTenantAwareComponent component) {
+        List<TenantRegistration> registrationAttempt = new ArrayList<>();
+        try {
+            for (TenantDescriptor tenantDescriptor : tenantDescriptors) {
+                registrationAttempt.add(new TenantRegistration(
+                        tenantDescriptor, component, component.registerTenant(tenantDescriptor)
+                ));
+            }
+        } catch (Throwable failure) {
+            rollBack(registrationAttempt, failure);
+            throw failure;
+        }
         tenantAwareComponents.add(component);
-        tenantDescriptors.forEach(tenantDescriptor -> registrations.add(new TenantRegistration(
-                tenantDescriptor, component, component.registerTenant(tenantDescriptor)
-        )));
+        storeRegistrationsOfKnownTenants(registrationAttempt);
 
         // Cancelling covers every registration made on the component's behalf, including tenants added after
         // subscribing, as the TenantProvider#subscribe contract requires.
@@ -274,10 +306,55 @@ public class AxonServerTenantProvider implements TenantProvider {
             try {
                 tenantRegistration.registration().cancel();
             } catch (Exception e) {
-                logger.warn("Error while cancelling the tenant [{}] registration of component [{}].",
-                            tenantRegistration.tenant().tenantId(), tenantRegistration.component(), e);
+                logCancelFailure(tenantRegistration, e);
             }
         }
+    }
+
+    private void rollBack(List<TenantRegistration> registrationAttempt, Throwable failure) {
+        cancelAttempt(registrationAttempt, exception -> {
+            // A cancel may throw the very object that is the failure, which cannot be suppressed by itself.
+            if (exception != failure) {
+                failure.addSuppressed(exception);
+            }
+        });
+    }
+
+    /**
+     * Stores the registrations of tenants that are still known and cancels the others: a component may remove a tenant
+     * while it registers it, and that removal cannot see this attempt.
+     */
+    private void storeRegistrationsOfKnownTenants(List<TenantRegistration> registrationAttempt) {
+        List<TenantRegistration> removed = new ArrayList<>();
+        for (TenantRegistration tenantRegistration : registrationAttempt) {
+            if (tenantDescriptors.contains(tenantRegistration.tenant())) {
+                registrations.add(tenantRegistration);
+            } else {
+                removed.add(tenantRegistration);
+            }
+        }
+        cancelAttempt(removed);
+    }
+
+    private void cancelAttempt(List<TenantRegistration> registrationAttempt) {
+        cancelAttempt(registrationAttempt, ignored -> {
+        });
+    }
+
+    private void cancelAttempt(List<TenantRegistration> registrationAttempt, Consumer<Throwable> onCancelFailure) {
+        for (TenantRegistration tenantRegistration : registrationAttempt.reversed()) {
+            try {
+                tenantRegistration.registration().cancel();
+            } catch (Throwable exception) {
+                logCancelFailure(tenantRegistration, exception);
+                onCancelFailure.accept(exception);
+            }
+        }
+    }
+
+    private static void logCancelFailure(TenantRegistration tenantRegistration, Throwable exception) {
+        logger.warn("Error while cancelling the tenant [{}] registration of component [{}].",
+                    tenantRegistration.tenant().tenantId(), tenantRegistration.component(), exception);
     }
 
     /**

@@ -1,20 +1,9 @@
 /*
- * Copyright (c) 2010-2026. AxonIQ B.V.
+ * Copyright (c) 2010-2026. Axoniq B.V.
  *
- * Licensed under the AXONIQ TERMS OF SERVICE,
- * Version 29 April 2026 (the "License");
- *
- * The software is available for evaluation use without registration.
- * Continued use beyond the evaluation period requires registration
- * and a commercial license. See the License for the specific language
- * governing permissions and limitations under the License.
- * You may not use this file except in compliance with the License.
- *
- * You may obtain a copy of the License at:
- *  https://www.axoniq.io/legal/terms-of-service
- *
- * For licensing information and to register, visit:
- *  https://www.axoniq.io/pricing
+ * Licensed under the Axoniq Terms of Service (the "Terms"). You may not
+ * use this file except in compliance with the Terms, available at
+ * https://www.axoniq.io/legal/terms-of-service
  */
 
 package io.axoniq.framework.messaging.eventhandling.deadletter;
@@ -46,12 +35,15 @@ import org.axonframework.messaging.eventhandling.configuration.EventProcessorCon
 import org.axonframework.messaging.eventhandling.processing.streaming.StreamingEventProcessor;
 import org.axonframework.messaging.eventhandling.processing.streaming.pooled.PooledStreamingEventProcessor;
 import org.axonframework.messaging.eventhandling.processing.streaming.pooled.PooledStreamingEventProcessorConfiguration;
+import org.axonframework.messaging.eventhandling.processing.streaming.token.GlobalSequenceTrackingToken;
+import org.axonframework.messaging.eventhandling.processing.streaming.token.ReplayToken;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.store.inmemory.InMemoryTokenStore;
 import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.*;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
@@ -548,6 +540,95 @@ public abstract class AbstractDeadLetteringEventIT {
     }
 
     @Nested
+    class WhenReplaying {
+
+        private static final long TOKEN_AT_RESET = 100;
+
+        @Test
+        void replayedEventsPrecedingTheHeadLetterAreNotAppendedToTheSequence() {
+            // given
+            String aggregateId = UUID.randomUUID().toString();
+            EventMessage head = asEventMessage(new DeadLetterableEvent(aggregateId, FAIL, SUCCEED_RETRY));
+            handleLive(head, 5);
+            EventMessage precedingEvent = asEventMessage(new DeadLetterableEvent(aggregateId, SUCCEED));
+
+            // when
+            handleReplayed(precedingEvent, 3);
+
+            // then
+            assertThat(eventHandler.eventWasHandled(precedingEvent.identifier())).isTrue();
+            assertThat(identifiersInSequence(aggregateId)).containsExactly(head.identifier());
+        }
+
+        @Test
+        void replayedEventAlreadyPresentInTheSequenceIsNotDuplicated() {
+            // given
+            String aggregateId = UUID.randomUUID().toString();
+            EventMessage head = asEventMessage(new DeadLetterableEvent(aggregateId, FAIL, SUCCEED_RETRY));
+            handleLive(head, 5);
+
+            // when
+            handleReplayed(head, 5);
+
+            // then
+            // The head's initial failure counted once; a second handling would register as an evaluation.
+            assertThat(eventHandler.unsuccessfulInitialHandlingCount(aggregateId)).isEqualTo(1);
+            assertThat(eventHandler.evaluationWasSuccessful(aggregateId)).isFalse();
+            assertThat(eventHandler.evaluationWasUnsuccessful(aggregateId)).isFalse();
+            assertThat(identifiersInSequence(aggregateId)).containsExactly(head.identifier());
+        }
+
+        @Test
+        void replayedEventFailingBeforeTheHeadLetterIsEnqueuedInPositionOrder() {
+            // given
+            String aggregateId = UUID.randomUUID().toString();
+            EventMessage head = asEventMessage(new DeadLetterableEvent(aggregateId, FAIL, SUCCEED_RETRY));
+            EventMessage tail = asEventMessage(new DeadLetterableEvent(aggregateId, SUCCEED, SUCCEED_RETRY));
+            handleLive(head, 5);
+            handleLive(tail, 9);
+            EventMessage failingReplayed = asEventMessage(new DeadLetterableEvent(aggregateId, FAIL, FAIL_RETRY));
+
+            // when
+            handleReplayed(failingReplayed, 3);
+
+            // then
+            assertThat(eventHandler.eventWasHandled(failingReplayed.identifier())).isTrue();
+            assertThat(eventHandler.evaluationWasUnsuccessful(aggregateId)).isTrue();
+            assertThat(eventHandler.evaluationWasSuccessful(aggregateId)).isFalse();
+            assertThat(identifiersInSequence(aggregateId))
+                    .containsExactly(failingReplayed.identifier(), head.identifier(), tail.identifier());
+        }
+
+        private void handleLive(EventMessage event, long position) {
+            handle(event, new GlobalSequenceTrackingToken(position));
+        }
+
+        private void handleReplayed(EventMessage event, long position) {
+            TrackingToken replayToken =
+                    ((ReplayToken) ReplayToken.createReplayToken(new GlobalSequenceTrackingToken(TOKEN_AT_RESET)))
+                            .advancedTo(new GlobalSequenceTrackingToken(position));
+            handle(event, replayToken);
+        }
+
+        private void handle(EventMessage event, TrackingToken token) {
+            buildUnitOfWorkFactory().create().executeWithResult(context -> {
+                context.putResource(TrackingToken.RESOURCE_KEY, token);
+                return deadLetteringComponent.handle(event, context)
+                                             .first()
+                                             .asCompletableFuture()
+                                             .thenApply(entry -> (Void) null);
+            }).join();
+        }
+
+        private List<String> identifiersInSequence(String aggregateId) {
+            List<String> identifiers = new ArrayList<>();
+            deadLetterQueue.deadLetterSequence(aggregateId, null).join()
+                           .forEach(letter -> identifiers.add(letter.message().identifier()));
+            return identifiers;
+        }
+    }
+
+    @Nested
     class WhenProcessingConcurrently {
 
         @Test
@@ -838,6 +919,10 @@ public abstract class AbstractDeadLetteringEventIT {
                         "Evaluation failed. Let's dead letter event [" + sequenceId + "].\n" + event.getCauseMessage()
                 )).ignoreEntries();
             }
+        }
+
+        public boolean eventWasHandled(String eventIdentifier) {
+            return handledEvent.contains(eventIdentifier);
         }
 
         public boolean initialHandlingWasSuccessful(String sequenceId) {

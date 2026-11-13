@@ -12,14 +12,7 @@ Here's the simplest possible workflow—a single durable step:
 [source,java]
 .src/main/java/io/axoniq/example/order/OrderFulfillmentWorkflow.java
 ----
-public class OrderFulfillmentWorkflow {
-
-    @Workflow(idProperty = "orderId", startOnEventName = "OrderPlaced")
-    public void execute(SimpleWorkflowContext workflowContext) {
-        workflowContext.awaitExecute("reserveStock", Boolean.class,
-                InventoryService::reserveStock); // <1>
-    }
-}
+include::example$gettingstarted/order/singlestep/OrderFulfillmentWorkflow.java[tag=workflow,indent=0]
 ----
 
 <.> `SimpleWorkflowContext.awaitExecute(stepName, resultType, supplier)` is a convenience for single-value actions.
@@ -34,27 +27,7 @@ Now let's make it more realistic by handling the result and passing payload:
 [source,java]
 .src/main/java/io/axoniq/example/order/OrderFulfillmentWorkflow.java
 ----
-public class OrderFulfillmentWorkflow {
-
-    Logger logger = LoggerFactory.getLogger(OrderFulfillmentWorkflow.class);
-
-    @Workflow(idProperty = "orderId", startOnEventName = "OrderPlaced")
-    public void execute(SimpleWorkflowContext workflowContext) {
-
-        var customerId = workflowContext.workflowPayload().get("customerId");
-        var amount = workflowContext.workflowPayload().get("amount");
-
-        var reservation = workflowContext.awaitExecute("reserveStock",
-                payload("customerId", customerId, "amount", amount).getValues(),
-                (pc, input) -> Map.of("reserved", InventoryService.reserveStock(input))); // <1>
-        if (!Boolean.TRUE.equals(reservation.get("reserved"))) {
-            workflowContext.fail(new RuntimeException("Stock unavailable")); // <2>
-            return;
-        }
-
-        logger.info("Stock reserved for order {}", workflowContext.workflowPayload().get("orderId"));
-    }
-}
+include::example$gettingstarted/order/withpayload/OrderFulfillmentWorkflow.java[tag=workflow,indent=0]
 ----
 
 <.> `awaitExecute` runs the action synchronously and returns the step's payload map.
@@ -122,27 +95,7 @@ Let's extend our workflow to initiate payment after reserving stock:
 [source,java]
 .src/main/java/io/axoniq/example/order/OrderFulfillmentWorkflow.java
 ----
-@Workflow(idProperty = "orderId", startOnEventName = "OrderPlaced")
-public void execute(SimpleWorkflowContext workflowContext) {
-
-    var customerId = workflowContext.workflowPayload().get("customerId");
-    var amount = workflowContext.workflowPayload().get("amount");
-
-    var reservation = workflowContext.awaitExecute("reserveStock",
-            payload("customerId", customerId, "amount", amount).getValues(),
-            (pc, input) -> Map.of("reserved", InventoryService.reserveStock(input)));
-    if (!Boolean.TRUE.equals(reservation.get("reserved"))) {
-        workflowContext.fail(new RuntimeException("Stock unavailable"));
-        return;
-    }
-
-    workflowContext.awaitExecute("initiatePayment",             // <1>
-                     payload("customerId", customerId,
-                             "amount", amount).getValues(),
-                     PaymentService::initiatePayment,
-                     step -> step.timeout(Duration.ofSeconds(30))
-                                 .eventNameCustomizer(baseName("InitiatingPaymentForCustomer")));  // <2>
-}
+include::example$gettingstarted/order/moresteps/OrderFulfillmentWorkflow.java[tag=execute-method,indent=0]
 ----
 
 <.> A second step that initiates payment processing, passing `customerId` and `amount` as input.
@@ -174,35 +127,7 @@ The `awaitEvent` convenience suspends the workflow until a matching external eve
 [source,java]
 .src/main/java/io/axoniq/example/order/OrderFulfillmentWorkflow.java
 ----
-@Workflow(idProperty = "orderId", startOnEventName = "OrderPlaced")
-public void execute(SimpleWorkflowContext workflowContext) {
-
-    var customerId = workflowContext.workflowPayload().get("customerId");
-    var amount = workflowContext.workflowPayload().get("amount");
-
-    var reservation = workflowContext.awaitExecute("reserveStock",
-            payload("customerId", customerId, "amount", amount).getValues(),
-            (pc, input) -> Map.of("reserved", InventoryService.reserveStock(input)));
-    if (!Boolean.TRUE.equals(reservation.get("reserved"))) {
-        workflowContext.fail(new RuntimeException("Stock unavailable"));
-        return;
-    }
-
-    workflowContext.awaitExecute("initiatePayment",
-                     payload("customerId", customerId,
-                             "amount", amount).getValues(),
-                     PaymentService::initiatePayment,
-                     step -> step.timeout(Duration.ofSeconds(30))
-                                 .eventNameCustomizer(baseName("InitiatingPaymentForCustomer")));
-
-    var confirmation = workflowContext.awaitEvent("awaitPayment", // <1>
-            PaymentConfirmed.class,
-            associate(payloadProperty("orderId"),
-                    equalsTo(workflowContext.workflowPayload().get("orderId"))),
-            step -> step.timeout(Duration.ofMinutes(15))); // <2>
-
-    logger.info("Payment confirmed: {}", confirmation);
-}
+include::example$gettingstarted/order/awaitevent/OrderFulfillmentWorkflow.java[tag=execute-method,indent=0]
 ----
 
 <.> `awaitEvent` blocks the workflow until a matching `PaymentConfirmed` event arrives.
@@ -251,19 +176,7 @@ The Kotlin DSL needs the `axoniq-workflow-dsl-kotlin` dependency.
 [source,kotlin]
 .src/main/kotlin/io/axoniq/example/order/OrderFulfillmentWorkflow.kt
 ----
-class OrderFulfillmentWorkflow {
-
-    @Workflow(idProperty = "orderId", startOnEventName = "OrderPlaced")
-    fun Kontext.onExecute() {
-        val reservation = awaitExecute("reserveStock") { _, _ ->
-            mapOf("reserved" to InventoryService.reserveStock())
-        }
-        if (reservation["reserved"] != true) {
-            fail(RuntimeException("Stock unavailable"))
-            return
-        }
-    }
-}
+include::example$gettingstarted/order/kotlin/OrderFulfillmentWorkflow.kt[tag=workflow,indent=0]
 ----
 
 ++++

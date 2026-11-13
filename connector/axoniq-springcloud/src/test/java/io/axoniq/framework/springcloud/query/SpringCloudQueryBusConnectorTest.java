@@ -1,20 +1,9 @@
 /*
- * Copyright (c) 2010-2026. AxonIQ B.V.
+ * Copyright (c) 2010-2026. Axoniq B.V.
  *
- * Licensed under the AXONIQ TERMS OF SERVICE,
- * Version 29 April 2026 (the "License");
- *
- * The software is available for evaluation use without registration.
- * Continued use beyond the evaluation period requires registration
- * and a commercial license. See the License for the specific language
- * governing permissions and limitations under the License.
- * You may not use this file except in compliance with the License.
- *
- * You may obtain a copy of the License at:
- *  https://www.axoniq.io/legal/terms-of-service
- *
- * For licensing information and to register, visit:
- *  https://www.axoniq.io/pricing
+ * Licensed under the Axoniq Terms of Service (the "Terms"). You may not
+ * use this file except in compliance with the Terms, available at
+ * https://www.axoniq.io/legal/terms-of-service
  */
 
 package io.axoniq.framework.springcloud.query;
@@ -58,6 +47,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -606,6 +599,47 @@ class SpringCloudQueryBusConnectorTest {
             // then a subscriber sees one stream of updates however many members produce them
             assertThat(drain(responses)).extracting(QueryResponseMessage::identifier)
                                         .containsExactlyInAnyOrder("update-from-b", "update-from-c");
+        }
+
+        @Test
+        void carriesAnUpdateEmittedWhileTheSubscriptionIsBeingOpened() throws Exception {
+            // given
+            remoteMemberHandlesTheQuery();
+            Member member = remoteMember();
+            int iterations = 20_000;
+            int carried = 0;
+
+            try (ExecutorService emitter = Executors.newSingleThreadExecutor()) {
+                for (int i = 0; i < iterations; i++) {
+                    RecordingRemoteQueryDispatcher subscriptions = new RecordingRemoteQueryDispatcher();
+                    SpringCloudQueryBusConnector connector = new SpringCloudQueryBusConnector(
+                            discovery, invoker, subscriptions, null, entitlementManager
+                    );
+                    CountDownLatch opening = new CountDownLatch(1);
+                    // the member emits as soon as its stream exists, racing this member starting to read from it
+                    subscriptions.whileOpening(opening::countDown);
+                    Future<?> emitting = emitter.submit(() -> {
+                        // spinning rather than parking, so that the update lands while the stream is being read
+                        while (opening.getCount() > 0) {
+                            Thread.onSpinWait();
+                        }
+                        subscriptions.emit(member, response("update-1"));
+                        return null;
+                    });
+
+                    // when
+                    MessageStream<QueryResponseMessage> responses = connector.subscriptionQuery(query(), null, 16);
+                    emitting.get(5, TimeUnit.SECONDS);
+
+                    if (drain(responses).stream().anyMatch(update -> update.identifier().equals("update-1"))) {
+                        carried++;
+                    }
+                    responses.close();
+                }
+            }
+
+            // then
+            assertThat(carried).isEqualTo(iterations);
         }
 
         @Test

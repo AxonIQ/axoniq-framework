@@ -1,27 +1,18 @@
 /*
- * Copyright (c) 2010-2026. AxonIQ B.V.
+ * Copyright (c) 2010-2026. Axoniq B.V.
  *
- * Licensed under the AXONIQ TERMS OF SERVICE,
- * Version 29 April 2026 (the "License");
- *
- * The software is available for evaluation use without registration.
- * Continued use beyond the evaluation period requires registration
- * and a commercial license. See the License for the specific language
- * governing permissions and limitations under the License.
- * You may not use this file except in compliance with the License.
- *
- * You may obtain a copy of the License at:
- *  https://www.axoniq.io/legal/terms-of-service
- *
- * For licensing information and to register, visit:
- *  https://www.axoniq.io/pricing
+ * Licensed under the Axoniq Terms of Service (the "Terms"). You may not
+ * use this file except in compliance with the Terms, available at
+ * https://www.axoniq.io/legal/terms-of-service
  */
 
 package io.axoniq.framework.integrationtests.tracing;
 
 import io.axoniq.framework.axonserver.connector.configuration.AxonServerConfigurationEnhancer;
 import io.micrometer.context.ContextRegistry;
+import io.micrometer.observation.contextpropagation.ObservationThreadLocalAccessor;
 import io.micrometer.tracing.Tracer;
+import io.micrometer.tracing.contextpropagation.ObservationAwareSpanThreadLocalAccessor;
 import io.opentelemetry.sdk.testing.exporter.InMemorySpanExporter;
 import io.opentelemetry.sdk.trace.data.SpanData;
 import org.axonframework.common.configuration.AxonConfiguration;
@@ -109,6 +100,10 @@ class ReactorContextPropagationTracingIT {
                    assertThat(projection.currentSpanInOperator.get()).isEqualTo(methodSpan.getSpanId());
                });
 
+        // and propagation carries the raw Micrometer span, without requiring an Observation carrier
+        assertThat(projection.observationCarrierPresent.get()).isFalse();
+        assertThat(projection.rawSpanCarrierPresent.get()).isTrue();
+
         // and a span created inside the operator on that thread parents under the handler's method span
         await().atMost(Duration.ofSeconds(10))
                .untilAsserted(() -> {
@@ -161,6 +156,8 @@ class ReactorContextPropagationTracingIT {
         private final Tracer tracer;
         private final AtomicReference<@Nullable String> operatorThread = new AtomicReference<>();
         private final AtomicReference<@Nullable String> currentSpanInOperator = new AtomicReference<>();
+        private final AtomicReference<@Nullable Boolean> observationCarrierPresent = new AtomicReference<>();
+        private final AtomicReference<@Nullable Boolean> rawSpanCarrierPresent = new AtomicReference<>();
 
         ReactiveProjection(Tracer tracer) {
             this.tracer = tracer;
@@ -168,7 +165,11 @@ class ReactorContextPropagationTracingIT {
 
         @EventHandler
         public Flux<String> on(String event) {
-            return Flux.just(event, event + "-follow-up")
+            return Flux.deferContextual(context -> {
+                        observationCarrierPresent.set(context.hasKey(ObservationThreadLocalAccessor.KEY));
+                        rawSpanCarrierPresent.set(context.hasKey(ObservationAwareSpanThreadLocalAccessor.KEY));
+                        return Flux.just(event, event + "-follow-up");
+                    })
                        .publishOn(Schedulers.boundedElastic())
                        .map(value -> {
                            if (operatorThread.get() == null) {

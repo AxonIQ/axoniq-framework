@@ -1,20 +1,9 @@
 /*
- * Copyright (c) 2010-2026. AxonIQ B.V.
+ * Copyright (c) 2010-2026. Axoniq B.V.
  *
- * Licensed under the AXONIQ TERMS OF SERVICE,
- * Version 29 April 2026 (the "License");
- *
- * The software is available for evaluation use without registration.
- * Continued use beyond the evaluation period requires registration
- * and a commercial license. See the License for the specific language
- * governing permissions and limitations under the License.
- * You may not use this file except in compliance with the License.
- *
- * You may obtain a copy of the License at:
- *  https://www.axoniq.io/legal/terms-of-service
- *
- * For licensing information and to register, visit:
- *  https://www.axoniq.io/pricing
+ * Licensed under the Axoniq Terms of Service (the "Terms"). You may not
+ * use this file except in compliance with the Terms, available at
+ * https://www.axoniq.io/legal/terms-of-service
  */
 
 package org.axonframework.integrationtests.deadline;
@@ -39,12 +28,12 @@ import org.axonframework.integrationtests.deadline.DeadlineTestEntity.ReadOccurr
 import org.axonframework.integrationtests.deadline.DeadlineTestEntity.ScheduleDeadline;
 import org.axonframework.integrationtests.deadline.DeadlineTestEntity.ScheduleDeadlineThenFail;
 import org.axonframework.integrationtests.deadline.DeadlineTestEntity.ScheduleDeadlineThroughCollaboratorThenFail;
-import org.axonframework.messaging.commandhandling.CommandMessage;
-import org.axonframework.messaging.commandhandling.gateway.CommandGateway;
 import org.axonframework.messaging.ContextAwareScope;
 import org.axonframework.messaging.ScopeAware;
 import org.axonframework.messaging.ScopeAwareProvider;
 import org.axonframework.messaging.ScopeDescriptor;
+import org.axonframework.messaging.commandhandling.CommandMessage;
+import org.axonframework.messaging.commandhandling.gateway.CommandGateway;
 import org.axonframework.messaging.core.GenericMessage;
 import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.MessageHandlerInterceptorChain;
@@ -60,6 +49,7 @@ import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.*;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -67,13 +57,13 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatNoException;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.*;
 import static org.assertj.core.api.Assumptions.assumeThat;
 import static org.awaitility.Awaitility.await;
 import static org.axonframework.integrationtests.deadline.DeadlineTestEntity.PAYLOADLESS_DEADLINE_NAME;
@@ -112,6 +102,24 @@ public abstract class AbstractDeadlineManagerTestSuite {
      * @return {@code true} if the manager cancels deadlines by name and by scope, {@code false} otherwise
      */
     protected boolean supportsCancellingByNameAndScope() {
+        return true;
+    }
+
+    /**
+     * Whether the manager under test fires a deadline with the identifier of the message it was scheduled with.
+     *
+     * @return {@code true} if a fired deadline keeps its identifier, {@code false} otherwise
+     */
+    protected boolean keepsTheIdentifierOfTheScheduledMessage() {
+        return true;
+    }
+
+    /**
+     * Whether the manager under test fires a deadline with the trigger time as timestamp.
+     *
+     * @return {@code true} if a fired deadline keeps its trigger time, {@code false} otherwise
+     */
+    protected boolean keepsTheTimestampOfTheScheduledMessage() {
         return true;
     }
 
@@ -211,6 +219,64 @@ public abstract class AbstractDeadlineManagerTestSuite {
             // then
             assertThat(awaitSingleDelivery().message().metadata()).containsAllEntriesOf(correlationData);
         }
+
+        @Test
+        void aDeadlineScheduledInThePastFiresRightAway() {
+            // when
+            deadlineManager.schedule(Instant.now().minusSeconds(10), DEADLINE_NAME, "payload", SAGA_SCOPE);
+
+            // then
+            assertThat(awaitSingleDelivery().message().payload()).isEqualTo("payload");
+        }
+
+        @Test
+        void aFiredDeadlineKeepsItsIdentifier() {
+            assumeThat(keepsTheIdentifierOfTheScheduledMessage()).isTrue();
+            // given
+            Message message = new GenericMessage(new MessageType(String.class), "payload");
+            Instant triggerTime = Instant.now().plus(TRIGGER_DURATION);
+
+            // when
+            deadlineManager.schedule(triggerTime, DEADLINE_NAME, message, SAGA_SCOPE);
+
+            // then
+            DeadlineMessage firedDeadline = awaitSingleDelivery().message();
+            assertThat(firedDeadline.identifier()).isEqualTo(message.identifier());
+        }
+
+        @Test
+        void aFiredDeadlineKeepsItsTriggerTimestamp() {
+            assumeThat(keepsTheTimestampOfTheScheduledMessage()).isTrue();
+            // given
+            Message message = new GenericMessage(new MessageType(String.class), "payload");
+            Instant triggerTime = Instant.now().plus(TRIGGER_DURATION);
+
+            // when
+            deadlineManager.schedule(triggerTime, DEADLINE_NAME, message, SAGA_SCOPE);
+
+            // then
+            DeadlineMessage firedDeadline = awaitSingleDelivery().message();
+            assertThat(firedDeadline.timestamp()).isEqualTo(triggerTime);
+        }
+
+        /**
+         * The scheduled delay is rounded down to whole milliseconds, so the deadline can fire, and be stamped, just
+         * before its trigger time.
+         */
+        @Test
+        void aFiredDeadlineCarriesTheMomentItFired() {
+            assumeThat(keepsTheTimestampOfTheScheduledMessage()).isFalse();
+            // given
+            Message message = new GenericMessage(new MessageType(String.class), "payload");
+            Instant scheduledAt = Instant.now();
+
+            // when
+            deadlineManager.schedule(scheduledAt.plus(TRIGGER_DURATION), DEADLINE_NAME, message, SAGA_SCOPE);
+
+            // then
+            DeadlineMessage firedDeadline = awaitSingleDelivery().message();
+            assertThat(firedDeadline.timestamp()).isBetween(scheduledAt, Instant.now());
+        }
     }
 
     @Nested
@@ -225,6 +291,17 @@ public abstract class AbstractDeadlineManagerTestSuite {
             deadlineManager.cancelSchedule(DEADLINE_NAME, scheduleId);
 
             // then
+            assertNothingFires();
+        }
+
+        @Test
+        void cancellingACancelledScheduleAgainHasNoEffect() {
+            // given
+            String scheduleId = deadlineManager.schedule(TRIGGER_DURATION, DEADLINE_NAME, "payload", SAGA_SCOPE);
+            deadlineManager.cancelSchedule(DEADLINE_NAME, scheduleId);
+
+            // when / then
+            assertThatNoException().isThrownBy(() -> deadlineManager.cancelSchedule(DEADLINE_NAME, scheduleId));
             assertNothingFires();
         }
 
@@ -393,6 +470,35 @@ public abstract class AbstractDeadlineManagerTestSuite {
             // then
             awaitSingleDelivery();
             assertThat(invocations).isEmpty();
+        }
+
+        /**
+         * The interceptor fails the unit of work after the deadline was delivered, so what the delivery registered for
+         * the commit, such as a Saga's write, never happens. It fails the first attempt only, as backends that retry a
+         * failed delivery, such as Quartz with its default refire policy, would otherwise retry it without end.
+         */
+        @Test
+        void aHandlerInterceptorFailingAfterTheDeliveryRollsTheDeliveryBack() {
+            // given
+            AtomicBoolean failing = new AtomicBoolean(true);
+            AtomicInteger failedAttemptCommits = new AtomicInteger();
+            deadlineManager.registerHandlerInterceptor((message, context, chain) -> {
+                if (!failing.getAndSet(false)) {
+                    return chain.proceed(message, context);
+                }
+                context.runOnCommit(committed -> failedAttemptCommits.incrementAndGet());
+                chain.proceed(message, context);
+                throw new IllegalStateException("failing after the delivery");
+            });
+
+            // when
+            deadlineManager.schedule(TRIGGER_DURATION, DEADLINE_NAME, "payload", SAGA_SCOPE);
+
+            // then
+            await().atMost(FIRING_TIMEOUT).until(() -> !scopeAware.attempts().isEmpty());
+            await().during(Duration.ofMillis(500))
+                   .atMost(FIRING_TIMEOUT)
+                   .until(() -> failedAttemptCommits.get() == 0);
         }
     }
 

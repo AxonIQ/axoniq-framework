@@ -1,20 +1,9 @@
 /*
- * Copyright (c) 2010-2026. AxonIQ B.V.
+ * Copyright (c) 2010-2026. Axoniq B.V.
  *
- * Licensed under the AXONIQ TERMS OF SERVICE,
- * Version 29 April 2026 (the "License");
- *
- * The software is available for evaluation use without registration.
- * Continued use beyond the evaluation period requires registration
- * and a commercial license. See the License for the specific language
- * governing permissions and limitations under the License.
- * You may not use this file except in compliance with the License.
- *
- * You may obtain a copy of the License at:
- *  https://www.axoniq.io/legal/terms-of-service
- *
- * For licensing information and to register, visit:
- *  https://www.axoniq.io/pricing
+ * Licensed under the Axoniq Terms of Service (the "Terms"). You may not
+ * use this file except in compliance with the Terms, available at
+ * https://www.axoniq.io/legal/terms-of-service
  */
 
 package migration.paths.multitenancy;
@@ -26,6 +15,7 @@ import io.axoniq.framework.messaging.multitenancy.api.TenantConnectPredicate;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantNotResolvedException;
 import io.axoniq.framework.messaging.multitenancy.api.TenantResolver;
+import io.axoniq.framework.messaging.multitenancy.axonserver.eventstreaming.MultiTenantPersistentStreamIdResolver;
 import io.axoniq.framework.messaging.multitenancy.configuration.StaticTenantConnectPredicate;
 import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.configuration.MessagingConfigurer;
@@ -106,6 +96,14 @@ public class DeclarativeTenantConfiguration {
                         tenant -> new JdbcCourseStatisticsStore(dataSourceFor(tenant)))));
     }
     // end::register-tenant-scoped-store[]
+
+    // tag::extension-stream-ids[]
+    public void keepExtensionStreamIds(MessagingConfigurer configurer) {
+        configurer.componentRegistry(registry -> registry.registerComponent(
+                MultiTenantPersistentStreamIdResolver.class,
+                config -> (name, tenant) -> name + "@" + tenant.tenantId()));      // <1>
+    }
+    // end::extension-stream-ids[]
 
     private String extractTenantId(Message message) {
         return null; // Elided: application-specific lookup, from the payload or a transport header.

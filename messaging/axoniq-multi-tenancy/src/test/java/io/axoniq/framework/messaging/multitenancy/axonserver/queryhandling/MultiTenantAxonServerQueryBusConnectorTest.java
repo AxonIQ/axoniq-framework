@@ -1,20 +1,9 @@
 /*
- * Copyright (c) 2010-2026. AxonIQ B.V.
+ * Copyright (c) 2010-2026. Axoniq B.V.
  *
- * Licensed under the AXONIQ TERMS OF SERVICE,
- * Version 29 April 2026 (the "License");
- *
- * The software is available for evaluation use without registration.
- * Continued use beyond the evaluation period requires registration
- * and a commercial license. See the License for the specific language
- * governing permissions and limitations under the License.
- * You may not use this file except in compliance with the License.
- *
- * You may obtain a copy of the License at:
- *  https://www.axoniq.io/legal/terms-of-service
- *
- * For licensing information and to register, visit:
- *  https://www.axoniq.io/pricing
+ * Licensed under the Axoniq Terms of Service (the "Terms"). You may not
+ * use this file except in compliance with the Terms, available at
+ * https://www.axoniq.io/legal/terms-of-service
  */
 
 package io.axoniq.framework.messaging.multitenancy.axonserver.queryhandling;
@@ -43,6 +32,7 @@ import io.axoniq.axonserver.grpc.query.QueryUpdate;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
 import io.axoniq.framework.axonserver.connector.api.RecordingAxonServerConnectionManager;
+import io.axoniq.framework.messaging.multitenancy.api.TenantComponentLookup;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantNotResolvedException;
 import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
@@ -75,6 +65,8 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.BiFunction;
 
 import static org.assertj.core.api.Assertions.*;
 
@@ -592,6 +584,72 @@ class MultiTenantAxonServerQueryBusConnectorTest {
     }
 
     @Nested
+    class FailedTenantRegistration {
+
+        @Test
+        void registerTenantRethrowsAndKeepsNothingOfATenantWhoseConnectorCannotBeBuilt() {
+            assertFailedTenantIsDroppedAndCanBeRegisteredAgain(
+                    MultiTenantAxonServerQueryBusConnector::registerTenant);
+        }
+
+        @Test
+        void registerAndStartTenantRethrowsAndKeepsNothingOfATenantWhoseConnectorCannotBeBuilt() {
+            assertFailedTenantIsDroppedAndCanBeRegisteredAgain(
+                    MultiTenantAxonServerQueryBusConnector::registerAndStartTenant);
+        }
+
+        private void assertFailedTenantIsDroppedAndCanBeRegisteredAgain(
+                BiFunction<MultiTenantAxonServerQueryBusConnector, TenantDescriptor, Registration> entryPoint
+        ) {
+            // given
+            IllegalStateException failure = new IllegalStateException("no converter for tenant");
+            AtomicBoolean lookupFails = new AtomicBoolean(true);
+            MessageConverter converter = Mockito.mock(MessageConverter.class);
+            TestTenantProvider tenantProvider = new TestTenantProvider(List.of(TENANT_1));
+            MultiTenantAxonServerQueryBusConnector testSubject = createSubject(
+                    tenantProvider,
+                    Map.of(TENANT_1.tenantId(), new RecordingConnection(),
+                           TENANT_2.tenantId(), new RecordingConnection()),
+                    tenant -> {
+                        if (lookupFails.get() && tenant.equals(TENANT_2)) {
+                            throw failure;
+                        }
+                        return converter;
+                    });
+
+            // when
+            Throwable thrown = catchThrowable(() -> entryPoint.apply(testSubject, TENANT_2));
+
+            // then
+            assertThat(thrown).isSameAs(failure);
+            assertThat(describedTenants(testSubject)).containsExactly(TENANT_1);
+            assertThat(describedConnectors(testSubject)).containsOnlyKeys(TENANT_1.tenantId());
+
+            // when the lookup works again
+            lookupFails.set(false);
+            entryPoint.apply(testSubject, TENANT_2);
+
+            // then
+            assertThat(describedTenants(testSubject)).containsExactlyInAnyOrder(TENANT_1, TENANT_2);
+            assertThat(describedConnectors(testSubject)).containsOnlyKeys(TENANT_1.tenantId(), TENANT_2.tenantId());
+        }
+
+        private MockComponentDescriptor describe(MultiTenantAxonServerQueryBusConnector testSubject) {
+            MockComponentDescriptor descriptor = new MockComponentDescriptor();
+            testSubject.describeTo(descriptor);
+            return descriptor;
+        }
+
+        private Set<TenantDescriptor> describedTenants(MultiTenantAxonServerQueryBusConnector testSubject) {
+            return describe(testSubject).getProperty("tenants");
+        }
+
+        private Map<String, ?> describedConnectors(MultiTenantAxonServerQueryBusConnector testSubject) {
+            return describe(testSubject).getProperty("tenantConnectors");
+        }
+    }
+
+    @Nested
     class DescribeTo {
 
         @Test
@@ -632,13 +690,21 @@ class MultiTenantAxonServerQueryBusConnectorTest {
 
     private static MultiTenantAxonServerQueryBusConnector createSubject(TestTenantProvider tenantProvider,
                                                                         Map<String, RecordingConnection> connections) {
-        AxonServerConfiguration configuration = defaultConfiguration();
         MessageConverter converter = Mockito.mock(MessageConverter.class);
+        return createSubject(tenantProvider, connections, unused -> converter);
+    }
+
+    private static MultiTenantAxonServerQueryBusConnector createSubject(
+            TestTenantProvider tenantProvider,
+            Map<String, RecordingConnection> connections,
+            TenantComponentLookup<MessageConverter> converterLookup
+    ) {
+        AxonServerConfiguration configuration = defaultConfiguration();
         MultiTenantAxonServerQueryBusConnector connector = new MultiTenantAxonServerQueryBusConnector(
                 routerFor(tenantProvider),
                 new RecordingAxonServerConnectionManager(configuration, connections),
                 configuration,
-                unused -> converter
+                converterLookup
         );
         tenantProvider.subscribe(connector);
         return connector;
@@ -916,6 +982,16 @@ class MultiTenantAxonServerQueryBusConnectorTest {
 
     private static final class EmptyResultStream<T> implements ResultStream<T> {
 
+        private final boolean closed;
+
+        private EmptyResultStream() {
+            this(true);
+        }
+
+        private EmptyResultStream(boolean closed) {
+            this.closed = closed;
+        }
+
         @Override
         public T peek() {
             return null;
@@ -948,7 +1024,7 @@ class MultiTenantAxonServerQueryBusConnectorTest {
 
         @Override
         public boolean isClosed() {
-            return true;
+            return closed;
         }
 
         @Override
@@ -971,7 +1047,8 @@ class MultiTenantAxonServerQueryBusConnectorTest {
 
         @Override
         public ResultStream<QueryUpdate> updates() {
-            return new EmptyResultStream<>();
+            // a subscription keeps its update stream open until cancelled
+            return new EmptyResultStream<>(false);
         }
     }
 

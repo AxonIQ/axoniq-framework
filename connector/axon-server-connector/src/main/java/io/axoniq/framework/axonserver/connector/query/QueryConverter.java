@@ -1,20 +1,9 @@
 /*
- * Copyright (c) 2010-2026. AxonIQ B.V.
+ * Copyright (c) 2010-2026. Axoniq B.V.
  *
- * Licensed under the AXONIQ TERMS OF SERVICE,
- * Version 29 April 2026 (the "License");
- *
- * The software is available for evaluation use without registration.
- * Continued use beyond the evaluation period requires registration
- * and a commercial license. See the License for the specific language
- * governing permissions and limitations under the License.
- * You may not use this file except in compliance with the License.
- *
- * You may obtain a copy of the License at:
- *  https://www.axoniq.io/legal/terms-of-service
- *
- * For licensing information and to register, visit:
- *  https://www.axoniq.io/pricing
+ * Licensed under the Axoniq Terms of Service (the "Terms"). You may not
+ * use this file except in compliance with the Terms, available at
+ * https://www.axoniq.io/legal/terms-of-service
  */
 
 package io.axoniq.framework.axonserver.connector.query;
@@ -103,7 +92,7 @@ public final class QueryConverter {
                         queryRequest.getMessageIdentifier(),
                         type,
                         payload.getData().toByteArray(),
-                        MetadataConverter.convertMetadataValuesToGrpc(queryRequest.getMetaDataMap())
+                        MetadataConverter.convertGrpcToMetadataMap(queryRequest.getMetaDataMap())
                 ),
                 priority
         ).withConverter(converter);
@@ -142,7 +131,7 @@ public final class QueryConverter {
                       .setComponentName(componentName)
                       .setMessageIdentifier(query.identifier())
                       .setQuery(query.type().name())
-                      .putAllMetaData(MetadataConverter.convertGrpcToMetadataValues(query.metadata()))
+                      .putAllMetaData(MetadataConverter.convertMetadataMapToGrpc(query.metadata()))
                       .setPayload(SerializedObject.newBuilder()
                                                   .setData(ByteString.copyFrom(payloadAsBytes))
                                                   .setType(query.type().name())
@@ -168,7 +157,9 @@ public final class QueryConverter {
      *                      {@link QueryResponseMessage}.
      * @param converter     the converter to be used for payload conversion
      * @return A {@link QueryResponseMessage} representation of the provided {@link QueryResponse}. The returned message
-     * includes the processed payload, metadata, and any error information, if applicable.
+     * includes the processed payload, metadata, and any error information, if applicable. It carries a {@code null}
+     * payload when the response carries no result, which is the case when the response's payload is typed as
+     * {@link Void} without data, or marked with the {@link #EMPTY_PAYLOAD_TYPE} sentinel
      * @throws IllegalArgumentException if the provided {@link QueryResponse} contains an error, in which case we use
      *                                  {@link ExceptionConverter#convertToAxonException(String, ErrorMessage,
      *                                  SerializedObject, Converter)}.
@@ -183,8 +174,8 @@ public final class QueryConverter {
         var message = new GenericMessage(
                 queryResponse.getMessageIdentifier(),
                 new MessageType(responsePayload.getType(), revision),
-                responsePayload.getData().toByteArray(),
-                MetadataConverter.convertMetadataValuesToGrpc(queryResponse.getMetaDataMap())
+                payloadOrNull(responsePayload),
+                MetadataConverter.convertGrpcToMetadataMap(queryResponse.getMetaDataMap())
         );
 
         return new GenericQueryResponseMessage(message)
@@ -217,7 +208,7 @@ public final class QueryConverter {
                                                         .setData(ByteString.copyFrom(payload))
                                                         .build()
                             )
-                            .putAllMetaData(MetadataConverter.convertGrpcToMetadataValues(queryResponseMessage.metadata()))
+                            .putAllMetaData(MetadataConverter.convertMetadataMapToGrpc(queryResponseMessage.metadata()))
                             .build();
     }
 
@@ -292,7 +283,7 @@ public final class QueryConverter {
                 query.getSubscriptionIdentifier(),
                 new MessageType(responsePayload.getType(), revision),
                 responsePayload.getData().toByteArray(),
-                MetadataConverter.convertMetadataValuesToGrpc(query.getQueryRequest().getMetaDataMap())
+                MetadataConverter.convertGrpcToMetadataMap(query.getQueryRequest().getMetaDataMap())
         );
 
         return new GenericQueryMessage(message)
@@ -320,12 +311,16 @@ public final class QueryConverter {
                                                       .setRevision(update.type().version())
                                                       .setData(ByteString.copyFrom(payload))
                                                       .build())
-                          .putAllMetaData(MetadataConverter.convertGrpcToMetadataValues(update.metadata()))
+                          .putAllMetaData(MetadataConverter.convertMetadataMapToGrpc(update.metadata()))
                           .build();
     }
 
     /**
      * Converts a {@link QueryUpdate} object into a {@link SubscriptionQueryUpdateMessage}.
+     * <p>
+     * The resulting {@link SubscriptionQueryUpdateMessage} carries a {@code null} payload when the update carries no
+     * result, which is the case when the update's payload is typed as {@link Void} without data, as for an update
+     * emitted as {@code null}, or marked with the {@link #EMPTY_PAYLOAD_TYPE} sentinel.
      *
      * @param queryUpdate the {@link QueryUpdate} object to be converted; must not be null
      * @param converter   the converter to be used for payload conversion
@@ -338,8 +333,8 @@ public final class QueryConverter {
         var message = new GenericMessage(
                 queryUpdate.getMessageIdentifier(),
                 new MessageType(payload.getType(), revision),
-                payload.getData().toByteArray(),
-                MetadataConverter.convertMetadataValuesToGrpc(queryUpdate.getMetaDataMap())
+                payloadOrNull(payload),
+                MetadataConverter.convertGrpcToMetadataMap(queryUpdate.getMetaDataMap())
         );
 
         return new GenericSubscriptionQueryUpdateMessage(message)
@@ -385,6 +380,25 @@ public final class QueryConverter {
                                                                        .setNumberValue(priority));
             builder.addProcessingInstructions(instruction);
         });
+    }
+
+    /**
+     * Returns the data of the given {@code payload}, or {@code null} when the {@code payload} describes an empty result.
+     * <p>
+     * That is the case when the {@code payload} is typed as {@link Void} without data, which is how handlers describe a
+     * {@code null} result, or when it is marked with the {@link #EMPTY_PAYLOAD_TYPE} sentinel, which is how Axon
+     * Framework 4 describes a {@code null} result. The type decides rather than the data alone, as results like an
+     * empty {@code String} legitimately convert to empty data.
+     *
+     * @param payload the {@link SerializedObject} of a {@link QueryResponse} or {@link QueryUpdate} to resolve the data
+     *                from
+     * @return the data of the {@code payload}, or {@code null} if the {@code payload} describes an empty result
+     */
+    private static byte @Nullable [] payloadOrNull(SerializedObject payload) {
+        String type = payload.getType();
+        boolean emptyResult = EMPTY_PAYLOAD_TYPE.equalsIgnoreCase(type)
+                || (Void.class.getName().equals(type) && payload.getData().isEmpty());
+        return emptyResult ? null : payload.getData().toByteArray();
     }
 
     /**

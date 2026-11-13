@@ -1,20 +1,9 @@
 /*
- * Copyright (c) 2010-2026. AxonIQ B.V.
+ * Copyright (c) 2010-2026. Axoniq B.V.
  *
- * Licensed under the AXONIQ TERMS OF SERVICE,
- * Version 29 April 2026 (the "License");
- *
- * The software is available for evaluation use without registration.
- * Continued use beyond the evaluation period requires registration
- * and a commercial license. See the License for the specific language
- * governing permissions and limitations under the License.
- * You may not use this file except in compliance with the License.
- *
- * You may obtain a copy of the License at:
- *  https://www.axoniq.io/legal/terms-of-service
- *
- * For licensing information and to register, visit:
- *  https://www.axoniq.io/pricing
+ * Licensed under the Axoniq Terms of Service (the "Terms"). You may not
+ * use this file except in compliance with the Terms, available at
+ * https://www.axoniq.io/legal/terms-of-service
  */
 
 package io.axoniq.framework.messaging.eventstreaming.checkpoint;
@@ -38,8 +27,9 @@ import java.util.concurrent.CompletableFuture;
  * it via {@link EventHandlingComponent#unwrap(Class)}), and a programmatic component (which implements both
  * {@link EventHandlingComponent} and this interface). Either way the processor finds it via
  * {@code unwrap(Checkpointing.class)} and runs in request-driven mode; a processor whose every handler is
- * {@code Checkpointing} is fully-deferred (it advances the stored token only on explicit request), whereas a processor
- * with at least one ordinary handler runs in auto mode (it requests a checkpoint at the batch-end token every batch).
+ * {@code Checkpointing} is fully-deferred (it advances the stored token on explicit request, and without one only past
+ * skipped events), whereas a processor with at least one ordinary handler runs in auto mode (it requests a checkpoint at
+ * the batch-end token every batch).
  * <p>
  * Only a streaming processor (with a tracking token and segments) can honour this protocol. A processor that does not
  * stream (such as a

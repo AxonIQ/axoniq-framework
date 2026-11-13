@@ -1,26 +1,16 @@
 /*
- * Copyright (c) 2010-2026. AxonIQ B.V.
+ * Copyright (c) 2010-2026. Axoniq B.V.
  *
- * Licensed under the AXONIQ TERMS OF SERVICE,
- * Version 29 April 2026 (the "License");
- *
- * The software is available for evaluation use without registration.
- * Continued use beyond the evaluation period requires registration
- * and a commercial license. See the License for the specific language
- * governing permissions and limitations under the License.
- * You may not use this file except in compliance with the License.
- *
- * You may obtain a copy of the License at:
- *  https://www.axoniq.io/legal/terms-of-service
- *
- * For licensing information and to register, visit:
- *  https://www.axoniq.io/pricing
+ * Licensed under the Axoniq Terms of Service (the "Terms"). You may not
+ * use this file except in compliance with the Terms, available at
+ * https://www.axoniq.io/legal/terms-of-service
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
 import io.axoniq.framework.workflow.dsl.api.EventNameCustomizer;
 import io.axoniq.framework.workflow.dsl.api.StepRetryInfo;
 import io.axoniq.framework.workflow.dsl.api.StepStatus;
+import io.axoniq.framework.workflow.dsl.api.StepWaitInfo;
 import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations;
 import io.axoniq.framework.workflow.runtime.util.EventMessageUtils;
@@ -84,12 +74,10 @@ class WorkflowEventTagResolverTest {
         var started = EventMessageUtils.startedWaitForEventStep(
                 context,
                 "awaitPayment",
-                Map.of(
-                        "startTime", Instant.parse("2026-07-08T10:00:00Z"),
-                        "eventQualifiedName", "io.acme.PaymentConfirmed",
-                        "criteria", Set.of("payload:orderId=123"),
-                        "timeoutTime", Instant.parse("2026-07-08T10:15:00Z")
-                ),
+                new StepWaitInfo(Instant.parse("2026-07-08T10:00:00Z"),
+                                 "io.acme.PaymentConfirmed",
+                                 Set.of("payload:orderId=123"),
+                                 Instant.parse("2026-07-08T10:15:00Z")),
                 customizer
         );
         var completed = EventMessageUtils.completedWaitForEventStep(

@@ -1,20 +1,9 @@
 /*
- * Copyright (c) 2010-2026. AxonIQ B.V.
+ * Copyright (c) 2010-2026. Axoniq B.V.
  *
- * Licensed under the AXONIQ TERMS OF SERVICE,
- * Version 29 April 2026 (the "License");
- *
- * The software is available for evaluation use without registration.
- * Continued use beyond the evaluation period requires registration
- * and a commercial license. See the License for the specific language
- * governing permissions and limitations under the License.
- * You may not use this file except in compliance with the License.
- *
- * You may obtain a copy of the License at:
- *  https://www.axoniq.io/legal/terms-of-service
- *
- * For licensing information and to register, visit:
- *  https://www.axoniq.io/pricing
+ * Licensed under the Axoniq Terms of Service (the "Terms"). You may not
+ * use this file except in compliance with the Terms, available at
+ * https://www.axoniq.io/legal/terms-of-service
  */
 
 package io.axoniq.framework.messaging.eventstreaming.checkpoint;
@@ -22,6 +11,7 @@ package io.axoniq.framework.messaging.eventstreaming.checkpoint;
 import org.axonframework.common.FutureUtils;
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.messaging.core.configuration.MessagingConfigurer;
+import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.AsyncInMemoryStreamableEventSource;
 import org.axonframework.messaging.eventhandling.EventTestUtils;
 import org.axonframework.messaging.eventhandling.annotation.EventHandler;
@@ -37,7 +27,9 @@ import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 
@@ -125,17 +117,61 @@ class CheckpointingSplitMergeTest {
         );
     }
 
+    @Test
+    void skippedEventsAfterAMergeAreStoredWithoutAbortingTheMergedSegment() {
+        // given -- every event belongs to segment 0, so segment 1 only skips them; segment 1 reports nothing durable on
+        // release, so the merge combines two different positions into a merged token; a short claim extension
+        // threshold lets the idle upkeep run on every quiet cycle
+        AsyncInMemoryStreamableEventSource eventSource = new AsyncInMemoryStreamableEventSource();
+        InMemoryTokenStore tokenStore = new InMemoryTokenStore();
+        RecordingProjection projection = new RecordingProjection();
+        projection.segmentReleasingAtLastHandled = 1;
+        start(eventSource, tokenStore, projection, 2, 50);
+
+        for (int i = 0; i < 20; i++) {
+            eventSource.publishMessage(EventTestUtils.asEventMessage("event-" + i));
+        }
+        long latestPosition = latestPosition(eventSource);
+        await().atMost(TIMEOUT).untilAsserted(() -> {
+            assertThat(projection.handled).hasSize(20);
+            assertThat(processor().processingStatus().values())
+                    .allSatisfy(status -> assertThat(status.getCurrentPosition()).hasValue(latestPosition));
+        });
+        assertThat(projection.lastHandledBySegment).containsOnlyKeys(0);
+
+        // when -- the segments are merged, and the merged segment reads the events segment 1 did not cover again
+        Boolean merged = processor().mergeSegment(0).orTimeout(5, TimeUnit.SECONDS).join();
+
+        // then -- segment 0 already saw those events, so the merged segment skips them and stores past them, and is
+        // never released again
+        assertThat(merged).isTrue();
+        await().atMost(TIMEOUT).untilAsserted(
+                () -> assertThat(storedPosition(tokenStore, 0)).isEqualTo(latestPosition)
+        );
+        assertThat(projection.handled).hasSize(20);
+        assertThat(projection.released).extracting(Segment::getSegmentId).containsExactlyInAnyOrder(0, 1);
+    }
+
     private void start(AsyncInMemoryStreamableEventSource eventSource,
                        InMemoryTokenStore tokenStore,
                        RecordingProjection projection,
                        int segmentCount) {
+        start(eventSource, tokenStore, projection, segmentCount, 5000);
+    }
+
+    private void start(AsyncInMemoryStreamableEventSource eventSource,
+                       InMemoryTokenStore tokenStore,
+                       RecordingProjection projection,
+                       int segmentCount,
+                       long claimExtensionThreshold) {
         var module = EventProcessorModule.pooledStreaming(PROCESSOR_NAME)
                                          .eventHandlingComponents(components -> components.autodetected(
                                                  "projection", cfg -> projection
                                          ))
                                          .customized((cfg, c) -> c.eventSource(eventSource)
                                                                   .tokenStore(tokenStore)
-                                                                  .initialSegmentCount(segmentCount));
+                                                                  .initialSegmentCount(segmentCount)
+                                                                  .claimExtensionThreshold(claimExtensionThreshold));
         configuration = MessagingConfigurer.create()
                                            .eventProcessing(ep -> ep.pooledStreaming(ps -> ps.processor(module)))
                                            .build();
@@ -147,9 +183,17 @@ class CheckpointingSplitMergeTest {
                                                             .get(PROCESSOR_NAME);
     }
 
-    private static long storedPosition(TokenStore tokenStore, int segmentId) {
-        TrackingToken token = FutureUtils.joinAndUnwrap(tokenStore.fetchToken(PROCESSOR_NAME, segmentId, null));
+    private long storedPosition(TokenStore tokenStore, int segmentId) {
+        TrackingToken token = FutureUtils.joinAndUnwrap(
+                configuration.getComponent(UnitOfWorkFactory.class).create().executeWithResult(
+                        context -> tokenStore.fetchToken(PROCESSOR_NAME, segmentId, context)
+                )
+        );
         return token == null ? -1L : token.position().orElse(-1L);
+    }
+
+    private static long latestPosition(AsyncInMemoryStreamableEventSource eventSource) {
+        return positionOf(eventSource.latestToken(null).orTimeout(5, TimeUnit.SECONDS).join());
     }
 
     private static long positionOf(TrackingToken token) {
@@ -166,12 +210,15 @@ class CheckpointingSplitMergeTest {
         private final List<String> handled = new CopyOnWriteArrayList<>();
         private final List<TrackingToken> handledTokens = new CopyOnWriteArrayList<>();
         private final List<Segment> released = new CopyOnWriteArrayList<>();
+        private final Map<Integer, TrackingToken> lastHandledBySegment = new ConcurrentHashMap<>();
         private volatile CheckpointTrigger trigger;
+        private volatile int segmentReleasingAtLastHandled = -1;
 
         @EventHandler
-        void on(String event, TrackingToken token, CheckpointTrigger checkpoint) {
+        void on(String event, TrackingToken token, CheckpointTrigger checkpoint, Segment segment) {
             this.trigger = checkpoint;
             handledTokens.add(token);
+            lastHandledBySegment.put(segment.getSegmentId(), token);
             handled.add(event);
         }
 
@@ -183,6 +230,9 @@ class CheckpointingSplitMergeTest {
         @Override
         public CompletableFuture<TrackingToken> onSegmentReleased(Segment segment, TrackingToken upTo) {
             released.add(segment);
+            if (segment.getSegmentId() == segmentReleasingAtLastHandled) {
+                return CompletableFuture.completedFuture(lastHandledBySegment.get(segment.getSegmentId()));
+            }
             return Checkpointing.super.onSegmentReleased(segment, upTo);
         }
     }

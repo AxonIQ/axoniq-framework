@@ -1,20 +1,9 @@
 /*
- * Copyright (c) 2010-2026. AxonIQ B.V.
+ * Copyright (c) 2010-2026. Axoniq B.V.
  *
- * Licensed under the AXONIQ TERMS OF SERVICE,
- * Version 29 April 2026 (the "License");
- *
- * The software is available for evaluation use without registration.
- * Continued use beyond the evaluation period requires registration
- * and a commercial license. See the License for the specific language
- * governing permissions and limitations under the License.
- * You may not use this file except in compliance with the License.
- *
- * You may obtain a copy of the License at:
- *  https://www.axoniq.io/legal/terms-of-service
- *
- * For licensing information and to register, visit:
- *  https://www.axoniq.io/pricing
+ * Licensed under the Axoniq Terms of Service (the "Terms"). You may not
+ * use this file except in compliance with the Terms, available at
+ * https://www.axoniq.io/legal/terms-of-service
  */
 
 package io.axoniq.framework.axonserver.connector.query;
@@ -92,10 +81,13 @@ class FlowControlledResponseSender implements FlowControl {
     private void responseSendingLoop() {
         // this is to make sure that we check the status again if the gate was flipped to false
         // there may have been messages that were sent after the last check
-        while (!sendingGate.get() && (
-                (requests.get() > 0 && upstream.hasNextAvailable())
-                        || (!upstream.hasNextAvailable() && upstream.isCompleted() && !closed.get())
-        )) {
+        while (!sendingGate.get()) {
+            boolean hasNext = upstream.hasNextAvailable();
+            boolean shouldSend = (requests.get() > 0 && hasNext)
+                    || (!hasNext && upstream.isCompleted() && !closed.get());
+            if (!shouldSend) {
+                return;
+            }
             sendResponses();
         }
     }

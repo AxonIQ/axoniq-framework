@@ -1,20 +1,9 @@
 /*
- * Copyright (c) 2010-2026. AxonIQ B.V.
+ * Copyright (c) 2010-2026. Axoniq B.V.
  *
- * Licensed under the AXONIQ TERMS OF SERVICE,
- * Version 29 April 2026 (the "License");
- *
- * The software is available for evaluation use without registration.
- * Continued use beyond the evaluation period requires registration
- * and a commercial license. See the License for the specific language
- * governing permissions and limitations under the License.
- * You may not use this file except in compliance with the License.
- *
- * You may obtain a copy of the License at:
- *  https://www.axoniq.io/legal/terms-of-service
- *
- * For licensing information and to register, visit:
- *  https://www.axoniq.io/pricing
+ * Licensed under the Axoniq Terms of Service (the "Terms"). You may not
+ * use this file except in compliance with the Terms, available at
+ * https://www.axoniq.io/legal/terms-of-service
  */
 
 package io.axoniq.framework.messaging.multitenancy.axonserver.eventstreaming;
@@ -23,7 +12,9 @@ import io.axoniq.axonserver.connector.event.PersistentStreamProperties;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
 import io.axoniq.framework.axonserver.connector.event.PersistentStreamScheduledExecutorBuilder;
+import io.axoniq.framework.messaging.multitenancy.api.MultiTenantAwareComponent;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
+import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
 import io.axoniq.framework.messaging.multitenancy.util.RecordingPersistentStreams;
 import io.axoniq.framework.messaging.multitenancy.util.StubTenantProvider;
 import org.axonframework.common.Registration;
@@ -47,16 +38,17 @@ import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.awaitility.Awaitility.await;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
 
 /**
  * Test class validating the {@link MultiTenantPersistentStreamEventSource}.
@@ -83,7 +75,8 @@ class MultiTenantPersistentStreamEventSourceTest {
                 schedulerFactory,
                 100,
                 configurationWith(streams.connectionManager()),
-                tenantProvider
+                tenantProvider,
+                MultiTenantPersistentStreamIdResolver.CONFIGURED_NAME
         );
     }
 
@@ -164,7 +157,7 @@ class MultiTenantPersistentStreamEventSourceTest {
             testSubject.subscribe(recordingConsumer());
 
             // then — the tenant's stream is open again
-            assertThat(streams.hasOpenStream("tenant-a")).isTrue();
+            assertThat(streams.hasOpenStream("tenant-a", STREAM_NAME)).isTrue();
         }
     }
 
@@ -238,7 +231,7 @@ class MultiTenantPersistentStreamEventSourceTest {
 
             // then
             await().atMost(Duration.ofSeconds(5)).until(() -> !consumer.tenants().isEmpty());
-            assertThat(streams.hasOpenStream("tenant-a")).isTrue();
+            assertThat(streams.hasOpenStream("tenant-a", STREAM_NAME)).isTrue();
             assertThat(consumer.tenantsOf("still-flowing")).containsExactly(TENANT_A);
         }
 
@@ -253,8 +246,8 @@ class MultiTenantPersistentStreamEventSourceTest {
             tenantProvider.removeTenant(TENANT_A);
 
             // then
-            assertThat(streams.hasOpenStream("tenant-a")).isFalse();
-            assertThat(streams.hasOpenStream("tenant-b")).isTrue();
+            assertThat(streams.hasOpenStream("tenant-a", STREAM_NAME)).isFalse();
+            assertThat(streams.hasOpenStream("tenant-b", STREAM_NAME)).isTrue();
         }
 
         @Test
@@ -283,7 +276,7 @@ class MultiTenantPersistentStreamEventSourceTest {
             tenantProvider.addTenant(TENANT_A);
 
             // then — a re-added tenant is served by a newly built stream, not the one bound to the dropped connection
-            assertThat(streams.hasOpenStream("tenant-a")).isTrue();
+            assertThat(streams.hasOpenStream("tenant-a", STREAM_NAME)).isTrue();
             assertThat(schedulerFactory.createCount()).isEqualTo(2);
         }
     }
@@ -302,8 +295,8 @@ class MultiTenantPersistentStreamEventSourceTest {
             registration.cancel();
 
             // then
-            assertThat(streams.hasOpenStream("tenant-a")).isFalse();
-            assertThat(streams.hasOpenStream("tenant-b")).isFalse();
+            assertThat(streams.hasOpenStream("tenant-a", STREAM_NAME)).isFalse();
+            assertThat(streams.hasOpenStream("tenant-b", STREAM_NAME)).isFalse();
         }
 
         @Test
@@ -372,8 +365,247 @@ class MultiTenantPersistentStreamEventSourceTest {
             tenantProvider.shutdown();
 
             // then
-            assertThat(streams.hasOpenStream("tenant-a")).isFalse();
-            assertThat(streams.hasOpenStream("tenant-b")).isFalse();
+            assertThat(streams.hasOpenStream("tenant-a", STREAM_NAME)).isFalse();
+            assertThat(streams.hasOpenStream("tenant-b", STREAM_NAME)).isFalse();
+        }
+    }
+
+    @Nested
+    class StreamIdResolution {
+
+        private static final MultiTenantPersistentStreamIdResolver SUFFIX_WITH_TENANT =
+                (name, tenant) -> name + "@" + tenant.tenantId();
+
+        @Test
+        void opensEveryTenantsStreamUnderTheConfiguredNameByDefault() {
+            // given
+            tenantProvider.addTenant(TENANT_A);
+            tenantProvider.addTenant(TENANT_B);
+
+            // when
+            testSubject.subscribe(recordingConsumer());
+
+            // then
+            assertThat(streams.openedStreamIds("tenant-a")).containsExactly(STREAM_NAME);
+            assertThat(streams.openedStreamIds("tenant-b")).containsExactly(STREAM_NAME);
+        }
+
+        @Test
+        void opensEveryTenantsStreamUnderTheResolvedStreamId() {
+            // given
+            tenantProvider.addTenant(TENANT_A);
+            tenantProvider.addTenant(TENANT_B);
+            MultiTenantPersistentStreamEventSource source = sourceWith(SUFFIX_WITH_TENANT);
+
+            // when
+            source.subscribe(recordingConsumer());
+
+            // then — each tenant's stream is opened under its resolved id only, never under the configured name
+            assertThat(streams.openedStreamIds("tenant-a")).containsExactly(STREAM_NAME + "@tenant-a");
+            assertThat(streams.openedStreamIds("tenant-b")).containsExactly(STREAM_NAME + "@tenant-b");
+        }
+
+        @Test
+        void keepsNamingTheTenantPoolAfterTheConfiguredName() {
+            // given
+            tenantProvider.addTenant(TENANT_A);
+            MultiTenantPersistentStreamEventSource source = sourceWith(SUFFIX_WITH_TENANT);
+
+            // when
+            source.subscribe(recordingConsumer());
+
+            // then — the pool name is independent of the resolved stream id
+            assertThat(schedulerFactory.poolNames()).containsExactly(STREAM_NAME + "@tenant-a");
+        }
+
+        @Test
+        void closesTheStreamOpenedUnderTheResolvedIdWhenItsTenantIsRemoved() {
+            // given
+            tenantProvider.addTenant(TENANT_A);
+            tenantProvider.addTenant(TENANT_B);
+            sourceWith(SUFFIX_WITH_TENANT).subscribe(recordingConsumer());
+
+            // when
+            tenantProvider.removeTenant(TENANT_A);
+
+            // then
+            assertThat(streams.hasOpenStream("tenant-a", STREAM_NAME + "@tenant-a")).isFalse();
+            assertThat(streams.hasOpenStream("tenant-b", STREAM_NAME + "@tenant-b")).isTrue();
+        }
+
+        @Test
+        void rejectsAnEmptyResolvedStreamIdWithoutTakingAPool() {
+            // given
+            tenantProvider.addTenant(TENANT_A);
+            MultiTenantPersistentStreamEventSource source = sourceWith((name, tenant) -> "");
+
+            // when / then
+            assertThatThrownBy(() -> source.subscribe(recordingConsumer()))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining(STREAM_NAME)
+                    .hasMessageContaining("tenant-a");
+            assertThat(schedulerFactory.createCount()).isZero();
+            assertThat(streams.openedContexts()).isEmpty();
+        }
+
+        @Test
+        void takesNoPoolWhenTheResolverFails() {
+            // given
+            tenantProvider.addTenant(TENANT_A);
+            MultiTenantPersistentStreamEventSource source = sourceWith((name, tenant) -> {
+                throw new IllegalStateException("resolution failed");
+            });
+
+            // when / then
+            assertThatThrownBy(() -> source.subscribe(recordingConsumer()))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessage("resolution failed");
+            assertThat(schedulerFactory.createCount()).isZero();
+            assertThat(streams.openedContexts()).isEmpty();
+        }
+
+        private MultiTenantPersistentStreamEventSource sourceWith(MultiTenantPersistentStreamIdResolver resolver) {
+            return new MultiTenantPersistentStreamEventSource(
+                    STREAM_NAME,
+                    new PersistentStreamProperties(STREAM_NAME, 1, "Seq", Collections.emptyList(), "0", null),
+                    schedulerFactory,
+                    100,
+                    configurationWith(streams.connectionManager()),
+                    tenantProvider,
+                    resolver
+            );
+        }
+    }
+
+    @Nested
+    class FailedRegistration {
+
+        @Test
+        void releasesTheConsumerClaimWhenTheTenantProviderFailsToSubscribe() {
+            // given
+            IllegalStateException failure = new IllegalStateException("provider unavailable");
+            AtomicBoolean providerFails = new AtomicBoolean(true);
+            TenantProvider flakyProvider = new TenantProvider() {
+                @Override
+                public Registration subscribe(MultiTenantAwareComponent component) {
+                    if (providerFails.get()) {
+                        throw failure;
+                    }
+                    return tenantProvider.subscribe(component);
+                }
+
+                @Override
+                public List<TenantDescriptor> tenants() {
+                    return tenantProvider.tenants();
+                }
+            };
+            tenantProvider.addTenant(TENANT_A);
+            MultiTenantPersistentStreamEventSource source =
+                    sourceWith(flakyProvider, MultiTenantPersistentStreamIdResolver.CONFIGURED_NAME);
+
+            // when
+            Throwable thrown = catchThrowable(() -> source.subscribe(recordingConsumer()));
+
+            // then
+            assertThat(thrown).isSameAs(failure);
+            assertThat((Boolean) describe(source).getProperty("subscribed")).isFalse();
+
+            // when the provider works again, a different consumer subscribes
+            providerFails.set(false);
+            source.subscribe(recordingConsumer());
+
+            // then
+            assertThat(streams.hasOpenStream("tenant-a", STREAM_NAME)).isTrue();
+        }
+
+        @Test
+        void leavesNoStreamOpenWhenTheResolverFailsForOneOfSeveralKnownTenantsAtStartup() {
+            // given
+            IllegalStateException failure = new IllegalStateException("resolution failed");
+            AtomicBoolean resolverFails = new AtomicBoolean(true);
+            tenantProvider.addTenant(TENANT_A);
+            tenantProvider.addTenant(TENANT_B);
+            MultiTenantPersistentStreamEventSource source = sourceWith(
+                    tenantProvider,
+                    (name, tenant) -> {
+                        if (resolverFails.get() && tenant.equals(TENANT_B)) {
+                            throw failure;
+                        }
+                        return name;
+                    });
+
+            // when
+            Throwable thrown = catchThrowable(() -> source.subscribe(recordingConsumer()));
+
+            // then
+            assertThat(thrown).isSameAs(failure);
+            assertThat(streams.hasOpenStream("tenant-a", STREAM_NAME)).isFalse();
+            assertThat(describedTenants(source)).isEmpty();
+            assertThat((Boolean) describe(source).getProperty("subscribed")).isFalse();
+
+            // when the resolver works again, a different consumer subscribes
+            resolverFails.set(false);
+            source.subscribe(recordingConsumer());
+
+            // then
+            assertThat(streams.hasOpenStream("tenant-a", STREAM_NAME)).isTrue();
+            assertThat(streams.hasOpenStream("tenant-b", STREAM_NAME)).isTrue();
+        }
+
+        @Test
+        void keepsNoStateOfATenantWhoseStreamCannotBeOpened() {
+            assertFailedTenantIsDroppedAndCanBeRegisteredAgain(MultiTenantPersistentStreamEventSource::registerTenant);
+        }
+
+        @Test
+        void keepsNoStateOfATenantWhoseStreamCannotBeOpenedWhenRegisteredAndStarted() {
+            assertFailedTenantIsDroppedAndCanBeRegisteredAgain(
+                    MultiTenantPersistentStreamEventSource::registerAndStartTenant);
+        }
+
+        private void assertFailedTenantIsDroppedAndCanBeRegisteredAgain(
+                BiFunction<MultiTenantPersistentStreamEventSource, TenantDescriptor, Registration> entryPoint
+        ) {
+            // given
+            IllegalStateException failure = new IllegalStateException("resolution failed");
+            AtomicBoolean resolverFails = new AtomicBoolean(false);
+            MultiTenantPersistentStreamEventSource source = sourceWith(
+                    tenantProvider,
+                    (name, tenant) -> {
+                        if (resolverFails.get() && tenant.equals(TENANT_A)) {
+                            throw failure;
+                        }
+                        return name;
+                    });
+            source.subscribe(recordingConsumer());
+            entryPoint.apply(source, TENANT_B);
+            resolverFails.set(true);
+
+            // when
+            Throwable thrown = catchThrowable(() -> entryPoint.apply(source, TENANT_A));
+
+            // then
+            assertThat(thrown).isSameAs(failure);
+            assertThat(describedTenants(source)).containsExactly(TENANT_B);
+            assertThat(streams.hasOpenStream("tenant-b", STREAM_NAME)).isTrue();
+
+            // when the resolver works again
+            resolverFails.set(false);
+            entryPoint.apply(source, TENANT_A);
+
+            // then
+            assertThat(streams.hasOpenStream("tenant-a", STREAM_NAME)).isTrue();
+            assertThat(describedTenants(source)).containsExactlyInAnyOrder(TENANT_A, TENANT_B);
+        }
+
+        private MockComponentDescriptor describe(MultiTenantPersistentStreamEventSource source) {
+            MockComponentDescriptor descriptor = new MockComponentDescriptor();
+            source.describeTo(descriptor);
+            return descriptor;
+        }
+
+        private List<TenantDescriptor> describedTenants(MultiTenantPersistentStreamEventSource source) {
+            return describe(source).getProperty("tenants");
         }
     }
 
@@ -402,7 +634,8 @@ class MultiTenantPersistentStreamEventSourceTest {
                     null,
                     100,
                     configurationWith(streams.connectionManager()),
-                    tenantProvider))
+                    tenantProvider,
+                    MultiTenantPersistentStreamIdResolver.CONFIGURED_NAME))
                     .isInstanceOf(NullPointerException.class)
                     .hasMessageContaining("scheduler factory");
         }
@@ -415,9 +648,24 @@ class MultiTenantPersistentStreamEventSourceTest {
                     schedulerFactory,
                     100,
                     configurationWith(streams.connectionManager()),
-                    null))
+                    null,
+                    MultiTenantPersistentStreamIdResolver.CONFIGURED_NAME))
                     .isInstanceOf(NullPointerException.class)
                     .hasMessageContaining("tenant provider");
+        }
+
+        @Test
+        void rejectsANullStreamIdResolver() {
+            assertThatThrownBy(() -> new MultiTenantPersistentStreamEventSource(
+                    STREAM_NAME,
+                    new PersistentStreamProperties(STREAM_NAME, 1, "Seq", Collections.emptyList(), "0", null),
+                    schedulerFactory,
+                    100,
+                    configurationWith(streams.connectionManager()),
+                    tenantProvider,
+                    null))
+                    .isInstanceOf(NullPointerException.class)
+                    .hasMessageContaining("stream id resolver");
         }
 
         private MultiTenantPersistentStreamEventSource sourceWith(String name, int batchSize) {
@@ -427,7 +675,8 @@ class MultiTenantPersistentStreamEventSourceTest {
                     schedulerFactory,
                     batchSize,
                     configurationWith(streams.connectionManager()),
-                    tenantProvider
+                    tenantProvider,
+                    MultiTenantPersistentStreamIdResolver.CONFIGURED_NAME
             );
         }
     }
@@ -450,6 +699,19 @@ class MultiTenantPersistentStreamEventSourceTest {
             assertThat((Boolean) descriptor.getProperty("subscribed")).isTrue();
             assertThat((List<TenantDescriptor>) descriptor.getProperty("tenants")).containsExactly(TENANT_A);
         }
+    }
+
+    private MultiTenantPersistentStreamEventSource sourceWith(TenantProvider provider,
+                                                              MultiTenantPersistentStreamIdResolver resolver) {
+        return new MultiTenantPersistentStreamEventSource(
+                STREAM_NAME,
+                new PersistentStreamProperties(STREAM_NAME, 1, "Seq", Collections.emptyList(), "0", null),
+                schedulerFactory,
+                100,
+                configurationWith(streams.connectionManager()),
+                provider,
+                resolver
+        );
     }
 
     private static BiFunction<List<? extends EventMessage>, ProcessingContext, CompletableFuture<?>> recordingConsumer() {
@@ -518,6 +780,10 @@ class MultiTenantPersistentStreamEventSourceTest {
 
         private int createCount() {
             return createCount.get();
+        }
+
+        private List<String> poolNames() {
+            return List.copyOf(created.keySet());
         }
 
         private boolean isShutdown(String poolName) {

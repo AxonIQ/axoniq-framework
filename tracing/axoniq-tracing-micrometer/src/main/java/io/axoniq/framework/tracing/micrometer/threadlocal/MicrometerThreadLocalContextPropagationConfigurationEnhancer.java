@@ -1,20 +1,9 @@
 /*
- * Copyright (c) 2010-2026. AxonIQ B.V.
+ * Copyright (c) 2010-2026. Axoniq B.V.
  *
- * Licensed under the AXONIQ TERMS OF SERVICE,
- * Version 29 April 2026 (the "License");
- *
- * The software is available for evaluation use without registration.
- * Continued use beyond the evaluation period requires registration
- * and a commercial license. See the License for the specific language
- * governing permissions and limitations under the License.
- * You may not use this file except in compliance with the License.
- *
- * You may obtain a copy of the License at:
- *  https://www.axoniq.io/legal/terms-of-service
- *
- * For licensing information and to register, visit:
- *  https://www.axoniq.io/pricing
+ * Licensed under the Axoniq Terms of Service (the "Terms"). You may not
+ * use this file except in compliance with the Terms, available at
+ * https://www.axoniq.io/legal/terms-of-service
  */
 
 package io.axoniq.framework.tracing.micrometer.threadlocal;
@@ -22,6 +11,7 @@ package io.axoniq.framework.tracing.micrometer.threadlocal;
 import io.axoniq.framework.tracing.micrometer.MicrometerSpanFactory;
 import io.micrometer.context.ContextRegistry;
 import io.micrometer.context.ContextSnapshotFactory;
+import io.micrometer.context.ThreadLocalAccessor;
 import io.micrometer.observation.ObservationRegistry;
 import io.micrometer.tracing.Tracer;
 import io.micrometer.tracing.contextpropagation.ObservationAwareSpanThreadLocalAccessor;
@@ -124,7 +114,7 @@ public final class MicrometerThreadLocalContextPropagationConfigurationEnhancer 
     }
 
     /**
-     * Registers the {@link ObservationAwareSpanThreadLocalAccessor} on {@code contextRegistry} when not already present.
+     * Registers the {@link MicrometerSpanThreadLocalAccessor} on {@code contextRegistry}.
      * This is the thread-local accessor that restores a captured span as the current span on
      * {@link io.micrometer.context.ContextSnapshot#setThreadLocals()}; it is added through a {@link ContextRegistry}
      * decorator, applied when that component is resolved (when the {@link ContextSnapshotFactory} is built), so it can
@@ -132,14 +122,24 @@ public final class MicrometerThreadLocalContextPropagationConfigurationEnhancer 
      */
     private static void registerSpanThreadLocalAccessor(Configuration config, ContextRegistry contextRegistry) {
         Object spanAccessorKey = ObservationAwareSpanThreadLocalAccessor.KEY;
-        boolean alreadyRegistered = contextRegistry.getThreadLocalAccessors().stream()
-                                                   .anyMatch(accessor -> spanAccessorKey.equals(accessor.key()));
-        if (!alreadyRegistered) {
-            ObservationRegistry observationRegistry = config.getOptionalComponent(ObservationRegistry.class)
-                                                             .orElseGet(ObservationRegistry::create);
-            contextRegistry.registerThreadLocalAccessor(
-                    new ObservationAwareSpanThreadLocalAccessor(observationRegistry, config.getComponent(Tracer.class)));
+        ThreadLocalAccessor<?> existing = contextRegistry.getThreadLocalAccessors().stream()
+                                                         .filter(accessor -> spanAccessorKey.equals(accessor.key()))
+                                                         .findFirst()
+                                                         .orElse(null);
+        if (existing instanceof MicrometerSpanThreadLocalAccessor) {
+            return;
         }
+        // The standard Micrometer accessor uses this same key. Replace it so ContextSnapshot always selects the
+        // balanced implementation; registering both would leave selection dependent on registry order.
+        // shortcut: replaces Micrometer's accessor until micrometer-metrics/tracing PR 1614 is in every supported
+        // Micrometer Tracing version; then register ObservationAwareSpanThreadLocalAccessor again.
+        if (existing != null) {
+            contextRegistry.removeThreadLocalAccessor(spanAccessorKey);
+        }
+        ObservationRegistry observationRegistry = config.getOptionalComponent(ObservationRegistry.class)
+                                                         .orElseGet(ObservationRegistry::create);
+        contextRegistry.registerThreadLocalAccessor(
+                new MicrometerSpanThreadLocalAccessor(observationRegistry, config.getComponent(Tracer.class)));
     }
 
     /**

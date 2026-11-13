@@ -1,20 +1,9 @@
 /*
- * Copyright (c) 2010-2026. AxonIQ B.V.
+ * Copyright (c) 2010-2026. Axoniq B.V.
  *
- * Licensed under the AXONIQ TERMS OF SERVICE,
- * Version 29 April 2026 (the "License");
- *
- * The software is available for evaluation use without registration.
- * Continued use beyond the evaluation period requires registration
- * and a commercial license. See the License for the specific language
- * governing permissions and limitations under the License.
- * You may not use this file except in compliance with the License.
- *
- * You may obtain a copy of the License at:
- *  https://www.axoniq.io/legal/terms-of-service
- *
- * For licensing information and to register, visit:
- *  https://www.axoniq.io/pricing
+ * Licensed under the Axoniq Terms of Service (the "Terms"). You may not
+ * use this file except in compliance with the Terms, available at
+ * https://www.axoniq.io/legal/terms-of-service
  */
 
 package io.axoniq.framework.axonserver.connector.event;
@@ -119,7 +108,7 @@ class AxonServerEventStorageEngineIT extends StorageEngineTestSuite<AxonServerEv
         );
 
         Snapshot snapshot = new Snapshot(
-                new GlobalIndexPosition(GlobalIndexConsistencyMarker.position(markerAfterFirstTwoEvents) - 1),
+                new GlobalIndexPosition(GlobalIndexConsistencyMarker.position(markerAfterFirstTwoEvents)),
                 "0.0.1", "snapshot-payload", Instant.now(), Map.of()
         );
         testSubject.store(snapshotType, identifier, snapshot, processingContext())

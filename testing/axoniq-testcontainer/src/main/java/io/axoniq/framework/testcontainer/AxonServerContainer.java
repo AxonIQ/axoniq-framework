@@ -1,29 +1,20 @@
 /*
- * Copyright (c) 2010-2026. AxonIQ B.V.
+ * Copyright (c) 2010-2026. Axoniq B.V.
  *
- * Licensed under the AXONIQ TERMS OF SERVICE,
- * Version 29 April 2026 (the "License");
- *
- * The software is available for evaluation use without registration.
- * Continued use beyond the evaluation period requires registration
- * and a commercial license. See the License for the specific language
- * governing permissions and limitations under the License.
- * You may not use this file except in compliance with the License.
- *
- * You may obtain a copy of the License at:
- *  https://www.axoniq.io/legal/terms-of-service
- *
- * For licensing information and to register, visit:
- *  https://www.axoniq.io/pricing
+ * Licensed under the Axoniq Terms of Service (the "Terms"). You may not
+ * use this file except in compliance with the Terms, available at
+ * https://www.axoniq.io/legal/terms-of-service
  */
 
 package io.axoniq.framework.testcontainer;
 
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.testcontainers.containers.ContainerLaunchException;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
+import org.testcontainers.images.builder.Transferable;
 import org.testcontainers.utility.DockerImageName;
 import org.testcontainers.utility.MountableFile;
 
@@ -88,6 +79,7 @@ public class AxonServerContainer extends GenericContainer<AxonServerContainer> {
     private static final Duration SLOW_STARTUP_THRESHOLD = Duration.ofSeconds(30);
 
     private String licensePath;
+    private @Nullable String licenseContent;
     private String configurationPath;
     private String clusterTemplatePath;
     private String axonServerName;
@@ -137,7 +129,15 @@ public class AxonServerContainer extends GenericContainer<AxonServerContainer> {
 
     @Override
     protected void configure() {
-        optionallyCopyResourceToContainer(LICENCE_DEFAULT_LOCATION, licensePath);
+        if (licensePath != null && licenseContent != null) {
+            LOG.warn("Both a license path and license content are configured; configure only one of them.");
+        }
+        if (licenseContent != null) {
+            //noinspection resource | ignore from AutoClosable on GenericContainer
+            withCopyToContainer(Transferable.of(licenseContent), LICENCE_DEFAULT_LOCATION);
+        } else {
+            optionallyCopyResourceToContainer(LICENCE_DEFAULT_LOCATION, licensePath);
+        }
         optionallyCopyResourceToContainer(CONFIGURATION_DEFAULT_LOCATION, configurationPath);
         optionallyCopyResourceToContainer(CLUSTER_TEMPLATE_DEFAULT_LOCATION, clusterTemplatePath);
         withOptionalEnv(AXONIQ_AXONSERVER_NAME, axonServerName);
@@ -211,6 +211,23 @@ public class AxonServerContainer extends GenericContainer<AxonServerContainer> {
      */
     public AxonServerContainer withLicense(String licensePath) {
         this.licensePath = licensePath;
+        return self();
+    }
+
+    /**
+     * Initialize this Axon Server test container with the given license {@code licenseContent}, rather than a license
+     * file on the classpath as {@link #withLicense(String)} does.
+     * <p>
+     * Useful when the license is provided as a value instead of a file, for example through the {@code AXONIQ_LICENSE}
+     * environment variable on a CI server. The content is written to the license location inside the container on
+     * startup. When both a license path and license content are configured, the license content takes precedence.
+     *
+     * @param licenseContent the content of the license, or {@code null} to start without a license
+     * @return this container itself for fluent API
+     * @since 5.5.0
+     */
+    public AxonServerContainer withLicenseContent(@Nullable String licenseContent) {
+        this.licenseContent = licenseContent;
         return self();
     }
 
@@ -352,6 +369,7 @@ public class AxonServerContainer extends GenericContainer<AxonServerContainer> {
         }
         AxonServerContainer that = (AxonServerContainer) o;
         return Objects.equals(licensePath, that.licensePath)
+                && Objects.equals(licenseContent, that.licenseContent)
                 && Objects.equals(configurationPath, that.configurationPath)
                 && Objects.equals(clusterTemplatePath, that.clusterTemplatePath)
                 && Objects.equals(axonServerName, that.axonServerName)
@@ -365,6 +383,7 @@ public class AxonServerContainer extends GenericContainer<AxonServerContainer> {
     public int hashCode() {
         return Objects.hash(super.hashCode(),
                             licensePath,
+                            licenseContent,
                             configurationPath,
                             clusterTemplatePath,
                             axonServerName,
@@ -378,6 +397,7 @@ public class AxonServerContainer extends GenericContainer<AxonServerContainer> {
     public String toString() {
         return "AxonServerContainer{" +
                 "licensePath='" + licensePath + '\'' +
+                ", licenseContent='" + (licenseContent == null ? "[unset]" : "[set]") + '\'' +
                 ", configurationPath='" + configurationPath + '\'' +
                 ", clusterTemplatePath='" + clusterTemplatePath + '\'' +
                 ", axonServerName='" + axonServerName + '\'' +

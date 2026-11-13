@@ -1,20 +1,9 @@
 /*
- * Copyright (c) 2010-2026. AxonIQ B.V.
+ * Copyright (c) 2010-2026. Axoniq B.V.
  *
- * Licensed under the AXONIQ TERMS OF SERVICE,
- * Version 29 April 2026 (the "License");
- *
- * The software is available for evaluation use without registration.
- * Continued use beyond the evaluation period requires registration
- * and a commercial license. See the License for the specific language
- * governing permissions and limitations under the License.
- * You may not use this file except in compliance with the License.
- *
- * You may obtain a copy of the License at:
- *  https://www.axoniq.io/legal/terms-of-service
- *
- * For licensing information and to register, visit:
- *  https://www.axoniq.io/pricing
+ * Licensed under the Axoniq Terms of Service (the "Terms"). You may not
+ * use this file except in compliance with the Terms, available at
+ * https://www.axoniq.io/legal/terms-of-service
  */
 
 package io.axoniq.framework.postgresql;
@@ -39,12 +28,20 @@ public enum SchemaInitialization {
      * When the schema is already complete, this only performs cheap existence checks and does not lock any of
      * the event store's tables. When something is missing, the (idempotent) creation statements run, which do
      * briefly lock the affected tables.
+     * <p>
+     * Existing objects are never replaced. If the schema is still incomplete after creating what was missing, for
+     * example because an existing trigger or index has an incompatible definition, construction fails with an
+     * {@link IllegalStateException} naming the offending objects.
      */
     CREATE_IF_MISSING,
 
     /**
-     * Checks whether the schema is complete, and fails construction with an {@link IllegalStateException} if it
-     * is not. Never creates or modifies anything.
+     * Checks whether the schema is complete, and fails construction with an {@link IllegalStateException} naming
+     * the missing or incompatible objects if it is not. Never creates or modifies anything.
+     * <p>
+     * Besides existence, the definitions of the type tag triggers and the unique type tag index are verified. This
+     * only reads system catalogs, so it works for a role without privileges on the event store's tables. The
+     * bodies of the trigger functions are not compared.
      * <p>
      * Use this when schema changes are managed out-of-band (e.g. by a dedicated migration step or a database
      * administrator) and an incomplete schema should be treated as a startup failure rather than something the

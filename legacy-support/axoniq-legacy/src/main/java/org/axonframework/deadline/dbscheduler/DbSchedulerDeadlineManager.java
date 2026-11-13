@@ -1,20 +1,9 @@
 /*
- * Copyright (c) 2010-2026. AxonIQ B.V.
+ * Copyright (c) 2010-2026. Axoniq B.V.
  *
- * Licensed under the AXONIQ TERMS OF SERVICE,
- * Version 29 April 2026 (the "License");
- *
- * The software is available for evaluation use without registration.
- * Continued use beyond the evaluation period requires registration
- * and a commercial license. See the License for the specific language
- * governing permissions and limitations under the License.
- * You may not use this file except in compliance with the License.
- *
- * You may obtain a copy of the License at:
- *  https://www.axoniq.io/legal/terms-of-service
- *
- * For licensing information and to register, visit:
- *  https://www.axoniq.io/pricing
+ * Licensed under the Axoniq Terms of Service (the "Terms"). You may not
+ * use this file except in compliance with the Terms, available at
+ * https://www.axoniq.io/legal/terms-of-service
  */
 
 package org.axonframework.deadline.dbscheduler;
@@ -189,9 +178,9 @@ public class DbSchedulerDeadlineManager extends AbstractDeadlineManager {
      * {@link Scheduler}. To be able to execute the task, this should be added to the task list, used to create the
      * scheduler.
      *
-     * @param deadlineManagerSupplier a {@link Supplier} of a {@link DbSchedulerDeadlineManager}. Preferably a method
-     *                                involving dependency injection is used. When those are not available the
-     *                                {@link DbSchedulerDeadlineManagerSupplier} can be used instead.
+     * @param deadlineManagerSupplier a {@link Supplier} of a {@link DbSchedulerDeadlineManager}, preferably one using
+     *                                dependency injection, or a {@link DbSchedulerDeadlineManagerSupplier} where that is
+     *                                not available
      * @return a {@link Task} to execute a deadline
      */
     public static Task<DbSchedulerBinaryDeadlineDetails> binaryTask(
@@ -212,9 +201,9 @@ public class DbSchedulerDeadlineManager extends AbstractDeadlineManager {
      * {@link Scheduler}. To be able to execute the task, this should be added to the task list, used to create the
      * scheduler.
      *
-     * @param deadlineManagerSupplier a {@link Supplier} of a {@link DbSchedulerDeadlineManager}. Preferably a method
-     *                                involving dependency injection is used. When those are not available the
-     *                                {@link DbSchedulerDeadlineManagerSupplier} can be used instead.
+     * @param deadlineManagerSupplier a {@link Supplier} of a {@link DbSchedulerDeadlineManager}, preferably one using
+     *                                dependency injection, or a {@link DbSchedulerDeadlineManagerSupplier} where that is
+     *                                not available
      * @return a {@link Task} to execute a deadline
      */
     public static Task<DbSchedulerHumanReadableDeadlineDetails> humanReadableTask(
@@ -370,7 +359,7 @@ public class DbSchedulerDeadlineManager extends AbstractDeadlineManager {
         }
         SchedulerState state = scheduler.getSchedulerState();
         if (state.isShuttingDown()) {
-            logger.warn("Scheduler is shutting down - will not attempting to start");
+            logger.warn("Scheduler is shutting down - will not attempt to start");
             return;
         }
         if (state.isStarted()) {

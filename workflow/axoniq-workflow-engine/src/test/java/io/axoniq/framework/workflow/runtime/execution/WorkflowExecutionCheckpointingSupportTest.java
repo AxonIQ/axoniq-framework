@@ -1,20 +1,9 @@
 /*
- * Copyright (c) 2010-2026. AxonIQ B.V.
+ * Copyright (c) 2010-2026. Axoniq B.V.
  *
- * Licensed under the AXONIQ TERMS OF SERVICE,
- * Version 29 April 2026 (the "License");
- *
- * The software is available for evaluation use without registration.
- * Continued use beyond the evaluation period requires registration
- * and a commercial license. See the License for the specific language
- * governing permissions and limitations under the License.
- * You may not use this file except in compliance with the License.
- *
- * You may obtain a copy of the License at:
- *  https://www.axoniq.io/legal/terms-of-service
- *
- * For licensing information and to register, visit:
- *  https://www.axoniq.io/pricing
+ * Licensed under the Axoniq Terms of Service (the "Terms"). You may not
+ * use this file except in compliance with the Terms, available at
+ * https://www.axoniq.io/legal/terms-of-service
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
@@ -22,12 +11,20 @@ import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecut
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution.CheckpointWorkStateListener;
 import org.junit.jupiter.api.*;
 
+import java.time.Duration;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Queue;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
+import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
 import static org.mockito.Mockito.*;
 
 /**
@@ -119,11 +116,171 @@ class WorkflowExecutionCheckpointingSupportTest {
         assertThat(safeTransitions).hasValue(1);
     }
 
+    @Nested
+    class PendingCheckpointLatchCallbacks {
+
+        // Large enough that running the callbacks as a nested call chain would overflow the stack.
+        private static final int CALLBACK_COUNT = 100_000;
+
+        @Test
+        void runsEveryCallbackOnceInRegistrationOrderWhenManyCallbacksShareOnePendingLatch() {
+            // given
+            var taskQueue = new InlineExecutionTaskQueue();
+            var support = new WorkflowExecutionCheckpointingSupport(taskQueue, CheckpointWorkStateListener.NO_OP);
+            List<Integer> invoked = new ArrayList<>();
+            for (int i = 0; i < CALLBACK_COUNT; i++) {
+                int index = i;
+                support.addCheckpointLatch(() -> invoked.add(index));
+            }
+            assertThat(taskQueue.tasks).hasSize(1);
+            assertThat(support.hasUnsafeCheckpointWork()).isTrue();
+
+            // when
+            support.runTask(taskQueue.tasks.remove(), mock(WorkflowExecution.class));
+
+            // then
+            assertThat(invoked).containsExactlyElementsOf(expectedIndices());
+            assertThat(support.hasUnsafeCheckpointWork()).isFalse();
+        }
+
+        @Test
+        void completesManyPendingCallbacksInRegistrationOrderWhenThePendingLatchIsReleased() {
+            // given
+            var taskQueue = new InlineExecutionTaskQueue();
+            var support = new WorkflowExecutionCheckpointingSupport(taskQueue, CheckpointWorkStateListener.NO_OP);
+            List<Integer> invoked = new ArrayList<>();
+            for (int i = 0; i < CALLBACK_COUNT; i++) {
+                int index = i;
+                support.addCheckpointLatch(() -> invoked.add(index));
+            }
+            assertThat(taskQueue.tasks).hasSize(1);
+
+            // when
+            support.completePendingCheckpointLatch();
+
+            // then
+            assertThat(invoked).containsExactlyElementsOf(expectedIndices());
+        }
+
+        @Test
+        void runsCallbacksRegisteredAfterConsumptionOnTheNextLatch() {
+            // given
+            var taskQueue = new InlineExecutionTaskQueue();
+            var support = new WorkflowExecutionCheckpointingSupport(taskQueue, CheckpointWorkStateListener.NO_OP);
+            var first = new AtomicInteger();
+            var second = new AtomicInteger();
+            support.addCheckpointLatch(first::incrementAndGet);
+            support.runTask(taskQueue.tasks.remove(), mock(WorkflowExecution.class));
+
+            // when
+            support.addCheckpointLatch(second::incrementAndGet);
+
+            // then the second callback waits for a freshly queued latch
+            assertThat(first).hasValue(1);
+            assertThat(second).hasValue(0);
+            assertThat(taskQueue.tasks).hasSize(1);
+
+            // when
+            support.runTask(taskQueue.tasks.remove(), mock(WorkflowExecution.class));
+
+            // then
+            assertThat(first).hasValue(1);
+            assertThat(second).hasValue(1);
+        }
+
+        private static List<Integer> expectedIndices() {
+            return IntStream.range(0, CALLBACK_COUNT).boxed().toList();
+        }
+    }
+
+    @Nested
+    class QueueLockContention {
+
+        @Test
+        void safetyChecksOnVirtualThreadsCompleteWhenTheWorkflowThreadIsNextInLineForTheQueueLock() throws Exception {
+            // Threads of other workflows check this execution's checkpoint safety, as a crossed latch does.
+            completesWhenTheWorkflowThreadIsNextInLineForTheQueueLock(
+                    WorkflowExecutionCheckpointingSupport::hasUnsafeCheckpointWork
+            );
+        }
+
+        @Test
+        void taskAppendsOnVirtualThreadsCompleteWhenTheWorkflowThreadIsNextInLineForTheQueueLock() throws Exception {
+            completesWhenTheWorkflowThreadIsNextInLineForTheQueueLock(support -> support.appendTask(ignored -> {
+            }));
+        }
+
+        private void completesWhenTheWorkflowThreadIsNextInLineForTheQueueLock(
+                Consumer<WorkflowExecutionCheckpointingSupport> operation
+        ) throws Exception {
+            // given
+            // The queue type SimpleWorkflowExecution uses: every read and write takes the queue's lock.
+            var tasks = new ArrayBlockingQueue<Consumer<WorkflowExecution>>(1000);
+            var support = new WorkflowExecutionCheckpointingSupport(
+                    new InlineExecutionTaskQueue(tasks), CheckpointWorkStateListener.NO_OP
+            );
+            var execution = mock(WorkflowExecution.class);
+            support.appendTask(ignored -> {
+            });
+            // Holds the queue lock until released, the way an offer, take or size call holds it for a moment.
+            var queueLockHeld = new CountDownLatch(1);
+            var releaseQueueLock = new CountDownLatch(1);
+            Thread.ofPlatform().daemon().start(() -> tasks.forEach(task -> {
+                queueLockHeld.countDown();
+                try {
+                    releaseQueueLock.await(10, TimeUnit.SECONDS);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }));
+            assertThat(queueLockHeld.await(5, TimeUnit.SECONDS)).isTrue();
+            // The workflow thread waits for the queue lock to take its next task, first in line.
+            var workflowThread = Thread.ofVirtual().start(() -> {
+                try {
+                    support.runTask(tasks.take(), execution);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            });
+            await().atMost(5, TimeUnit.SECONDS).until(() -> workflowThread.getState() == Thread.State.WAITING);
+            // One operation per carrier thread, so every carrier thread is running one.
+            int carrierThreads = Integer.getInteger("jdk.virtualThreadScheduler.parallelism",
+                                                    Runtime.getRuntime().availableProcessors());
+            var operationsDone = new CountDownLatch(carrierThreads);
+            List<Thread> operations = IntStream.range(0, carrierThreads)
+                                               .mapToObj(i -> Thread.ofVirtual().start(() -> {
+                                                   operation.accept(support);
+                                                   operationsDone.countDown();
+                                               }))
+                                               .toList();
+            await().atMost(5, TimeUnit.SECONDS).until(() -> operations.stream().allMatch(
+                    thread -> thread.getState() == Thread.State.WAITING || thread.getState() == Thread.State.BLOCKED
+            ));
+
+            // when
+            releaseQueueLock.countDown();
+
+            // then
+            assertThat(operationsDone.await(10, TimeUnit.SECONDS))
+                    .as("%d of %d operations never returned", operationsDone.getCount(), carrierThreads)
+                    .isTrue();
+            assertThat(workflowThread.join(Duration.ofSeconds(5))).isTrue();
+        }
+    }
+
     private static final class InlineExecutionTaskQueue
             implements WorkflowExecutionCheckpointingSupport.ExecutionTaskQueue {
 
-        private final Queue<Consumer<WorkflowExecution>> tasks = new ArrayDeque<>();
+        private final Queue<Consumer<WorkflowExecution>> tasks;
         private boolean running = true;
+
+        private InlineExecutionTaskQueue() {
+            this(new ArrayDeque<>());
+        }
+
+        private InlineExecutionTaskQueue(Queue<Consumer<WorkflowExecution>> tasks) {
+            this.tasks = tasks;
+        }
 
         @Override
         public boolean isRunning() {

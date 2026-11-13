@@ -1,35 +1,29 @@
 /*
- * Copyright (c) 2010-2026. AxonIQ B.V.
+ * Copyright (c) 2010-2026. Axoniq B.V.
  *
- * Licensed under the AXONIQ TERMS OF SERVICE,
- * Version 29 April 2026 (the "License");
- *
- * The software is available for evaluation use without registration.
- * Continued use beyond the evaluation period requires registration
- * and a commercial license. See the License for the specific language
- * governing permissions and limitations under the License.
- * You may not use this file except in compliance with the License.
- *
- * You may obtain a copy of the License at:
- *  https://www.axoniq.io/legal/terms-of-service
- *
- * For licensing information and to register, visit:
- *  https://www.axoniq.io/pricing
+ * Licensed under the Axoniq Terms of Service (the "Terms"). You may not
+ * use this file except in compliance with the Terms, available at
+ * https://www.axoniq.io/legal/terms-of-service
  */
 
 package io.axoniq.framework.messaging.deadletter;
 
+import org.axonframework.messaging.core.Context;
+import org.axonframework.messaging.core.Metadata;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.EventTestUtils;
-import org.axonframework.messaging.core.Metadata;
+import org.axonframework.messaging.eventhandling.processing.streaming.token.GlobalSequenceTrackingToken;
+import org.axonframework.messaging.eventhandling.processing.streaming.token.ReplayToken;
+import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.junit.jupiter.api.*;
 
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.util.Optional;
+import java.util.OptionalLong;
 
-import static org.assertj.core.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Test class validating the {@link GenericDeadLetter}.
@@ -241,5 +235,56 @@ class GenericDeadLetterTest {
         assertThat(result.enqueuedAt()).isEqualTo(testSubject.enqueuedAt());
         assertThat(result.lastTouched()).isEqualTo(testSubject.lastTouched());
         assertThat(result.diagnostics()).isEqualTo(expectedDiagnostics);
+    }
+
+    @Nested
+    class Position {
+
+        @Test
+        void returnsPositionOfTrackingTokenInContext() {
+            // given
+            DeadLetter<EventMessage> testSubject = new GenericDeadLetter<>(
+                    SEQUENCE_IDENTIFIER, EventTestUtils.asEventMessage("payload"), null,
+                    Context.with(TrackingToken.RESOURCE_KEY, new GlobalSequenceTrackingToken(7))
+            );
+
+            // when
+            OptionalLong result = testSubject.position();
+
+            // then
+            assertThat(result).hasValue(7);
+        }
+
+        @Test
+        void returnsPositionOfEventUnderlyingReplayToken() {
+            // given
+            TrackingToken replayToken =
+                    ((ReplayToken) ReplayToken.createReplayToken(new GlobalSequenceTrackingToken(100)))
+                            .advancedTo(new GlobalSequenceTrackingToken(3));
+            DeadLetter<EventMessage> testSubject = new GenericDeadLetter<>(
+                    SEQUENCE_IDENTIFIER, EventTestUtils.asEventMessage("payload"), null,
+                    Context.with(TrackingToken.RESOURCE_KEY, replayToken)
+            );
+
+            // when
+            OptionalLong result = testSubject.position();
+
+            // then
+            assertThat(result).hasValue(3);
+        }
+
+        @Test
+        void returnsEmptyWhenContextHoldsNoTrackingToken() {
+            // given
+            DeadLetter<EventMessage> testSubject = new GenericDeadLetter<>(
+                    SEQUENCE_IDENTIFIER, EventTestUtils.asEventMessage("payload"), null, Context.empty()
+            );
+
+            // when
+            OptionalLong result = testSubject.position();
+
+            // then
+            assertThat(result).isEmpty();
+        }
     }
 }

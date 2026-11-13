@@ -1,26 +1,16 @@
 /*
- * Copyright (c) 2010-2026. AxonIQ B.V.
+ * Copyright (c) 2010-2026. Axoniq B.V.
  *
- * Licensed under the AXONIQ TERMS OF SERVICE,
- * Version 29 April 2026 (the "License");
- *
- * The software is available for evaluation use without registration.
- * Continued use beyond the evaluation period requires registration
- * and a commercial license. See the License for the specific language
- * governing permissions and limitations under the License.
- * You may not use this file except in compliance with the License.
- *
- * You may obtain a copy of the License at:
- *  https://www.axoniq.io/legal/terms-of-service
- *
- * For licensing information and to register, visit:
- *  https://www.axoniq.io/pricing
+ * Licensed under the Axoniq Terms of Service (the "Terms"). You may not
+ * use this file except in compliance with the Terms, available at
+ * https://www.axoniq.io/legal/terms-of-service
  */
 package io.axoniq.framework.workflow.runtime.util;
 
 import io.axoniq.framework.workflow.dsl.api.EventNameCustomizer;
 import io.axoniq.framework.workflow.dsl.api.StepRetryInfo;
 import io.axoniq.framework.workflow.dsl.api.StepStatus;
+import io.axoniq.framework.workflow.dsl.api.StepWaitInfo;
 import io.axoniq.framework.workflow.dsl.api.WorkflowError;
 import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.api.execution.context.Version;
@@ -256,17 +246,17 @@ public class EventMessageUtils {
      *
      * @param workflowEventPublicationContext read-only workflow event-publication context
      * @param stepName                        name of the step
-     * @param local                           local data
+     * @param waitInfo                        the wait details, published as the event payload
      * @param customizer                      customizer for event name
      */
     public static EventMessage startedWaitForEventStep(WorkflowEventPublicationContext workflowEventPublicationContext,
                                                        String stepName,
-                                                       Map<String, @Nullable Object> local,
+                                                       StepWaitInfo waitInfo,
                                                        EventNameCustomizer customizer) {
-        var name = customizer.getEventName(stepName, local, StepStatus.STARTED);
+        var name = customizer.getEventName(stepName, Map.of(), StepStatus.STARTED);
         return eventMessage(workflowEventPublicationContext,
                             new MessageType(name, versionOf(workflowEventPublicationContext)),
-                            local,
+                            waitInfo,
                             MetadataUtils.markWaitForEventStep(
                                     MetadataUtils.create(workflowEventPublicationContext.workflowId(),
                                                          stepName,

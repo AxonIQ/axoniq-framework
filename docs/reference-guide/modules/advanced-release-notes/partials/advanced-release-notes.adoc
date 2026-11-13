@@ -8,17 +8,14 @@
 | |xref:major-releases.adoc#release_5_3[5.3]
 | |xref:major-releases.adoc#release_5_2[5.2]
 | |xref:major-releases.adoc#release_5_1[5.1]
-|**Minor** |xref:minor-releases.adoc#release_5_3[5.3]
+|**Minor** |xref:minor-releases.adoc#release_5_4[5.4]
+| |xref:minor-releases.adoc#release_5_3[5.3]
 | |xref:minor-releases.adoc#release_5_2[5.2]
 | |xref:minor-releases.adoc#release_5_1[5.1]
 |===
 
 ifdef::data-protection[]
 include::data-protection-release-notes:partial$data-protection-release-notes.adoc[]
-endif::[]
-
-ifdef::workflows[]
-include::workflows-release-notes:partial$workflows-release-notes.adoc[]
 endif::[]
 
 

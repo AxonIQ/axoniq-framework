@@ -1,20 +1,9 @@
 /*
- * Copyright (c) 2010-2026. AxonIQ B.V.
+ * Copyright (c) 2010-2026. Axoniq B.V.
  *
- * Licensed under the AXONIQ TERMS OF SERVICE,
- * Version 29 April 2026 (the "License");
- *
- * The software is available for evaluation use without registration.
- * Continued use beyond the evaluation period requires registration
- * and a commercial license. See the License for the specific language
- * governing permissions and limitations under the License.
- * You may not use this file except in compliance with the License.
- *
- * You may obtain a copy of the License at:
- *  https://www.axoniq.io/legal/terms-of-service
- *
- * For licensing information and to register, visit:
- *  https://www.axoniq.io/pricing
+ * Licensed under the Axoniq Terms of Service (the "Terms"). You may not
+ * use this file except in compliance with the Terms, available at
+ * https://www.axoniq.io/legal/terms-of-service
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
@@ -26,10 +15,12 @@ import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowConfigurationRegistry.PredicatedWorkflowConfiguration;
 import org.axonframework.common.TypeReference;
+import org.axonframework.messaging.core.EmptyApplicationContext;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.Metadata;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.axonframework.messaging.core.unitofwork.SimpleUnitOfWorkFactory;
 import org.axonframework.messaging.core.unitofwork.StubProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventMessage;
@@ -46,6 +37,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.stream.IntStream;
@@ -79,6 +71,9 @@ import static org.mockito.Mockito.*;
  * events.
  */
 class WorkflowEngineCrossSegmentCheckpointTest {
+
+    private static final SimpleUnitOfWorkFactory UNIT_OF_WORK_FACTORY =
+            new SimpleUnitOfWorkFactory(EmptyApplicationContext.INSTANCE);
 
     private static final String PROCESSOR = "Workflow";
 
@@ -128,7 +123,12 @@ class WorkflowEngineCrossSegmentCheckpointTest {
     @BeforeEach
     void setUp() {
         tokenStore = new InMemoryTokenStore();
-        tokenStore.initializeTokenSegments(PROCESSOR, SEGMENT_COUNT, null, null).join();
+        UNIT_OF_WORK_FACTORY.create()
+                            .executeWithResult(ctx -> tokenStore.initializeTokenSegments(
+                                    PROCESSOR, SEGMENT_COUNT, null, ctx
+                            ))
+                            .orTimeout(5, TimeUnit.SECONDS)
+                            .join();
         configurationRegistry = mock(WorkflowConfigurationRegistry.class);
         repository = new InMemoryWorkflowExecutionRepository();
         workflowEngine = new WorkflowEngine(configurationRegistry,
@@ -294,7 +294,12 @@ class WorkflowEngineCrossSegmentCheckpointTest {
     }
 
     private TrackingToken storedToken(Segment segment) {
-        return tokenStore.fetchToken(PROCESSOR, segment.getSegmentId(), null).join();
+        return UNIT_OF_WORK_FACTORY.create()
+                                   .executeWithResult(ctx -> tokenStore.fetchToken(
+                                           PROCESSOR, segment.getSegmentId(), ctx
+                                   ))
+                                   .orTimeout(5, TimeUnit.SECONDS)
+                                   .join();
     }
 
     /**
@@ -327,6 +332,19 @@ class WorkflowEngineCrossSegmentCheckpointTest {
         @Override
         public TrackingToken lastConsumedToken() {
             return lastConsumed;
+        }
+
+        @Nullable
+        @Override
+        public TrackingToken lastHandledToken() {
+            // Every consumed position is handled: the test never delivers an event this segment skips.
+            return lastConsumed;
+        }
+
+        @Nullable
+        @Override
+        public TrackingToken lastStoredToken() {
+            return stored;
         }
 
         @Override

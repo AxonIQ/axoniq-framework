@@ -1,20 +1,9 @@
 /*
- * Copyright (c) 2010-2026. AxonIQ B.V.
+ * Copyright (c) 2010-2026. Axoniq B.V.
  *
- * Licensed under the AXONIQ TERMS OF SERVICE,
- * Version 29 April 2026 (the "License");
- *
- * The software is available for evaluation use without registration.
- * Continued use beyond the evaluation period requires registration
- * and a commercial license. See the License for the specific language
- * governing permissions and limitations under the License.
- * You may not use this file except in compliance with the License.
- *
- * You may obtain a copy of the License at:
- *  https://www.axoniq.io/legal/terms-of-service
- *
- * For licensing information and to register, visit:
- *  https://www.axoniq.io/pricing
+ * Licensed under the Axoniq Terms of Service (the "Terms"). You may not
+ * use this file except in compliance with the Terms, available at
+ * https://www.axoniq.io/legal/terms-of-service
  */
 
 package io.axoniq.framework.messaging.eventhandling.deadletter;
@@ -39,6 +28,9 @@ import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventHandlingComponent;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.EventTestUtils;
+import org.axonframework.messaging.eventhandling.processing.streaming.token.GlobalSequenceTrackingToken;
+import org.axonframework.messaging.eventhandling.processing.streaming.token.ReplayToken;
+import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.axonframework.messaging.eventhandling.replay.GenericResetContext;
 import org.axonframework.messaging.eventhandling.replay.ReplayStatusChanged;
 import org.axonframework.messaging.eventhandling.replay.ResetContext;
@@ -48,7 +40,9 @@ import org.junit.jupiter.api.*;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -243,6 +237,142 @@ class DeadLetteringEventHandlingComponentTest {
 
             // then - the enqueueIfPresent failure should propagate
             assertFailedStreamWithError(result, RuntimeException.class, "queue failure");
+        }
+    }
+
+    @Nested
+    class WhenHandlingReplayedEvents {
+
+        private static final long TOKEN_AT_RESET = 100;
+
+        @Test
+        void deliversReplayedEventPrecedingTheHeadLetter() {
+            // given
+            EventMessage blockedEvent = EventTestUtils.asEventMessage("blocked");
+            enqueueLetter(blockedEvent, new GlobalSequenceTrackingToken(5));
+            EventMessage replayedEvent = EventTestUtils.asEventMessage("replayed");
+
+            // when
+            MessageStream.Empty<Message> result = testSubject.handle(replayedEvent, replayContext(3));
+
+            // then
+            assertSuccessfulStream(result);
+            assertThat(delegate.handledEvent()).isEqualTo(replayedEvent);
+            assertThat(queue.sequenceSize(TEST_SEQUENCE_ID, null).join()).isEqualTo(1);
+        }
+
+        @Test
+        void dropsReplayedEventAlreadyPresentInTheSequence() {
+            // given
+            EventMessage blockedEvent = EventTestUtils.asEventMessage("blocked");
+            enqueueLetter(blockedEvent, new GlobalSequenceTrackingToken(5));
+
+            // when
+            MessageStream.Empty<Message> result = testSubject.handle(blockedEvent, replayContext(5));
+
+            // then
+            assertSuccessfulStream(result);
+            assertThat(delegate.wasHandled()).isFalse();
+            assertThat(queue.sequenceSize(TEST_SEQUENCE_ID, null).join()).isEqualTo(1);
+        }
+
+        @Test
+        void enqueuesReplayedEventFollowingTheHeadLetterInPositionOrder() {
+            // given
+            EventMessage head = EventTestUtils.asEventMessage("head");
+            EventMessage tail = EventTestUtils.asEventMessage("tail");
+            enqueueLetter(head, new GlobalSequenceTrackingToken(5));
+            enqueueLetter(tail, new GlobalSequenceTrackingToken(9));
+            EventMessage middle = EventTestUtils.asEventMessage("middle");
+
+            // when
+            MessageStream.Empty<Message> result = testSubject.handle(middle, replayContext(7));
+
+            // then
+            assertSuccessfulStream(result);
+            assertThat(delegate.wasHandled()).isFalse();
+            assertThat(payloadsInSequence()).containsExactly("head", "middle", "tail");
+        }
+
+        @Test
+        void enqueuesFailingDeliveredReplayedEventBeforeTheHeadLetter() {
+            // given
+            enqueueLetter(EventTestUtils.asEventMessage("head"), new GlobalSequenceTrackingToken(5));
+            enqueueLetter(EventTestUtils.asEventMessage("tail"), new GlobalSequenceTrackingToken(9));
+            delegate.failingWith(new RuntimeException("Order not found"));
+            EventMessage replayedEvent = EventTestUtils.asEventMessage("replayed");
+
+            // when
+            MessageStream.Empty<Message> result = testSubject.handle(replayedEvent, replayContext(3));
+
+            // then
+            assertSuccessfulStream(result);
+            assertThat(payloadsInSequence()).containsExactly("replayed", "head", "tail");
+        }
+
+        @Test
+        void handlesReplayedEventNormallyWhenSequenceHasNoDeadLetters() {
+            // given
+            EventMessage replayedEvent = EventTestUtils.asEventMessage("replayed");
+
+            // when
+            MessageStream.Empty<Message> result = testSubject.handle(replayedEvent, replayContext(3));
+
+            // then
+            assertSuccessfulStream(result);
+            assertThat(delegate.handledEvent()).isEqualTo(replayedEvent);
+            assertThat(queue.contains(TEST_SEQUENCE_ID, null).join()).isFalse();
+        }
+
+        @Test
+        void enqueuesFailingReplayedEventAtTheTailWhenSequenceHasNoDeadLetters() {
+            // given
+            delegate.failingWith(new RuntimeException("failure"));
+
+            // when
+            testSubject.handle(EventTestUtils.asEventMessage("replayed"), replayContext(3));
+
+            // then
+            assertThat(payloadsInSequence()).containsExactly("replayed");
+        }
+
+        @Test
+        void enqueuesNonReplayedEventAtTheTailRegardlessOfPosition() {
+            // given
+            enqueueLetter(EventTestUtils.asEventMessage("head"), new GlobalSequenceTrackingToken(5));
+            ProcessingContext liveContext = new StubProcessingContext().withResource(
+                    TrackingToken.RESOURCE_KEY, new GlobalSequenceTrackingToken(TOKEN_AT_RESET + 1)
+            );
+
+            // when
+            testSubject.handle(EventTestUtils.asEventMessage("live"), liveContext);
+
+            // then
+            assertThat(delegate.wasHandled()).isFalse();
+            assertThat(payloadsInSequence()).containsExactly("head", "live");
+        }
+
+        private ProcessingContext replayContext(long position) {
+            TrackingToken replayToken = ((ReplayToken) ReplayToken.createReplayToken(new GlobalSequenceTrackingToken(
+                    TOKEN_AT_RESET)))
+                    .advancedTo(new GlobalSequenceTrackingToken(position));
+            return new StubProcessingContext().withResource(TrackingToken.RESOURCE_KEY, replayToken);
+        }
+
+        private void enqueueLetter(EventMessage event, TrackingToken token) {
+            queue.enqueue(
+                    TEST_SEQUENCE_ID,
+                    new GenericDeadLetter<>(TEST_SEQUENCE_ID, event, (Throwable) null,
+                                            Context.with(TrackingToken.RESOURCE_KEY, token)),
+                    null
+            ).join();
+        }
+
+        private List<Object> payloadsInSequence() {
+            List<Object> payloads = new ArrayList<>();
+            queue.deadLetterSequence(TEST_SEQUENCE_ID, null).join()
+                 .forEach(letter -> payloads.add(letter.message().payload()));
+            return payloads;
         }
     }
 
@@ -990,9 +1120,6 @@ class DeadLetteringEventHandlingComponentTest {
         assertThat(error.getMessage()).contains(expectedMessage);
     }
 
-    /**
-     * A stub {@link EventHandlingComponent} that tracks handled events and can be configured to fail.
-     */
     private static class StubEventHandlingComponent implements EventHandlingComponent {
 
         private final String sequenceId;

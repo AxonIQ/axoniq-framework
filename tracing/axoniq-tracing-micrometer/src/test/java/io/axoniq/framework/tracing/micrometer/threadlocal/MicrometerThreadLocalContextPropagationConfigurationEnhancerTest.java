@@ -1,20 +1,9 @@
 /*
- * Copyright (c) 2010-2026. AxonIQ B.V.
+ * Copyright (c) 2010-2026. Axoniq B.V.
  *
- * Licensed under the AXONIQ TERMS OF SERVICE,
- * Version 29 April 2026 (the "License");
- *
- * The software is available for evaluation use without registration.
- * Continued use beyond the evaluation period requires registration
- * and a commercial license. See the License for the specific language
- * governing permissions and limitations under the License.
- * You may not use this file except in compliance with the License.
- *
- * You may obtain a copy of the License at:
- *  https://www.axoniq.io/legal/terms-of-service
- *
- * For licensing information and to register, visit:
- *  https://www.axoniq.io/pricing
+ * Licensed under the Axoniq Terms of Service (the "Terms"). You may not
+ * use this file except in compliance with the Terms, available at
+ * https://www.axoniq.io/legal/terms-of-service
  */
 
 package io.axoniq.framework.tracing.micrometer.threadlocal;
@@ -40,7 +29,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 /**
  * Tests {@link MicrometerThreadLocalContextPropagationConfigurationEnhancer}: when a Micrometer backend is configured it
  * registers a {@link ContextSnapshotFactory} and, when that factory is built, installs the
- * {@link ObservationAwareSpanThreadLocalAccessor} on the global {@link ContextRegistry} idempotently and after the
+ * {@link MicrometerSpanThreadLocalAccessor} on the global {@link ContextRegistry} idempotently and after the
  * ServiceLoader-registered {@link ObservationThreadLocalAccessor} (so it defers to observation-scoped spans).
  *
  * @author Mateusz Nowak
@@ -57,10 +46,10 @@ class MicrometerThreadLocalContextPropagationConfigurationEnhancerTest {
         configuration.getComponent(ContextSnapshotFactory.class);
 
         // then exactly one span thread-local accessor is present on the global registry
-        long spanAccessors = ContextRegistry.getInstance().getThreadLocalAccessors().stream()
+        List<ThreadLocalAccessor<?>> spanAccessors = ContextRegistry.getInstance().getThreadLocalAccessors().stream()
                 .filter(accessor -> ObservationAwareSpanThreadLocalAccessor.KEY.equals(accessor.key()))
-                .count();
-        assertThat(spanAccessors).isEqualTo(1);
+                .toList();
+        assertThat(spanAccessors).singleElement().isInstanceOf(MicrometerSpanThreadLocalAccessor.class);
     }
 
     @Test
