@@ -367,13 +367,16 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
 
     /**
      * Locks the attribute hashes of a whole append in ascending order using only the fast, same-row
-     * check - no fallback. This is the first of up to two round trips - see {@link #lockCriterion}
-     * for why the fallback-aware statement ({@link #CONSISTENCY_TAGS_LOCK}) must always be a
-     * separate, later round trip rather than be embedded here.
+     * check - no fallback. It runs once per append, see {@link #fastLock}. The fallback-aware
+     * statement ({@link #CONSISTENCY_TAGS_LOCK}) must always be a separate, later round trip rather
+     * than be embedded here - see its Javadoc for why.
      * <p>
      * A hash that is not part of the append condition is upserted unconditionally. Locking every
      * hash of the append here, in the same ascending order {@link PostgresqlFinalizer} uses, is
-     * what keeps concurrent appends and the finalizer from deadlocking on this table.
+     * what keeps concurrent appends and the finalizer from deadlocking on this table. Verified
+     * empirically against PostgreSQL 16: the rows are locked in {@code ORDER BY} order, and a
+     * conflicting row is locked even when the {@code DO UPDATE ... WHERE} is false. Every later
+     * statement of the append therefore only touches rows this statement already locked.
      *
      * <li>Parameter 1 {@code long}: the temporary global index
      * <li>Parameter 2 {@code int[]}: the tag hashes to lock
@@ -754,11 +757,13 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
                     long temporaryGlobalIndex = keys.getLong(1);
                     boolean firstEvent = fastLockedHashes == null;
 
-                    if (firstEvent) {  // locks every hash of this append, including this event's unconditional tags
+                    // Not before the loop: fastLock writes a temporary index, which only exists after the first insert
+                    if (firstEvent) {
                         fastLockedHashes = fastLock(connection, condition, events, temporaryGlobalIndex);
                     }
 
-                    Set<Integer> lockedHashes = lock(connection, condition, temporaryGlobalIndex, batchLockedHashes, fastLockedHashes);
+                    Set<Integer> lockedHashes =
+                        lock(connection, condition, temporaryGlobalIndex, batchLockedHashes, fastLockedHashes);
 
                     if (lockedHashes == null) {  // locking of some or all attributes failed, return that appending failed
                         return false;
@@ -766,7 +771,11 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
 
                     batchLockedHashes.addAll(lockedHashes);
 
-                    // Update unconditional tags (tags not part of the append condition):
+                    /*
+                     * Update unconditional tags (tags not part of the append condition). fastLock already wrote
+                     * the first event's index for them, so this only lowers a row a later event carries to that
+                     * event's index, through LEAST, on a row this transaction already holds.
+                     */
                     for (Tag tag : tem.tags()) {
                         int tagHash = consistencyHash(tag.key(), tag.value());
 
@@ -1187,13 +1196,13 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
      * committed, any other transactions blocking on an overlapping attribute will fail. If this
      * transaction is rolled back, they may progress.
      * <p>
-     * Each real tag is its own independent attribute hash, batched into a single {@link
-     * #CONSISTENCY_TAGS_LOCK} statement per criterion, so one round trip locks all of a
-     * criterion's tags at once. That statement's embedded fallback resolves any hash that looks
-     * stale by precisely re-checking the criterion as a whole against the real data - tags and
-     * type together, via {@link #buildCriterionSql(EventCriterion)} - so a shared tag with a
-     * non-matching type, or an unrelated tag that merely collides on the same hash bucket,
-     * doesn't cause a false conflict.
+     * Each real tag is its own independent attribute hash. {@link #fastLock} already locked every
+     * hash of the append; a hash that failed its fast check is re-checked here, batched into a
+     * single {@link #CONSISTENCY_TAGS_LOCK} statement per criterion. That statement's embedded
+     * fallback resolves any hash that looks stale by precisely re-checking the criterion as a whole
+     * against the real data - tags and type together, via {@link #buildCriterionSql(EventCriterion)}
+     * - so a shared tag with a non-matching type, or an unrelated tag that merely collides on the
+     * same hash bucket, doesn't cause a false conflict.
      * <p>
      * A type restriction is never itself hash-locked: unlike tags, types are typically
      * low-cardinality, so every event of a common type would contend on the same handful of
@@ -1211,7 +1220,8 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
      * @return the attribute hashes that were locked (possibly empty), or {@code null} if locking failed
      * @throws SQLException when a JDBC error occurred
      */
-    private Set<Integer> lock(Connection connection, AppendCondition condition, long temporaryGlobalIndex, Set<Integer> batchLockedHashes, Set<Integer> fastLockedHashes) throws SQLException {
+    private Set<Integer> lock(Connection connection, AppendCondition condition, long temporaryGlobalIndex,
+                              Set<Integer> batchLockedHashes, Set<Integer> fastLockedHashes) throws SQLException {
 
         /*
          * The position in a consistency marker is the position just after the last event it was consistent with,
@@ -1220,7 +1230,7 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
          * having to adjust the marker position.
          */
 
-        long globalIndex = Math.max(0, GlobalIndexConsistencyMarker.position(condition.consistencyMarker()));
+        long globalIndex = markerPosition(condition);
 
         assert temporaryGlobalIndex < 0;
         assert globalIndex >= 0;
@@ -1236,16 +1246,7 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
                 continue;
             }
 
-            /*
-             * Sorted (rather than e.g. insertion order) so that any two transactions locking an
-             * overlapping set of hashes always attempt them in the same order - the standard fix
-             * for ABBA deadlocks between concurrent multi-row lock attempts.
-             */
-            Set<Integer> hashesToLock = new TreeSet<>();
-
-            for (Tag tag : criterion.tags()) {
-                hashesToLock.add(consistencyHash(tag.key(), tag.value()));
-            }
+            Set<Integer> hashesToLock = criterionHashes(criterion);
 
             hashesToLock.removeAll(batchLockedHashes);
             hashesToLock.removeAll(lockedHashes);
@@ -1254,13 +1255,16 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
                 continue;  // every tag of this criterion was already locked earlier in this batch
             }
 
-            Set<Integer> locked = lockCriterion(connection, criterion, hashesToLock, fastLockedHashes, temporaryGlobalIndex, globalIndex);
+            Set<Integer> unresolved = new TreeSet<>(hashesToLock);
 
-            if (locked == null) {
+            unresolved.removeAll(fastLockedHashes);  // failed the fast check; fastLock holds the row all the same
+
+            if (!unresolved.isEmpty()
+                    && fallbackLock(connection, criterion, unresolved, temporaryGlobalIndex, globalIndex) == null) {
                 return null;
             }
 
-            lockedHashes.addAll(locked);
+            lockedHashes.addAll(hashesToLock);
         }
 
         return lockedHashes;
@@ -1308,55 +1312,14 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
     }
 
     /**
-     * Locks every given attribute hash for a single criterion, in at most two round trips - see
-     * {@link #lock}.
+     * Locks every attribute hash of the append in one {@link #CONSISTENCY_TAGS_FAST_LOCK} round trip,
+     * in ascending order: the hashes of the append condition with the cheap, same-row-only check,
+     * all other hashes unconditionally. A hash of the append condition that fails the check is
+     * re-checked by {@link #lock}.
      * <p>
-     * The first round trip ({@link #fastLock}) tries the cheap, same-row-only check for every
-     * hash at once. If that alone resolves them all - the common case for high-cardinality tags -
-     * this returns without a second round trip. Otherwise, a second, separate round trip ({@link
-     * #fallbackLock}) re-checks only the hashes still unresolved, now backed by the precise
-     * fallback. This second statement must never be merged into the first: see {@link
-     * #CONSISTENCY_TAGS_LOCK}'s Javadoc for why a fallback sharing a statement with a blocking
-     * write can observe a stale snapshot.
-     *
-     * @param connection the connection to lock on, cannot be {@code null}
-     * @param criterion the criterion {@code hashesToLock} belongs to, used to build the fallback's condition, cannot be {@code null}
-     * @param hashesToLock the distinct attribute hashes to lock, cannot be {@code null} or empty
-     * @param fastLockedHashes the attribute hashes {@link #fastLock} resolved for this append, cannot be {@code null}
-     * @param temporaryGlobalIndex the (temporary) index of a newly inserted event, always negative
-     * @param globalIndex the marker position to check consistency against, never negative
-     * @return the hashes that were locked, or {@code null} if a real conflict was confirmed
-     * @throws SQLException when a JDBC error occurred
-     */
-    private Set<Integer> lockCriterion(Connection connection, EventCriterion criterion, Set<Integer> hashesToLock, Set<Integer> fastLockedHashes, long temporaryGlobalIndex, long globalIndex) throws SQLException {
-        Set<Integer> resolved = new HashSet<>(hashesToLock);
-
-        resolved.retainAll(fastLockedHashes);
-
-        if (resolved.size() == hashesToLock.size()) {
-            return resolved;
-        }
-
-        Set<Integer> remaining = new TreeSet<>(hashesToLock);
-
-        remaining.removeAll(resolved);
-
-        Set<Integer> fallbackResolved = fallbackLock(connection, criterion, remaining, temporaryGlobalIndex, globalIndex);
-
-        if (fallbackResolved == null) {
-            return null;
-        }
-
-        Set<Integer> allResolved = new HashSet<>(resolved);
-
-        allResolved.addAll(fallbackResolved);
-
-        return allResolved;
-    }
-
-    /**
-     * Attempts the cheap, same-row-only {@link #CONSISTENCY_TAGS_FAST_LOCK} for every hash of the append
-     * in one round trip - the first phase of {@link #lockCriterion}.
+     * Runs once per append, with the temporary index of its first event. Every row it writes must
+     * hold a temporary index of this append, so the finalizer renumbers it; later events lower it
+     * to their own index through {@code LEAST}.
      *
      * @param connection the connection to lock on, cannot be {@code null}
      * @param condition the append condition, cannot be {@code null}
@@ -1365,13 +1328,12 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
      * @return the hashes that resolved via the fast check alone (possibly empty, never {@code null})
      * @throws SQLException when a JDBC error occurred
      */
-    private Set<Integer> fastLock(Connection connection, AppendCondition condition, List<TaggedEventMessage<?>> events, long temporaryGlobalIndex) throws SQLException {
+    private Set<Integer> fastLock(Connection connection, AppendCondition condition,
+                                  List<TaggedEventMessage<?>> events, long temporaryGlobalIndex) throws SQLException {
         Set<Integer> conditionHashes = new HashSet<>();
 
         for (EventCriterion criterion : condition.criteria().flatten()) {
-            for (Tag tag : criterion.tags()) {
-                conditionHashes.add(consistencyHash(tag.key(), tag.value()));
-            }
+            conditionHashes.addAll(criterionHashes(criterion));
         }
 
         Set<Integer> hashesToLock = new TreeSet<>(conditionHashes);
@@ -1389,7 +1351,7 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
         try (PreparedStatement ps = connection.prepareStatement(CONSISTENCY_TAGS_FAST_LOCK)) {
             ps.setLong(1, temporaryGlobalIndex);
             ps.setArray(2, connection.createArrayOf("int4", hashesToLock.toArray()));
-            ps.setLong(3, Math.max(0, GlobalIndexConsistencyMarker.position(condition.consistencyMarker())));
+            ps.setLong(3, markerPosition(condition));
             ps.setArray(4, connection.createArrayOf("int4", conditionHashes.toArray()));
 
             try (ResultSet resultSet = ps.executeQuery()) {
@@ -1405,9 +1367,37 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
     }
 
     /**
+     * Returns the attribute hashes of the tags of the given criterion, shared by {@link #fastLock}
+     * and {@link #lock} so both always lock the same hashes.
+     *
+     * @param criterion the criterion to hash the tags of, cannot be {@code null}
+     * @return the distinct attribute hashes, in ascending order, never {@code null}
+     */
+    private Set<Integer> criterionHashes(EventCriterion criterion) {
+        Set<Integer> hashes = new TreeSet<>();
+
+        for (Tag tag : criterion.tags()) {
+            hashes.add(consistencyHash(tag.key(), tag.value()));
+        }
+
+        return hashes;
+    }
+
+    /**
+     * Returns the marker position of the given append condition, shared by {@link #fastLock} and
+     * {@link #lock} - see {@link #lock} for why it needs no adjustment.
+     *
+     * @param condition the append condition, cannot be {@code null}
+     * @return the marker position to check consistency against, never negative
+     */
+    private static long markerPosition(AppendCondition condition) {
+        return Math.max(0, GlobalIndexConsistencyMarker.position(condition.consistencyMarker()));
+    }
+
+    /**
      * Re-checks and locks the given (still-unresolved after {@link #fastLock}) attribute hashes
      * for a single criterion in one round trip, using {@link #CONSISTENCY_TAGS_LOCK}'s fast-check-
-     * or-fallback logic - the second phase of {@link #lockCriterion}, run only when needed.
+     * or-fallback logic - run by {@link #lock} only when needed.
      *
      * @param connection the connection to lock on, cannot be {@code null}
      * @param criterion the criterion {@code hashesToLock} belongs to, used to build the fallback's condition, cannot be {@code null}
