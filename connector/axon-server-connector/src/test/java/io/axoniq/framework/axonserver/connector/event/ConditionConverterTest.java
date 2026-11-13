@@ -145,7 +145,7 @@ class ConditionConverterTest {
                 testCondition, snapshotKey
         );
         // then...
-        assertThat(result.getSnapshotKey()).isEqualTo(snapshotKey);
+        assertThat(result.getSnapshotKeyList()).containsExactly(snapshotKey);
         List<Criterion> resultCriterion = result.getCriterionList();
         assertThat(resultCriterion).hasSize(3);
         validateCriterion(resultCriterion.getFirst().getTagsAndNames());

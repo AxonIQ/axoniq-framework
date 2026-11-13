@@ -761,6 +761,11 @@ class MultiTenantAxonServerQueryBusConnectorTest {
         }
 
         @Override
+        public boolean supports(String capability) {
+            return false;
+        }
+
+        @Override
         public void disconnect() {
             connected = false;
             disconnectCalls++;

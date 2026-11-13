@@ -80,17 +80,17 @@ public class AxonServerEventStorageEngine implements EventStorageEngine, Snapsho
 
     private static final Logger logger = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
 
+    /*
+     * Axon Server versions before this capability existed had a bug where the single-round-trip snapshotted-source
+     * RPC silently skipped the event at the snapshot's position (see
+     * https://github.com/AxonIQ/axoniq-framework/issues/675). The fix and this capability were introduced together,
+     * so a node advertising it is guaranteed to have the corrected behavior.
+     */
+    private static final String SNAPSHOT_AWARE_SOURCING_CAPABILITY = "dcb:snapshot-aware-sourcing";
+
     private final AxonServerConnection connection;
     private final TaggedEventConverter converter;
     private final AxonServerSnapshotStore snapshotStore;
-
-    /*
-     * Disabled by default: the single-round-trip snapshotted-source RPC on affected Axon Server versions
-     * silently skips the event at the snapshot's position instead of including it. Flip to true once the
-     * server fix is in place and this engine can detect it supports the corrected behavior.
-     * See https://github.com/AxonIQ/axoniq-framework/issues/675.
-     */
-    private final AtomicBoolean snapshottedSourceSupported = new AtomicBoolean(false);
 
     /**
      * Constructs an {@code AxonServerEventStorageEngine} with the given {@code connection} and {@code converter}, using
@@ -168,7 +168,7 @@ public class AxonServerEventStorageEngine implements EventStorageEngine, Snapsho
     private MessageStream<EventMessage> sourceWithSnapshot(SourcingCondition condition,
                                                            SourcingStrategy.Snapshot snapshotStrategy,
                                                            @Nullable ProcessingContext context) {
-        if (!snapshottedSourceSupported.get()) {
+        if (!connection.supports(SNAPSHOT_AWARE_SOURCING_CAPABILITY)) {
             return sourceWithBoundedSnapshot(condition, snapshotStrategy, context);
         }
 
@@ -185,20 +185,16 @@ public class AxonServerEventStorageEngine implements EventStorageEngine, Snapsho
 
     /**
      * Awaits the first signal (an item, an error, or completion) from the given {@code sourcingStream}, before deciding
-     * what to hand back to the caller, to not break if Axon Server doesn't support source-with-snapshot.
+     * what to hand back to the caller, as a safety net for the rare case where the connected node advertised {@link
+     * #SNAPSHOT_AWARE_SOURCING_CAPABILITY} yet still answers the underlying RPC with {@code UNIMPLEMENTED} - for
+     * example because it lost that capability on a mid-call reconnect to a different, less capable node.
      * <p>
-     * The {@code SnapshottedDcbEventStore/Source} RPC this stream is backed by only exists on Axon Server versions
-     * supporting DCB snapshotting. Against an older Axon Server,
-     * {@link DcbEventChannel#source(SnapshottedSourceRequest)} still returns a {@code ResultStream} immediately. The
-     * {@code UNIMPLEMENTED} failure only arrives later, asynchronously, as an error on that stream. When that happens,
-     * the given {@code sourcingStream} is closed and this method falls back to {@link #sourceWithBoundedSnapshot}.
-     * The snapshot itself is still fetched, through the older, separate {@link #load} RPC, and prepended to the
-     * events sourced after it. Only when that separate load also fails, or finds nothing, does sourcing fall back
-     * further to full reconstruction from {@link Position#START}. This keeps snapshots in play against an Axon
-     * Server that predates the single-round-trip RPC, rather than disabling them for as long as that server is used.
-     * <p>
-     * TODO - Ideally this is covered by having a "supported handshake" call between Axon Framework and Axon Server,
-     * as documented in https://github.com/AxonIQ/axoniq-framework/issues/100.
+     * The {@code UNIMPLEMENTED} failure, if it occurs, only arrives asynchronously as an error on the stream rather
+     * than at the point of calling {@link DcbEventChannel#source(SnapshottedSourceRequest)}. When that happens, the
+     * given {@code sourcingStream} is closed and this method falls back to {@link #sourceWithBoundedSnapshot}. The
+     * snapshot itself is still fetched, through the older, separate {@link #load} RPC, and prepended to the events
+     * sourced after it. Only when that separate load also fails, or finds nothing, does sourcing fall back further to
+     * full reconstruction from {@link Position#START}.
      *
      * @param sourcingStream   the {@code ResultStream} to await the first signal of
      * @param condition        the {@code SourcingCondition} to fall back to plain sourcing with, if needed
@@ -226,11 +222,9 @@ public class AxonServerEventStorageEngine implements EventStorageEngine, Snapsho
                 return;
             }
             if (unimplemented) {
-                if (snapshottedSourceSupported.compareAndSet(true, false)) {
-                    logger.warn("Axon Server does not support sourcing with snapshots in a single round trip. "
-                                        + "Falling back to loading the snapshot separately. "
-                                        + "Upgrade Axon Server to make use of this optimization.");
-                }
+                logger.warn("Axon Server reported capability [{}] but rejected the sourcing-with-snapshot RPC as "
+                                    + "UNIMPLEMENTED. Falling back to loading the snapshot separately for this call.",
+                            SNAPSHOT_AWARE_SOURCING_CAPABILITY);
                 sourcingStream.close();
                 result.complete(sourceWithBoundedSnapshot(condition, snapshotStrategy, context));
             } else {
