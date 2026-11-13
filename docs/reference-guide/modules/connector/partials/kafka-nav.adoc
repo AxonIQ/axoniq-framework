@@ -1,0 +1,1 @@
+*** xref:connector:kafka.adoc[[.advanced-framework]#Kafka#]
