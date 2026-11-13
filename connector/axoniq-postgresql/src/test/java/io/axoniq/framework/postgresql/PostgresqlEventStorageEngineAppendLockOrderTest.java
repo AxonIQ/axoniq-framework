@@ -13,6 +13,7 @@ import com.zaxxer.hikari.HikariDataSource;
 import org.axonframework.common.jdbc.ConnectionExecutor;
 import org.axonframework.conversion.jackson.JacksonConverter;
 import org.axonframework.eventsourcing.eventstore.AppendCondition;
+import org.axonframework.eventsourcing.eventstore.AppendEventsTransactionRejectedException;
 import org.axonframework.eventsourcing.eventstore.ConsistencyMarker;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine.AppendTransaction;
 import org.axonframework.eventsourcing.eventstore.GenericTaggedEventMessage;
@@ -36,24 +37,30 @@ import java.sql.Statement;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.Arrays;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.awaitility.Awaitility.await;
 
 /**
  * Test class validating that appends of the {@link PostgresqlEventStorageEngine} do not deadlock on the
- * {@code consistency_tags} rows they share with each other or with the {@code PostgresqlFinalizer}.
+ * {@code consistency_tags} rows they share with each other or with the {@code PostgresqlFinalizer}, and that the
+ * rows they store stay correct.
  * <p>
- * Every test keeps one {@code consistency_tags} row, the gate, locked from a separate transaction. An append that
- * needs the gate stops there while it already holds other rows, which makes the order in which the transactions
- * reach their rows the same on every run.
+ * A separate transaction keeps one {@code consistency_tags} row, the gate, locked. An append that needs the gate
+ * stops there while it already holds other rows, which makes the order in which the transactions reach their rows
+ * the same on every run.
  *
  * @author Stefan Dragisic
  */
@@ -153,11 +160,11 @@ class PostgresqlEventStorageEngineAppendLockOrderTest {
 
         @Test
         void appendsTaggingTheirEventsInOppositeOrderBothSucceed() throws SQLException {
-            // given - an append that stops at the gate, after its event with the low tag
+            // given
+            // an append that stops at the gate, after its event with the low tag
             CompletableFuture<ConsistencyMarker> first = append(AppendCondition.none(), low, gate, high);
             awaitTransactionsWaitingForALock(1);
-
-            // and - an append that reaches the same tags in the opposite order
+            // an append that reaches the same tags in the opposite order
             CompletableFuture<ConsistencyMarker> second = append(AppendCondition.none(), high, gate, low);
             awaitTransactionsWaitingForALock(2);
 
@@ -171,12 +178,12 @@ class PostgresqlEventStorageEngineAppendLockOrderTest {
 
         @Test
         void appendWithConditionAndAppendWithoutReachingTheSameTagsInOppositeOrderBothSucceed() throws SQLException {
-            // given - an append that stops at the gate, after it locked the high tag of its condition
+            // given
+            // an append that stops at the gate, after it locked the high tag of its condition
             AppendCondition condition = AppendCondition.withCriteria(EventCriteria.havingTags(high));
             CompletableFuture<ConsistencyMarker> conditional = append(condition, gate, low);
             awaitTransactionsWaitingForALock(1);
-
-            // and - an append without a condition that reaches the low tag first
+            // an append without a condition that reaches the low tag first
             CompletableFuture<ConsistencyMarker> unconditional = append(AppendCondition.none(), low, gate, high);
             awaitTransactionsWaitingForALock(2);
 
@@ -194,10 +201,10 @@ class PostgresqlEventStorageEngineAppendLockOrderTest {
 
         @Test
         void appendSharingTagsWithEventsBeingFinalizedSucceedsAndSoDoesTheFinalization() throws SQLException {
-            // given - committed events with the low and the high tag that still wait for their final global index
+            // given
+            // committed events with the low and the high tag that still wait for their final global index
             AppendTransaction<Object> committed = appendAndCommit(AppendCondition.none(), low, high);
-
-            // and - an append that stops at the gate, after its event with the high tag
+            // an append that stops at the gate, after its event with the high tag
             CompletableFuture<ConsistencyMarker> append = append(AppendCondition.none(), high, gate, low);
             awaitTransactionsWaitingForALock(1);
 
@@ -209,6 +216,74 @@ class PostgresqlEventStorageEngineAppendLockOrderTest {
             // then
             assertThat(finalization).succeedsWithin(TIMEOUT);
             assertThat(append).succeedsWithin(TIMEOUT);
+        }
+    }
+
+    @Nested
+    class StoredConsistencyTags {
+
+        private final Tag x = new Tag("stored", "x");
+        private final Tag y = new Tag("stored", "y");
+        private final Tag z = new Tag("stored", "z");
+
+        @Test
+        void tagOfALaterEventEndsAtTheIndexOfThatEvent() {
+            // when
+            finalize(appendAndCommit(AppendCondition.none(), List.of(Set.of(x), Set.of(y), Set.of(x))));
+
+            // then
+            assertThat(consistencyTagIndices()).isEqualTo(latestEventIndexPerTag()).hasSize(2);
+        }
+
+        @Test
+        void eventsWithSeveralTagsAndTagsRepeatedAcrossEventsEndAtTheIndexOfTheLatestEventPerTag() {
+            // when
+            finalize(appendAndCommit(AppendCondition.none(), List.of(Set.of(x, y), Set.of(y, z), Set.of(x))));
+
+            // then
+            assertThat(consistencyTagIndices()).isEqualTo(latestEventIndexPerTag()).hasSize(3);
+            assertThat(eventCount()).isEqualTo(3);
+        }
+
+        @Test
+        void conditionalAppendWithTagsOutsideItsConditionEndsAtTheIndexOfTheLatestEventPerTag() {
+            // given
+            AppendCondition condition = AppendCondition.withCriteria(EventCriteria.havingTags(x));
+
+            // when
+            finalize(appendAndCommit(condition, List.of(Set.of(x, y), Set.of(z), Set.of(x, z))));
+
+            // then
+            assertThat(consistencyTagIndices()).isEqualTo(latestEventIndexPerTag()).hasSize(3);
+        }
+
+        @Test
+        void conflictingAppendWithTagsOutsideItsConditionIsRejectedAndStoresNothing() {
+            // given
+            finalize(appendAndCommit(AppendCondition.none(), List.of(Set.of(x))));
+            Map<Integer, Long> storedBefore = consistencyTagIndices();
+            AppendCondition conflicting = AppendCondition.withCriteria(EventCriteria.havingTags(x));
+
+            // when / then
+            assertThatThrownBy(() -> appendAndCommit(conflicting, List.of(Set.of(x, y), Set.of(z))))
+                    .isInstanceOf(CompletionException.class)
+                    .hasCauseInstanceOf(AppendEventsTransactionRejectedException.class);
+            assertThat(eventCount()).isEqualTo(1);
+            assertThat(consistencyTagIndices()).isEqualTo(storedBefore);
+        }
+
+        @Test
+        void appendWithoutTagsOrConditionStoresItsEventsAndNoConsistencyTags() {
+            // when
+            finalize(appendAndCommit(AppendCondition.none(), List.of(Set.of(), Set.of())));
+
+            // then
+            assertThat(eventCount()).isEqualTo(2);
+            assertThat(consistencyTagIndices()).isEmpty();
+        }
+
+        private void finalize(AppendTransaction<Object> transaction) {
+            assertThat(transaction.afterCommit(null)).succeedsWithin(TIMEOUT);
         }
     }
 
@@ -225,12 +300,20 @@ class PostgresqlEventStorageEngineAppendLockOrderTest {
      * Appends one event per given tag, in the given order, and commits. The events keep their temporary global
      * index until {@link AppendTransaction#afterCommit(Object)} of the returned transaction is called.
      */
-    @SuppressWarnings("unchecked")
     private AppendTransaction<Object> appendAndCommit(AppendCondition condition, Tag... tagPerEvent) {
+        return appendAndCommit(condition, Arrays.stream(tagPerEvent).map(Set::of).toList());
+    }
+
+    /**
+     * Appends one event per given set of tags, in the given order, and commits. See
+     * {@link #appendAndCommit(AppendCondition, Tag...)}.
+     */
+    @SuppressWarnings("unchecked")
+    private AppendTransaction<Object> appendAndCommit(AppendCondition condition, List<Set<Tag>> tagsPerEvent) {
         List<TaggedEventMessage<?>> events = new ArrayList<>();
 
-        for (int i = 0; i < tagPerEvent.length; i++) {
-            events.add(new GenericTaggedEventMessage<>(EventTestUtils.createEvent(i), Set.of(tagPerEvent[i])));
+        for (int i = 0; i < tagsPerEvent.size(); i++) {
+            events.add(new GenericTaggedEventMessage<>(EventTestUtils.createEvent(i), tagsPerEvent.get(i)));
         }
 
         try (Connection connection = dataSource.getConnection()) {
@@ -267,7 +350,8 @@ class PostgresqlEventStorageEngineAppendLockOrderTest {
                 Connection connection = dataSource.getConnection();
                 Statement statement = connection.createStatement();
                 ResultSet resultSet = statement.executeQuery(
-                        "SELECT COUNT(*) FROM pg_stat_activity WHERE wait_event_type = 'Lock'"
+                        "SELECT COUNT(*) FROM pg_stat_activity "
+                        + "WHERE wait_event_type = 'Lock' AND datname = current_database()"
                 )
             ) {
                 resultSet.next();
@@ -277,8 +361,68 @@ class PostgresqlEventStorageEngineAppendLockOrderTest {
         });
     }
 
+    /**
+     * Returns the {@code consistency_tags} hash of the given tag. Replicates the engine's hash on purpose: stored
+     * hashes must never change, so a change to the engine's hash has to break this test.
+     */
     private int tagHash(Tag tag) {
         return MurmurHash3.hash32((tag.key() + ":" + tag.value()).getBytes(StandardCharsets.UTF_8))
                 & testSubject.hashMask;
+    }
+
+    /**
+     * Returns the committed {@code global_index} of every {@code consistency_tags} row, by {@code tag_hash}.
+     */
+    private Map<Integer, Long> consistencyTagIndices() {
+        Map<Integer, Long> indices = new HashMap<>();
+
+        query("SELECT tag_hash, global_index FROM consistency_tags",
+              resultSet -> indices.put(resultSet.getInt(1), resultSet.getLong(2)));
+
+        return indices;
+    }
+
+    /**
+     * Returns the final {@code global_index} of the latest event carrying each tag, by the tag's {@code tag_hash}.
+     */
+    private Map<Integer, Long> latestEventIndexPerTag() {
+        Map<Integer, Long> indices = new HashMap<>();
+
+        query("SELECT key, value, MAX(global_index) FROM tags WHERE key <> '__T' GROUP BY key, value",
+              resultSet -> {
+                  assertThat(resultSet.getLong(3)).as("event is finalized").isPositive();
+                  indices.put(tagHash(new Tag(resultSet.getString(1), resultSet.getString(2))), resultSet.getLong(3));
+              });
+
+        return indices;
+    }
+
+    private long eventCount() {
+        List<Long> count = new ArrayList<>();
+
+        query("SELECT COUNT(*) FROM events", resultSet -> count.add(resultSet.getLong(1)));
+
+        return count.getFirst();
+    }
+
+    private void query(String sql, RowConsumer rowConsumer) {
+        try (
+            Connection connection = dataSource.getConnection();
+            Statement statement = connection.createStatement();
+            ResultSet resultSet = statement.executeQuery(sql)
+        ) {
+            while (resultSet.next()) {
+                rowConsumer.accept(resultSet);
+            }
+        }
+        catch (SQLException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    @FunctionalInterface
+    private interface RowConsumer {
+
+        void accept(ResultSet resultSet) throws SQLException;
     }
 }
