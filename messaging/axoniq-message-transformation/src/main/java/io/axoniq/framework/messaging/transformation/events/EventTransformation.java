@@ -11,11 +11,9 @@ package io.axoniq.framework.messaging.transformation.events;
 import io.axoniq.framework.messaging.transformation.FromMatcher;
 import io.axoniq.framework.messaging.transformation.MessageTransformation;
 import org.axonframework.common.TypeReference;
-import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
-import org.axonframework.messaging.eventhandling.EventMessage;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -29,9 +27,8 @@ import java.util.function.Predicate;
 import static java.util.Objects.requireNonNull;
 
 /**
- * An event-specific {@link MessageTransformation} describing how stored events of one {@link MessageType} are
- * rewritten into another when they are read. A transformation is a 1:1 payload mapping, a pure rename, a 1:N split,
- * or a 1:0 drop.
+ * Describes how stored events of one {@link MessageType} are rewritten into another when they are read. A
+ * transformation is a 1:1 payload mapping, a pure rename, a 1:N split, or a 1:0 drop.
  * <p>
  * A mapping is built through one of two {@code from} paths, each continuing with {@code to(...)} to declare the
  * resulting identity and {@code transform(...)} to supply the payload mapper:
@@ -93,7 +90,7 @@ import static java.util.Objects.requireNonNull;
  * @author Laura Devriendt
  * @since 5.2.0
  */
-public sealed interface EventTransformation extends MessageTransformation<EventMessage>
+public sealed interface EventTransformation extends MessageTransformation
         permits MappingEventTransformation, RenameEventTransformation, SplitEventTransformation,
                 DropEventTransformation {
 
@@ -191,15 +188,6 @@ public sealed interface EventTransformation extends MessageTransformation<EventM
         requireNonNull(source, SOURCE_NOT_NULL);
         return new DropEventTransformation(source);
     }
-
-    /**
-     * The {@code from}-side matcher selecting the events this transformation applies to. The chain's lookup uses
-     * this; the declared {@code to} identity, if any, is variant-specific and not part of this contract.
-     *
-     * @return the {@code from}-side matcher
-     */
-    @Internal
-    FromMatcher matcher();
 
     /**
      * Continuation of {@link #from(Predicate)}; optionally restricts the predicate match to a set of declared

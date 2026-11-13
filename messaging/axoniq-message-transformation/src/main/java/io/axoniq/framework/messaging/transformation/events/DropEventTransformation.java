@@ -11,7 +11,6 @@ package io.axoniq.framework.messaging.transformation.events;
 import io.axoniq.framework.messaging.transformation.FromMatcher;
 import io.axoniq.framework.messaging.transformation.TransformationContext;
 import org.axonframework.common.annotation.Internal;
-import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.eventhandling.EventMessage;
 
@@ -44,21 +43,7 @@ final class DropEventTransformation implements EventTransformation {
         this.matcher = new FromMatcher.Exact(source);
     }
 
-    /**
-     * Produces no output: the matched event is suppressed. The empty stream satisfies a direct SPI call; within the
-     * chain a drop is short-circuited and this is not invoked.
-     *
-     * @param message the matched input message
-     * @param context the per-message {@link TransformationContext}; required by the contract but otherwise unused
-     * @return an empty stream
-     */
-    @Override
-    public MessageStream<EventMessage> transform(EventMessage message, TransformationContext context) {
-        return MessageStream.empty();
-    }
-
-    @Override
-    public FromMatcher matcher() {
+    FromMatcher matcher() {
         return matcher;
     }
 
