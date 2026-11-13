@@ -283,8 +283,9 @@ class PostgresqlEventStorageEngineTest extends StorageEngineTestSuite<Postgresql
                         SourcingCondition.conditionFor(TEST_CRITERIA), contextReading(connection)
                 ));
 
-                // then - a paged read touches each tag row about once; collecting every remaining tag row
-                // for each page would read about ten times the number of events
+                // then - a paged read touches each tag row about once. The bound relies on the engine's page
+                // size of 50: 1,000 events are 20 pages, and collecting every remaining tag row for each of
+                // them reads about ten times the number of events
                 long tagRowsRead = tagRowsRead(connection) - tagRowsReadBefore;
 
                 assertThat(payloads).hasSize(eventCount);
@@ -319,13 +320,11 @@ class PostgresqlEventStorageEngineTest extends StorageEngineTestSuite<Postgresql
             Tag secondTag = new Tag("OTHER", OTHER_DOMAIN_ID);
             Set<Tag> bothTags = Set.of(firstTag, secondTag);
             int eventCount = 480;
-            appendInBatches(IntStream.range(0, eventCount).<TaggedEventMessage<?>>mapToObj(i -> switch (i % 4) {
+            appendInBatches(IntStream.range(0, eventCount).mapToObj(i -> switch (i % 4) {
                 case 0 -> taggedEventMessage("event-" + i, bothTags);
                 case 1 -> taggedEventMessage("event-" + i, Set.of(firstTag));
                 case 2 -> taggedEventMessage("event-" + i, Set.of(secondTag));
-                default -> new GenericTaggedEventMessage<>(
-                        new GenericEventMessage(new MessageType("other-event"), "event-" + i), bothTags
-                );
+                default -> typedEvent("other-event", "event-" + i, bothTags);
             }).toList());
 
             // when
@@ -337,6 +336,56 @@ class PostgresqlEventStorageEngineTest extends StorageEngineTestSuite<Postgresql
             assertThat(payloads).containsExactlyElementsOf(
                     IntStream.range(0, eventCount).filter(i -> i % 4 == 0).mapToObj(i -> "event-" + i).toList()
             );
+        }
+
+        @Test
+        void returnsTheEventsOfAGroupedAndAnUngroupedCriterionInOrder() {
+            // given - a criterion with a tag and a type, and a criterion with a single tag; each matches more
+            // than a page of events, interleaved with events that have the tag of the first but not its type
+            int eventCount = 360;
+            appendInBatches(IntStream.range(0, eventCount).mapToObj(i -> switch (i % 3) {
+                case 0 -> taggedEventMessage("event-" + i, TEST_CRITERIA_TAGS);
+                case 1 -> taggedEventMessage("event-" + i, OTHER_CRITERIA_TAGS);
+                default -> typedEvent("other-event", "event-" + i, TEST_CRITERIA_TAGS);
+            }).toList());
+            EventCriteria tagAndType = EventCriteria.havingTags(TEST_CRITERIA_TAGS).andBeingOneOfTypes("event");
+
+            // when
+            List<String> payloads = payloadsOf(testSubject.source(
+                    SourcingCondition.conditionFor(tagAndType.or(OTHER_CRITERIA))
+            ));
+
+            // then
+            assertThat(payloads).containsExactlyElementsOf(
+                    IntStream.range(0, eventCount).filter(i -> i % 3 != 2).mapToObj(i -> "event-" + i).toList()
+            );
+        }
+
+        @Test
+        void returnsTheEventsOfSeveralTypesInOrder() {
+            // given - events of three types, interleaved. The type names are unique to this test, because a
+            // criterion on types alone matches the events of every entity in the store
+            String firstType = "first-" + TEST_DOMAIN_ID;
+            String secondType = "second-" + TEST_DOMAIN_ID;
+            String thirdType = "third-" + TEST_DOMAIN_ID;
+            int eventCount = 360;
+            appendInBatches(IntStream.range(0, eventCount).mapToObj(i -> typedEvent(
+                    i % 3 == 0 ? firstType : i % 3 == 1 ? secondType : thirdType, "event-" + i, TEST_CRITERIA_TAGS
+            )).toList());
+
+            // when
+            List<String> payloads = payloadsOf(testSubject.source(SourcingCondition.conditionFor(
+                    EventCriteria.havingAnyTag().andBeingOneOfTypes(firstType, secondType)
+            )));
+
+            // then
+            assertThat(payloads).containsExactlyElementsOf(
+                    IntStream.range(0, eventCount).filter(i -> i % 3 != 2).mapToObj(i -> "event-" + i).toList()
+            );
+        }
+
+        private TaggedEventMessage<EventMessage> typedEvent(String type, String payload, Set<Tag> tags) {
+            return new GenericTaggedEventMessage<>(new GenericEventMessage(new MessageType(type), payload), tags);
         }
 
         private void appendInBatches(List<? extends TaggedEventMessage<?>> events) {
