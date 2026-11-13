@@ -12,7 +12,10 @@ import io.axoniq.framework.workflow.runtime.execution.EventSourcedRunningWorkflo
 import io.axoniq.framework.workflow.runtime.util.EventMessageUtils;
 import org.axonframework.common.FutureUtils;
 import org.axonframework.common.configuration.ComponentRegistry;
+import org.axonframework.common.TypeReference;
+import org.axonframework.conversion.Converter;
 import org.axonframework.conversion.jackson.JacksonConverter;
+import org.axonframework.conversion.jackson2.Jackson2Converter;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
 import org.axonframework.eventsourcing.eventstore.SourcingCondition;
 import org.axonframework.eventsourcing.eventstore.TerminalEventMessage;
@@ -30,11 +33,16 @@ import org.axonframework.messaging.eventstreaming.EventCriteria;
 import org.axonframework.messaging.eventstreaming.Tag;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.*;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.stream.Stream;
 
 import static io.axoniq.framework.workflow.runtime.execution.WorkflowEventTags.TAG_VALUE_EVENT_TYPE_LIFECYCLE;
 import static io.axoniq.framework.workflow.runtime.execution.WorkflowEventTags.TAG_WORKFLOW_EVENT_TYPE;
@@ -89,12 +97,20 @@ class RunningWorkflowsRepositoryIntegrationTest extends AbstractEventSourcedEnti
 
         private static final VersionedType DEFINITION_ID =
                 VersionedType.of(new QualifiedName("OrderWorkflow"), "0.0.1");
+        private static final TypeReference<Map<String, Object>> FIELDS = new TypeReference<>() {
+        };
 
-        @Test
-        void repositoryRestoresRunningWorkflowIdsFromSnapshot() {
+        static Stream<Arguments> converters() {
+            return Stream.of(Arguments.of(Named.of("JacksonConverter", new JacksonConverter())),
+                             Arguments.of(Named.of("Jackson2Converter", new Jackson2Converter())));
+        }
+
+        @ParameterizedTest
+        @MethodSource("converters")
+        void repositoryRestoresRunningWorkflowIdsFromSnapshot(Converter converter) {
             // given
             configuration = configuration("running-workflows-module", configurer -> configurer
-                    .componentRegistry(Snapshots::registerSnapshotStore)
+                    .componentRegistry(cr -> registerSnapshotStore(cr, converter))
                     .snapshots(snapshots -> snapshots.enabled(true).runningWorkflows(SnapshotPolicy.afterEvents(1))));
             configuration.start();
             publishTwoStartedAndOneCompletedWorkflow();
@@ -117,7 +133,7 @@ class RunningWorkflowsRepositoryIntegrationTest extends AbstractEventSourcedEnti
             // given
             configuration = configuration(
                     "running-workflows-module",
-                    configurer -> configurer.componentRegistry(Snapshots::registerSnapshotStore)
+                    configurer -> configurer.componentRegistry(cr -> registerSnapshotStore(cr, new JacksonConverter()))
             );
             configuration.start();
             publishTwoStartedAndOneCompletedWorkflow();
@@ -142,10 +158,25 @@ class RunningWorkflowsRepositoryIntegrationTest extends AbstractEventSourcedEnti
                     .hasStackTraceContaining("A SnapshotStore must be configured to use snapshotting.");
         }
 
-        private static void registerSnapshotStore(ComponentRegistry componentRegistry) {
-            componentRegistry.registerComponent(
-                    SnapshotStore.class, c -> new InMemorySnapshotStore(new JacksonConverter())
-            );
+        @ParameterizedTest
+        @MethodSource("converters")
+        void convertedSnapshotHoldsOnlyTheWorkflowIds(Converter converter) {
+            // given
+            configuration = configuration("running-workflows-module");
+            configuration.start();
+            publishTwoStartedAndOneCompletedWorkflow();
+            var runningWorkflows = load();
+
+            // when
+            byte[] stored = converter.convert(runningWorkflows, byte[].class);
+
+            // then - no other getter of the entity ends up in the snapshot
+            Map<String, Object> fields = converter.convert(stored, FIELDS.getType());
+            assertThat(fields).containsOnlyKeys("workflowIds");
+        }
+
+        private static void registerSnapshotStore(ComponentRegistry componentRegistry, Converter converter) {
+            componentRegistry.registerComponent(SnapshotStore.class, c -> new InMemorySnapshotStore(converter));
         }
 
         private void publishTwoStartedAndOneCompletedWorkflow() {

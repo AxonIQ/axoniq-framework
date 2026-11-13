@@ -11,6 +11,7 @@ import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.util.MetadataUtils;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.Metadata;
+import org.axonframework.messaging.eventhandling.annotation.Event;
 import org.axonframework.messaging.eventstreaming.EventCriteria;
 import org.axonframework.messaging.eventstreaming.Tag;
 
@@ -19,11 +20,14 @@ import java.util.Set;
 
 /**
  * Event sourced collection of running workflow IDs, loaded by {@link WorkflowStore}.
+ * <p>
+ * The {@link Event#version() version} is the version of the snapshot format, see {@link #getWorkflowIds()}.
  *
  * @author Simon Zambrovski
  * @since 5.4.0
  */
 @Internal
+@Event(version = "1.0.0")
 public class EventSourcedRunningWorkflows implements RunningWorkflows {
 
     /**

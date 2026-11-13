@@ -27,6 +27,7 @@ import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.messaging.core.Context;
 import org.axonframework.messaging.core.Metadata;
 import org.axonframework.messaging.core.VersionedType;
+import org.axonframework.messaging.eventhandling.annotation.Event;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventstreaming.EventCriteria;
@@ -49,11 +50,14 @@ import static java.util.Objects.requireNonNull;
 
 /**
  * Holds the current state of a workflow and modified by the {@link #evolve} method receiving messages.
+ * <p>
+ * The {@link Event#version() version} is the version of the snapshot format, see {@link #getStateSnapshot()}.
  *
  * @author Simon Zambrovski
  * @since 5.4.0
  */
 @Internal
+@Event(version = "1.0.0")
 public class EventSourcedWorkflowState implements WorkflowState {
 
     /**
@@ -624,7 +628,7 @@ public class EventSourcedWorkflowState implements WorkflowState {
      * @param rawResult the result of the step, if it is bytes
      * @param retryInfo the result of the step, if it is a {@link StepRetryInfo}
      * @param error     the error of the step, if any
-     * @param timestamp the time the step reached its status
+     * @param timestamp the time the step reached its status, in ISO-8601 form so that no converter needs a time module
      */
     public record StepSnapshot(
             String stepName,
@@ -633,7 +637,7 @@ public class EventSourcedWorkflowState implements WorkflowState {
             byte @Nullable [] rawResult,
             @Nullable StepRetryInfo retryInfo,
             @Nullable WorkflowError error,
-            Instant timestamp
+            String timestamp
     ) {
 
         private static StepSnapshot of(WorkflowStep step) {
@@ -644,7 +648,7 @@ public class EventSourcedWorkflowState implements WorkflowState {
                     step.result() instanceof byte[] rawResult ? rawResult : null,
                     step.result() instanceof StepRetryInfo retryInfo ? retryInfo : null,
                     WorkflowError.from(step.error()),
-                    step.timestamp()
+                    step.timestamp().toString()
             );
         }
 
@@ -654,7 +658,7 @@ public class EventSourcedWorkflowState implements WorkflowState {
                     status,
                     rawResult != null ? rawResult : retryInfo != null ? retryInfo : result,
                     error == null ? null : error.toThrowable(),
-                    timestamp,
+                    Instant.parse(timestamp),
                     Context.empty()
             );
         }
