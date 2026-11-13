@@ -591,6 +591,7 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
     void close() {  // for testing purposes, to avoid junk exceptions
         eventMonitor.close();
         finalizer.close();
+        snapshotStore.close();
     }
 
     /*
@@ -602,6 +603,14 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
      * mean a separate round trip before the events could be read.
      */
 
+    /**
+     * {@inheritDoc}
+     * <p>
+     * The snapshot is written in the background, on a connection of its own, so this method does not wait for a
+     * connection and the {@code context} is not used. The returned future completes when the snapshot was written,
+     * and completes exceptionally with a {@link java.util.concurrent.RejectedExecutionException} when too many
+     * snapshots are waiting to be written. A snapshot that is rejected is not written.
+     */
     @Override
     public CompletableFuture<Void> store(QualifiedName qualifiedName, Object identifier, Snapshot snapshot,
                                          @Nullable ProcessingContext context) {
