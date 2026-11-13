@@ -7,10 +7,13 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
+import com.fasterxml.jackson.annotation.JsonAutoDetect;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.util.MetadataUtils;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.Metadata;
+import org.axonframework.messaging.eventhandling.annotation.Event;
 import org.axonframework.messaging.eventstreaming.EventCriteria;
 import org.axonframework.messaging.eventstreaming.Tag;
 
@@ -19,11 +22,20 @@ import java.util.Set;
 
 /**
  * Event sourced collection of running workflow IDs, loaded by {@link WorkflowStore}.
+ * <p>
+ * The {@link Event#version() version} is the version of the snapshot format, see {@link #getWorkflowIds()}.
  *
  * @author Simon Zambrovski
  * @since 5.4.0
  */
 @Internal
+@Event(version = "1.0.0")
+@JsonAutoDetect(
+        fieldVisibility = JsonAutoDetect.Visibility.NONE,
+        getterVisibility = JsonAutoDetect.Visibility.NONE,
+        isGetterVisibility = JsonAutoDetect.Visibility.NONE,
+        setterVisibility = JsonAutoDetect.Visibility.NONE
+)
 public class EventSourcedRunningWorkflows implements RunningWorkflows {
 
     /**
@@ -54,6 +66,27 @@ public class EventSourcedRunningWorkflows implements RunningWorkflows {
     public void evolve(Metadata metadata) {
         MetadataUtils.getWorkflowStatus(metadata)
                      .ifPresent(status -> applyLifecycle(MetadataUtils.getWorkflowId(metadata), status));
+    }
+
+    /**
+     * Returns the identifiers of the running workflows, for a converter writing this collection as a snapshot.
+     *
+     * @return the identifiers of the running workflows
+     */
+    @JsonProperty("workflowIds")
+    public Set<String> getWorkflowIds() {
+        return workflowIds();
+    }
+
+    /**
+     * Sets the identifiers of the running workflows, for a converter reading this collection from a snapshot.
+     *
+     * @param workflowIds the identifiers of the running workflows
+     */
+    @JsonProperty("workflowIds")
+    public void setWorkflowIds(Set<String> workflowIds) {
+        this.workflowIds.clear();
+        this.workflowIds.addAll(workflowIds);
     }
 
     @Override
