@@ -20,7 +20,7 @@
     <name>Axoniq Framework - Workflow - Standard Kotlin DSL</name>
 
     <properties>
-        <kotlin-logging.version>8.0.4</kotlin-logging.version>
+        <kotlin-logging.version>8.0.7</kotlin-logging.version>
         <dokka-maven-plugin.version>2.3.0</dokka-maven-plugin.version>
     </properties>
 
