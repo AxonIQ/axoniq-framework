@@ -22,7 +22,7 @@
     </description>
 
     <properties>
-        <revision>5.4.2</revision>
+        <revision>5.4.3-SNAPSHOT</revision>
 
         <!-- Global Axoniq version properties -->
         <axon-framework.version>5.4.2</axon-framework.version>
