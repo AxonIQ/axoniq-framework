@@ -223,7 +223,7 @@ include::example$workflows/configuration/ConfigurationExamples.java[tag=snapshot
 <.> The policy for the list of running workflows. There is one list, so there is one snapshot of it.
 <.> The policy for the workflow state. Each workflow instance has a snapshot of its own, stored under its workflow id.
 
-Both policies default to a snapshot after 100 sourced events.
+Both policies default to a snapshot after 50 sourced events.
 The setting applies to every `WorkflowModule` of the application, because all modules share both entities.
 The history projector does not source these entities, so snapshots do not affect it.
 
@@ -290,11 +290,11 @@ The history processor uses the same properties under `axon.workflow.history.*`.
 |Whether snapshots are taken.
 
 |`running-workflows.after-events`
-|`100`
+|`50`
 |Number of sourced events after which the list of running workflows is snapshotted.
 
 |`workflow-state.after-events`
-|`100`
+|`50`
 |Number of sourced events after which the state of a workflow instance is snapshotted.
 |===
 

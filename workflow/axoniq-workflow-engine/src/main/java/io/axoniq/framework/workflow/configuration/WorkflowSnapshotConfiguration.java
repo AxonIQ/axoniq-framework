@@ -37,8 +37,8 @@ import static java.util.Objects.requireNonNull;
 public class WorkflowSnapshotConfiguration {
 
     private boolean enabled = false;
-    private SnapshotPolicy runningWorkflows = SnapshotPolicy.afterEvents(100);
-    private SnapshotPolicy workflowState = SnapshotPolicy.afterEvents(100);
+    private SnapshotPolicy runningWorkflows = SnapshotPolicy.afterEvents(50);
+    private SnapshotPolicy workflowState = SnapshotPolicy.afterEvents(50);
 
     /**
      * Enables or disables snapshots. Defaults to {@code false}.
@@ -53,7 +53,7 @@ public class WorkflowSnapshotConfiguration {
 
     /**
      * Sets the {@link SnapshotPolicy} of the running-workflow list. Defaults to
-     * {@link SnapshotPolicy#afterEvents(int) after 100 events}.
+     * {@link SnapshotPolicy#afterEvents(int) after 50 events}.
      *
      * @param runningWorkflows the {@link SnapshotPolicy} of the running-workflow list
      * @return this configuration, for a fluent API
@@ -65,7 +65,7 @@ public class WorkflowSnapshotConfiguration {
 
     /**
      * Sets the {@link SnapshotPolicy} of the state of each workflow instance. Defaults to
-     * {@link SnapshotPolicy#afterEvents(int) after 100 events}.
+     * {@link SnapshotPolicy#afterEvents(int) after 50 events}.
      *
      * @param workflowState the {@link SnapshotPolicy} of the state of each workflow instance
      * @return this configuration, for a fluent API
