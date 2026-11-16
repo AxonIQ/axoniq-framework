@@ -113,15 +113,15 @@ class WorkflowPropertiesTest {
                 .withConfiguration(AutoConfigurations.of(WorkflowAutoConfiguration.class));
 
         @Test
-        void snapshotsAreDisabledWithOneHundredEventsPerSnapshotByDefault() {
+        void snapshotsAreDisabledWithFiftyEventsPerSnapshotByDefault() {
             contextRunner.run(context -> {
                 // when
                 var snapshots = context.getBean(WorkflowProperties.class).getSnapshots();
 
                 // then
                 assertThat(snapshots.isEnabled()).isFalse();
-                assertThat(snapshots.getRunningWorkflows().getAfterEvents()).isEqualTo(100);
-                assertThat(snapshots.getWorkflowState().getAfterEvents()).isEqualTo(100);
+                assertThat(snapshots.getRunningWorkflows().getAfterEvents()).isEqualTo(50);
+                assertThat(snapshots.getWorkflowState().getAfterEvents()).isEqualTo(50);
             });
         }
 
@@ -130,7 +130,7 @@ class WorkflowPropertiesTest {
             contextRunner.withPropertyValues(
                     "axon.workflow.snapshots.enabled=true",
                     "axon.workflow.snapshots.running-workflows.after-events=250",
-                    "axon.workflow.snapshots.workflow-state.after-events=50"
+                    "axon.workflow.snapshots.workflow-state.after-events=75"
             ).run(context -> {
                 // when
                 var snapshots = context.getBean(WorkflowProperties.class).getSnapshots();
@@ -138,7 +138,7 @@ class WorkflowPropertiesTest {
                 // then
                 assertThat(snapshots.isEnabled()).isTrue();
                 assertThat(snapshots.getRunningWorkflows().getAfterEvents()).isEqualTo(250);
-                assertThat(snapshots.getWorkflowState().getAfterEvents()).isEqualTo(50);
+                assertThat(snapshots.getWorkflowState().getAfterEvents()).isEqualTo(75);
             });
         }
 

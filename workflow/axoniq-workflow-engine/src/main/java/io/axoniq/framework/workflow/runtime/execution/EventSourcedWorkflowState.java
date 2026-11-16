@@ -53,13 +53,14 @@ import static java.util.Objects.requireNonNull;
 /**
  * Holds the current state of a workflow and modified by the {@link #evolve} method receiving messages.
  * <p>
- * The {@link Event#version() version} is the version of the snapshot format, see {@link #getStateSnapshot()}.
+ * The {@link Event#version() version} is the release that introduced the snapshot format, see
+ * {@link #getStateSnapshot()}.
  *
  * @author Simon Zambrovski
  * @since 5.4.0
  */
 @Internal
-@Event(version = "1.0.0")
+@Event(version = "5.4.2")
 @JsonAutoDetect(
         fieldVisibility = JsonAutoDetect.Visibility.NONE,
         getterVisibility = JsonAutoDetect.Visibility.NONE,

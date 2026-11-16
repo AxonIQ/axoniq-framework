@@ -303,7 +303,7 @@ public class WorkflowProperties {
      */
     public static class SnapshotPolicyProperties {
 
-        private int afterEvents = 100;
+        private int afterEvents = 50;
 
         /**
          * Returns the number of sourced events after which a snapshot is taken.

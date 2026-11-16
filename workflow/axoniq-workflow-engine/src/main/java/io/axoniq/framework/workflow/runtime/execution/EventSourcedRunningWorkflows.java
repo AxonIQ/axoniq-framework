@@ -23,13 +23,14 @@ import java.util.Set;
 /**
  * Event sourced collection of running workflow IDs, loaded by {@link WorkflowStore}.
  * <p>
- * The {@link Event#version() version} is the version of the snapshot format, see {@link #getWorkflowIds()}.
+ * The {@link Event#version() version} is the release that introduced the snapshot format, see
+ * {@link #getWorkflowIds()}.
  *
  * @author Simon Zambrovski
  * @since 5.4.0
  */
 @Internal
-@Event(version = "1.0.0")
+@Event(version = "5.4.2")
 @JsonAutoDetect(
         fieldVisibility = JsonAutoDetect.Visibility.NONE,
         getterVisibility = JsonAutoDetect.Visibility.NONE,
