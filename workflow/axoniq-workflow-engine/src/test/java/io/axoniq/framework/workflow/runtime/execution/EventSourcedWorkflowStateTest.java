@@ -20,6 +20,8 @@ import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowStatus
 import io.axoniq.framework.workflow.runtime.execution.payload.PayloadReducerRegistry;
 import io.axoniq.framework.workflow.runtime.util.MetadataUtils;
 import org.axonframework.common.TypeReference;
+import org.axonframework.conversion.Converter;
+import org.axonframework.conversion.jackson.JacksonConverter;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.Metadata;
 import org.axonframework.messaging.core.QualifiedName;
@@ -29,12 +31,14 @@ import org.axonframework.messaging.eventhandling.EventMessage;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.*;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
 
 import static io.axoniq.framework.workflow.runtime.execution.payload.CombineGlobalAndLocalPayloadReducer.NAME;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
@@ -448,5 +452,86 @@ class EventSourcedWorkflowStateTest {
         // then: it is a business event for this instance, never one of its steps
         assertThat(state.containsStep("notifyApproved")).isFalse();
         assertThat(state.workflowStepNames()).isEmpty();
+    }
+
+    @Nested
+    class Snapshots {
+
+        private final Converter converter = new JacksonConverter();
+
+        @Test
+        void converterRestoresTheStateItWroteAsSnapshot() {
+            // given - a failed workflow with a raw step result, a retried step, a failed step and a version migration
+            Instant timestamp = Instant.parse("2026-11-12T10:15:30.123456789Z");
+            byte[] rawResult = "{\"approved\":true}".getBytes(StandardCharsets.UTF_8);
+            StepRetryInfo retryInfo =
+                    new StepRetryInfo(1, 3, WorkflowError.from(new IllegalStateException("carrier down")));
+            state = new EventSourcedWorkflowState(WORKFLOW_ID, Map.of("orderId", "42"), DEFINITION_ID);
+            state.addStep(WorkflowStep.completed("approveOrder", rawResult, timestamp, processingContext));
+            state.addStep(WorkflowStep.retrying("shipOrder", retryInfo, timestamp, processingContext));
+            state.addStep(WorkflowStep.failed(
+                    "chargeCard",
+                    WorkflowError.from(new IllegalStateException("card declined")).toThrowable(),
+                    timestamp,
+                    processingContext
+            ));
+            state.evolve(
+                    mockMigrationStepEvent(
+                            MetadataUtils.createVersionMigrationStep(WORKFLOW_ID, "payment-redesign", "0.0.2")
+                    ),
+                    processingContext
+            );
+            state.setStatus(
+                    WorkflowStatus.FAILED,
+                    WorkflowError.from(new IllegalStateException("order failed")).toThrowable(),
+                    false,
+                    processingContext
+            );
+
+            // when
+            byte[] snapshot = converter.convert(state, byte[].class);
+            EventSourcedWorkflowState restored = converter.convert(snapshot, EventSourcedWorkflowState.class);
+
+            // then
+            assertThat(restored.workflowId()).isEqualTo(WORKFLOW_ID);
+            assertThat(restored.payload()).isEqualTo(Map.of("orderId", "42"));
+            assertThat(restored.workflowDefinitionId()).isEqualTo(state.workflowDefinitionId());
+            assertThat(restored.versionMigrations()).isEqualTo(Map.of("payment-redesign", "0.0.2"));
+            assertThat(restored.workflowStepNames()).containsExactlyInAnyOrderElementsOf(state.workflowStepNames());
+            assertThat(restored.workflowStatus()).isEqualTo(WorkflowStatus.FAILED);
+            assertThatThrownBy(restored::throwTerminalCause).hasRootCauseMessage("order failed");
+
+            WorkflowStep approveOrder = restored.getStep("approveOrder");
+            assertThat(approveOrder.status()).isEqualTo(StepStatus.COMPLETED);
+            assertThat(approveOrder.result()).isEqualTo(rawResult);
+            assertThat(approveOrder.timestamp()).isEqualTo(timestamp);
+
+            WorkflowStep shipOrder = restored.getStep("shipOrder");
+            assertThat(shipOrder.status()).isEqualTo(StepStatus.RETRYING);
+            assertThat(shipOrder.result()).isEqualTo(retryInfo);
+            assertThat(shipOrder.error()).hasMessage("carrier down");
+
+            WorkflowStep chargeCard = restored.getStep("chargeCard");
+            assertThat(chargeCard.status()).isEqualTo(StepStatus.FAILED);
+            assertThat(chargeCard.error()).isInstanceOfSatisfying(WorkflowExecutionException.class, e -> {
+                assertThat(e.type()).isEqualTo(IllegalStateException.class.getName());
+                assertThat(e.getMessage()).isEqualTo("card declined");
+            });
+        }
+
+        @Test
+        void converterRestoresAStepResultThatIsNeitherBytesNorRetryInfo() {
+            // given - a step result as an in-memory event store hands it over: the payload object itself
+            state.addStep(WorkflowStep.completed(
+                    "approveOrder", Map.of("approved", true), Instant.now(), processingContext
+            ));
+
+            // when
+            byte[] snapshot = converter.convert(state, byte[].class);
+            EventSourcedWorkflowState restored = converter.convert(snapshot, EventSourcedWorkflowState.class);
+
+            // then
+            assertThat(restored.getStep("approveOrder").result()).isEqualTo(Map.of("approved", true));
+        }
     }
 }
