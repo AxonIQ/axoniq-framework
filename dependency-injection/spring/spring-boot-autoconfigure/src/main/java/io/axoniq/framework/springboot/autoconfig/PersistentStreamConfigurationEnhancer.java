@@ -24,13 +24,12 @@ import org.axonframework.messaging.core.SubscribableEventSource;
 import org.axonframework.messaging.eventhandling.processing.subscribing.SubscribingEventProcessorConfiguration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.DisposableBean;
-import org.springframework.beans.factory.ObjectProvider;
 
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
 /**
  * A {@link ConfigurationEnhancer} that registers a {@link SubscribableEventSource} component consuming a persistent
@@ -82,37 +81,38 @@ import java.util.function.Function;
  */
 @Internal
 @RegistrationScope(scope = RegistrationScope.Scope.CURRENT)
-public class PersistentStreamConfigurationEnhancer implements ConfigurationEnhancer, DisposableBean {
+public class PersistentStreamConfigurationEnhancer implements ConfigurationEnhancer {
 
     private static final Logger logger = LoggerFactory.getLogger(PersistentStreamConfigurationEnhancer.class);
 
-    private final ObjectProvider<AxonServerConfiguration> axonServerConfigProvider;
+    private final Supplier<AxonServerConfiguration> serverConfigSupplier;
     private final PersistentStreamScheduledExecutorBuilder schedulerBuilder;
     private final PersistentStreamEventSourceFactory factory;
 
     /**
      * Instantiates a {@code PersistentStreamConfigurationEnhancer}.
      *
-     * @param axonServerConfigProvider provider for the Axon Server configuration containing persistent stream settings;
-     *                                 resolved lazily to avoid Spring lifecycle ordering issues with
-     *                                 {@link org.axonframework.extension.spring.config.SpringComponentRegistry}
-     * @param schedulerBuilder         the builder used to create a per-stream {@link ScheduledExecutorService}
-     * @param eventSourceFactory       the eventSourceFactory used to construct each event source
+     * @param serverConfigSupplier supplier of the Axon Server configuration containing persistent stream settings;
+     *                             resolved lazily to avoid Spring lifecycle ordering issues with
+     *                             {@link org.axonframework.extension.spring.config.SpringComponentRegistry}
+     * @param schedulerBuilder     the builder used to create a per-stream {@link ScheduledExecutorService}
+     * @param eventSourceFactory   the eventSourceFactory used to construct each event source
      */
     public PersistentStreamConfigurationEnhancer(
-            ObjectProvider<AxonServerConfiguration> axonServerConfigProvider,
+            Supplier<AxonServerConfiguration> serverConfigSupplier,
             PersistentStreamScheduledExecutorBuilder schedulerBuilder,
             PersistentStreamEventSourceFactory eventSourceFactory
     ) {
-        this.axonServerConfigProvider = Objects.requireNonNull(axonServerConfigProvider,
-                                                               "axonServerConfigProvider must not be null");
+        this.serverConfigSupplier = Objects.requireNonNull(
+                serverConfigSupplier, "axonServerConfigSupplier must not be null"
+        );
         this.schedulerBuilder = Objects.requireNonNull(schedulerBuilder, "schedulerBuilder must not be null");
         this.factory = Objects.requireNonNull(eventSourceFactory, "eventSourceFactory must not be null");
     }
 
     @Override
     public void enhance(ComponentRegistry registry) {
-        AxonServerConfiguration axonServerConfig = axonServerConfigSupplier.get();
+        AxonServerConfiguration axonServerConfig = serverConfigSupplier.get();
         registry.registerIfNotPresent(executorRegistryDefinition());
         registerConfiguredEventSources(registry, axonServerConfig);
         configureAutoPersistentStreams(registry, axonServerConfig);
