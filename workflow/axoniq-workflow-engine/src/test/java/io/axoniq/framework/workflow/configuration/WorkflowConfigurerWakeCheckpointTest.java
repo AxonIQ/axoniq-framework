@@ -28,10 +28,12 @@ import org.axonframework.eventsourcing.eventstore.EventStore;
 import org.axonframework.eventsourcing.eventstore.SourcingCondition;
 import org.axonframework.eventsourcing.eventstore.TaggedEventMessage;
 import org.axonframework.eventsourcing.eventstore.inmemory.InMemoryEventStorageEngine;
+import org.axonframework.messaging.core.EmptyApplicationContext;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.axonframework.messaging.core.unitofwork.SimpleUnitOfWorkFactory;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
@@ -65,6 +67,9 @@ import static org.awaitility.Awaitility.await;
  * @author Stefan Dragisic
  */
 class WorkflowConfigurerWakeCheckpointTest {
+
+    private static final SimpleUnitOfWorkFactory UNIT_OF_WORK_FACTORY =
+            new SimpleUnitOfWorkFactory(EmptyApplicationContext.INSTANCE);
 
     private static final String MODULE = "wake-checkpoint";
     private static final String PROCESSOR = MODULE;
@@ -132,9 +137,12 @@ class WorkflowConfigurerWakeCheckpointTest {
 
             // when
             var restartedTokenStore = new InMemoryTokenStore();
-            restartedTokenStore.initializeTokenSegments(PROCESSOR, 1, tokenAtCrash, null)
-                               .orTimeout(5, TimeUnit.SECONDS)
-                               .join();
+            UNIT_OF_WORK_FACTORY.create()
+                                .executeWithResult(ctx -> restartedTokenStore.initializeTokenSegments(
+                                        PROCESSOR, 1, tokenAtCrash, ctx
+                                ))
+                                .orTimeout(5, TimeUnit.SECONDS)
+                                .join();
             var restarted = start(restartedTokenStore, AWAIT_PAID_BODY);
 
             // then
@@ -220,7 +228,10 @@ class WorkflowConfigurerWakeCheckpointTest {
 
     @Nullable
     private static TrackingToken storedToken(TokenStore tokenStore) {
-        return tokenStore.fetchToken(PROCESSOR, 0, null).orTimeout(5, TimeUnit.SECONDS).join();
+        return UNIT_OF_WORK_FACTORY.create()
+                                   .executeWithResult(ctx -> tokenStore.fetchToken(PROCESSOR, 0, ctx))
+                                   .orTimeout(5, TimeUnit.SECONDS)
+                                   .join();
     }
 
     private static boolean covers(@Nullable TrackingToken stored, TrackingToken position) {

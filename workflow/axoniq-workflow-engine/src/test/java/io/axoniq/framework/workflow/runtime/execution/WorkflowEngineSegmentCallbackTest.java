@@ -52,7 +52,7 @@ class WorkflowEngineSegmentCallbackTest {
                                         cancellationService,
                                         workflowStore,
                                         restoreUnitOfWorkFactory());
-        engine.setCheckpointingSupport(new WorkflowEngineCheckpointingSupport(engine));
+        engine.setCheckpointingSupport(new WorkflowEngineCheckpointingSupport(engine, 0L));
         engine.restoreTimeout = SHORT_TIMEOUT;
         return engine;
     }

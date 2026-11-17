@@ -10,6 +10,7 @@ package io.axoniq.framework.workflow.runtime.execution;
 import io.axoniq.framework.workflow.dsl.api.EventNameCustomizer;
 import io.axoniq.framework.workflow.dsl.api.StepCancellationException;
 import io.axoniq.framework.workflow.dsl.api.StepRetryInfo;
+import io.axoniq.framework.workflow.dsl.api.StepWaitInfo;
 import io.axoniq.framework.workflow.dsl.api.WorkflowCancelledException;
 import io.axoniq.framework.workflow.dsl.api.WorkflowFailedException;
 import io.axoniq.framework.workflow.dsl.api.WorkflowStepResult;
@@ -151,9 +152,9 @@ public abstract class AbstractStepExecutor {
     }
 
     protected CompletableFuture<Void> startedWaitForEvent(String stepName,
-                                                          Map<String, @Nullable Object> payload,
+                                                          StepWaitInfo waitInfo,
                                                           EventNameCustomizer eventNameCustomizer) {
-        return sendStepEvent(stepName, startedWaitForEventStep(workflowExecutionOperations, stepName, sanitize(payload),
+        return sendStepEvent(stepName, startedWaitForEventStep(workflowExecutionOperations, stepName, waitInfo,
                                                                merge(parentEventNameCustomizer, eventNameCustomizer)
         ), getContext(stepName));
     }

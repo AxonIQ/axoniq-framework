@@ -13,6 +13,7 @@ import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
 import org.axonframework.common.Registration;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Predicate;
@@ -23,6 +24,9 @@ import java.util.function.Predicate;
  * tenants added or removed later trigger the registration hooks on all subscribed components. Cancelling a
  * subscription cancels every tenant registration made on the component's behalf, including registrations for tenants
  * added after subscribing, as the {@link TenantProvider#subscribe(MultiTenantAwareComponent)} contract requires.
+ * Adding a tenant and subscribing are all or nothing: a failure cancels the attempt's registrations in reverse order
+ * and rethrows. A tenant is known while its registration runs and withdrawn on failure, and a component is only
+ * subscribed after every registration succeeded.
  */
 public class StubTenantProvider implements TenantProvider {
 
@@ -32,11 +36,18 @@ public class StubTenantProvider implements TenantProvider {
     private final List<TenantRegistration> registrations = new CopyOnWriteArrayList<>();
 
     @Override
-    public Registration subscribe(MultiTenantAwareComponent component) {
+    public synchronized Registration subscribe(MultiTenantAwareComponent component) {
+        List<TenantRegistration> registrationAttempt = new ArrayList<>();
+        try {
+            for (TenantDescriptor tenant : tenantDescriptors) {
+                registrationAttempt.add(new TenantRegistration(tenant, component, component.registerTenant(tenant)));
+            }
+        } catch (Throwable failure) {
+            rollBack(registrationAttempt, failure);
+            throw failure;
+        }
         subscribedComponents.add(component);
-        tenantDescriptors.forEach(tenant -> registrations.add(new TenantRegistration(
-                tenant, component, component.registerTenant(tenant)
-        )));
+        storeRegistrationsOfKnownTenants(registrationAttempt);
         return () -> {
             subscribedComponents.remove(component);
             cancelRegistrationsMatching(registration -> registration.component() == component);
@@ -49,11 +60,24 @@ public class StubTenantProvider implements TenantProvider {
         return List.copyOf(tenantDescriptors);
     }
 
-    public void addTenant(TenantDescriptor tenant) {
+    public synchronized void addTenant(TenantDescriptor tenant) {
+        if (tenantDescriptors.contains(tenant)) {
+            return;
+        }
         tenantDescriptors.add(tenant);
-        subscribedComponents.forEach(component -> registrations.add(new TenantRegistration(
-                tenant, component, component.registerAndStartTenant(tenant)
-        )));
+        List<TenantRegistration> registrationAttempt = new ArrayList<>();
+        try {
+            for (MultiTenantAwareComponent component : subscribedComponents) {
+                registrationAttempt.add(new TenantRegistration(
+                        tenant, component, component.registerAndStartTenant(tenant)
+                ));
+            }
+        } catch (Throwable failure) {
+            rollBack(registrationAttempt, failure);
+            tenantDescriptors.remove(tenant);
+            throw failure;
+        }
+        storeRegistrationsOfKnownTenants(registrationAttempt);
     }
 
     public void removeTenant(TenantDescriptor tenant) {
@@ -80,6 +104,37 @@ public class StubTenantProvider implements TenantProvider {
         List<TenantRegistration> matching = registrations.stream().filter(criterion).toList();
         registrations.removeAll(matching);
         matching.reversed().forEach(tenantRegistration -> tenantRegistration.registration().cancel());
+    }
+
+    /**
+     * Stores the registrations of tenants that are still known and cancels the others: a component may remove a tenant
+     * while it registers it, and that removal cannot see this attempt.
+     */
+    private void storeRegistrationsOfKnownTenants(List<TenantRegistration> registrationAttempt) {
+        List<TenantRegistration> removed = new ArrayList<>();
+        for (TenantRegistration tenantRegistration : registrationAttempt) {
+            if (tenantDescriptors.contains(tenantRegistration.tenant())) {
+                registrations.add(tenantRegistration);
+            } else {
+                removed.add(tenantRegistration);
+            }
+        }
+        removed.reversed().forEach(tenantRegistration -> tenantRegistration.registration().cancel());
+    }
+
+    /**
+     * Undoes a failed attempt in reverse order. Unlike removal, a cancel failure is attached to the original failure.
+     */
+    private static void rollBack(List<TenantRegistration> registrationAttempt, Throwable failure) {
+        for (TenantRegistration tenantRegistration : registrationAttempt.reversed()) {
+            try {
+                tenantRegistration.registration().cancel();
+            } catch (Throwable exception) {
+                if (exception != failure) {
+                    failure.addSuppressed(exception);
+                }
+            }
+        }
     }
 
     private record TenantRegistration(TenantDescriptor tenant,

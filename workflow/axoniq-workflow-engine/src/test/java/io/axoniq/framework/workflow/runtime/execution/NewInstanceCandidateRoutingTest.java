@@ -258,7 +258,7 @@ class NewInstanceCandidateRoutingTest {
                                     mock(WorkflowStore.class),
                                     mock(UnitOfWorkFactory.class));
         routing = (WorkflowEngineSequencingPolicy) engine.segmentedRouting();
-        checkpointingSupport = new WorkflowEngineCheckpointingSupport(engine);
+        checkpointingSupport = new WorkflowEngineCheckpointingSupport(engine, 0L);
         engine.setCheckpointingSupport(checkpointingSupport);
     }
 

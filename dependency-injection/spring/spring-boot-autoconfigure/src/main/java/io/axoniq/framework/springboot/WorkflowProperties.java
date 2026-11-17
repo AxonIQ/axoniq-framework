@@ -79,7 +79,16 @@ public class WorkflowProperties {
      * configuration instead.
      */
     private boolean coordinatorClaimExtension = false;
+
+    /**
+     * The minimum time, in milliseconds, between two checkpoint requests of one segment of the workflow event
+     * processor.
+     * <p>
+     * Defaults to {@code 0}, which requests a checkpoint after every event.
+     */
+    private long checkpointInterval = 0L;
     private final HistoryProcessorProperties history = new HistoryProcessorProperties();
+    private final SnapshotProperties snapshots = new SnapshotProperties();
 
     /**
      * Returns the number of segments to initialize the workflow event processor with.
@@ -192,6 +201,31 @@ public class WorkflowProperties {
     }
 
     /**
+     * Returns the minimum time, in milliseconds, between two checkpoint requests of one segment of the workflow event
+     * processor.
+     * <p>
+     * Defaults to {@code 0}, which requests a checkpoint after every event.
+     *
+     * @return the checkpoint interval, in milliseconds, where {@code 0} requests a checkpoint after every event
+     */
+    public long getCheckpointInterval() {
+        return checkpointInterval;
+    }
+
+    /**
+     * Sets the minimum time, in milliseconds, between two checkpoint requests of one segment of the workflow event
+     * processor.
+     * <p>
+     * Defaults to {@code 0}, which requests a checkpoint after every event.
+     *
+     * @param checkpointInterval the checkpoint interval, in milliseconds, where {@code 0} requests a checkpoint after
+     *                           every event
+     */
+    public void setCheckpointInterval(long checkpointInterval) {
+        this.checkpointInterval = checkpointInterval;
+    }
+
+    /**
      * The properties of the history projector's own, dedicated event processor, under the
      * {@code axoniq.workflow.history} prefix.
      * <p>
@@ -203,6 +237,91 @@ public class WorkflowProperties {
      */
     public HistoryProcessorProperties getHistory() {
         return history;
+    }
+
+    /**
+     * The snapshot properties of the workflow engine, under the {@code axon.workflow.snapshots} prefix.
+     *
+     * @return the snapshot properties of the workflow engine
+     */
+    public SnapshotProperties getSnapshots() {
+        return snapshots;
+    }
+
+    /**
+     * The snapshot properties of the workflow engine.
+     * <p>
+     * Snapshots are disabled by default. Enabling them requires a {@code SnapshotStore} bean.
+     */
+    public static class SnapshotProperties {
+
+        private boolean enabled = false;
+        private final SnapshotPolicyProperties runningWorkflows = new SnapshotPolicyProperties();
+        private final SnapshotPolicyProperties workflowState = new SnapshotPolicyProperties();
+
+        /**
+         * Returns whether snapshots are taken.
+         *
+         * @return whether snapshots are taken
+         */
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        /**
+         * Sets whether snapshots are taken.
+         *
+         * @param enabled whether snapshots are taken
+         */
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        /**
+         * The snapshot properties of the running-workflow list, under the
+         * {@code axon.workflow.snapshots.running-workflows} prefix.
+         *
+         * @return the snapshot properties of the running-workflow list
+         */
+        public SnapshotPolicyProperties getRunningWorkflows() {
+            return runningWorkflows;
+        }
+
+        /**
+         * The snapshot properties of the state of each workflow instance, under the
+         * {@code axon.workflow.snapshots.workflow-state} prefix.
+         *
+         * @return the snapshot properties of the state of each workflow instance
+         */
+        public SnapshotPolicyProperties getWorkflowState() {
+            return workflowState;
+        }
+    }
+
+    /**
+     * The properties deciding when a snapshot is taken.
+     */
+    public static class SnapshotPolicyProperties {
+
+        private int afterEvents = 50;
+
+        /**
+         * Returns the number of sourced events after which a snapshot is taken.
+         *
+         * @return the number of sourced events after which a snapshot is taken
+         */
+        public int getAfterEvents() {
+            return afterEvents;
+        }
+
+        /**
+         * Sets the number of sourced events after which a snapshot is taken.
+         *
+         * @param afterEvents the number of sourced events after which a snapshot is taken
+         */
+        public void setAfterEvents(int afterEvents) {
+            this.afterEvents = afterEvents;
+        }
     }
 
     /**

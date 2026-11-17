@@ -27,8 +27,10 @@ import org.axonframework.common.configuration.Configuration;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
 import org.axonframework.eventsourcing.eventstore.EventStore;
 import org.axonframework.eventsourcing.eventstore.inmemory.InMemoryEventStorageEngine;
+import org.axonframework.messaging.core.EmptyApplicationContext;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
+import org.axonframework.messaging.core.unitofwork.SimpleUnitOfWorkFactory;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
 import org.axonframework.messaging.eventhandling.processing.EventProcessor;
@@ -66,6 +68,8 @@ class WorkflowConfigurerWaitAssociationRoutingTest {
     private static final String PROCESSOR = MODULE;
     private static final int SEGMENT_COUNT = 4;
     private static final String WAIT_STEP = "awaitPaid";
+    private static final SimpleUnitOfWorkFactory UNIT_OF_WORK_FACTORY =
+            new SimpleUnitOfWorkFactory(EmptyApplicationContext.INSTANCE);
 
     private final InMemoryTokenStore tokenStore = new InMemoryTokenStore();
     private final InMemoryEventStorageEngine storageEngine = new InMemoryEventStorageEngine();
@@ -306,7 +310,10 @@ class WorkflowConfigurerWaitAssociationRoutingTest {
 
     @Nullable
     private TrackingToken storedToken(int segment) {
-        return tokenStore.fetchToken(PROCESSOR, segment, null).orTimeout(5, TimeUnit.SECONDS).join();
+        return UNIT_OF_WORK_FACTORY.create()
+                                   .executeWithResult(ctx -> tokenStore.fetchToken(PROCESSOR, segment, ctx))
+                                   .orTimeout(5, TimeUnit.SECONDS)
+                                   .join();
     }
 
     @SuppressWarnings("unchecked")

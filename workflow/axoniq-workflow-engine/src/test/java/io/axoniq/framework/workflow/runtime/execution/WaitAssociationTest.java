@@ -8,6 +8,7 @@
 package io.axoniq.framework.workflow.runtime.execution;
 
 import io.axoniq.framework.workflow.dsl.api.StepStatus;
+import io.axoniq.framework.workflow.dsl.api.StepWaitInfo;
 import io.axoniq.framework.workflow.runtime.util.MetadataUtils;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
@@ -15,6 +16,7 @@ import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
 import org.junit.jupiter.api.*;
 
+import java.time.Instant;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -59,6 +61,23 @@ class WaitAssociationTest {
             assertThat(row.stepName()).isEqualTo(STEP_NAME);
             assertThat(row.eventName()).isEqualTo(new QualifiedName("PaymentReceived"));
             assertThat(row.associations()).containsExactlyInAnyOrder("payload:orderId=42", "metadata:tenant=acme");
+            assertThat(row.isWildcard()).isFalse();
+        }
+
+        @Test
+        void readsTheWaitInfoAsTheWaitPublishesIt() {
+            // given: an in-memory store hands back the published payload, without conversion
+            var event = startedWait(new StepWaitInfo(Instant.parse("2026-07-08T10:00:00Z"),
+                                                     "PaymentReceived",
+                                                     Set.of("payload:orderId=42"),
+                                                     Instant.parse("2026-07-08T10:15:00Z")));
+
+            // when
+            var row = WaitAssociation.fromStartedEvent(event);
+
+            // then
+            assertThat(row.eventName()).isEqualTo(new QualifiedName("PaymentReceived"));
+            assertThat(row.associations()).containsExactly("payload:orderId=42");
             assertThat(row.isWildcard()).isFalse();
         }
 

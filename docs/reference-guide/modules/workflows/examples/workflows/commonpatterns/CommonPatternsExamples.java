@@ -228,7 +228,7 @@ public class CommonPatternsExamples {
         var targetTime = LocalDateTime.of(2026, 4, 1, 9, 0);
         var delay = Duration.between(LocalDateTime.now(), targetTime);
 
-        ctx.sleep("waitUntilAprilFirst", delay);
+        ctx.awaitSleep("waitUntilAprilFirst", delay);
 
         ctx.awaitExecute("sendReminder",
                          payload("to", email).getValues(),

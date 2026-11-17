@@ -10,6 +10,7 @@ package io.axoniq.framework.workflow.runtime.util;
 import io.axoniq.framework.workflow.dsl.api.EventNameCustomizer;
 import io.axoniq.framework.workflow.dsl.api.StepRetryInfo;
 import io.axoniq.framework.workflow.dsl.api.StepStatus;
+import io.axoniq.framework.workflow.dsl.api.StepWaitInfo;
 import io.axoniq.framework.workflow.dsl.api.WorkflowError;
 import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.api.execution.context.Version;
@@ -245,17 +246,17 @@ public class EventMessageUtils {
      *
      * @param workflowEventPublicationContext read-only workflow event-publication context
      * @param stepName                        name of the step
-     * @param local                           local data
+     * @param waitInfo                        the wait details, published as the event payload
      * @param customizer                      customizer for event name
      */
     public static EventMessage startedWaitForEventStep(WorkflowEventPublicationContext workflowEventPublicationContext,
                                                        String stepName,
-                                                       Map<String, @Nullable Object> local,
+                                                       StepWaitInfo waitInfo,
                                                        EventNameCustomizer customizer) {
-        var name = customizer.getEventName(stepName, local, StepStatus.STARTED);
+        var name = customizer.getEventName(stepName, Map.of(), StepStatus.STARTED);
         return eventMessage(workflowEventPublicationContext,
                             new MessageType(name, versionOf(workflowEventPublicationContext)),
-                            local,
+                            waitInfo,
                             MetadataUtils.markWaitForEventStep(
                                     MetadataUtils.create(workflowEventPublicationContext.workflowId(),
                                                          stepName,
