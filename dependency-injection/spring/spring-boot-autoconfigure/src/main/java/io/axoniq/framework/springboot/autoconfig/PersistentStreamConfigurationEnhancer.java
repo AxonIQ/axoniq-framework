@@ -19,6 +19,7 @@ import org.axonframework.common.configuration.ComponentDefinition;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.axonframework.common.configuration.DecoratorDefinition;
+import org.axonframework.common.lifecycle.Phase;
 import org.axonframework.messaging.core.SubscribableEventSource;
 import org.axonframework.messaging.eventhandling.processing.subscribing.SubscribingEventProcessorConfiguration;
 import org.slf4j.Logger;
@@ -26,10 +27,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.DisposableBean;
 import org.springframework.beans.factory.ObjectProvider;
 
-import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.function.Function;
 
@@ -90,8 +89,6 @@ public class PersistentStreamConfigurationEnhancer implements ConfigurationEnhan
     private final ObjectProvider<AxonServerConfiguration> axonServerConfigProvider;
     private final PersistentStreamScheduledExecutorBuilder schedulerBuilder;
     private final PersistentStreamEventSourceFactory factory;
-    // Pools are added whenever a source is built, which is not necessarily the thread that ran the enhancement.
-    private final List<ScheduledExecutorService> schedulers = new CopyOnWriteArrayList<>();
 
     /**
      * Instantiates a {@code PersistentStreamConfigurationEnhancer}.
@@ -116,8 +113,16 @@ public class PersistentStreamConfigurationEnhancer implements ConfigurationEnhan
     @Override
     public void enhance(ComponentRegistry registry) {
         AxonServerConfiguration axonServerConfig = axonServerConfigProvider.getObject();
+        registry.registerIfNotPresent(executorRegistryDefinition());
         registerConfiguredEventSources(registry, axonServerConfig);
         configureAutoPersistentStreams(registry, axonServerConfig);
+    }
+
+    private static ComponentDefinition<PersistentStreamExecutorRegistry> executorRegistryDefinition() {
+        return ComponentDefinition.ofType(PersistentStreamExecutorRegistry.class)
+                                  .withBuilder(config -> new PersistentStreamExecutorRegistry())
+                                  .onShutdown(Phase.OUTBOUND_EVENT_CONNECTORS,
+                                              PersistentStreamExecutorRegistry::shutdownAll);
     }
 
     private void configureAutoPersistentStreams(ComponentRegistry registry, AxonServerConfiguration axonServerConfig) {
