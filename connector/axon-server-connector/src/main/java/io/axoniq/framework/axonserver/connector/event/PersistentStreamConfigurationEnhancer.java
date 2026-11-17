@@ -6,13 +6,10 @@
  * https://www.axoniq.io/legal/terms-of-service
  */
 
-package io.axoniq.framework.springboot.autoconfig;
+package io.axoniq.framework.axonserver.connector.event;
 
 import io.axoniq.axonserver.connector.event.PersistentStreamProperties;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration;
-import io.axoniq.framework.axonserver.connector.event.PersistentStreamEventSource;
-import io.axoniq.framework.axonserver.connector.event.PersistentStreamEventSourceFactory;
-import io.axoniq.framework.axonserver.connector.event.PersistentStreamScheduledExecutorBuilder;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.annotation.RegistrationScope;
 import org.axonframework.common.configuration.ComponentDefinition;
@@ -36,8 +33,7 @@ import java.util.function.Supplier;
  * stream for each entry in {@link AxonServerConfiguration#getPersistentStreams()}.
  * <p>
  * Each map key of the {@link AxonServerConfiguration.PersistentStreamSettings} becomes the component name (and thus the
- * Spring bean name after being exposed by the
- * {@link org.axonframework.extension.spring.config.SpringComponentRegistry}).
+ * Spring bean name after being exposed by the {@code SpringComponentRegistry}).
  * <p>
  * The resolved Axon Server stream name defaults to the map key but can be overridden via
  * {@link AxonServerConfiguration.PersistentStreamSettings#getName()}.
@@ -71,11 +67,10 @@ import java.util.function.Supplier;
  * This enhancer registers that registry as a component when none is present yet, and its shutdown handler shuts all
  * tracked executors down again when the Axon Framework lifecycle shuts down.
  * <p>
- * Marked {@link Internal} because instances are created by {@link PersistentStreamAutoConfiguration} and should not be
+ * Marked {@link Internal} because instances are created by the Spring Boot autoconfiguration and should not be
  * constructed directly in application code.
  *
  * @author Jakob Hatzl
- * @see PersistentStreamAutoConfiguration
  * @see PersistentStreamEventSourceFactory
  * @since 5.2.0
  */
@@ -94,7 +89,7 @@ public class PersistentStreamConfigurationEnhancer implements ConfigurationEnhan
      *
      * @param serverConfigSupplier supplier of the Axon Server configuration containing persistent stream settings;
      *                             resolved lazily to avoid Spring lifecycle ordering issues with
-     *                             {@link org.axonframework.extension.spring.config.SpringComponentRegistry}
+     *                             the {@code SpringComponentRegistry}
      * @param schedulerBuilder     the builder used to create a per-stream {@link ScheduledExecutorService}
      * @param eventSourceFactory   the eventSourceFactory used to construct each event source
      */

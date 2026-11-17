@@ -10,6 +10,7 @@ package io.axoniq.framework.springboot.autoconfig;
 
 import io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration;
 import io.axoniq.framework.axonserver.connector.event.DefaultPersistentStreamEventSourceFactory;
+import io.axoniq.framework.axonserver.connector.event.PersistentStreamConfigurationEnhancer;
 import io.axoniq.framework.axonserver.connector.event.PersistentStreamEventSourceFactory;
 import io.axoniq.framework.axonserver.connector.event.PersistentStreamScheduledExecutorBuilder;
 import org.axonframework.common.AxonConfigurationException;

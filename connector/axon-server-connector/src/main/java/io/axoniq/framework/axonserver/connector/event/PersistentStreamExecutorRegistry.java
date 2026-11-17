@@ -6,7 +6,7 @@
  * https://www.axoniq.io/legal/terms-of-service
  */
 
-package io.axoniq.framework.springboot.autoconfig;
+package io.axoniq.framework.axonserver.connector.event;
 
 import java.util.List;
 import java.util.Objects;

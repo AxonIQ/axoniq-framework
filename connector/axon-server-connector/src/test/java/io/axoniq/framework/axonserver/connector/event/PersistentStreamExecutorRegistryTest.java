@@ -6,7 +6,7 @@
  * https://www.axoniq.io/legal/terms-of-service
  */
 
-package io.axoniq.framework.springboot.autoconfig;
+package io.axoniq.framework.axonserver.connector.event;
 
 import org.junit.jupiter.api.*;
 
