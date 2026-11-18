@@ -22,6 +22,9 @@ import org.axonframework.messaging.queryhandling.QueryResponseMessage;
 import org.axonframework.messaging.queryhandling.SubscriptionQueryUpdateMessage;
 import org.junit.jupiter.api.*;
 
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -33,6 +36,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.awaitility.Awaitility.await;
 
 /**
  * Tests how {@link IncomingQueryInvoker} answers a query from another member, and how it reports what it cannot
@@ -56,6 +60,11 @@ class IncomingQueryInvokerTest {
         sink = new RecordingQueryResponseSink();
         testSubject = new IncomingQueryInvoker(() -> "node-b", null);
         testSubject.bind(handler);
+    }
+
+    // The responses are written on a thread of the invoker, after handle() returned
+    private void awaitTheEndOfTheAnswer() {
+        await().until(() -> sink.completed() || sink.error() != null);
     }
 
     private static QueryDispatchRequest request() {
@@ -94,6 +103,7 @@ class IncomingQueryInvokerTest {
 
             // when
             testSubject.handle(request(), sink);
+            awaitTheEndOfTheAnswer();
 
             // then
             assertThat(sink.responses()).extracting(QueryDispatchResponse::identifier)
@@ -109,6 +119,7 @@ class IncomingQueryInvokerTest {
 
             // when
             testSubject.handle(request(), sink);
+            awaitTheEndOfTheAnswer();
 
             // then the member that asked matches the responses to the query it sent
             assertThat(sink.responses()).singleElement()
@@ -120,6 +131,7 @@ class IncomingQueryInvokerTest {
         void completesWithoutResponsesWhenTheHandlerProducesNone() {
             // when — a query with no answer is answered, just not with anything
             testSubject.handle(request(), sink);
+            awaitTheEndOfTheAnswer();
 
             // then
             assertThat(sink.responses()).isEmpty();
@@ -184,9 +196,11 @@ class IncomingQueryInvokerTest {
             responses.seal();
 
             // then
-            assertThat(sink.responses()).extracting(QueryDispatchResponse::identifier)
-                                        .containsExactly("response-1", "response-2");
-            assertThat(sink.completed()).isTrue();
+            await().untilAsserted(() -> {
+                assertThat(sink.responses()).extracting(QueryDispatchResponse::identifier)
+                                            .containsExactly("response-1", "response-2");
+                assertThat(sink.completed()).isTrue();
+            });
         }
 
         @Test
@@ -202,8 +216,7 @@ class IncomingQueryInvokerTest {
                 }
             });
             int iterations = 20_000;
-            int written = 0;
-            int completed = 0;
+            List<RecordingQueryResponseSink> sinks = new ArrayList<>();
 
             try (ExecutorService handlerThread = Executors.newSingleThreadExecutor()) {
                 for (int i = 0; i < iterations; i++) {
@@ -223,14 +236,13 @@ class IncomingQueryInvokerTest {
                     testSubject.handle(request(), writing);
                     answer.get(5, TimeUnit.SECONDS);
 
-                    written += writing.responses().size();
-                    completed += writing.completed() ? 1 : 0;
+                    sinks.add(writing);
                 }
             }
 
-            // then
-            assertThat(written).isEqualTo(iterations);
-            assertThat(completed).isEqualTo(iterations);
+            // then every answer was written, which happens on threads of the invoker, so it is waited for
+            await().atMost(Duration.ofSeconds(30)).until(() -> sinks.stream().allMatch(RecordingQueryResponseSink::completed));
+            assertThat(sinks.stream().mapToInt(writing -> writing.responses().size()).sum()).isEqualTo(iterations);
         }
     }
 
@@ -269,13 +281,17 @@ class IncomingQueryInvokerTest {
             // given
             testSubject.handle(request(), sink);
             responses.offer(response("response-1"), Context.empty());
+            await().until(() -> sink.responses().size() == 1);
             sink.becomeUnavailable();
 
             // when a response arrives after the member stopped reading
             responses.offer(response("response-2"), Context.empty());
 
-            // then
-            assertThat(sink.responses()).extracting(QueryDispatchResponse::identifier).containsExactly("response-1");
+            // then nothing further is written, however long it is given
+            await().during(Duration.ofMillis(200)).untilAsserted(
+                    () -> assertThat(sink.responses()).extracting(QueryDispatchResponse::identifier)
+                                                      .containsExactly("response-1")
+            );
         }
 
         @Test
@@ -297,6 +313,7 @@ class IncomingQueryInvokerTest {
             testSubject.handle(request(), sink);
             responses.offer(response("response-1"), Context.empty());
             responses.seal();
+            await().until(sink::completed);
 
             // when the container reports completion, as it does for every stream it closes
             sink.becomeUnavailable();
@@ -583,8 +600,9 @@ class IncomingQueryInvokerTest {
             // when
             testSubject.handle(request(), countingSink);
 
-            // then
-            assertThat(failures).hasValue(1);
+            // then the failure is reported once, however many drains saw the stream end
+            await().during(Duration.ofMillis(200))
+                   .untilAsserted(() -> assertThat(failures).hasValue(1));
         }
 
         @Test
@@ -594,6 +612,7 @@ class IncomingQueryInvokerTest {
 
             // when
             testSubject.handle(request(), sink);
+            awaitTheEndOfTheAnswer();
 
             // then
             assertThat(sink.error()).isNotNull();
@@ -608,6 +627,7 @@ class IncomingQueryInvokerTest {
 
             // when
             testSubject.handle(request(), sink);
+            awaitTheEndOfTheAnswer();
 
             // then
             assertThat(sink.error()).isNotNull();
