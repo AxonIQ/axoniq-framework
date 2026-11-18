@@ -6,6 +6,41 @@ Any patch release made for an Axon project is tailored towards resolving bugs. T
 [#release_5_4]
 == Release 5.4
 
+=== Release 5.4.2
+
+==== Enhancements
+
+- [#774] Add an opt-in checkpoint interval to the workflow engine link:https://github.com/AxonIQ/axoniq-framework/pull/775[#775]
+- [#529] Snapshot the running-workflow list and the workflow state link:https://github.com/AxonIQ/axoniq-framework/pull/772[#772]
+- [Backport axoniq-5.4.x] [#716] Convert Axon Server's `BYTES_VALUE` in `MetadataConverter` link:https://github.com/AxonIQ/axoniq-framework/pull/759[#759]
+- [Backport axoniq-5.4.x] [#712] Add awaitSleep(String, Duration) and document sleep as non-blocking link:https://github.com/AxonIQ/axoniq-framework/pull/758[#758]
+- [Backport axoniq-5.4.x | #721] Verify trigger and index definitions in PostgreSQL schema validation link:https://github.com/AxonIQ/axoniq-framework/pull/752[#752]
+- [Backport axoniq-5.4.x | #720] Rebuild in-memory workflow history after restart link:https://github.com/AxonIQ/axoniq-framework/pull/745[#745]
+- [Backport axoniq-5.4.x] Replace `cache` for artifact-steps in the release GHA link:https://github.com/AxonIQ/axoniq-framework/pull/730[#730]
+- [Backport axoniq-5.4.x] Helper script to align docs build for patch branches link:https://github.com/AxonIQ/axoniq-framework/pull/703[#703]
+
+==== Bug fixes
+
+- [#779] Page the tag lookup when sourcing from PostgreSQL link:https://github.com/AxonIQ/axoniq-framework/pull/782[#782]
+- [#780] Stop the PostgreSQL deadlock on consistency\_tags under concurrent appends link:https://github.com/AxonIQ/axoniq-framework/pull/781[#781]
+- [Backport axoniq-5.4.x] Register a tenant with every component or with none link:https://github.com/AxonIQ/axoniq-framework/pull/778[#778]
+- [Port] [#769] Stop the workflow checkpoint deadlock on Java 21 link:https://github.com/AxonIQ/axoniq-framework/pull/777[#777]
+- [Backport axoniq-5.4.x] [#738] Keep the deadline of a started sleep after a restart link:https://github.com/AxonIQ/axoniq-framework/pull/771[#771]
+- [Port] Give token store calls in tests a processing context link:https://github.com/AxonIQ/axoniq-framework/pull/766[#766]
+- [Backport axoniq-5.4.x] [#5217] Correct Consistency Marker position for `AggregateBasedAxonServerEventStorageEngine` when sourcing after snapshot link:https://github.com/AxonIQ/axoniq-framework/pull/757[#757]
+- [Port | #719] Run pending checkpoint latch callbacks iteratively to avoid stack overflow- #726 link:https://github.com/AxonIQ/axoniq-framework/pull/749[#749]
+- [Backport axoniq-5.4.x] Run the Mongo integration tests on MongoDB 7.0 link:https://github.com/AxonIQ/axoniq-framework/pull/748[#748]
+- [Backport axoniq-5.4.x] Cover subscription-query updates emitted from an uncommitted unit of work link:https://github.com/AxonIQ/axoniq-framework/pull/737[#737]
+- [Backport axoniq-5.4.x] [#718 & #722] Move snapshots table DDL into the PostgreSQL schema initializer link:https://github.com/AxonIQ/axoniq-framework/pull/735[#735]
+- [Backport axoniq-5.4.x | #713] Fix workflow hang when a completed payload or publish step replays after a restart link:https://github.com/AxonIQ/axoniq-framework/pull/731[#731]
+- [Port] Add workflow dependencies to the BOM link:https://github.com/AxonIQ/axoniq-framework/pull/728[#728]
+
+==== Contributors
+
+Thank you to all the contributors who worked on this release:
+
+link:https://github.com/schananas[@schananas], https://github.com/MateuszNaKodach[@MateuszNaKodach], https://github.com/hjohn[@hjohn], and link:https://github.com/smcvb[@smcvb]
+
 === Release 5.4.1
 
 ==== Features
