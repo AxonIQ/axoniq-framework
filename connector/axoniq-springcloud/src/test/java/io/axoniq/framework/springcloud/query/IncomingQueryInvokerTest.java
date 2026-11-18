@@ -641,6 +641,7 @@ class IncomingQueryInvokerTest {
 
             // when
             testSubject.handle(request(), sink);
+            awaitTheEndOfTheAnswer();
 
             // then the member that asked learns why the answer ends, and what was already written stays delivered
             assertThat(sink.responses()).extracting(QueryDispatchResponse::identifier).containsExactly("response-1");
