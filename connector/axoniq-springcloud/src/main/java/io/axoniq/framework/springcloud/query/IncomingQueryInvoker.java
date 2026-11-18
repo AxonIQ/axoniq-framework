@@ -390,8 +390,9 @@ public class IncomingQueryInvoker {
                         }
                         QueryDispatchResponse convertedResponse;
                         try {
-                            convertedResponse = QueryConverter.convertResponseMessage(next.get().message(),
-                                                                                      requestIdentifier);
+                            convertedResponse = QueryConverter.convertResponseMessage(
+                                    next.get().message(), requestIdentifier
+                            );
                         } catch (Exception e) {
                             failConversion(next.get().message(), e);
                             return;
