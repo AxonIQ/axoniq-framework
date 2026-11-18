@@ -78,6 +78,12 @@ class IncomingQueryInvokerTest {
         );
     }
 
+    private static QueryResponseMessage unconvertibleResponse(String identifier) {
+        return new GenericQueryResponseMessage(
+                new GenericMessage(identifier, RESPONSE_TYPE, new Object(), Map.of())
+        );
+    }
+
     @Nested
     class AnsweringAQuery {
 
@@ -606,6 +612,24 @@ class IncomingQueryInvokerTest {
             // then
             assertThat(sink.error()).isNotNull();
             assertThat(sink.error().errorOrigin()).isEqualTo("node-b");
+        }
+
+        @Test
+        void reportsAResponseThatCannotBeConvertedAsWorthNoRetry() {
+            // given a handler whose second response has a payload that cannot be written
+            handler.answeringWith(response("response-1"), unconvertibleResponse("response-2"));
+
+            // when
+            testSubject.handle(request(), sink);
+
+            // then the member that asked learns why the answer ends, and what was already written stays delivered
+            assertThat(sink.responses()).extracting(QueryDispatchResponse::identifier).containsExactly("response-1");
+            assertThat(sink.completed()).isFalse();
+            assertThat(sink.error()).isNotNull();
+            assertThat(sink.error().errorCode()).isEqualTo(QueryErrorCode.QUERY_EXECUTION_NON_TRANSIENT_ERROR);
+            assertThat(sink.error().errorOrigin()).isEqualTo("node-b");
+            assertThat(sink.error().errorMessage())
+                    .contains("node-b", FIND_COURSE_TYPE.toString(), RESPONSE_TYPE.toString());
         }
 
         @Test

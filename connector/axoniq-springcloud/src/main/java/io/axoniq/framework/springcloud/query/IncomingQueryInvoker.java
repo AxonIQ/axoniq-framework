@@ -138,7 +138,7 @@ public class IncomingQueryInvoker {
             return;
         }
 
-        new ResponseWriter(request.identifier(), responses, sink).start();
+        new ResponseWriter(request.identifier(), request.type(), responses, sink).start();
     }
 
     /**
@@ -328,6 +328,7 @@ public class IncomingQueryInvoker {
     private class ResponseWriter {
 
         private final String requestIdentifier;
+        private final String queryType;
         private final MessageStream<QueryResponseMessage> responses;
         private final QueryResponseSink sink;
         // Volatile rather than guarded by this writer's monitor, so that cancelling does not wait on a drain that
@@ -335,9 +336,11 @@ public class IncomingQueryInvoker {
         private volatile boolean terminated = false;
 
         private ResponseWriter(String requestIdentifier,
+                               String queryType,
                                MessageStream<QueryResponseMessage> responses,
                                QueryResponseSink sink) {
             this.requestIdentifier = requestIdentifier;
+            this.queryType = queryType;
             this.responses = responses;
             this.sink = sink;
         }
@@ -377,7 +380,14 @@ public class IncomingQueryInvoker {
                         hasNext = false;
                         break;
                     }
-                    sink.response(QueryConverter.convertResponseMessage(next.get().message(), requestIdentifier));
+                    QueryDispatchResponse convertedResponse;
+                    try {
+                        convertedResponse = QueryConverter.convertResponseMessage(next.get().message(), requestIdentifier);
+                    } catch (Exception e) {
+                        failConversion(next.get().message(), e);
+                        return;
+                    }
+                    sink.response(convertedResponse);
                     hasNext = responses.hasNextAvailable();
                 }
                 // Reading a stream that has just ended reports its completion, which drains it again from inside
@@ -392,6 +402,19 @@ public class IncomingQueryInvoker {
                 terminated = true;
                 responses.close();
             }
+        }
+
+        private void failConversion(QueryResponseMessage response, Exception cause) {
+            terminated = true;
+            responses.close();
+            UnconvertibleResponseException failure =
+                    new UnconvertibleResponseException(memberName.get(),
+                                                       queryType,
+                                                       response.type().toString(),
+                                                       cause);
+            logger.warn("Could not convert a response of type [{}] to query [{}] of type [{}].",
+                        response.type(), requestIdentifier, queryType, cause);
+            sink.error(QueryConverter.convertErrorResult(failure, requestIdentifier, memberName.get(), converter));
         }
 
         private void finish() {
