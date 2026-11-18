@@ -13,6 +13,7 @@ import org.axonframework.messaging.core.sequencing.SequencingPolicy;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -70,11 +71,13 @@ import java.util.stream.Collectors;
      *   {@link WorkflowSegmentOwnership} decides ownership on.</li>
      *   <li>Business events are sequenced by the start-candidate workflow id when exactly one registered definition
      *   would start from the event, so new instances are created on the segment that owns them.</li>
-     *   <li>All other events may need to wake waiting instances resident in any segment. They are sequenced by the
-     *   single workflow waiting for them in the {@link WaitAssociationIndex}, and by {@link SequencingPolicy#BROADCAST}
-     *   when more workflows may need them or the index is not reliable yet. Each segment then evaluates the wait
-     *   conditions of the instances it owns.</li>
+     *   <li>All other events, including start events that no start condition accepts, may need to wake waiting
+     *   instances resident in any segment. They are sequenced by the single workflow waiting for them in the
+     *   {@link WaitAssociationIndex}, and by {@link SequencingPolicy#BROADCAST} when more workflows may need them or
+     *   the index is not reliable yet. Each segment then evaluates the wait conditions of the instances it owns.</li>
      * </ul>
+     * A start condition is evaluated here and again when the owning segment handles the event, so it must give the
+     * same answer for the same event every time.
      *
      * @param eventMessage      the event to sequence
      * @param processingContext the processing context of the event
@@ -108,7 +111,7 @@ import java.util.stream.Collectors;
         var targets = new HashSet<String>();
         if (isStartEvent(eventMessage)) {
             var candidates = newInstanceCandidateIds(eventMessage, processingContext);
-            if (publish || candidates.size() != 1) {
+            if (publish || candidates == null || candidates.size() > 1) {
                 return SequencingPolicy.BROADCAST;
             }
             targets.addAll(candidates);
@@ -134,10 +137,10 @@ import java.util.stream.Collectors;
     /**
      * Base workflow ids of all definitions that would start a new instance from the given event: the highest registered
      * version of each definition whose start condition matches. Mirrors the matching performed by the engine's start
-     * path.
+     * path. {@code null} when the candidates cannot be derived yet.
      */
-    private Set<String> newInstanceCandidateIds(EventMessage eventMessage,
-                                                ProcessingContext processingContext) {
+    private @Nullable Set<String> newInstanceCandidateIds(EventMessage eventMessage,
+                                                          ProcessingContext processingContext) {
         try {
             return workflowConfigurationRegistry
                     .getHighestVersionConfigurations(eventMessage.type())
@@ -152,11 +155,11 @@ import java.util.stream.Collectors;
         } catch (RuntimeException e) {
             // Sequencing runs before the event reaches a handler, so the payload conversion a start condition or
             // workflowIdProvider needs is not always available yet. Routing must not fail the work package for that:
-            // reporting no candidate degrades this event to a broadcast, which every ownership guard then narrows
+            // returning no candidate set degrades this event to a broadcast, which every ownership guard then narrows
             // back to exactly-once. Costs one delivery per segment for such events, never correctness.
             logger.debug("Could not derive start candidates for event {}; broadcasting it to every segment.",
                          eventMessage.type(), e);
-            return Set.of();
+            return null;
         }
     }
 }

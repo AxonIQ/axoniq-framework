@@ -12,7 +12,6 @@ import io.axoniq.framework.workflow.history.api.WorkflowHistory;
 import io.axoniq.framework.workflow.history.api.WorkflowHistoryRepository;
 import io.axoniq.framework.workflow.query.api.WorkflowStateQuery;
 import io.axoniq.framework.workflow.query.utils.WorkflowStateQueryMatcher;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.framework.workflow.runtime.api.manager.NonUniqueWorkflowInstanceMatchException;
 import io.axoniq.framework.workflow.runtime.api.manager.WorkflowInstance;
 import io.axoniq.framework.workflow.runtime.api.manager.WorkflowInstances;
@@ -34,6 +33,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Flow;
 import java.util.concurrent.SubmissionPublisher;
+import java.util.function.Predicate;
 import java.util.stream.Stream;
 
 /**
@@ -87,14 +87,6 @@ public class SimpleWorkflowManager implements WorkflowManager {
                     .map(WorkflowStateQuery.WorkflowIdCriterion::workflowId);
     }
 
-    private static <T> CompletableFuture<T> cancellation(CancellationOperation<T> operation) {
-        try {
-            return operation.request();
-        } catch (RuntimeException e) {
-            return CompletableFuture.failedFuture(e);
-        }
-    }
-
     private static <T> CompletableFuture<T> cancellation(CancellationOperation<T> operation,
                                                          @Nullable T unavailableResult) {
         try {
@@ -126,6 +118,14 @@ public class SimpleWorkflowManager implements WorkflowManager {
      * it exists and still matches the query.
      */
     private CompletableFuture<List<WorkflowState>> matching(WorkflowStateQuery query) {
+        return matching(query, workflowId -> true);
+    }
+
+    /**
+     * Resolves the states matching a query, like {@link #matching(WorkflowStateQuery)}, sourcing only the candidates
+     * the given filter accepts.
+     */
+    private CompletableFuture<List<WorkflowState>> matching(WorkflowStateQuery query, Predicate<String> sourceable) {
         return executionRepository.findAll(query)
                                   .thenCombine(historyRepository.findAll(query), (liveExecutions, history) -> {
                                       var byId = new LinkedHashMap<String, WorkflowState>();
@@ -134,6 +134,7 @@ public class SimpleWorkflowManager implements WorkflowManager {
                                       history.stream().map(WorkflowHistory::workflowId).forEach(candidates::add);
                                       explicitWorkflowIds(query).forEach(candidates::add);
                                       candidates.removeAll(byId.keySet());
+                                      candidates.removeIf(sourceable.negate());
                                       return new Merge(byId, List.copyOf(candidates));
                                   })
                                   .thenCompose(merge -> sourceAll(merge.candidates()).thenApply(sourced -> {
@@ -164,11 +165,14 @@ public class SimpleWorkflowManager implements WorkflowManager {
                                 .executeWithResult(context -> workflowStore.findWorkflow(workflowId, context));
     }
 
+    /**
+     * Resolves the live workflows matching a query: the executions in memory, plus the other
+     * {@link RunningWorkflows running workflows}, sourced from the {@link WorkflowStore}.
+     */
     private CompletableFuture<List<WorkflowState>> matchingLive(WorkflowStateQuery query) {
-        return executionRepository.findAll(query)
-                                  .thenApply(executions -> executions.stream()
-                                                                     .map(WorkflowExecution::state)
-                                                                     .toList());
+        return unitOfWorkFactory.create("workflow-manager-running-workflows")
+                                .executeWithResult(workflowStore::loadRunningWorkflows)
+                                .thenCompose(running -> matching(query, running::contains));
     }
 
     private CompletableFuture<Optional<WorkflowState>> singleMatch(WorkflowStateQuery query) {
@@ -323,7 +327,7 @@ public class SimpleWorkflowManager implements WorkflowManager {
                 for (WorkflowState state : states) {
                     operations.add(cancellation(() -> cancellationService.requestStepCancellation(
                             state.workflowId(), stepName, cause
-                    )));
+                    ), false));
                 }
                 return CompletableFuture.allOf(operations.toArray(CompletableFuture[]::new))
                                         .thenApply(ignored -> !operations.isEmpty());
@@ -337,7 +341,7 @@ public class SimpleWorkflowManager implements WorkflowManager {
                 for (WorkflowState state : states) {
                     operations.add(cancellation(() -> cancellationService.requestCancellationOfAllSteps(
                             state.workflowId(), cause
-                    )));
+                    ), 0));
                 }
                 return CompletableFuture.allOf(operations.toArray(CompletableFuture[]::new))
                                         .thenApply(ignored -> operations.stream()
@@ -353,7 +357,7 @@ public class SimpleWorkflowManager implements WorkflowManager {
                 for (WorkflowState state : states) {
                     operations.add(cancellation(() -> cancellationService.requestWorkflowCancellation(
                             state.workflowId(), cause
-                    )));
+                    ), null));
                 }
                 return CompletableFuture.allOf(operations.toArray(CompletableFuture[]::new));
             });

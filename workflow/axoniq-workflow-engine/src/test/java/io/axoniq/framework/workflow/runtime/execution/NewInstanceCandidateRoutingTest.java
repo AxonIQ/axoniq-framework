@@ -430,10 +430,11 @@ class NewInstanceCandidateRoutingTest {
                 .as("precondition: an idProperty the event lacks yields a null id")
                 .isNull();
 
-        assertThat(routing.sequenceIdentifierFor(startEvent(), context(segment)))
-                .as("a definition that derives no id contributes no candidate, and an event without a single "
-                            + "candidate is broadcast")
-                .contains(SequencingPolicy.BROADCAST);
+        var routedEvent = startEvent();
+        assertThat(routing.sequenceIdentifierFor(routedEvent, context(segment)))
+                .as("a definition that derives no id contributes no candidate, so the event follows the wait index: "
+                            + "no workflow waits for it, and its own id hands it to one segment")
+                .contains(routedEvent.identifier());
 
         assertThatCode(() -> engine.handle(startEvent(), context(segment)))
                 .as("""
@@ -553,25 +554,34 @@ class NewInstanceCandidateRoutingTest {
     }
 
     /**
-     * The precise negative of the two above, and the reason this is a purity requirement rather than an ordering bug: a
-     * disagreement in the other direction is harmless. A start condition that does not match while the event is
-     * sequenced contributes no candidate, so the event is broadcast to every segment, and the definition that has
-     * changed its mind by the time the event is handled still finds its owner among them. Only a derivation that
-     * <em>narrows</em> after sequencing loses work.
+     * The same gap in the other direction, and the reason a start condition must give the same answer for the same
+     * event every time. A start condition that does not match while the event is sequenced contributes no candidate,
+     * so the event follows the wait index to a single segment. A definition that has changed its mind by the time the
+     * event is handled finds its owner there only by chance.
      */
     @Test
-    void aStartConditionThatOnlyStartsMatchingAfterSequencingStillStarts() {
+    void aStartConditionThatOnlyStartsMatchingAfterSequencingLosesTheEvent_asExpectedGap() {
         var evaluations = new AtomicInteger();
         register("Alpha", "1.0.0", (event, pc) -> evaluations.getAndIncrement() > 0, event -> "alpha-1");
+        var owner = owningSegment("alpha-1");
+        var event = startEvent();
+        while (owner.matches(event.identifier())) {
+            event = startEvent();
+        }
 
-        assertThat(routing.sequenceIdentifierFor(startEvent(), context(SEGMENTS.getFirst())))
-                .as("no candidate at sequencing time, so the event goes to every segment")
-                .contains(SequencingPolicy.BROADCAST);
+        var routed = routing.sequenceIdentifierFor(event, context(SEGMENTS.getFirst())).orElseThrow();
+        assertThat(routed).as("no candidate at sequencing time, so the event goes to the one segment its id picks")
+                          .isEqualTo(event.identifier());
 
-        SEGMENTS.forEach(segment -> engine.handle(startEvent(), context(segment)));
+        engine.handle(event, context(SEGMENTS.stream().filter(segment -> segment.matches(routed)).findFirst()
+                                             .orElseThrow()));
 
-        assertThat(started).as("the broadcast reaches the owner, which is why widening after sequencing is safe")
-                           .containsExactly("alpha-1");
+        assertThat(evaluations).as("the start condition ran twice for one event: once to route it, once to act on it")
+                               .hasValue(2);
+        assertThat(started).as("a start condition that widens between the two evaluations loses the event, because "
+                                       + "the routing has already narrowed the delivery to a segment that is not the "
+                                       + "owner")
+                           .isEmpty();
     }
 
     @Test

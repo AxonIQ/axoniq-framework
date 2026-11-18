@@ -26,6 +26,7 @@ import io.axoniq.framework.workflow.runtime.execution.WorkflowConfigurationRegis
 import io.axoniq.framework.workflow.runtime.execution.WorkflowEngine;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowEngineCheckpointingSupport;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowExecutionRepository;
+import io.axoniq.framework.workflow.runtime.execution.WorkflowScheduler;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowStore;
 import org.axonframework.common.AxonConfigurationException;
 import org.axonframework.common.annotation.Internal;
@@ -49,6 +50,7 @@ import org.axonframework.messaging.eventstreaming.EventCriteria;
 import org.axonframework.messaging.eventstreaming.StreamableEventSource;
 import org.jspecify.annotations.Nullable;
 
+import java.time.Clock;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -97,6 +99,7 @@ class SimpleWorkflowModule<C extends WorkflowContext>
             psepConfig -> psepConfig;
     private boolean useHistory = true;
     private long checkpointInterval = 0L;
+    private boolean hibernation = false;
     private ComponentBuilder<MutableWorkflowHistoryRepository> historyRepository =
             config -> new InMemoryWorkflowHistoryRepository();
     private Function<PooledStreamingEventProcessorConfiguration, PooledStreamingEventProcessorConfiguration> historyConfigCustomizer =
@@ -202,6 +205,12 @@ class SimpleWorkflowModule<C extends WorkflowContext>
     }
 
     @Override
+    public OptionalPhase<C> hibernation(boolean enabled) {
+        this.hibernation = enabled;
+        return this;
+    }
+
+    @Override
     public OptionalPhase<C> historyProcessorConfiguration(
             Function<PooledStreamingEventProcessorConfiguration, PooledStreamingEventProcessorConfiguration> historyProcessorConfiguration
     ) {
@@ -301,6 +310,10 @@ class SimpleWorkflowModule<C extends WorkflowContext>
                                       engine.setCheckpointingSupport(
                                               c.getComponent(WorkflowEngineCheckpointingSupport.class)
                                       );
+                                      if (hibernation) {
+                                          engine.enableHibernation(c.getComponent(WorkflowScheduler.class),
+                                                                   c.getComponent(Clock.class));
+                                      }
                                   })
                                   .onShutdown(POST_PROCESSOR_SHUTDOWN_PHASE, WorkflowEngine::shutdown);
     }

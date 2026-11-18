@@ -31,8 +31,10 @@ import org.reactivestreams.Subscription;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -249,12 +251,30 @@ class SimpleWorkflowManagerTest {
     /**
      * A store that answers what the history projection holds, and an empty state for anything else — the shape of a
      * store whose projection is fully caught up, so the tests keep judging the merge rules rather than the sourcing.
+     * Its running workflows are the history entries that have not reached a terminal status.
      */
     private static WorkflowStore storeMirroring(WorkflowHistoryRepository history) {
         return new WorkflowStore() {
             @Override
             public CompletableFuture<RunningWorkflows> loadRunningWorkflows(ProcessingContext processingContext) {
-                throw new UnsupportedOperationException("not used by the manager");
+                return history.findAll().thenApply(entries -> {
+                    var running = entries.stream()
+                                         .map(WorkflowHistory::state)
+                                         .filter(state -> !state.workflowStatus().isTerminal())
+                                         .map(WorkflowState::workflowId)
+                                         .collect(Collectors.toUnmodifiableSet());
+                    return new RunningWorkflows() {
+                        @Override
+                        public Set<String> workflowIds() {
+                            return running;
+                        }
+
+                        @Override
+                        public boolean contains(String workflowId) {
+                            return running.contains(workflowId);
+                        }
+                    };
+                });
             }
 
             @Override

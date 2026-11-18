@@ -123,6 +123,11 @@ Example with association filtering—only start for VIP customers:
 include::example$workflows/configuration/ConfigurationExamples.java[tag=start-conditions-vip,indent=0]
 ----
 
+A start condition must give the same answer for the same event, every time.
+The engine evaluates it twice per event: once to pick the segment the event goes to, and once when that segment handles the event.
+If the first evaluation rejects the event, the event can skip the segment that owns the new workflow, and the workflow never starts.
+So a start condition must not read the clock, a database or an external service.
+
 == Workflow ID provider
 
 The workflow ID provider determines how each workflow instance gets its unique ID from the triggering event.
@@ -203,11 +208,11 @@ Until a segment has loaded its open waits, or when loading them fails, that segm
 The engine broadcasts an event to every segment, where each segment acts only on the workflows it owns, in these cases:
 
 * The event targets two or more workflows on the segments of one node.
-* A workflow definition starts on the event type, and the event does not resolve to exactly one workflow to start.
+* A workflow definition starts on the event type, and the event starts two or more workflows.
 This includes every published event of such a type.
 * A segment of the node is still loading its open waits, or failed to load them.
 * A segment of the node is still processing the backlog stored before the node started.
-* The engine can't read the event values it needs to match the waits.
+* The engine can't read the event values it needs to match the waits or to evaluate a start condition.
 
 An event no segment needs reaches at most one segment, which ignores it.
 A segment that receives no events still stores its token, on the processor's claim-extension cycle, once its workflows have no work in progress.
@@ -260,6 +265,54 @@ Axon Server and PostgreSQL each register one.
 An application that enables snapshots without a `SnapshotStore` fails to start.
 A snapshot is taken while an entity is sourced, so the first restore after enabling snapshots still replays the full history.
 See xref:snapshotting:index.adoc[Snapshotting] for snapshot policies and snapshot stores.
+
+[[hibernation]]
+== Hibernation
+
+A workflow that waits for days or months holds memory the whole time it waits.
+With hibernation enabled, the engine removes such a workflow from memory while it waits, and restores it from the event store when it is needed again.
+
+[source,java]
+----
+include::example$workflows/configuration/ConfigurationExamples.java[tag=hibernation,indent=0]
+----
+
+Hibernation is a setting of the workflow module, and it's disabled by default.
+It applies to every workflow of the module.
+Workflows that need different settings go into separate workflow modules.
+
+=== When a workflow hibernates
+
+Every 10 seconds, the engine asks the workflows in memory to hibernate.
+A workflow hibernates only at a safe point:
+
+* its body waits on a step result, or on `anyMatch`, `allMatch` or `noneMatch` of step results,
+* every step it has not finished is a `waitForEvent` or a `sleep`.
+
+A running `execute` step keeps the workflow in memory, also while it waits for a retry.
+Hibernating writes no events.
+
+=== How a workflow wakes up
+
+A hibernated workflow wakes up when one of these happens:
+
+* an event it waits for arrives,
+* the nearest timeout of its waits expires,
+* a step or workflow cancellation is requested for it.
+
+The engine then loads the workflow from the event store and replays its history to the point where it waited.
+
+=== Trade-off
+
+Hibernation trades memory for load time.
+Every wake replays the history of the workflow.
+After a restart, or when a node claims a segment, the engine replays every unfinished workflow of that segment, which then hibernates again at the same wait.
+
+Enable hibernation for workflows that wait for days or months.
+Keep it disabled for many short-lived workflows, or for workflows with short timeouts, because they would load again and again.
+
+Hibernation relies on the workflow body being deterministic, like every replay does.
+The engine stops a hibernating body the way it stops the workflows of a released segment, so a body that catches exceptions around a step result must rethrow the `StepInterruptedException`.
 
 [[spring-boot]]
 == Spring Boot

@@ -266,6 +266,7 @@ public interface WorkflowModule<C extends WorkflowContext> extends Module {
      *         {@link PooledStreamingEventProcessorConfiguration} backing this module's event processor.</li>
      *     <li>{@link #withHistory(ComponentBuilder)} / {@link #withoutHistory()} - enable or disable workflow history
      *         tracking.</li>
+     *     <li>{@link #hibernation(boolean)} - unload idle workflows from memory while they wait.</li>
      *     <li>{@link #historyProcessorConfiguration(Function)} - customize the
      *         {@link PooledStreamingEventProcessorConfiguration} backing the history projector's own event
      *         processor.</li>
@@ -362,6 +363,24 @@ public interface WorkflowModule<C extends WorkflowContext> extends Module {
          * @return this phase, for further optional configuration
          */
         OptionalPhase<C> withoutHistory();
+
+        /**
+         * Enables or disables hibernation of the workflows in this module. Disabled by default.
+         * <p>
+         * A hibernated workflow is removed from memory while it only waits for an external event or a deadline. It is
+         * restored from the event store when that event arrives or that deadline expires, and replays its history to
+         * the point where it waited. A workflow hibernates only at a safe point: its body waits on a step result, and
+         * every active step is an open {@code waitForEvent} or {@code sleep}. A running {@code execute} step keeps it
+         * in memory.
+         * <p>
+         * Enable it for workflows that wait for days or months. Keep it disabled for many short-lived workflows: every
+         * wake replays the workflow history, and so does every restart of the application. Workflows that need
+         * different settings go into separate workflow modules.
+         *
+         * @param enabled {@code true} to hibernate the workflows of this module whenever they are safe to hibernate
+         * @return this phase, for further optional configuration
+         */
+        OptionalPhase<C> hibernation(boolean enabled);
 
         /**
          * Applies the given {@code historyProcessorConfiguration} function to the
