@@ -154,6 +154,7 @@ class IncomingQueryInvokerTest {
 
             // when
             testSubject.handle(request(), countingSink);
+            await().until(() -> completions.get() > 0);
 
             // then
             assertThat(completions).hasValue(1);
