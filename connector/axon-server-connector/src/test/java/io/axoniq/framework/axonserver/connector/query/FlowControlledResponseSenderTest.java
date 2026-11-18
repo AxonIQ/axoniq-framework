@@ -21,19 +21,25 @@ import org.axonframework.messaging.queryhandling.QueryExecutionException;
 import org.axonframework.messaging.queryhandling.QueryResponseMessage;
 import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.*;
+import org.mockito.ArgumentCaptor;
 
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
 import static org.mockito.Mockito.*;
 
 class FlowControlledResponseSenderTest {
 
     public static final byte[] PAYLOAD = "test".getBytes(StandardCharsets.UTF_8);
+
+    // What the sender does when its stream signals happens on a thread of its own, which the tests wait for
+    private static final long AWAIT_MILLIS = 5000;
     private QueueMessageStream<QueryResponseMessage> upstream;
     private ReplyChannel<QueryResponse> stubDownstream;
     private FlowControlledResponseSender testSubject;
@@ -56,8 +62,8 @@ class FlowControlledResponseSenderTest {
         }
         upstream.seal();
         testSubject.request(Long.MAX_VALUE);
+        verify(stubDownstream, timeout(AWAIT_MILLIS)).complete();
         verify(stubDownstream, times(10)).send(any());
-        verify(stubDownstream).complete();
     }
 
     @Test
@@ -67,8 +73,8 @@ class FlowControlledResponseSenderTest {
             upstream.offer(newMessage(), Context.empty());
         }
         upstream.seal();
+        verify(stubDownstream, timeout(AWAIT_MILLIS)).complete();
         verify(stubDownstream, times(10)).send(any());
-        verify(stubDownstream).complete();
     }
 
     @Test
@@ -79,8 +85,8 @@ class FlowControlledResponseSenderTest {
             upstream.offer(newMessage(), Context.empty());
         }
         upstream.seal();
+        verify(stubDownstream, timeout(AWAIT_MILLIS)).complete();
         verify(stubDownstream, times(10)).send(any());
-        verify(stubDownstream).complete();
     }
 
     @Test
@@ -91,9 +97,9 @@ class FlowControlledResponseSenderTest {
         upstream.seal();
         for (int i = 0; i < 10; i++) {
             testSubject.request(1);
-            verify(stubDownstream, times(i + 1)).send(any());
+            verify(stubDownstream, timeout(AWAIT_MILLIS).times(i + 1)).send(any());
         }
-        verify(stubDownstream).complete();
+        verify(stubDownstream, timeout(AWAIT_MILLIS)).complete();
     }
 
     @Test
@@ -103,10 +109,10 @@ class FlowControlledResponseSenderTest {
         }
         for (int i = 0; i < 10; i++) {
             testSubject.request(1);
-            verify(stubDownstream, times(i + 1)).send(any());
+            verify(stubDownstream, timeout(AWAIT_MILLIS).times(i + 1)).send(any());
         }
         upstream.seal();
-        verify(stubDownstream).complete();
+        verify(stubDownstream, timeout(AWAIT_MILLIS)).complete();
     }
 
     @Test
@@ -115,22 +121,22 @@ class FlowControlledResponseSenderTest {
         upstream.offer(newMessage(), Context.empty());
 
         testSubject.request(1);
-        verify(stubDownstream, times(1)).send(any());
+        verify(stubDownstream, timeout(AWAIT_MILLIS).times(1)).send(any());
 
         testSubject.request(2);
-        verify(stubDownstream, times(2)).send(any());
+        verify(stubDownstream, timeout(AWAIT_MILLIS).times(2)).send(any());
 
         // there is 1 outstanding request for this message
         upstream.offer(newMessage(), Context.empty());
-        verify(stubDownstream, times(3)).send(any());
+        verify(stubDownstream, timeout(AWAIT_MILLIS).times(3)).send(any());
 
         testSubject.request(1);
         // this message won't arrive
         upstream.seal();
 
-        // still 3 messages sent
+        // still 3 messages sent, once the stream was seen to be completed
+        verify(stubDownstream, timeout(AWAIT_MILLIS)).complete();
         verify(stubDownstream, times(3)).send(any());
-        verify(stubDownstream).complete();
     }
 
     @Test
@@ -144,8 +150,8 @@ class FlowControlledResponseSenderTest {
         // this should also trigger the completion
         testSubject.request(1);
 
-        verify(stubDownstream, times(1)).send(any());
-        verify(stubDownstream).sendLast(assertArg(e -> {
+        verify(stubDownstream, timeout(AWAIT_MILLIS).times(1)).send(any());
+        verify(stubDownstream, timeout(AWAIT_MILLIS)).sendLast(assertArg(e -> {
             assertThat(e.getErrorMessage().getMessage()).isEqualTo("Custom message");
             assertThat(e.getErrorMessage().getErrorCode()).isEqualTo(ErrorCategory.QUERY_EXECUTION_ERROR.errorCode());
             assertThat(e.getErrorCode()).isEqualTo(ErrorCategory.QUERY_EXECUTION_ERROR.errorCode());
@@ -164,10 +170,42 @@ class FlowControlledResponseSenderTest {
 
         detailsTestSubject.request(1);
 
-        verify(stubDownstream).sendLast(assertArg(e -> {
+        verify(stubDownstream, timeout(AWAIT_MILLIS)).sendLast(assertArg(e -> {
             assertThat(e.getErrorMessage().getMessage()).isEqualTo("Custom message");
             assertThat(e.getPayload().getData().toStringUtf8()).isEqualTo("Some details");
         }));
+    }
+
+    @Test
+    void shouldEndTheQueryWithAnErrorAndCloseUpstreamWhenSendingAResponseFails() {
+        doThrow(new IllegalStateException("cannot send")).when(stubDownstream).send(any());
+        upstream.offer(newMessage(), Context.empty());
+
+        testSubject.request(1);
+
+        verify(stubDownstream, timeout(AWAIT_MILLIS)).sendLast(assertArg(e -> {
+            assertThat(e.getRequestIdentifier()).isEqualTo("test");
+            assertThat(e.getErrorMessage().getMessage()).isEqualTo("cannot send");
+            assertThat(e.getErrorCode()).isEqualTo(ErrorCategory.QUERY_EXECUTION_ERROR.errorCode());
+        }));
+        assertThat(upstream.isCompleted()).isTrue();
+        verify(stubDownstream, never()).complete();
+    }
+
+    @Test
+    void shouldReportAFailureWithoutDetailsWhenTheDetailsCannotBeConverted() {
+        doThrow(new IllegalStateException("cannot send")).when(stubDownstream).send(any());
+        doThrow(new IllegalArgumentException("cannot convert details")).doNothing().when(stubDownstream).sendLast(any());
+        upstream.offer(newMessage(), Context.empty());
+
+        testSubject.request(1);
+
+        ArgumentCaptor<QueryResponse> responses = ArgumentCaptor.forClass(QueryResponse.class);
+
+        verify(stubDownstream, timeout(AWAIT_MILLIS).times(2)).sendLast(responses.capture());
+
+        assertThat(responses.getAllValues().get(1).getErrorMessage().getMessage()).isEqualTo("cannot send");
+        assertThat(responses.getAllValues().get(1).hasPayload()).isFalse();
     }
 
     @Test
@@ -175,13 +213,13 @@ class FlowControlledResponseSenderTest {
         upstream.seal();
         testSubject.request(Long.MAX_VALUE);
 
-        verify(stubDownstream, never()).send(any());
-        verify(stubDownstream, never()).complete();
-        verify(stubDownstream).sendLast(assertArg(response -> {
+        verify(stubDownstream, timeout(AWAIT_MILLIS)).sendLast(assertArg(response -> {
             assertThat(response.getRequestIdentifier()).isEqualTo("test");
             assertThat(response.getPayload().getType()).isEqualTo("empty");
             assertThat(response.getPayload().getData().isEmpty()).isTrue();
         }));
+        verify(stubDownstream, never()).send(any());
+        verify(stubDownstream, never()).complete();
     }
 
     @Test
@@ -232,8 +270,10 @@ class FlowControlledResponseSenderTest {
             }
         }
 
-        // then
-        assertThat(sent.get()).isEqualTo(iterations);
-        assertThat(completed.get()).isEqualTo(iterations);
+        // then, once the sending that was handed off has caught up
+        await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> {
+            assertThat(sent.get()).isEqualTo(iterations);
+            assertThat(completed.get()).isEqualTo(iterations);
+        });
     }
 }
