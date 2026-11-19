@@ -42,6 +42,10 @@ import org.axonframework.messaging.eventhandling.EventHandlingComponent;
 import org.axonframework.messaging.eventhandling.configuration.EventProcessorModule;
 import org.axonframework.messaging.eventhandling.processing.streaming.pooled.PooledStreamingEventProcessorConfiguration;
 import org.axonframework.messaging.eventhandling.processing.streaming.pooled.PooledStreamingEventProcessorModule;
+import org.axonframework.messaging.eventhandling.processing.streaming.StreamingEventProcessor;
+import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.EventTrackerStatus;
+import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
+import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.SequenceOverridingEventHandlingComponent;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.store.TokenStore;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.store.inmemory.InMemoryTokenStore;
@@ -51,6 +55,7 @@ import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.function.Function;
@@ -410,11 +415,26 @@ class SimpleWorkflowModule<C extends WorkflowContext>
                                           (c, ignored) -> {
                                               requireEventStore(moduleName, c);
                                               WorkflowEngine engine = c.getComponent(WorkflowEngine.class, engineName);
+                                              c.getOptionalComponent(StreamingEventProcessor.class, moduleName)
+                                               .ifPresent(processor -> engine.setSegmentPositions(
+                                                       segment -> consumedPosition(processor, segment)
+                                               ));
                                               return c.getComponent(StreamableEventSource.class)
                                                       .latestToken(null)
                                                       .thenCompose(engine::start);
                                           }
                                   );
+    }
+
+    /**
+     * Returns the position the given processor consumed the given segment up to, including the events it skipped
+     * because they belong to other segments.
+     */
+    private static Optional<TrackingToken> consumedPosition(StreamingEventProcessor processor, Segment segment) {
+        EventTrackerStatus status = processor.processingStatus().get(segment.getSegmentId());
+        return status == null || !status.getSegment().equals(segment)
+                ? Optional.empty()
+                : Optional.ofNullable(status.getTrackingToken());
     }
 
     private void requireEventStore(String moduleName, Configuration config) {

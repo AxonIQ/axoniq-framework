@@ -42,12 +42,14 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
 import static io.axoniq.framework.workflow.configuration.WorkflowConfigurationDefaults.WORKFLOW_ENGINE_EXECUTOR;
 import static io.axoniq.framework.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.defaults;
 import static io.axoniq.framework.workflow.runtime.execution.SegmentTestFixtures.owningSegment;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
@@ -208,6 +210,28 @@ class WorkflowEngineClaimGapWakeTest {
         // then: the instance runs, so the checkpoint request at that event is no longer held back by it
         assertThat(restored.isRunning()).isTrue();
         assertThat(requested).containsExactly(new GlobalSequenceTrackingToken(2));
+    }
+
+    @Test
+    void theSegmentPositionReachingTheStartupHeadStartsTheRestoredInstanceWithoutAnEventOfItsOwn() {
+        // given: the segment is claimed behind the startup head, and the processor reports it consumed up to before it
+        var owner = owningSegment(RESIDENT_ID);
+        var position = new AtomicReference<TrackingToken>(new GlobalSequenceTrackingToken(1));
+        workflowEngine.setSegmentPositions(segment -> Optional.of(position.get()));
+        workflowEngine.start(new GlobalSequenceTrackingToken(2));
+        workflowEngine.restoreWorkflowsFor(owner,
+                                           new GlobalSequenceTrackingToken(0),
+                                           sourcingContext(),
+                                           new StubProcessingContext())
+                      .orTimeout(5, TimeUnit.SECONDS)
+                      .join();
+        assertThat(restored.isRunning()).as("the instance waits for catch-up").isFalse();
+
+        // when: the processor skips events of other segments up to the startup head, handing this segment none
+        position.set(new GlobalSequenceTrackingToken(2));
+
+        // then
+        await().atMost(5, TimeUnit.SECONDS).until(restored::isRunning);
     }
 
     /**

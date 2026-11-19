@@ -27,49 +27,35 @@ import io.axoniq.framework.workflow.runtime.execution.payload.GlobalOnlyPayloadR
 import io.axoniq.framework.workflow.runtime.execution.payload.LocalOnlyPayloadReducer;
 import org.axonframework.common.FutureUtils;
 import org.axonframework.common.configuration.AxonConfiguration;
-import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.conversion.Converter;
 import org.axonframework.conversion.jackson.JacksonConverter;
-import org.axonframework.eventsourcing.eventstore.AppendCondition;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
 import org.axonframework.eventsourcing.eventstore.EventStore;
-import org.axonframework.eventsourcing.eventstore.SourcingCondition;
-import org.axonframework.eventsourcing.eventstore.TaggedEventMessage;
 import org.axonframework.eventsourcing.eventstore.inmemory.InMemoryEventStorageEngine;
 import org.axonframework.eventsourcing.snapshot.api.Snapshot;
 import org.axonframework.eventsourcing.snapshot.api.SnapshotPolicy;
 import org.axonframework.eventsourcing.snapshot.inmemory.InMemorySnapshotStore;
 import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
-import org.axonframework.messaging.core.DelegatingMessageStream;
-import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.MessageTypeResolver;
 import org.axonframework.messaging.core.QualifiedName;
-import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
-import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
-import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.store.TokenStore;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.store.inmemory.InMemoryTokenStore;
-import org.axonframework.messaging.eventstreaming.StreamingCondition;
 import org.axonframework.modelling.repository.ManagedEntity;
 import org.axonframework.modelling.repository.Repository;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.*;
 
 import java.time.Duration;
-import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.stream.IntStream;
@@ -480,80 +466,5 @@ class WorkflowSnapshotRestartTest {
                 "versions", state.versionMigrations(),
                 "steps", steps
         );
-    }
-
-    /**
-     * The event store as one configuration sees it: the shared store, which stops notifying that configuration once it
-     * stopped, the way a connection to a durable event store ends with its process. The in-memory store itself keeps
-     * notifying every stream it ever opened, so a later append would call into the stopped event processor and fail.
-     */
-    private static final class DisconnectableStorageEngine implements EventStorageEngine {
-
-        private final EventStorageEngine delegate;
-        private final AtomicBoolean connected = new AtomicBoolean(true);
-
-        private DisconnectableStorageEngine(EventStorageEngine delegate) {
-            this.delegate = delegate;
-        }
-
-        private void disconnect() {
-            connected.set(false);
-        }
-
-        @Override
-        public CompletableFuture<AppendTransaction<?>> appendEvents(AppendCondition condition,
-                                                                    ProcessingContext processingContext,
-                                                                    List<TaggedEventMessage<?>> events) {
-            return delegate.appendEvents(condition, processingContext, events);
-        }
-
-        @Override
-        public MessageStream<EventMessage> source(SourcingCondition condition, ProcessingContext processingContext) {
-            return delegate.source(condition, processingContext);
-        }
-
-        @Override
-        public MessageStream<EventMessage> stream(StreamingCondition condition) {
-            return new DelegatingMessageStream<EventMessage, EventMessage>(delegate.stream(condition)) {
-                @Override
-                public Optional<Entry<EventMessage>> next() {
-                    return delegate().next();
-                }
-
-                @Override
-                public Optional<Entry<EventMessage>> peek() {
-                    return delegate().peek();
-                }
-
-                @Override
-                public void setCallback(Runnable callback) {
-                    super.setCallback(() -> {
-                        if (connected.get()) {
-                            callback.run();
-                        }
-                    });
-                }
-            };
-        }
-
-        @Override
-        public CompletableFuture<TrackingToken> firstToken() {
-            return delegate.firstToken();
-        }
-
-        @Override
-        public CompletableFuture<TrackingToken> latestToken() {
-            return delegate.latestToken();
-        }
-
-        @Override
-        public CompletableFuture<TrackingToken> tokenAt(Instant at) {
-            return delegate.tokenAt(at);
-        }
-
-        @Override
-        public void describeTo(ComponentDescriptor descriptor) {
-            descriptor.describeWrapperOf(delegate);
-        }
     }
 }

@@ -12,6 +12,7 @@ import org.axonframework.messaging.eventhandling.processing.streaming.segmenting
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.jspecify.annotations.Nullable;
 
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -24,6 +25,8 @@ import java.util.concurrent.ConcurrentHashMap;
 @Internal final class WorkflowEngineCatchUpSupport {
 
     private final Set<Integer> caughtUpSegments = ConcurrentHashMap.newKeySet();
+    // Per segment that waits for catch-up, the handle of the claim that waits, so a wait outliving its claim ends.
+    private final Map<Integer, Object> waits = new ConcurrentHashMap<>();
     @Nullable
     private volatile TrackingToken startupHead;
 
@@ -50,7 +53,26 @@ import java.util.concurrent.ConcurrentHashMap;
                 && caughtUpSegments.add(segment.getSegmentId());
     }
 
+    /**
+     * Registers that the current claim of the given {@code segment} waits for catch-up, and returns the handle of that
+     * wait for {@link #isWaiting(Segment, Object)}.
+     */
+    Object startWaiting(Segment segment) {
+        Object wait = new Object();
+        waits.put(segment.getSegmentId(), wait);
+        return wait;
+    }
+
+    /**
+     * Returns whether the given {@code wait} still waits for the given {@code segment} to catch up: the segment has not
+     * caught up yet, and was not released or claimed again since the wait started.
+     */
+    boolean isWaiting(Segment segment, Object wait) {
+        return waits.get(segment.getSegmentId()) == wait && !caughtUpSegments.contains(segment.getSegmentId());
+    }
+
     void release(Segment segment) {
+        waits.remove(segment.getSegmentId());
         caughtUpSegments.remove(segment.getSegmentId());
     }
 }

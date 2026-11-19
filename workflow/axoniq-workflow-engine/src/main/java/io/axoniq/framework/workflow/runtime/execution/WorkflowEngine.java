@@ -35,6 +35,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Stream;
 
@@ -66,6 +67,10 @@ public class WorkflowEngine implements
      * release needs no such bound: the processor already caps it at its claim extension threshold.
      */
     static final Duration DEFAULT_RESTORE_TIMEOUT = Duration.ofSeconds(30);
+    /**
+     * Time between two reads of the position of a segment that waits to catch up with the startup head.
+     */
+    static final Duration CATCH_UP_POLL_INTERVAL = Duration.ofMillis(200);
     private static final Logger logger = LoggerFactory.getLogger(WorkflowEngine.class);
     private final WorkflowConfigurationRegistry<?> workflowConfigurationRegistry;
     private final WorkflowExecutionRepository workflowExecutionRepository;
@@ -78,6 +83,8 @@ public class WorkflowEngine implements
     // Package-private so a test can shrink it instead of waiting out the production timeout.
     Duration restoreTimeout = DEFAULT_RESTORE_TIMEOUT;
     private WorkflowEngineCheckpointingSupport checkpointingSupport;
+    private volatile Function<Segment, Optional<TrackingToken>> segmentPositions = segment -> Optional.empty();
+    private volatile boolean shutDown;
 
     /**
      * Creates a new workflow engine. Be sure to follow-up construction of a {@code WorkflowEngine} with an invocation
@@ -154,6 +161,21 @@ public class WorkflowEngine implements
         this.checkpointingSupport = requireNonNull(
                 checkpointingSupport, "The WorkflowEngineCheckpointingSupport must not be null."
         );
+    }
+
+    /**
+     * Sets the source of the position each claimed segment has consumed up to, including events the processor skipped
+     * because they belong to other segments.
+     * <p>
+     * A segment claimed behind the startup head starts its restored workflows once it caught up with that head. Without
+     * a source of positions, it only learns so from an event it handles at or after the head, which a segment whose
+     * backlog holds only events of other segments never gets.
+     *
+     * @param segmentPositions returns the position the given segment consumed up to, or empty when unknown
+     */
+    @Internal
+    public void setSegmentPositions(Function<Segment, Optional<TrackingToken>> segmentPositions) {
+        this.segmentPositions = requireNonNull(segmentPositions, "The segment positions must not be null.");
     }
 
     @Override
@@ -388,6 +410,8 @@ public class WorkflowEngine implements
      * @return a future completed after this engine has requested every released execution to stop
      */
     public CompletableFuture<Void> releaseWorkflowsFor(Segment segment) {
+        // Also for a segment without executions: a later claim of it has to catch up again.
+        catchUpSupport.release(segment);
         var released = workflowExecutionRepository.findAll(ownedBy(segment));
         if (released.isEmpty()) {
             return CompletableFuture.completedFuture(null);
@@ -397,7 +421,6 @@ public class WorkflowEngine implements
         released.forEach(WorkflowExecution::stopForShutdown);
         // An execution stopped for recovery skips the termination handler, so the release does its cleanup.
         released.forEach(execution -> removeExecution(execution.workflowId()));
-        catchUpSupport.release(segment);
         return CompletableFuture.completedFuture(null);
     }
 
@@ -422,9 +445,35 @@ public class WorkflowEngine implements
         if (!catchUpSupport.startsAfterClaim(segment, claimedFrom)) {
             logger.info("Segment {} is catching up; restored workflow executions start after catch-up.",
                         segment.getSegmentId());
+            awaitCatchUp(segment, catchUpSupport.startWaiting(segment));
             return;
         }
         removeTerminalAndStartRestoredWorkflowExecutions(segment, "on claim of segment " + segment.getSegmentId());
+    }
+
+    /**
+     * Polls the position of the given {@code segment} until it covers the startup head.
+     * <p>
+     * A segment normally learns it caught up from an event it handles at or after the startup head. But the processor
+     * skips events of other segments without handing them over, so a segment whose backlog holds no event of its own
+     * would never learn it, and its restored workflows would never start. Its position, which the processor advances
+     * past skipped events as well, tells it instead. Polling ends once the segment caught up, either way, or its claim
+     * ended.
+     */
+    private void awaitCatchUp(Segment segment, Object wait) {
+        CompletableFuture.delayedExecutor(CATCH_UP_POLL_INTERVAL.toMillis(), TimeUnit.MILLISECONDS).execute(() -> {
+            if (shutDown || !catchUpSupport.isWaiting(segment, wait)) {
+                return;
+            }
+            try {
+                segmentPositions.apply(segment)
+                                .ifPresent(position -> activateSegmentWhenCaughtUp(segment, position));
+            } catch (RuntimeException e) {
+                logger.warn("Could not read the position of segment {} while it catches up.",
+                            segment.getSegmentId(), e);
+            }
+            awaitCatchUp(segment, wait);
+        });
     }
 
     private void activateSegmentWhenCaughtUp(@Nullable Segment segment, @Nullable TrackingToken currentToken) {
@@ -660,6 +709,7 @@ public class WorkflowEngine implements
      * requests no checkpoint.
      */
     public void shutdown() {
+        shutDown = true;
         var executions = workflowExecutionRepository.findAll();
         logger.info("Shutting down WorkflowEngine: interrupting running steps of {} workflow instance(s).",
                     executions.size());
