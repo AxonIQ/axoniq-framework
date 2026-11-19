@@ -127,7 +127,7 @@ class AppendCriteriaAxonServerIT extends AppendCriteriaIT {
                                     return MessageStream.just(SUCCESSFUL_COMMAND_RESULT).cast();
                                 })
                 )
-                .intercepted(c -> new AppendCriteriaInterceptor(
+                .intercepted(c -> AppendCriteriaInterceptor.forAllCommands(
                         (command, sourcingCriteria, context) -> {
                             receivedPayloads.add(command.payload());
                             command.payloadAs(Enroll.class, context.component(MessageConverter.class));
