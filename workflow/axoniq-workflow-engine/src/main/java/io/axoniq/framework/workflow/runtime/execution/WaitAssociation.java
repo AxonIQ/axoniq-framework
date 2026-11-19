@@ -88,7 +88,7 @@ public record WaitAssociation(String workflowId,
         var stepName = Objects.requireNonNull(MetadataUtils.getStepName(metadata),
                                               "A wait-step STARTED event must carry a stepName.");
         // An in-memory store hands back the published StepWaitInfo. A serialized one is read as a map of its fields.
-        if (startedWaitEvent.payload() instanceof StepWaitInfo info) {
+        if (startedWaitEvent.payload() instanceof StepWaitInfo info && !info.eventName().isBlank()) {
             return new WaitAssociation(workflowId, stepName, new QualifiedName(info.eventName()), info.associations());
         }
         try {
