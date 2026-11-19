@@ -137,6 +137,11 @@ public class WorkflowConfigurer implements ApplicationConfigurer {
                             SnapshotPolicy.class,
                             WorkflowConfigurationDefaults.WORKFLOW_STATE_SNAPSHOT_POLICY,
                             c -> snapshots.workflowState()
+                    )
+                    .registerComponent(
+                            SnapshotPolicy.class,
+                            WorkflowConfigurationDefaults.WAIT_ASSOCIATIONS_SNAPSHOT_POLICY,
+                            c -> snapshots.waitAssociations()
                     ));
         }
         return this;

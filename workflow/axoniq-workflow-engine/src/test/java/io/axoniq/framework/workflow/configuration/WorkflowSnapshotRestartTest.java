@@ -20,7 +20,9 @@ import io.axoniq.framework.workflow.dsl.api.retry.BackoffStrategy;
 import io.axoniq.framework.workflow.dsl.api.retry.RetryPolicy;
 import io.axoniq.framework.workflow.runtime.execution.DefaultEventNameCustomizer;
 import io.axoniq.framework.workflow.runtime.execution.EventSourcedRunningWorkflows;
+import io.axoniq.framework.workflow.runtime.execution.EventSourcedWaitAssociations;
 import io.axoniq.framework.workflow.runtime.execution.EventSourcedWorkflowState;
+import io.axoniq.framework.workflow.runtime.execution.WaitAssociation;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowEngine;
 import io.axoniq.framework.workflow.runtime.execution.payload.CombineGlobalAndLocalPayloadReducer;
 import io.axoniq.framework.workflow.runtime.execution.payload.GlobalOnlyPayloadReducer;
@@ -60,6 +62,7 @@ import org.junit.jupiter.api.*;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -89,6 +92,7 @@ import static org.awaitility.Awaitility.await;
 class WorkflowSnapshotRestartTest {
 
     private static final String MODULE = "snapshot-restart";
+    private static final int SEGMENTS = 4;
     private static final String WAIT_STEP = "awaitPaid";
     private static final WaitForStepDefinition AWAIT_PAID = new WaitForStepDefinition(
             new PrimitiveMetadata(WAIT_STEP, DefaultEventNameCustomizer.Builder.defaults()),
@@ -126,18 +130,23 @@ class WorkflowSnapshotRestartTest {
                             .isNotNull()
             );
             stop(first);
-            // The running-workflow list is sourced on a restart only, so the first restart is the one snapshotting it.
+            // The running-workflow list and the open waits are sourced on a segment claim only, so the first restart is
+            // the one snapshotting them.
             var second = start(workflowWithSteps(STEPS), true);
             await().atMost(30, TimeUnit.SECONDS)
                    .until(() -> engine(second).workflowExecutions().size() == WORKFLOWS);
             assertThat(snapshotOf(second, EventSourcedRunningWorkflows.class, EventSourcedRunningWorkflows.ENTITY_ID))
                     .isNotNull();
+            awaitOpenWaitsSnapshot(second);
             stop(second);
 
-            // when - the list and every workflow state continue from their snapshot
+            // when - the lists and every workflow state continue from their snapshot
             var restarted = start(workflowWithSteps(STEPS), true);
             await().atMost(30, TimeUnit.SECONDS)
                    .until(() -> engine(restarted).workflowExecutions().size() == WORKFLOWS);
+            // Every segment loaded its open waits, so the awaited event reaches the workflows through them.
+            await().atMost(30, TimeUnit.SECONDS).until(() -> waitSourcings(restarted).size() >= SEGMENTS);
+            var waitEventsReadPerClaim = List.copyOf(waitSourcings(restarted));
             publish(restarted, "paid");
 
             // then - every workflow completes, and no step ran a second time
@@ -150,6 +159,9 @@ class WorkflowSnapshotRestartTest {
             );
             assertThat(stepExecutions).hasSize(WORKFLOWS * (STEPS + 1));
             assertThat(stepExecutions.values()).allSatisfy(executions -> assertThat(executions).hasValue(1));
+            // and - each claim read the snapshot of the open waits plus the events after it, not the history of every
+            // wait
+            assertThat(waitEventsReadPerClaim).allSatisfy(read -> assertThat(read).isLessThan(WORKFLOWS));
         }
 
         @Test
@@ -162,11 +174,14 @@ class WorkflowSnapshotRestartTest {
             var restarted = start(workflowWithSteps(STEPS), true);
             await().atMost(30, TimeUnit.SECONDS)
                    .until(() -> engine(restarted).workflowExecutions().size() == WORKFLOWS);
+            awaitOpenWaitsSnapshot(restarted);
             // A configuration without snapshots that is never started only reads: it replays every event.
             var replaying = build(workflowWithSteps(STEPS), false);
 
             // when / then - while parked
             assertThat(runningWorkflowIds(restarted)).isEqualTo(runningWorkflowIds(replaying));
+            assertThat(openWaits(restarted)).hasSize(WORKFLOWS)
+                                            .containsExactlyInAnyOrderElementsOf(openWaits(replaying));
             assertThat(workflowIds).allSatisfy(
                     workflowId -> assertThat(describe(durableState(restarted, workflowId)))
                             .isEqualTo(describe(durableState(replaying, workflowId)))
@@ -178,6 +193,8 @@ class WorkflowSnapshotRestartTest {
                    .ignoreExceptions()
                    .until(() -> runningWorkflowIds(restarted).isEmpty());
             assertThat(runningWorkflowIds(replaying)).isEmpty();
+            assertThat(openWaits(restarted)).isEmpty();
+            assertThat(openWaits(replaying)).isEmpty();
             assertThat(workflowIds).allSatisfy(
                     workflowId -> assertThat(describe(durableState(restarted, workflowId)))
                             .isEqualTo(describe(durableState(replaying, workflowId)))
@@ -367,7 +384,7 @@ class WorkflowSnapshotRestartTest {
                                            .on(c -> EventConditions.fromQualifiedName(new QualifiedName("start")))
                                            .notCustomized()
                                    )
-                                   .processorConfiguration(pc -> pc.initialSegmentCount(4))
+                                   .processorConfiguration(pc -> pc.initialSegmentCount(SEGMENTS))
                                    .contextFactory(c -> TestContext::new);
         var nodeStorageEngine = new DisconnectableStorageEngine(storageEngine);
         var configurer = WorkflowConfigurer.create();
@@ -430,6 +447,29 @@ class WorkflowSnapshotRestartTest {
                 .workflowIds();
     }
 
+    private static Collection<WaitAssociation> openWaits(AxonConfiguration configuration) {
+        return load(configuration, EventSourcedWaitAssociations.class, EventSourcedWaitAssociations.ENTITY_ID)
+                .waitAssociations();
+    }
+
+    /**
+     * Waits for the snapshot of the open waits, which a segment claim stores after it loaded them.
+     */
+    private void awaitOpenWaitsSnapshot(AxonConfiguration configuration) {
+        await().atMost(30, TimeUnit.SECONDS)
+               .until(() -> snapshotOf(configuration,
+                                       EventSourcedWaitAssociations.class,
+                                       EventSourcedWaitAssociations.ENTITY_ID) != null);
+    }
+
+    /**
+     * Returns the number of events each completed sourcing of the open waits read from the event store of the given
+     * configuration. A sourcing that continues from a snapshot reads only the events after it.
+     */
+    private List<Integer> waitSourcings(AxonConfiguration configuration) {
+        return configurations.get(configuration).waitSourcings;
+    }
+
     private static EventSourcedWorkflowState durableState(AxonConfiguration configuration, String workflowId) {
         return load(configuration, EventSourcedWorkflowState.class, workflowId);
     }
@@ -486,11 +526,14 @@ class WorkflowSnapshotRestartTest {
      * The event store as one configuration sees it: the shared store, which stops notifying that configuration once it
      * stopped, the way a connection to a durable event store ends with its process. The in-memory store itself keeps
      * notifying every stream it ever opened, so a later append would call into the stopped event processor and fail.
+     * <p>
+     * It also counts the events each sourcing of the open waits reads.
      */
     private static final class DisconnectableStorageEngine implements EventStorageEngine {
 
         private final EventStorageEngine delegate;
         private final AtomicBoolean connected = new AtomicBoolean(true);
+        private final List<Integer> waitSourcings = new CopyOnWriteArrayList<>();
 
         private DisconnectableStorageEngine(EventStorageEngine delegate) {
             this.delegate = delegate;
@@ -509,7 +552,13 @@ class WorkflowSnapshotRestartTest {
 
         @Override
         public MessageStream<EventMessage> source(SourcingCondition condition, ProcessingContext processingContext) {
-            return delegate.source(condition, processingContext);
+            var source = delegate.source(condition, processingContext);
+            if (!condition.criteria().equals(EventSourcedWaitAssociations.criteriaBuilder())) {
+                return source;
+            }
+            var read = new AtomicInteger();
+            return source.onNext(entry -> read.incrementAndGet())
+                         .onComplete(() -> waitSourcings.add(read.get()));
         }
 
         @Override

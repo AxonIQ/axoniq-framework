@@ -7,14 +7,21 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
+import com.fasterxml.jackson.annotation.JsonAutoDetect;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import org.axonframework.common.annotation.Internal;
+import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.eventhandling.EventMessage;
+import org.axonframework.messaging.eventhandling.annotation.Event;
 import org.axonframework.messaging.eventstreaming.EventCriteria;
 import org.axonframework.messaging.eventstreaming.Tag;
+import org.jspecify.annotations.Nullable;
 
 import java.util.Collection;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -32,11 +39,20 @@ import java.util.stream.Collectors;
  * order-2    | awaitShipping | OrderShipped    | payload:orderId=43, metadata:tenant=acme
  * order-3    | cooldown      | java.lang.Void  | (none: a sleep, never matches an event)
  * </pre>
+ * <p>
+ * The {@link Event#version() version} is the release that introduced the snapshot format, see {@link #getWaits()}.
  *
  * @author Stefan Dragisic
  * @since 5.5.0
  */
 @Internal
+@Event(version = "5.5.0")
+@JsonAutoDetect(
+        fieldVisibility = JsonAutoDetect.Visibility.NONE,
+        getterVisibility = JsonAutoDetect.Visibility.NONE,
+        isGetterVisibility = JsonAutoDetect.Visibility.NONE,
+        setterVisibility = JsonAutoDetect.Visibility.NONE
+)
 public class EventSourcedWaitAssociations implements WaitAssociations {
 
     /**
@@ -67,9 +83,7 @@ public class EventSourcedWaitAssociations implements WaitAssociations {
      */
     public void evolve(EventMessage event) {
         switch (WaitAssociationChange.of(event)) {
-            case WaitAssociationChange.WaitStarted(var row) ->
-                    rowsByWorkflow.computeIfAbsent(row.workflowId(), id -> new LinkedHashMap<>())
-                                  .put(row.stepName(), row);
+            case WaitAssociationChange.WaitStarted(var row) -> add(row);
             case WaitAssociationChange.WaitTerminated(var workflowId, var stepName) -> {
                 var rows = rowsByWorkflow.get(workflowId);
                 if (rows != null) {
@@ -86,11 +100,66 @@ public class EventSourcedWaitAssociations implements WaitAssociations {
         }
     }
 
+    private void add(WaitAssociation row) {
+        rowsByWorkflow.computeIfAbsent(row.workflowId(), id -> new LinkedHashMap<>()).put(row.stepName(), row);
+    }
+
+    /**
+     * Returns the open waits as plain values, for a converter writing this list as a snapshot.
+     *
+     * @return the plain values of the open waits
+     */
+    @JsonProperty("waits")
+    public List<WaitSnapshot> getWaits() {
+        return waitAssociations().stream().map(WaitSnapshot::of).toList();
+    }
+
+    /**
+     * Sets the open waits from plain values, for a converter reading this list from a snapshot.
+     *
+     * @param waits the plain values of the open waits
+     */
+    @JsonProperty("waits")
+    public void setWaits(List<WaitSnapshot> waits) {
+        rowsByWorkflow.clear();
+        waits.forEach(wait -> add(wait.toWaitAssociation()));
+    }
+
     @Override
     public Collection<WaitAssociation> waitAssociations() {
         return rowsByWorkflow.values()
                              .stream()
                              .flatMap(rows -> rows.values().stream())
                              .collect(Collectors.toUnmodifiableList());
+    }
+
+    /**
+     * The plain values of a {@link WaitAssociation}, which a converter can write and read.
+     *
+     * @param workflowId   the identifier of the waiting workflow
+     * @param stepName     the name of the waiting step
+     * @param eventName    the qualified name of the awaited event, or {@code null} for a row that matches every routed
+     *                     event
+     * @param associations the canonical serialized associations the awaited event must all satisfy
+     */
+    public record WaitSnapshot(String workflowId,
+                               String stepName,
+                               @Nullable String eventName,
+                               Set<String> associations) {
+
+        private static WaitSnapshot of(WaitAssociation wait) {
+            var eventName = wait.eventName();
+            return new WaitSnapshot(wait.workflowId(),
+                                    wait.stepName(),
+                                    eventName == null ? null : eventName.name(),
+                                    wait.associations());
+        }
+
+        private WaitAssociation toWaitAssociation() {
+            return new WaitAssociation(workflowId,
+                                       stepName,
+                                       eventName == null ? null : new QualifiedName(eventName),
+                                       associations);
+        }
     }
 }
