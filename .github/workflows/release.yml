@@ -15,7 +15,8 @@ name: Release Axoniq Framework
 #   3. release:perform  - builds the tag, then signs it and uploads it to Central, waiting until the
 #                         deployment is validated
 #   4. push the commits and the tag; this happens only once step 3 succeeded, so a failed deploy leaves
-#      nothing to revert. The tag push (with the App token) starts the "Publish API Docs" workflow.
+#      nothing to revert. App tokens expire after one hour, so the push uses a token generated right
+#      before it. The tag push (with the App token) starts the "Publish API Docs" workflow.
 #   5. create the patch branch (only for a final X.Y.0 released from main)
 #
 # Still manual afterwards (listed in the job summary):
@@ -23,8 +24,6 @@ name: Release Axoniq Framework
 #   - close the GitHub milestone, then review and publish the draft release
 #   - add the release notes to docs, and review and pin the Discuss announcement
 #
-# Required secrets: RELEASE_APP_ID, RELEASE_APP_PRIVATE_KEY, SONATYPE_TOKEN_ID, SONATYPE_TOKEN_PASS,
-#                   MAVEN_GPG_PRIVATE_KEY, MAVEN_GPG_PASSPHRASE.
 # The release App must be allowed to push to protected branches (main, axoniq-*).
 
 on:
@@ -55,7 +54,7 @@ jobs:
   release:
     name: Release ${{ inputs.RELEASE_VERSION }} from ${{ github.ref_name }}
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/axoniq-')
+    if: github.ref == 'refs/heads/main' || (startsWith(github.ref, 'refs/heads/axoniq-5.') && endsWith(github.ref, '.x'))
     timeout-minutes: 90
     env:
       RELEASE_VERSION: ${{ inputs.RELEASE_VERSION }}
@@ -110,7 +109,7 @@ jobs:
             || { echo "::error::main.yml on $SHA is '${CONCLUSION:-missing}'; release a commit with a green build"; exit 1; }
 
       - name: Set up JDK 21
-        uses: actions/setup-java@v6.1.0
+        uses: actions/setup-java@v6.3.0
         with:
           distribution: 'zulu'
           java-version: 21
@@ -144,15 +143,25 @@ jobs:
           MAVEN_GPG_PASSPHRASE: ${{ secrets.MAVEN_GPG_PASSPHRASE }}
         run: ./mvnw -B -ntp -Dstyle.color=always release:perform -Darguments="-DskipTests"
 
+      # The token from the first step can expire during release:perform (App tokens are valid for one hour),
+      # so the pushes below use a fresh one.
+      - name: Generate GitHub App token for push
+        id: push-token
+        if: ${{ !inputs.DRY_RUN }}
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+
       - name: Push release commits and tag
         if: ${{ !inputs.DRY_RUN }}
+        env:
+          PUSH_TOKEN: ${{ steps.push-token.outputs.token }}
         run: |
+          git config --local --unset-all http.https://github.com/.extraheader || true
+          git remote set-url origin "https://x-access-token:${PUSH_TOKEN}@github.com/${{ github.repository }}.git"
           git push origin "$BRANCH_NAME"
           git push origin "$RELEASE_TAG"
-
-      - name: Clean release plugin working files
-        if: always()
-        run: ./mvnw -B -ntp release:clean
 
       - name: Create patch branch ${{ steps.plan.outputs.patch_branch }}
         if: ${{ !inputs.DRY_RUN && steps.plan.outputs.patch_branch != '' }}
@@ -167,18 +176,20 @@ jobs:
           git push origin "$PATCH_BRANCH"
 
       - name: Summary
-        if: always()
         run: |
           {
             echo "## Release $RELEASE_TAG (dry run: ${{ inputs.DRY_RUN }})"
             echo "- Branch: \`$BRANCH_NAME\`, next development version: \`$DEVELOPMENT_VERSION\`"
             [ -n "${{ steps.plan.outputs.patch_branch }}" ] && echo "- Patch branch: \`${{ steps.plan.outputs.patch_branch }}\` at \`${{ steps.plan.outputs.patch_version }}\`"
             echo
-            echo "### Remaining manual steps"
-            echo "1. Check the deployment and publish it: https://central.sonatype.com/publishing/deployments"
-            echo "2. Check that **Publish API Docs** ran for \`$RELEASE_TAG\` (the tag push starts it): https://apidocs.axoniq.io/latest/"
-            echo "3. Close the milestone, then review and publish the draft GitHub release"
-            echo "4. Add the release notes to docs on the right branch"
-            echo "5. Review the Discuss announcement and pin it globally for 2 weeks"
-            true
+            if [ "${{ inputs.DRY_RUN }}" = "true" ]; then
+              echo "Dry run: nothing was deployed, committed or pushed."
+            else
+              echo "### Remaining manual steps"
+              echo "1. Check the deployment and publish it: https://central.sonatype.com/publishing/deployments"
+              echo "2. Check that **Publish API Docs** ran for \`$RELEASE_TAG\` (the tag push starts it): https://apidocs.axoniq.io/latest/"
+              echo "3. Close the milestone, then review and publish the draft GitHub release"
+              echo "4. Add the release notes to docs on the right branch"
+              echo "5. Review the Discuss announcement and pin it globally for 2 weeks"
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
