@@ -20,15 +20,18 @@ import static java.util.Objects.requireNonNull;
  *     is one list, so there is one snapshot of it.</li>
  *     <li>The state of each workflow instance, as its {@link #workflowState(SnapshotPolicy) snapshot policy} dictates.
  *     Every workflow instance has a snapshot of its own.</li>
+ *     <li>The open-wait list, as its {@link #waitAssociations(SnapshotPolicy) snapshot policy} dictates. There is one
+ *     list, so there is one snapshot of it. Every segment claim loads this list.</li>
  * </ul>
- * A restarting node then sources either from its latest snapshot instead of from every event ever published.
+ * A restarting node then sources each from its latest snapshot instead of from every event ever published.
  * <p>
  * Example usage:
  * <pre>{@code
  * WorkflowConfigurer.create()
  *                   .snapshots(snapshots -> snapshots.enabled(true)
  *                                                    .runningWorkflows(SnapshotPolicy.afterEvents(500))
- *                                                    .workflowState(SnapshotPolicy.afterEvents(200)));
+ *                                                    .workflowState(SnapshotPolicy.afterEvents(200))
+ *                                                    .waitAssociations(SnapshotPolicy.afterEvents(500)));
  * }</pre>
  *
  * @author Stefan Dragisic
@@ -39,6 +42,7 @@ public class WorkflowSnapshotConfiguration {
     private boolean enabled = false;
     private SnapshotPolicy runningWorkflows = SnapshotPolicy.afterEvents(50);
     private SnapshotPolicy workflowState = SnapshotPolicy.afterEvents(50);
+    private SnapshotPolicy waitAssociations = SnapshotPolicy.afterEvents(50);
 
     /**
      * Enables or disables snapshots. Defaults to {@code false}.
@@ -76,6 +80,19 @@ public class WorkflowSnapshotConfiguration {
     }
 
     /**
+     * Sets the {@link SnapshotPolicy} of the open-wait list. Defaults to
+     * {@link SnapshotPolicy#afterEvents(int) after 50 events}.
+     *
+     * @param waitAssociations the {@link SnapshotPolicy} of the open-wait list
+     * @return this configuration, for a fluent API
+     * @since 5.5.0
+     */
+    public WorkflowSnapshotConfiguration waitAssociations(SnapshotPolicy waitAssociations) {
+        this.waitAssociations = requireNonNull(waitAssociations, "The SnapshotPolicy must not be null.");
+        return this;
+    }
+
+    /**
      * Returns whether snapshots are taken.
      *
      * @return {@code true} if snapshots are taken, {@code false} otherwise
@@ -100,5 +117,15 @@ public class WorkflowSnapshotConfiguration {
      */
     public SnapshotPolicy workflowState() {
         return workflowState;
+    }
+
+    /**
+     * Returns the {@link SnapshotPolicy} of the open-wait list.
+     *
+     * @return the {@link SnapshotPolicy} of the open-wait list
+     * @since 5.5.0
+     */
+    public SnapshotPolicy waitAssociations() {
+        return waitAssociations;
     }
 }

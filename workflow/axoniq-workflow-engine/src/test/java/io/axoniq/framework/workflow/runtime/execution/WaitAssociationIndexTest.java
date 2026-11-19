@@ -206,6 +206,20 @@ class WaitAssociationIndexTest {
         }
 
         @Test
+        void aTerminalWorkflowRemovesItsRowsKeyedByAValue() {
+            // given
+            members.addAll(Set.of("order-1", "order-2"));
+            index.evolve(waitStarted("order-1", "awaitPayment", Set.of("payload:orderId=42")));
+            index.evolve(waitStarted("order-2", "awaitPayment", Set.of("payload:orderId=42")));
+
+            // when
+            index.evolve(workflowEnded("order-1"));
+
+            // then
+            assertThat(index.match(paymentReceived(Map.of("orderId", "42")), CONTEXT)).containsExactly("order-2");
+        }
+
+        @Test
         void businessEventsChangeNothing() {
             // given
             index.segmentLoaded(FIRST_HALF, List.of(row("order-42", Set.of("payload:orderId=42"))));
@@ -234,6 +248,17 @@ class WaitAssociationIndexTest {
                     .as("values compare as text, as the wait condition compares them")
                     .containsExactly("order-43");
             assertThat(index.match(paymentReceived(Map.of("orderId", "44")), CONTEXT)).isEmpty();
+        }
+
+        @Test
+        void theSameValueInAnotherEventMatchesNothing() {
+            // given
+            index.segmentLoaded(FIRST_HALF, List.of(row("order-42", Set.of("payload:orderId=42"))));
+            var shipped = new GenericEventMessage(new MessageType(new QualifiedName("OrderShipped")),
+                                                  Map.of("orderId", "42"));
+
+            // when / then
+            assertThat(index.match(shipped, CONTEXT)).isEmpty();
         }
 
         @Test

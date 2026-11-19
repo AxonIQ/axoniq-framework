@@ -83,6 +83,13 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
      */
     public static final String WORKFLOW_STATE_SNAPSHOT_POLICY = "WorkflowStateSnapshotPolicy";
     /**
+     * Name of the {@link SnapshotPolicy} component of the open-wait list.
+     * <p>
+     * The list is snapshotted only when a component is registered under this name. Snapshotting then requires a
+     * {@link org.axonframework.eventsourcing.snapshot.store.SnapshotStore} component.
+     */
+    public static final String WAIT_ASSOCIATIONS_SNAPSHOT_POLICY = "WaitAssociationsSnapshotPolicy";
+    /**
      * Order for this enhancer.
      * <p>
      * Enhancer math: register the tag-resolver decorator before event sourcing creates the event store.
@@ -202,15 +209,19 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
     }
 
     void registerWaitAssociationsModule(ComponentRegistry componentRegistry) {
-        componentRegistry.registerModule(
-                declarative(String.class, EventSourcedWaitAssociations.class)
-                        .messagingModel((c, model) -> model.entityEvolver((entity, event, context) -> {
-                            entity.evolve(event);
-                            return entity;
-                        }).build())
-                        .entityFactory(c -> (identifier, firstEvent, context) -> new EventSourcedWaitAssociations())
-                        .criteriaResolver(c -> (identifier, context) -> EventSourcedWaitAssociations.criteriaBuilder())
-                        .build());
+        var module = declarative(String.class, EventSourcedWaitAssociations.class)
+                .messagingModel((c, model) -> model.entityEvolver((entity, event, context) -> {
+                    entity.evolve(event);
+                    return entity;
+                }).build())
+                .entityFactory(c -> (identifier, firstEvent, context) -> new EventSourcedWaitAssociations())
+                .criteriaResolver(c -> (identifier, context) -> EventSourcedWaitAssociations.criteriaBuilder());
+        if (componentRegistry.hasComponent(SnapshotPolicy.class, WAIT_ASSOCIATIONS_SNAPSHOT_POLICY)) {
+            module.snapshotPolicy((ComponentBuilder<SnapshotPolicy>) c -> c.getComponent(
+                    SnapshotPolicy.class, WAIT_ASSOCIATIONS_SNAPSHOT_POLICY
+            ));
+        }
+        componentRegistry.registerModule(module.build());
     }
 
     void registerWorkflowStateModule(ComponentRegistry componentRegistry) {
