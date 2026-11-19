@@ -42,6 +42,7 @@ import org.junit.jupiter.api.*;
 import java.time.Duration;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -225,9 +226,11 @@ class WorkflowConfigurerModuleComponentIsolationTest {
         var workflowId = startEventForA.identifier();
         publish(startEventForA);
 
-        // then: module A's own engine durably completed the workflow it owns
+        // then: module A's own engine durably completed the workflow it owns. Sourcing the state fails until the
+        // workflow's first event is stored, so polls before that are retried.
         Awaitility.await()
                   .atMost(Duration.ofSeconds(5))
+                  .ignoreExceptions()
                   .until(() -> durableStatus(workflowId) == WorkflowStatus.COMPLETED);
         // and: module B's engine never reacted to it - its own repository never held an execution for it
         assertThat(engineOf("module-b").workflowExecutions()).isEmpty();
@@ -251,6 +254,7 @@ class WorkflowConfigurerModuleComponentIsolationTest {
                             .executeWithResult(ctx -> repository.loadOrCreate(workflowId, ctx)
                                                                 .thenApply(managed -> managed.entity()
                                                                                              .workflowStatus()))
+                            .orTimeout(5, TimeUnit.SECONDS)
                             .join();
     }
 
