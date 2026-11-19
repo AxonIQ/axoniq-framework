@@ -144,6 +144,10 @@ public class MultiTenantPersistentStreamEventSource implements SubscribableEvent
      * Only one consumer can be subscribed at a time, matching the single-tenant behaviour: subscribing the same consumer
      * again is a no-op, while a different one is rejected. Cancelling the returned {@link Registration} closes every
      * tenant's stream and releases its scheduler, after which this source can be subscribed again.
+     * <p>
+     * If subscribing to the {@link TenantProvider} fails, the consumer is released again and the failure is rethrown.
+     * Streams the provider already opened for this subscription close when the provider cancels their registrations,
+     * after which another consumer can subscribe.
      *
      * @param eventsBatchConsumer the consumer receiving batches of events, each with the tenant of its stream on the
      *                            {@link ProcessingContext}
@@ -160,7 +164,14 @@ public class MultiTenantPersistentStreamEventSource implements SubscribableEvent
             // Subscribed outside the monitor on purpose: the provider takes its own monitor and calls back into
             // registerTenant, which takes ours. Acquiring the provider's monitor while holding ours would invert the
             // lock order of that callback and of the removal path, so the two could deadlock.
-            tenantSubscription = tenantProvider.subscribe(this);
+            try {
+                tenantSubscription = tenantProvider.subscribe(this);
+            } catch (Throwable t) {
+                // Without this the claim outlives the failed subscription and no other consumer could ever subscribe.
+                // tenantSubscription is still null here, so unsubscribing only releases the claim.
+                unsubscribe(eventsBatchConsumer);
+                throw t;
+            }
         }
         return () -> unsubscribe(eventsBatchConsumer);
     }
@@ -238,11 +249,22 @@ public class MultiTenantPersistentStreamEventSource implements SubscribableEvent
     // then done under the monitor, so it cannot race a subscription into opening the stream twice or not at all.
     private Registration addTenant(TenantDescriptor tenantDescriptor) {
         Registration registration = tenantStreams.registerTenant(tenantDescriptor);
-        synchronized (this) {
-            if (consumer != NO_OP_CONSUMER) {
-                // deliberately ignores the result, called only to force creation of the tenantStream
-                tenantStreams.componentFor(tenantDescriptor);
+        try {
+            synchronized (this) {
+                if (consumer != NO_OP_CONSUMER) {
+                    // deliberately ignores the result, called only to force creation of the tenantStream
+                    tenantStreams.componentFor(tenantDescriptor);
+                }
             }
+        } catch (Throwable t) {
+            // The caller never receives the registration, so the tenant must be dropped here or it stays registered in
+            // the cache.
+            try {
+                registration.cancel();
+            } catch (Throwable cancelFailure) {
+                t.addSuppressed(cancelFailure);
+            }
+            throw t;
         }
         return registration;
     }

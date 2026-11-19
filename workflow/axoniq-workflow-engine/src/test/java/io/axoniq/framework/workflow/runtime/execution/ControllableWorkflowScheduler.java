@@ -35,6 +35,10 @@ final class ControllableWorkflowScheduler implements WorkflowScheduler {
         return (int) tasks.stream().filter(task -> !task.completion.isDone()).count();
     }
 
+    List<Instant> pendingDeadlines() {
+        return tasks.stream().filter(task -> !task.completion.isDone()).map(task -> task.deadline).toList();
+    }
+
     @Override
     public ScheduledTask schedule(Instant deadline) {
         var controlledTask = new ControlledTask(deadline);

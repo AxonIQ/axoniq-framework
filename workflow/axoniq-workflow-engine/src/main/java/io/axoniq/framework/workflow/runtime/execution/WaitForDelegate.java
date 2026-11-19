@@ -10,6 +10,7 @@ package io.axoniq.framework.workflow.runtime.execution;
 import io.axoniq.framework.workflow.dsl.api.EventCondition;
 import io.axoniq.framework.workflow.dsl.api.EventNameCustomizer;
 import io.axoniq.framework.workflow.dsl.api.StepStatus;
+import io.axoniq.framework.workflow.dsl.api.StepWaitInfo;
 import io.axoniq.framework.workflow.dsl.api.WorkflowStepResult;
 import io.axoniq.framework.workflow.runtime.api.execution.FutureResolutionTimeoutException;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WaitForPrimitive;
@@ -25,8 +26,6 @@ import org.slf4j.LoggerFactory;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.LinkedHashMap;
-import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 
@@ -110,8 +109,11 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
         }
 
         if (WorkflowStateUtils.isStepStatus(workflowExecution.state(), stepName, StepStatus.STARTED)) {
-            var actualStartTime = workflowExecution.state().getStep(stepName).timestamp();
-            var timeoutDeadline = actualStartTime.plus(timeout);
+            var step = workflowExecution.state().getStep(stepName);
+            var timeoutDeadline = stateBased(stepName, eventNameCustomizer, workflowExecution)
+                    .resultAs(StepWaitInfo.class)
+                    .map(StepWaitInfo::timeoutTime)
+                    .orElseGet(() -> step.timestamp().plus(timeout));
             var remainingTimeout = Duration.between(clock.instant(), timeoutDeadline);
 
             if (remainingTimeout.isNegative()) {
@@ -178,14 +180,10 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
         return cancelledWaitForEvent(stepName, cause, eventNameCustomizer);
     }
 
-    private Map<String, @Nullable Object> startedPayload(EventCondition eventCondition,
-                                                         Instant startedAt,
-                                                         Duration timeout) {
-        var payload = new LinkedHashMap<String, @Nullable Object>();
-        payload.put("startTime", startedAt);
-        payload.put(WaitAssociation.EVENT_NAME_KEY, eventCondition.qualifiedName().toString());
-        payload.put(WaitAssociation.ASSOCIATIONS_KEY, eventCondition.associations());
-        payload.put("timeoutTime", startedAt.plus(timeout));
-        return payload;
+    private StepWaitInfo startedPayload(EventCondition eventCondition, Instant startedAt, Duration timeout) {
+        return new StepWaitInfo(startedAt,
+                                eventCondition.qualifiedName().toString(),
+                                eventCondition.associations(),
+                                startedAt.plus(timeout));
     }
 }

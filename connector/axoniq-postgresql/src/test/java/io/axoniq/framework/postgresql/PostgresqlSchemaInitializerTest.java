@@ -132,15 +132,15 @@ class PostgresqlSchemaInitializerTest {
     }
 
     @Test
-    void schemaIsCompleteReturnsFalseWhenNothingExistsYet() throws SQLException {
-        assertThat(PostgresqlSchemaInitializer.schemaIsComplete(dataSource)).isFalse();
+    void findSchemaProblemsReportsEverythingWhenNothingExistsYet() throws SQLException {
+        assertThat(PostgresqlSchemaInitializer.findSchemaProblems(dataSource)).isNotEmpty();
     }
 
     @Test
-    void schemaIsCompleteReturnsTrueOnceCreateIfMissingHasRun() throws SQLException {
+    void findSchemaProblemsReportsNothingOnceCreateIfMissingHasRun() throws SQLException {
         PostgresqlSchemaInitializer.initialize(dataSource, SchemaInitialization.CREATE_IF_MISSING);
 
-        assertThat(PostgresqlSchemaInitializer.schemaIsComplete(dataSource)).isTrue();
+        assertThat(PostgresqlSchemaInitializer.findSchemaProblems(dataSource)).isEmpty();
     }
 
     @Test
@@ -148,18 +148,18 @@ class PostgresqlSchemaInitializerTest {
         assertThatThrownBy(() -> PostgresqlSchemaInitializer.initialize(dataSource, SchemaInitialization.VALIDATE))
                 .isInstanceOf(IllegalStateException.class);
 
-        assertThat(PostgresqlSchemaInitializer.schemaIsComplete(dataSource)).isFalse();
+        assertThat(PostgresqlSchemaInitializer.findSchemaProblems(dataSource)).isNotEmpty();
     }
 
     @Test
-    void schemaIsCompleteReturnsFalseWhenOnlyASingleIndexIsMissing() throws SQLException {
+    void findSchemaProblemsReportsASingleMissingIndex() throws SQLException {
         // given - a schema created by an older version that predates one of the indices, simulated
         // by creating the full schema and then dropping just that one index again.
         PostgresqlSchemaInitializer.initialize(dataSource, SchemaInitialization.CREATE_IF_MISSING);
         dropIndex("tags_type_unique");
 
         // then - the partial schema is reported as incomplete, not mistaken for a complete one.
-        assertThat(PostgresqlSchemaInitializer.schemaIsComplete(dataSource)).isFalse();
+        assertThat(PostgresqlSchemaInitializer.findSchemaProblems(dataSource)).isNotEmpty();
     }
 
     @Test
@@ -171,7 +171,7 @@ class PostgresqlSchemaInitializerTest {
         PostgresqlSchemaInitializer.initialize(dataSource, SchemaInitialization.CREATE_IF_MISSING);
 
         // then - the missing index was recreated, without needing a full schema wipe.
-        assertThat(PostgresqlSchemaInitializer.schemaIsComplete(dataSource)).isTrue();
+        assertThat(PostgresqlSchemaInitializer.findSchemaProblems(dataSource)).isEmpty();
     }
 
     @Test
@@ -184,11 +184,11 @@ class PostgresqlSchemaInitializerTest {
     }
 
     @Test
-    void schemaIsCompleteReturnsFalseWhenOnlyTheSnapshotsTableIsMissing() throws SQLException {
+    void findSchemaProblemsReportsTheSnapshotsTableWhenOnlyItIsMissing() throws SQLException {
         PostgresqlSchemaInitializer.initialize(dataSource, SchemaInitialization.CREATE_IF_MISSING);
         dropTable("snapshots");
 
-        assertThat(PostgresqlSchemaInitializer.schemaIsComplete(dataSource)).isFalse();
+        assertThat(PostgresqlSchemaInitializer.findSchemaProblems(dataSource)).isNotEmpty();
     }
 
     @Test
@@ -198,7 +198,7 @@ class PostgresqlSchemaInitializerTest {
 
         PostgresqlSchemaInitializer.initialize(dataSource, SchemaInitialization.CREATE_IF_MISSING);
 
-        assertThat(PostgresqlSchemaInitializer.schemaIsComplete(dataSource)).isTrue();
+        assertThat(PostgresqlSchemaInitializer.findSchemaProblems(dataSource)).isEmpty();
     }
 
     @Test
@@ -222,7 +222,142 @@ class PostgresqlSchemaInitializerTest {
     void skipDoesNotCreateAnythingEvenOnAMissingSchema() throws SQLException {
         PostgresqlSchemaInitializer.initialize(dataSource, SchemaInitialization.SKIP);
 
-        assertThat(PostgresqlSchemaInitializer.schemaIsComplete(dataSource)).isFalse();
+        assertThat(PostgresqlSchemaInitializer.findSchemaProblems(dataSource)).isNotEmpty();
+    }
+
+    @Test
+    void validateRejectsATypeTagTriggerThatOnlyFiresForReplicaWrites() throws SQLException {
+        PostgresqlSchemaInitializer.initialize(dataSource, SchemaInitialization.CREATE_IF_MISSING);
+        execute("ALTER TABLE events ENABLE REPLICA TRIGGER axon_events_write_type_tag");
+
+        assertThatThrownBy(() -> PostgresqlSchemaInitializer.initialize(dataSource, SchemaInitialization.VALIDATE))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("axon_events_write_type_tag");
+    }
+
+    @Test
+    void validateRejectsAStatementLevelTypeTagTrigger() throws SQLException {
+        PostgresqlSchemaInitializer.initialize(dataSource, SchemaInitialization.CREATE_IF_MISSING);
+        execute("""
+                DROP TRIGGER axon_events_write_type_tag ON events;
+                CREATE TRIGGER axon_events_write_type_tag AFTER INSERT ON events
+                  FOR EACH STATEMENT EXECUTE FUNCTION axon_write_type_tag();
+                """);
+
+        assertThatThrownBy(() -> PostgresqlSchemaInitializer.initialize(dataSource, SchemaInitialization.VALIDATE))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("axon_events_write_type_tag");
+    }
+
+    @Test
+    void validateRejectsATypeTagTriggerWithAWhenCondition() throws SQLException {
+        PostgresqlSchemaInitializer.initialize(dataSource, SchemaInitialization.CREATE_IF_MISSING);
+        execute("""
+                DROP TRIGGER axon_events_write_type_tag ON events;
+                CREATE TRIGGER axon_events_write_type_tag AFTER INSERT ON events
+                  FOR EACH ROW WHEN (NEW.type <> 'x') EXECUTE FUNCTION axon_write_type_tag();
+                """);
+
+        assertThatThrownBy(() -> PostgresqlSchemaInitializer.initialize(dataSource, SchemaInitialization.VALIDATE))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("axon_events_write_type_tag");
+    }
+
+    @Test
+    void validateRejectsADisabledTypeTagValidationTrigger() throws SQLException {
+        PostgresqlSchemaInitializer.initialize(dataSource, SchemaInitialization.CREATE_IF_MISSING);
+        execute("ALTER TABLE tags DISABLE TRIGGER axon_tags_validate_type");
+
+        assertThatThrownBy(() -> PostgresqlSchemaInitializer.initialize(dataSource, SchemaInitialization.VALIDATE))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("axon_tags_validate_type");
+    }
+
+    @Test
+    void validateRejectsATypeTagUniqueIndexWithAnInvertedPredicate() throws SQLException {
+        PostgresqlSchemaInitializer.initialize(dataSource, SchemaInitialization.CREATE_IF_MISSING);
+        execute("""
+                DROP INDEX tags_type_unique;
+                CREATE UNIQUE INDEX tags_type_unique ON tags (global_index) WHERE key <> '__T';
+                """);
+
+        assertThatThrownBy(() -> PostgresqlSchemaInitializer.initialize(dataSource, SchemaInitialization.VALIDATE))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("tags_type_unique");
+    }
+
+    @Test
+    void validateRejectsATypeTagUniqueIndexThatIsNotUnique() throws SQLException {
+        PostgresqlSchemaInitializer.initialize(dataSource, SchemaInitialization.CREATE_IF_MISSING);
+        execute("""
+                DROP INDEX tags_type_unique;
+                CREATE INDEX tags_type_unique ON tags (global_index) WHERE key = '__T';
+                """);
+
+        assertThatThrownBy(() -> PostgresqlSchemaInitializer.initialize(dataSource, SchemaInitialization.VALIDATE))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("tags_type_unique");
+    }
+
+    @Test
+    void createIfMissingFailsWhenAnExistingDefinitionIsIncompatibleAndCannotBeRepaired() throws SQLException {
+        PostgresqlSchemaInitializer.initialize(dataSource, SchemaInitialization.CREATE_IF_MISSING);
+        execute("""
+                DROP INDEX tags_type_unique;
+                CREATE UNIQUE INDEX tags_type_unique ON tags (global_index) WHERE key <> '__T';
+                """);
+
+        assertThatThrownBy(() -> PostgresqlSchemaInitializer.initialize(dataSource, SchemaInitialization.CREATE_IF_MISSING))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("tags_type_unique");
+    }
+
+    @Test
+    void createIfMissingFailsWhenATriggerIsDisabledAndCannotBeRepaired() throws SQLException {
+        PostgresqlSchemaInitializer.initialize(dataSource, SchemaInitialization.CREATE_IF_MISSING);
+        execute("ALTER TABLE events ENABLE REPLICA TRIGGER axon_events_write_type_tag");
+
+        assertThatThrownBy(() -> PostgresqlSchemaInitializer.initialize(dataSource, SchemaInitialization.CREATE_IF_MISSING))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("axon_events_write_type_tag");
+    }
+
+    @Test
+    void validateWorksForARoleWithNoPrivilegesOnTheSchemaTables() throws SQLException {
+        // given - a complete schema, and a role that has been granted nothing on it
+        PostgresqlSchemaInitializer.initialize(dataSource, SchemaInitialization.CREATE_IF_MISSING);
+        execute("""
+                DROP ROLE IF EXISTS axon_limited;
+                CREATE ROLE axon_limited LOGIN PASSWORD 'limited';
+                """);
+
+        HikariConfig config = new HikariConfig();
+
+        config.setJdbcUrl(postgresContainer.getJdbcUrl());
+        config.setUsername("axon_limited");
+        config.setPassword("limited");
+
+        try (HikariDataSource limitedDataSource = new HikariDataSource(config)) {
+            // when / then
+            assertThatCode(() -> PostgresqlSchemaInitializer.initialize(limitedDataSource, SchemaInitialization.VALIDATE))
+                    .doesNotThrowAnyException();
+        }
+        finally {
+            execute("DROP ROLE IF EXISTS axon_limited");
+        }
+    }
+
+    private void execute(String sql) throws SQLException {
+        try (
+            Connection connection = dataSource.getConnection();
+            Statement statement = connection.createStatement()
+        ) {
+            connection.setAutoCommit(false);
+
+            statement.execute(sql);
+
+            connection.commit();
+        }
     }
 
     private void dropIndex(String indexName) throws SQLException {

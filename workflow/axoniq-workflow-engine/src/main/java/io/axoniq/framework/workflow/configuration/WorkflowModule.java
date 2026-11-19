@@ -320,6 +320,28 @@ public interface WorkflowModule<C extends WorkflowContext> extends Module {
         );
 
         /**
+         * Sets the minimum time, in milliseconds, between two checkpoint requests of one segment of this module's
+         * event processor.
+         * <p>
+         * The engine requests a checkpoint after every event it handles, and every request makes the event processor
+         * wait, at its next batch commit, until all workflows of the segment reached a safe point. A positive interval
+         * forwards at most one request per segment within that time, so the processor waits less often under load.
+         * The stored position then lags further behind, and events after it are processed again after a restart.
+         * <p>
+         * Defaults to {@code 0}, which forwards every request.
+         *
+         * @param checkpointInterval the minimum time, in milliseconds, between two checkpoint requests of one segment,
+         *                           where {@code 0} forwards every request
+         * @return this phase, for further optional configuration
+         * @throws org.axonframework.common.AxonConfigurationException if {@code checkpointInterval} is negative
+         * @throws UnsupportedOperationException                       if this phase does not support a checkpoint
+         *                                                             interval
+         */
+        default OptionalPhase<C> checkpointInterval(long checkpointInterval) {
+            throw new UnsupportedOperationException();
+        }
+
+        /**
          * Enables workflow history tracking, storing collected history in the given
          * {@link MutableWorkflowHistoryRepository}.
          * <p>

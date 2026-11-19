@@ -8,6 +8,7 @@
 
 package io.axoniq.framework.springcloud.query;
 
+import io.axoniq.framework.messaging.distributed.CallbackHandOff;
 import io.axoniq.framework.messaging.queryhandling.distributed.QueryBusConnector;
 import io.axoniq.framework.messaging.queryhandling.distributed.QueryBusConnector.Handler;
 import org.axonframework.common.FutureUtils;
@@ -29,6 +30,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Supplier;
 
 /**
@@ -92,8 +94,8 @@ public class IncomingQueryInvoker {
      * Handles the given {@code request}, received from another member, writing its responses to the given
      * {@code sink}.
      * <p>
-     * Returns as soon as the query has been handed to the local handler. Responses are written to the {@code sink} as
-     * the handler produces them, which for a handler that answers asynchronously is after this method returned.
+     * Returns as soon as the query has been handed to the local handler. The responses are written to the
+     * {@code sink} later, on another thread, whenever the handler's stream has some.
      *
      * @param request the request received from another member
      * @param sink    receives the responses to the query, and the outcome that ends them
@@ -322,7 +324,8 @@ public class IncomingQueryInvoker {
     /**
      * Drains a response stream into a sink, as and when the stream has something to write.
      * <p>
-     * The stream reports availability on whichever thread produced it, so draining is serialised here: two threads
+     * The stream calls back on the thread of whoever produced a response, which only schedules a drain on a thread of
+     * its own. Drains are serialised here: a signal arriving while one runs schedules the next, and two of them
      * writing to one sink would interleave the responses of a single query.
      */
     private class ResponseWriter {
@@ -330,8 +333,11 @@ public class IncomingQueryInvoker {
         private final String requestIdentifier;
         private final MessageStream<QueryResponseMessage> responses;
         private final QueryResponseSink sink;
-        // Volatile rather than guarded by this writer's monitor, so that cancelling does not wait on a drain that
-        // is blocked writing to a member which has already stopped reading.
+        // A drain blocks while writing to the sink, and a virtual thread that blocks inside a monitor holds on to its
+        // carrier thread on JDK 21, so drains are serialised with a lock.
+        private final ReentrantLock drainLock = new ReentrantLock();
+        // Volatile, so that cancelling does not wait on a drain that is blocked writing to a member which has already
+        // stopped reading.
         private volatile boolean terminated = false;
 
         private ResponseWriter(String requestIdentifier,
@@ -344,8 +350,9 @@ public class IncomingQueryInvoker {
 
         private void start() {
             sink.onUnavailable(this::cancel);
-            responses.setCallback(this::drain);
-            drain();
+            // The stream calls back on the thread of whoever produced a response, which may not read from it, or block.
+            // It also calls back at once when it has a response already, or has ended, so nothing is drained here.
+            responses.setCallback(CallbackHandOff.handOff(this::drain));
         }
 
         /**
@@ -363,34 +370,38 @@ public class IncomingQueryInvoker {
             responses.close();
         }
 
-        private synchronized void drain() {
-            if (terminated) {
-                return;
-            }
+        private void drain() {
+            drainLock.lock();
+
             try {
-                // Asked once per decision: a second ask can take a response that arrived in between, swallowing the
-                // notification that would have drained it, and leave it unwritten.
-                boolean hasNext = responses.hasNextAvailable();
-                while (hasNext) {
-                    Optional<MessageStream.Entry<QueryResponseMessage>> next = responses.next();
-                    if (next.isEmpty()) {
-                        hasNext = false;
-                        break;
+                if (terminated) {
+                    return;
+                }
+                try {
+                    // Reads until the stream has nothing available: a response it reported and that is left unread
+                    // is not announced by another callback.
+                    while (responses.hasNextAvailable()) {
+                        Optional<MessageStream.Entry<QueryResponseMessage>> next = responses.next();
+                        if (next.isEmpty()) {
+                            break;
+                        }
+                        sink.response(QueryConverter.convertResponseMessage(next.get().message(), requestIdentifier));
                     }
-                    sink.response(QueryConverter.convertResponseMessage(next.get().message(), requestIdentifier));
-                    hasNext = responses.hasNextAvailable();
+                    // Reading a stream that has just ended reports its completion, which schedules another drain.
+                    // That one waits for this one and then finds the answer finished, so it is finished only once.
+                    if (!terminated && responses.isCompleted()) {
+                        responses.error().ifPresentOrElse(this::fail, this::finish);
+                    }
+                } catch (Exception e) {
+                    // Writing failed, which usually means the member that asked is gone. Reporting the failure back is
+                    // pointless in that case, so the stream is simply released.
+                    logger.debug("Could not write the responses to query [{}]; abandoning it.", requestIdentifier, e);
+                    terminated = true;
+                    responses.close();
                 }
-                // Reading a stream that has just ended reports its completion, which drains it again from inside
-                // this drain. That nested drain already finished the answer, so finishing it here would do so twice.
-                if (!hasNext && !terminated && responses.isCompleted()) {
-                    responses.error().ifPresentOrElse(this::fail, this::finish);
-                }
-            } catch (Exception e) {
-                // Writing failed, which usually means the member that asked is gone. Reporting the failure back is
-                // pointless in that case, so the stream is simply released.
-                logger.debug("Could not write the responses to query [{}]; abandoning it.", requestIdentifier, e);
-                terminated = true;
-                responses.close();
+            }
+            finally {
+                drainLock.unlock();
             }
         }
 

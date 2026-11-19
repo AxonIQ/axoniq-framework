@@ -10,6 +10,7 @@ package io.axoniq.framework.workflow.runtime.util;
 import io.axoniq.framework.workflow.dsl.api.EventNameCustomizer;
 import io.axoniq.framework.workflow.dsl.api.StepRetryInfo;
 import io.axoniq.framework.workflow.dsl.api.StepStatus;
+import io.axoniq.framework.workflow.dsl.api.StepWaitInfo;
 import io.axoniq.framework.workflow.dsl.api.WorkflowError;
 import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.api.execution.context.Version;
@@ -28,6 +29,7 @@ import org.junit.jupiter.api.*;
 import java.lang.reflect.Constructor;
 import java.time.Instant;
 import java.util.Map;
+import java.util.Set;
 
 import static io.axoniq.framework.workflow.runtime.execution.payload.CombineGlobalAndLocalPayloadReducer.NAME;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -231,10 +233,13 @@ class EventMessageUtilsTest {
 
     @Test
     void startedWaitForEventStep() {
-        Map<String, @Nullable Object> local = Map.of("localKey", "localVal");
-        EventMessage message = EventMessageUtils.startedWaitForEventStep(context, "step1", local, customizer);
+        StepWaitInfo waitInfo = new StepWaitInfo(Instant.parse("2026-07-08T10:00:00Z"),
+                                                 "io.acme.PaymentConfirmed",
+                                                 Set.of("payload:orderId=123"),
+                                                 Instant.parse("2026-07-08T10:15:00Z"));
+        EventMessage message = EventMessageUtils.startedWaitForEventStep(context, "step1", waitInfo, customizer);
         assertThat(message.type().toString()).startsWith("step1.STARTED");
-        assertThat(message.payload()).isEqualTo(local);
+        assertThat(message.payload()).isEqualTo(waitInfo);
         assertThat(MetadataUtils.getWorkflowId(message.metadata())).isEqualTo(workflowId);
         assertThat(MetadataUtils.getStepName(message.metadata())).isEqualTo("step1");
         assertThat(MetadataUtils.getStepStatus(message.metadata())).contains(StepStatus.STARTED);

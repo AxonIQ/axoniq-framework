@@ -33,7 +33,6 @@ import org.axonframework.eventsourcing.eventstore.TaggedEventMessage;
 import org.axonframework.messaging.core.Context;
 import org.axonframework.messaging.core.LegacyResources;
 import org.axonframework.messaging.core.MessageStream;
-import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.Metadata;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
@@ -210,9 +209,10 @@ public class AggregateBasedAxonServerEventStorageEngine implements EventStorageE
     private AggregateSource aggregateSourceForCriterion(SourcingCondition condition, EventCriterion criterion) {
         AtomicReference<@Nullable AggregateBasedConsistencyMarker> markerReference = new AtomicReference<>();
         String aggregateIdentifier = resolveAggregateIdentifier(criterion.tags());
+        long firstSequenceNumber = AggregateSequenceNumberPosition.toSequenceNumber(condition.start());
         AggregateEventStream aggregateStream =
                 connection.eventChannel()
-                          .openAggregateStream(aggregateIdentifier, AggregateSequenceNumberPosition.toSequenceNumber(condition.start()));
+                          .openAggregateStream(aggregateIdentifier, firstSequenceNumber);
 
         MessageStream<EventMessage> source =
                 MessageStream.fromStream(aggregateStream.asStream(),
@@ -223,10 +223,13 @@ public class AggregateBasedAxonServerEventStorageEngine implements EventStorageE
                                                                            markerReference))
                              // Defaults the marker when the aggregate stream was empty
                              .onComplete(() -> markerReference.compareAndSet(
-                                     // making sequence number (=last seen event) -1 makes the position in the Consistency Marker 0
-                                     // this ensures 0-based sequence numbers, as they are derived from the marker when appending
-                                     // Axon Server enforces 0-based sequence numbers
-                                     null, new AggregateBasedConsistencyMarker(aggregateIdentifier, -1)
+                                     // the last seen event is the one right before the requested start. For a start of 0
+                                     // this is -1, which makes the position in the Consistency Marker 0 and ensures
+                                     // 0-based sequence numbers, as they are derived from the marker when appending.
+                                     // Axon Server enforces 0-based sequence numbers.
+                                     // For a later start (e.g. after a snapshot) it retains the requested lower bound.
+                                     null,
+                                     new AggregateBasedConsistencyMarker(aggregateIdentifier, firstSequenceNumber - 1)
                              ))
                              .cast();
         return new AggregateSource(markerReference, source);
@@ -282,7 +285,7 @@ public class AggregateBasedAxonServerEventStorageEngine implements EventStorageE
     }
 
     private Metadata getMetadata(Map<String, MetaDataValue> metadataMap) {
-        return new Metadata(MetadataConverter.convertMetadataValuesToGrpc(metadataMap));
+        return new Metadata(MetadataConverter.convertGrpcToMetadataMap(metadataMap));
     }
 
     @Override
