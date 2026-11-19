@@ -99,6 +99,7 @@ import static java.util.Objects.requireNonNull;
     private final ReentrantLock lock = new ReentrantLock();
     private final AtomicBoolean taskActive = new AtomicBoolean(false);
     private boolean latchQueued;
+    private boolean driverStopped;
     private List<Runnable> latchCallbacks = new ArrayList<>();
 
     private CheckpointWorkStateListener checkpointWorkStateListener;
@@ -133,40 +134,40 @@ import static java.util.Objects.requireNonNull;
      * added to the pending {@link #latchCallbacks} so they all fire, in registration order, when the single queued
      * latch is consumed.
      * <p>
-     * The latch is appended outside the locked section. The locked section only decides whether a new latch
-     * is needed; once that decision is made, queueing the task does not need to hold this instance's lock.
+     * Once the workflow driver stopped through {@link #stop(Runnable)}, nothing drains the queue anymore, so the
+     * callback is invoked immediately as well, until the driver starts again through {@link #start(Runnable)}.
+     * <p>
+     * Deciding whether the execution is idle, registering the callback and queueing the latch happen in one locked
+     * section, the same one in which {@link #stop(Runnable)} stops the driver and releases the pending callbacks. A
+     * callback is therefore either released by the stop, or registered while the driver still runs and the latch is
+     * consumed, or invoked immediately: it is never registered with a driver that already stopped.
      *
      * @param latch callback invoked after the queued checkpoint latch has been consumed
      */
     public void addCheckpointLatch(Runnable latch) {
         requireNonNull(latch, "The when-complete runnable must not be null");
-        boolean idle = locked(() -> !executionTaskQueue.isRunning() && !unsafe());
-        if (idle) {
-            latch.run();
-            return;
-        }
-
-        boolean latchAlreadyQueued = locked(() -> {
+        boolean invokeNow = locked(() -> {
+            if (driverStopped || (!executionTaskQueue.isRunning() && !unsafe())) {
+                return true;
+            }
             latchCallbacks.add(latch);
             if (latchQueued) {
-                return true;
+                return false;
             }
             latchQueued = true;
             reportCheckpointWorkUnsafe();
-            return false;
-        });
-        if (latchAlreadyQueued) {
-            return;
-        }
-
-        try {
-            executionTaskQueue.appendTask(new CheckpointLatch());
-        } catch (RuntimeException e) {
-            locked(() -> {
+            try {
+                executionTaskQueue.appendTask(new CheckpointLatch());
+            } catch (RuntimeException e) {
+                latchCallbacks.remove(latchCallbacks.size() - 1);
                 latchQueued = false;
                 reportCheckpointWorkState();
-            });
-            throw e;
+                throw e;
+            }
+            return false;
+        });
+        if (invokeNow) {
+            latch.run();
         }
     }
 
@@ -181,13 +182,19 @@ import static java.util.Objects.requireNonNull;
      *     <li>a {@link CheckpointLatch} has been queued but not yet consumed.</li>
      * </ul>
      * <p>
+     * It also stays unsafe until the workflow thread has observed, at the end of a task, that all of the above ended.
+     * The workflow thread takes a task off the queue before {@link #runTask(Consumer, WorkflowExecution)} marks it
+     * active, so in between the queue and the active flag both look idle while that task has not run yet. The work
+     * reported unsafe when the task was appended is only reported safe again once that task finished and nothing else
+     * is left, which closes that hand-over window.
+     * <p>
      * When the execution is not live, the answer is always {@code false} because there is no asynchronous queue work
      * to wait for.
      *
      * @return {@code true} if checkpoint advancement must still wait, otherwise {@code false}
      */
     public boolean hasUnsafeCheckpointWork() {
-        return locked(this::unsafe);
+        return locked(() -> unsafe() || checkpointWorkUnsafe);
     }
 
     /**
@@ -221,6 +228,20 @@ import static java.util.Objects.requireNonNull;
 
     void refreshCheckpointWorkState() {
         locked(this::reportCheckpointWorkState);
+    }
+
+    /**
+     * Starts the workflow driver: runs the given {@code startDriver}, which makes the task queue report itself as
+     * running, while holding this instance's lock, so that checkpoint latches queue up for the driver again.
+     *
+     * @param startDriver the action marking the workflow driver as running
+     */
+    void start(Runnable startDriver) {
+        locked(() -> {
+            startDriver.run();
+            driverStopped = false;
+            reportCheckpointWorkState();
+        });
     }
 
     void appendTask(Consumer<WorkflowExecution> task) {
@@ -326,13 +347,20 @@ import static java.util.Objects.requireNonNull;
     }
 
     /**
-     * Completes any checkpoint callbacks whose latches cannot be consumed because the workflow driver has stopped.
+     * Stops the workflow driver and completes any checkpoint callbacks whose latches cannot be consumed anymore.
      * <p>
-     * Once the driver is no longer executable, no further queue work can make checkpoint advancement unsafe. Releasing
-     * the callbacks prevents a checkpoint waiter from being stranded by terminal cleanup.
+     * The given {@code stopDriver} runs while holding this instance's lock, the same lock under which
+     * {@link #addCheckpointLatch(Runnable)} decides whether to register a callback, so no callback is registered with
+     * a driver that is stopping. Once the driver is no longer executable, no further queue work can make checkpoint
+     * advancement unsafe. Releasing the callbacks prevents a checkpoint waiter from being stranded by terminal cleanup,
+     * and callbacks added later are invoked immediately until the driver is started again.
+     *
+     * @param stopDriver the action marking the workflow driver as not running and discarding its queued tasks
      */
-    void completePendingCheckpointLatch() {
+    void stop(Runnable stopDriver) {
         List<Runnable> callbacks = locked(() -> {
+            stopDriver.run();
+            driverStopped = true;
             checkpointWorkUnsafe = false;
             latchQueued = false;
             return takeLatchCallbacks();

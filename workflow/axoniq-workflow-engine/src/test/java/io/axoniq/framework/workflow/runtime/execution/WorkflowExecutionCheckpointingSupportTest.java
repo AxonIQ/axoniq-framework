@@ -117,6 +117,72 @@ class WorkflowExecutionCheckpointingSupportTest {
     }
 
     @Nested
+    class TaskTakenOffTheQueueButNotRunYet {
+
+        @Test
+        void keepsCheckpointWorkUnsafeWhileTheWorkflowThreadHoldsTheTakenTask() {
+            // given
+            var taskQueue = new InlineExecutionTaskQueue();
+            var support = new WorkflowExecutionCheckpointingSupport(taskQueue, CheckpointWorkStateListener.NO_OP);
+            support.appendTask(ignored -> {
+            });
+
+            // when
+            // The workflow thread took the task off the queue but did not hand it to runTask yet: the queue is empty
+            // and no task is active, while the effect of the task is still to come.
+            var taken = taskQueue.tasks.remove();
+
+            // then
+            assertThat(support.hasUnsafeCheckpointWork()).isTrue();
+            support.runTask(taken, mock(WorkflowExecution.class));
+            assertThat(support.hasUnsafeCheckpointWork()).isFalse();
+        }
+    }
+
+    @Nested
+    class StoppedDriver {
+
+        @Test
+        void invokesALatchRequestedAfterTheStopImmediatelyEvenWhenWorkWasAppendedAfterTheStop() {
+            // given
+            var taskQueue = new InlineExecutionTaskQueue();
+            var support = new WorkflowExecutionCheckpointingSupport(taskQueue, CheckpointWorkStateListener.NO_OP);
+            var crossed = new AtomicInteger();
+            support.stop(() -> {
+                taskQueue.running = false;
+                taskQueue.tasks.clear();
+            });
+            // An event delivered to the finished execution before the engine removed it: nothing drains it anymore.
+            support.appendTask(ignored -> {
+            });
+
+            // when
+            support.addCheckpointLatch(crossed::incrementAndGet);
+
+            // then
+            assertThat(crossed).hasValue(1);
+        }
+
+        @Test
+        void queuesLatchesForTheDriverAgainOnceItStarted() {
+            // given
+            var taskQueue = new InlineExecutionTaskQueue();
+            var support = new WorkflowExecutionCheckpointingSupport(taskQueue, CheckpointWorkStateListener.NO_OP);
+            var crossed = new AtomicInteger();
+            support.stop(() -> taskQueue.running = false);
+            support.start(() -> taskQueue.running = true);
+
+            // when
+            support.addCheckpointLatch(crossed::incrementAndGet);
+
+            // then
+            assertThat(crossed).hasValue(0);
+            support.runTask(taskQueue.tasks.remove(), mock(WorkflowExecution.class));
+            assertThat(crossed).hasValue(1);
+        }
+    }
+
+    @Nested
     class PendingCheckpointLatchCallbacks {
 
         // Large enough that running the callbacks as a nested call chain would overflow the stack.
@@ -156,7 +222,10 @@ class WorkflowExecutionCheckpointingSupportTest {
             assertThat(taskQueue.tasks).hasSize(1);
 
             // when
-            support.completePendingCheckpointLatch();
+            support.stop(() -> {
+                taskQueue.running = false;
+                taskQueue.tasks.clear();
+            });
 
             // then
             assertThat(invoked).containsExactlyElementsOf(expectedIndices());

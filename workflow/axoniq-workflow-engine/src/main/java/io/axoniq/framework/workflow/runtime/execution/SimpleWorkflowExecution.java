@@ -201,8 +201,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
     @Override
     public CompletableFuture<Void> execute(Consumer<WorkflowExecution> terminationHandler) {
         this.stoppedForRecovery = false;
-        this.running = true;
-        checkpointingSupport.refreshCheckpointWorkState();
+        checkpointingSupport.start(() -> this.running = true);
         // run in a separate thread to avoid blocking the replay status change handler thread ( = WorkPackage)
 
         return ProcessingContextUtils
@@ -478,11 +477,13 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
      * state.
      */
     private void stopRuntime(@Nullable Throwable stepCancellationCause) {
-        this.running = false;
-        this.taskQueue.clear();
         // Queue cleanup removes checkpoint barriers too. Release their callbacks because no workflow driver remains to
-        // consume them; otherwise a fully deferred processor checkpoint would wait forever.
-        this.checkpointingSupport.completePendingCheckpointLatch();
+        // consume them; otherwise a fully deferred processor checkpoint would wait forever. Stopping under the lock of
+        // the checkpointing support keeps a concurrent latch request from attaching to the queue after the cleanup.
+        this.checkpointingSupport.stop(() -> {
+            this.running = false;
+            this.taskQueue.clear();
+        });
         this.eventWaitConditions.clear();
         this.runningSteps.cancelAll(stepCancellationCause, s -> {
         });
