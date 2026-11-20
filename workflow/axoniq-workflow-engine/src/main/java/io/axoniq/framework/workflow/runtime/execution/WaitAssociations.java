@@ -16,8 +16,7 @@ import java.util.Collection;
  * {@link WorkflowStore#loadWaitAssociations(org.axonframework.messaging.core.unitofwork.ProcessingContext)}.
  * <p>
  * The {@link WorkflowEngine} loads it each time its processor claims a segment, and keeps the rows of the workflows
- * that segment owns in its live {@link WaitAssociationIndex}. The default implementation,
- * {@link EventSourcedWaitAssociations}, is sourced from the workflow events in the event store.
+ * that segment owns in its live {@link WaitAssociationIndex}.
  *
  * @author Stefan Dragisic
  * @since 5.5.0

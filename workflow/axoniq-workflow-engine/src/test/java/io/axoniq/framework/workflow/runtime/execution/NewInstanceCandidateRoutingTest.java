@@ -9,6 +9,7 @@ package io.axoniq.framework.workflow.runtime.execution;
 
 import io.axoniq.framework.workflow.dsl.api.EventCondition;
 import io.axoniq.framework.workflow.dsl.api.StepStatus;
+import io.axoniq.framework.workflow.dsl.api.StepWaitInfo;
 import io.axoniq.framework.workflow.dsl.api.WorkflowContext;
 import io.axoniq.framework.workflow.dsl.api.WorkflowState;
 import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
@@ -31,6 +32,7 @@ import org.axonframework.messaging.eventhandling.processing.streaming.token.Glob
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.junit.jupiter.api.*;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
 import java.util.List;
@@ -219,10 +221,9 @@ class NewInstanceCandidateRoutingTest {
                 MetadataUtils.create(workflowId, "await", StepStatus.STARTED)
         ));
         when(eventMessage.type()).thenReturn(new MessageType(new QualifiedName("AwaitStarted")));
-        when(eventMessage.payloadAs(any(TypeReference.class))).thenReturn(Map.of(
-                WaitAssociation.EVENT_NAME_KEY, awaited.toString(),
-                WaitAssociation.ASSOCIATIONS_KEY, Set.of()
-        ));
+        when(eventMessage.payloadAs(StepWaitInfo.class)).thenReturn(
+                new StepWaitInfo(Instant.EPOCH, awaited.toString(), Set.of(), Instant.EPOCH)
+        );
         return eventMessage;
     }
 

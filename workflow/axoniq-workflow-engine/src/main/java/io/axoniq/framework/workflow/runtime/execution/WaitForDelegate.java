@@ -171,7 +171,8 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
     }
 
     /**
-     * Records a cancelled wait with the wait marker, like the wait's started and completed events.
+     * Records a cancelled wait with the wait marker, like the wait's started and completed events. The list of open
+     * waits sources only events with that marker, so without it a cancelled wait would stay open in that list.
      */
     @Override
     protected CompletableFuture<Void> cancelled(String stepName,

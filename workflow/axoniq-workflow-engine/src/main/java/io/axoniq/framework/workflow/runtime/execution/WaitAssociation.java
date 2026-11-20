@@ -16,11 +16,8 @@ import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Collection;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 /**
  * One open wait of a workflow instance: the event the wait expects, and the associations that event must satisfy.
@@ -31,7 +28,6 @@ import java.util.stream.Collectors;
  * execution evaluates its full wait condition, including any predicate, when the event arrives. A row may therefore
  * match more events than the wait accepts, but never fewer.
  * <p>
- * A {@code sleep} is a wait for {@link Void}, which no business event is named after, so its row never routes an event.
  * A row whose STARTED payload cannot be read has no {@link #eventName()} and matches every routed event.
  *
  * @param workflowId   the identifier of the waiting workflow
@@ -46,15 +42,6 @@ public record WaitAssociation(String workflowId,
                               String stepName,
                               @Nullable QualifiedName eventName,
                               Set<String> associations) {
-
-    /**
-     * Key of the awaited event name in the payload of a wait-step STARTED event.
-     */
-    static final String EVENT_NAME_KEY = "eventName";
-    /**
-     * Key of the serialized associations in the payload of a wait-step STARTED event.
-     */
-    static final String ASSOCIATIONS_KEY = "associations";
 
     private static final Logger logger = LoggerFactory.getLogger(WaitAssociation.class);
 
@@ -76,8 +63,8 @@ public record WaitAssociation(String workflowId,
     /**
      * Builds the row of the wait started by the given wait-step STARTED event.
      * <p>
-     * Never throws on the payload: a payload that cannot be read yields a row without an {@link #eventName()}, which
-     * matches every routed event, and an unreadable association set yields a row that matches on the event name alone.
+     * Reads the payload as the {@link StepWaitInfo} the wait step publishes. Never throws on the payload: a payload
+     * that cannot be read yields a row without an {@link #eventName()}, which matches every routed event.
      *
      * @param startedWaitEvent a wait-step STARTED event, carrying {@code workflowId} and {@code stepName} metadata
      * @return the row of the started wait
@@ -87,17 +74,13 @@ public record WaitAssociation(String workflowId,
         var workflowId = MetadataUtils.getWorkflowId(metadata);
         var stepName = Objects.requireNonNull(MetadataUtils.getStepName(metadata),
                                               "A wait-step STARTED event must carry a stepName.");
-        // An in-memory store hands back the published StepWaitInfo. A serialized one is read as a map of its fields.
-        if (startedWaitEvent.payload() instanceof StepWaitInfo info && !info.eventName().isBlank()) {
-            return new WaitAssociation(workflowId, stepName, new QualifiedName(info.eventName()), info.associations());
-        }
         try {
-            Map<String, @Nullable Object> payload = startedWaitEvent.payloadAs(EventSourcedWorkflowState.PAYLOAD_TYPE);
-            if (payload != null && payload.get(EVENT_NAME_KEY) instanceof CharSequence name && !name.isEmpty()) {
+            StepWaitInfo waitInfo = startedWaitEvent.payloadAs(StepWaitInfo.class);
+            if (waitInfo != null && waitInfo.eventName() instanceof String name && !name.isEmpty()) {
                 return new WaitAssociation(workflowId,
                                            stepName,
-                                           new QualifiedName(name.toString()),
-                                           associationsOf(payload.get(ASSOCIATIONS_KEY)));
+                                           new QualifiedName(name),
+                                           Objects.requireNonNullElse(waitInfo.associations(), Set.of()));
             }
             logger.debug("Wait [{}] of workflow [{}] names no awaited event; it matches every routed event.",
                          stepName, workflowId);
@@ -106,16 +89,6 @@ public record WaitAssociation(String workflowId,
                          stepName, workflowId, e);
         }
         return new WaitAssociation(workflowId, stepName, null, Set.of());
-    }
-
-    private static Set<String> associationsOf(@Nullable Object associations) {
-        if (!(associations instanceof Collection<?> values)) {
-            return Set.of();
-        }
-        return values.stream()
-                     .filter(Objects::nonNull)
-                     .map(String::valueOf)
-                     .collect(Collectors.toUnmodifiableSet());
     }
 
     /**
