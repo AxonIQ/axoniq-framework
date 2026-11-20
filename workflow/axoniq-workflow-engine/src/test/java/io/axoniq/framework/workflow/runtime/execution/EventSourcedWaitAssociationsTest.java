@@ -8,6 +8,7 @@
 package io.axoniq.framework.workflow.runtime.execution;
 
 import io.axoniq.framework.workflow.dsl.api.StepStatus;
+import io.axoniq.framework.workflow.dsl.api.StepWaitInfo;
 import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.util.MetadataUtils;
 import org.axonframework.messaging.core.MessageType;
@@ -21,6 +22,7 @@ import org.junit.jupiter.api.*;
 import org.junit.jupiter.params.*;
 import org.junit.jupiter.params.provider.*;
 
+import java.time.Instant;
 import java.util.Map;
 import java.util.Set;
 
@@ -36,13 +38,13 @@ class EventSourcedWaitAssociationsTest {
 
     private static final String WORKFLOW_ID = "order-workflow-1";
 
-    private static EventMessage event(Metadata metadata, Map<String, Object> payload) {
+    private static EventMessage event(Metadata metadata, Object payload) {
         return new GenericEventMessage(new MessageType(new QualifiedName("WorkflowEvent")), payload, metadata);
     }
 
     private static EventMessage waitStarted(String workflowId, String stepName, String awaited) {
         return event(MetadataUtils.markWaitForEventStep(MetadataUtils.create(workflowId, stepName, StepStatus.STARTED)),
-                     Map.of("eventName", awaited, "associations", Set.of("payload:orderId=42")));
+                     new StepWaitInfo(Instant.EPOCH, awaited, Set.of("payload:orderId=42"), Instant.EPOCH));
     }
 
     private static EventMessage stepEvent(String stepName, StepStatus status, boolean marked) {

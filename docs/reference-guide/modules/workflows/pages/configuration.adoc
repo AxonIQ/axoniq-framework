@@ -185,33 +185,6 @@ The history projector runs on a second processor named `WorkflowHistoryProjector
 Each workflow instance belongs to one segment of the engine processor, chosen by the hash of its workflow id.
 Subscribing processors, including Axon Server persistent streams, cannot back workflows.
 
-[[event-routing]]
-=== Event routing
-
-An event a workflow writes for its own steps reaches only the segment that owns that workflow.
-Any other event, including an event published with `publish` / `awaitPublish`, reaches the segments of the workflows that need it:
-
-* the workflows waiting for the event, matched on event name and equality associations, see xref:waiting-for-events.adoc#_filtering_with_associations[Filtering with associations],
-* the publisher of a published event, which records its publish step on it,
-* for an event a workflow definition starts on, the single workflow the event starts.
-
-A segment hands the event only to those workflows, not to every workflow it owns.
-To match waits, each node keeps the open waits of the workflows on the segments it holds.
-It loads them from the event store when it claims a segment, from the events tagged `workflowEvent=waitForStep` and `workflowEvent=lifecycle`.
-Until a segment has loaded its open waits, or when loading them fails, that segment hands each event to every workflow it owns.
-
-The engine broadcasts an event to every segment, where each segment acts only on the workflows it owns, in these cases:
-
-* The event targets two or more workflows on the segments of one node.
-* A workflow definition starts on the event type, and the event does not resolve to exactly one workflow to start.
-This includes every published event of such a type.
-* A segment of the node is still loading its open waits, or failed to load them.
-* A segment of the node is still processing the backlog stored before the node started.
-* The engine can't read the event values it needs to match the waits.
-
-An event no segment needs reaches at most one segment, which ignores it.
-A segment that receives no events still stores its token, on the processor's claim-extension cycle, once its workflows have no work in progress.
-
 === Token store
 
 The processor claims its segments in the unnamed `TokenStore` component of your application.
@@ -251,7 +224,7 @@ include::example$workflows/configuration/ConfigurationExamples.java[tag=snapshot
 ----
 <.> The policy for the list of running workflows. There is one list, so there is one snapshot of it.
 <.> The policy for the workflow state. Each workflow instance has a snapshot of its own, stored under its workflow id.
-<.> The policy for the list of open waits, see <<event-routing,Event routing>>. There is one list, so there is one snapshot of it.
+<.> The policy for the list of open waits, see xref:workflow-internals.adoc#event-routing[Event routing]. There is one list, so there is one snapshot of it.
 
 All three policies default to a snapshot after 50 sourced events.
 The setting applies to every `WorkflowModule` of the application, because all modules share these entities.
@@ -472,7 +445,7 @@ Engine-published workflow events are also written with event-store tags.
 
 These tags are intended for event-sourced read models such as "currently running workflow executions" and "currently
 waiting steps".
-The engine reads the same tags to route events to waiting workflows, see <<event-routing,Event routing>>.
+The engine reads the same tags to route events to waiting workflows, see xref:workflow-internals.adoc#event-routing[Event routing].
 
 === Correlation data propagation
 

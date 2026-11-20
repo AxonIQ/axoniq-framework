@@ -85,10 +85,7 @@ import java.util.stream.Collectors;
     @Override
     public Optional<Object> sequenceIdentifierFor(EventMessage eventMessage,
                                                   ProcessingContext processingContext) {
-        if (Segment.fromContext(processingContext).isEmpty()) {
-            // The scheduling evaluation is the one the processor makes in stream order, ahead of handling.
-            waitIndex.evolve(eventMessage);
-        }
+        trackWaitsInStreamOrder(eventMessage, processingContext);
         var metadata = eventMessage.metadata();
         if (belongsToOneWorkflow(metadata)) {
             return Optional.of(MetadataUtils.getWorkflowId(metadata));
@@ -101,6 +98,18 @@ import java.util.stream.Collectors;
             logger.debug("Could not route event {} through the wait associations; broadcasting it to every segment.",
                          eventMessage.type(), e);
             return Optional.of(SequencingPolicy.BROADCAST);
+        }
+    }
+
+    /**
+     * Applies the event to the {@link WaitAssociationIndex} on the evaluation without a segment, which the processor
+     * makes in stream order before any handler runs. Updating the index in a handler instead would let it lag behind
+     * routing: a wait opened by one event could be missing when the next event is routed, which then misses the wait.
+     * Applying an event twice changes nothing.
+     */
+    private void trackWaitsInStreamOrder(EventMessage eventMessage, ProcessingContext processingContext) {
+        if (Segment.fromContext(processingContext).isEmpty()) {
+            waitIndex.evolve(eventMessage);
         }
     }
 

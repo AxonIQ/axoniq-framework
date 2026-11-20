@@ -7,6 +7,7 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
+import io.axoniq.framework.workflow.dsl.api.StepWaitInfo;
 import io.axoniq.framework.workflow.runtime.util.MetadataUtils;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.QualifiedName;
@@ -15,11 +16,8 @@ import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Collection;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 /**
  * One open wait of a workflow instance: the event the wait expects, and the associations that event must satisfy.
@@ -45,15 +43,6 @@ public record WaitAssociation(String workflowId,
                               @Nullable QualifiedName eventName,
                               Set<String> associations) {
 
-    /**
-     * Key of the awaited event name in the payload of a wait-step STARTED event.
-     */
-    static final String EVENT_NAME_KEY = "eventName";
-    /**
-     * Key of the serialized associations in the payload of a wait-step STARTED event.
-     */
-    static final String ASSOCIATIONS_KEY = "associations";
-
     private static final Logger logger = LoggerFactory.getLogger(WaitAssociation.class);
 
     /**
@@ -74,8 +63,8 @@ public record WaitAssociation(String workflowId,
     /**
      * Builds the row of the wait started by the given wait-step STARTED event.
      * <p>
-     * Never throws on the payload: a payload that cannot be read yields a row without an {@link #eventName()}, which
-     * matches every routed event, and an unreadable association set yields a row that matches on the event name alone.
+     * Reads the payload as the {@link StepWaitInfo} the wait step publishes. Never throws on the payload: a payload
+     * that cannot be read yields a row without an {@link #eventName()}, which matches every routed event.
      *
      * @param startedWaitEvent a wait-step STARTED event, carrying {@code workflowId} and {@code stepName} metadata
      * @return the row of the started wait
@@ -86,12 +75,12 @@ public record WaitAssociation(String workflowId,
         var stepName = Objects.requireNonNull(MetadataUtils.getStepName(metadata),
                                               "A wait-step STARTED event must carry a stepName.");
         try {
-            Map<String, @Nullable Object> payload = startedWaitEvent.payloadAs(EventSourcedWorkflowState.PAYLOAD_TYPE);
-            if (payload != null && payload.get(EVENT_NAME_KEY) instanceof CharSequence name && !name.isEmpty()) {
+            StepWaitInfo waitInfo = startedWaitEvent.payloadAs(StepWaitInfo.class);
+            if (waitInfo != null && waitInfo.eventName() instanceof String name && !name.isEmpty()) {
                 return new WaitAssociation(workflowId,
                                            stepName,
-                                           new QualifiedName(name.toString()),
-                                           associationsOf(payload.get(ASSOCIATIONS_KEY)));
+                                           new QualifiedName(name),
+                                           Objects.requireNonNullElse(waitInfo.associations(), Set.of()));
             }
             logger.debug("Wait [{}] of workflow [{}] names no awaited event; it matches every routed event.",
                          stepName, workflowId);
@@ -100,16 +89,6 @@ public record WaitAssociation(String workflowId,
                          stepName, workflowId, e);
         }
         return new WaitAssociation(workflowId, stepName, null, Set.of());
-    }
-
-    private static Set<String> associationsOf(@Nullable Object associations) {
-        if (!(associations instanceof Collection<?> values)) {
-            return Set.of();
-        }
-        return values.stream()
-                     .filter(Objects::nonNull)
-                     .map(String::valueOf)
-                     .collect(Collectors.toUnmodifiableSet());
     }
 
     /**

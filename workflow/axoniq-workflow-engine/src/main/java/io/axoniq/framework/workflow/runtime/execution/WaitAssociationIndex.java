@@ -231,9 +231,8 @@ final class WaitAssociationIndex {
                     checkable.add(parsed);
                 }
             } catch (RuntimeException e) {
-                // An association that cannot be checked is skipped; that only widens the match.
-                logger.debug("Not checking association [{}] of wait [{}] of workflow [{}].",
-                             association, wait.stepName(), wait.workflowId(), e);
+                logger.debug("Not checking association [{}] of wait [{}] of workflow [{}]; this only widens its "
+                                     + "match.", association, wait.stepName(), wait.workflowId(), e);
             }
         }
         var key = new WaitAssociationKey(wait.workflowId(), wait.stepName());
@@ -297,7 +296,8 @@ final class WaitAssociationIndex {
 
     /**
      * Only an {@code =} association on a plain payload or metadata path is checked. Any other association is skipped,
-     * so a value the default operator registry cannot parse never hides a waiting workflow.
+     * so a value the default operator registry cannot parse never hides a waiting workflow. A lookup also needs the
+     * exact text of one value, which only {@code =} gives.
      */
     private static boolean isCheckable(SerializedAssociation association) {
         return EqualsComparison.OPERATOR.equals(association.operator())

@@ -5,7 +5,7 @@
  * use this file except in compliance with the Terms, available at
  * https://www.axoniq.io/legal/terms-of-service
  */
-package io.axoniq.framework.workflow.configuration;
+package io.axoniq.framework.workflow.history.inmemory;
 
 import io.axoniq.framework.workflow.dsl.api.StepStatus;
 import io.axoniq.framework.workflow.runtime.util.MetadataUtils;
