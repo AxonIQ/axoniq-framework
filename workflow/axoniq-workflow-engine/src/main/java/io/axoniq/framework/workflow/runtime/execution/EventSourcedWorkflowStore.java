@@ -31,14 +31,25 @@ import java.util.concurrent.CompletableFuture;
 public class EventSourcedWorkflowStore implements WorkflowStore {
 
     private final Repository<String, EventSourcedRunningWorkflows> runningWorkflowsRepository;
+    private final Repository<String, EventSourcedWaitAssociations> waitAssociationsRepository;
     private final Repository<String, EventSourcedWorkflowState> workflowStateRepository;
 
+    /**
+     * Creates a store that loads each workflow entity through its own repository.
+     *
+     * @param runningWorkflowsRepository the repository of the list of running workflows
+     * @param waitAssociationsRepository the repository of the list of open waits
+     * @param workflowStateRepository    the repository of the state of each workflow instance
+     */
     public EventSourcedWorkflowStore(
             Repository<String, EventSourcedRunningWorkflows> runningWorkflowsRepository,
+            Repository<String, EventSourcedWaitAssociations> waitAssociationsRepository,
             Repository<String, EventSourcedWorkflowState> workflowStateRepository
     ) {
         this.runningWorkflowsRepository = Objects.requireNonNull(runningWorkflowsRepository,
                                                                  "Running workflows repository must not be null");
+        this.waitAssociationsRepository = Objects.requireNonNull(waitAssociationsRepository,
+                                                                 "Wait associations repository must not be null");
         this.workflowStateRepository = Objects.requireNonNull(workflowStateRepository,
                                                               "Workflow state repository must not be null");
     }
@@ -46,6 +57,12 @@ public class EventSourcedWorkflowStore implements WorkflowStore {
     @Override
     public CompletableFuture<RunningWorkflows> loadRunningWorkflows(ProcessingContext processingContext) {
         return runningWorkflowsRepository.loadOrCreate(EventSourcedRunningWorkflows.ENTITY_ID, processingContext)
+                                         .thenApply(ManagedEntity::entity);
+    }
+
+    @Override
+    public CompletableFuture<WaitAssociations> loadWaitAssociations(ProcessingContext processingContext) {
+        return waitAssociationsRepository.loadOrCreate(EventSourcedWaitAssociations.ENTITY_ID, processingContext)
                                          .thenApply(ManagedEntity::entity);
     }
 

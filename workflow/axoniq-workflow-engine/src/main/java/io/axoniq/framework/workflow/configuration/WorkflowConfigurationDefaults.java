@@ -12,6 +12,7 @@ import io.axoniq.framework.workflow.runtime.execution.DefaultEventNameCustomizer
 import io.axoniq.framework.workflow.runtime.execution.DefaultExecuteStepActionResolver;
 import io.axoniq.framework.workflow.runtime.execution.DefaultWorkflowScheduler;
 import io.axoniq.framework.workflow.runtime.execution.EventSourcedRunningWorkflows;
+import io.axoniq.framework.workflow.runtime.execution.EventSourcedWaitAssociations;
 import io.axoniq.framework.workflow.runtime.execution.EventSourcedWorkflowState;
 import io.axoniq.framework.workflow.runtime.execution.EventSourcedWorkflowStore;
 import io.axoniq.framework.workflow.runtime.execution.ExecuteStepActionResolver;
@@ -82,6 +83,13 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
      */
     public static final String WORKFLOW_STATE_SNAPSHOT_POLICY = "WorkflowStateSnapshotPolicy";
     /**
+     * Name of the {@link SnapshotPolicy} component of the open-wait list.
+     * <p>
+     * The list is snapshotted only when a component is registered under this name. Snapshotting then requires a
+     * {@link org.axonframework.eventsourcing.snapshot.store.SnapshotStore} component.
+     */
+    public static final String WAIT_ASSOCIATIONS_SNAPSHOT_POLICY = "WaitAssociationsSnapshotPolicy";
+    /**
      * Order for this enhancer.
      * <p>
      * Enhancer math: register the tag-resolver decorator before event sourcing creates the event store.
@@ -130,6 +138,7 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
         registerExecuteStepActionResolver(componentRegistry);
         registerWorkflowTimeoutScheduler(componentRegistry);
         registerRunningWorkflowsModule(componentRegistry);
+        registerWaitAssociationsModule(componentRegistry);
         registerWorkflowEngineExecutor(componentRegistry);
         registerWorkflowStore(componentRegistry);
     }
@@ -199,6 +208,22 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
         componentRegistry.registerIfNotPresent(Clock.class, cfg -> ClockUtils.get());
     }
 
+    void registerWaitAssociationsModule(ComponentRegistry componentRegistry) {
+        var module = declarative(String.class, EventSourcedWaitAssociations.class)
+                .messagingModel((c, model) -> model.entityEvolver((entity, event, context) -> {
+                    entity.evolve(event);
+                    return entity;
+                }).build())
+                .entityFactory(c -> (identifier, firstEvent, context) -> new EventSourcedWaitAssociations())
+                .criteriaResolver(c -> (identifier, context) -> EventSourcedWaitAssociations.criteriaBuilder());
+        if (componentRegistry.hasComponent(SnapshotPolicy.class, WAIT_ASSOCIATIONS_SNAPSHOT_POLICY)) {
+            module.snapshotPolicy((ComponentBuilder<SnapshotPolicy>) c -> c.getComponent(
+                    SnapshotPolicy.class, WAIT_ASSOCIATIONS_SNAPSHOT_POLICY
+            ));
+        }
+        componentRegistry.registerModule(module.build());
+    }
+
     void registerWorkflowStateModule(ComponentRegistry componentRegistry) {
         var module = declarative(String.class, EventSourcedWorkflowState.class)
                 .messagingModel((c, model) -> model.entityEvolver((entity, event, context) ->
@@ -244,6 +269,14 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
                             .orElseThrow(() -> new NoSuchElementException(
                                     "No repository found for %s".formatted(EventSourcedRunningWorkflows.class.getName())));
                     @SuppressWarnings("unchecked")
+                    var waitAssociationsRepository = (Repository<String, EventSourcedWaitAssociations>) repositories
+                            .stream()
+                            .filter(repository -> repository.entityType()
+                                                            .equals(EventSourcedWaitAssociations.class))
+                            .findFirst()
+                            .orElseThrow(() -> new NoSuchElementException(
+                                    "No repository found for %s".formatted(EventSourcedWaitAssociations.class.getName())));
+                    @SuppressWarnings("unchecked")
                     var workflowStateRepository = (Repository<String, EventSourcedWorkflowState>) repositories
                             .stream()
                             .filter(repository -> repository.entityType()
@@ -253,7 +286,9 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
                                     "No repository found for %s".formatted(
                                             EventSourcedWorkflowState.class.getName()
                                     )));
-                    return new EventSourcedWorkflowStore(runningWorkflowsRepository, workflowStateRepository);
+                    return new EventSourcedWorkflowStore(runningWorkflowsRepository,
+                                                         waitAssociationsRepository,
+                                                         workflowStateRepository);
                 });
     }
 

@@ -11,5 +11,6 @@
 ** xref:workflows:common-patterns.adoc[]
 ** xref:workflows:payload-and-state.adoc[]
 ** xref:workflows:configuration.adoc[]
+** xref:workflows:workflow-internals.adoc[]
 ** xref:workflows:testing-workflows.adoc[]
 ** xref:workflows:versioning.adoc[Versioning]

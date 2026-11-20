@@ -122,6 +122,7 @@ class WorkflowPropertiesTest {
                 assertThat(snapshots.isEnabled()).isFalse();
                 assertThat(snapshots.getRunningWorkflows().getAfterEvents()).isEqualTo(50);
                 assertThat(snapshots.getWorkflowState().getAfterEvents()).isEqualTo(50);
+                assertThat(snapshots.getWaitAssociations().getAfterEvents()).isEqualTo(50);
             });
         }
 
@@ -130,7 +131,8 @@ class WorkflowPropertiesTest {
             contextRunner.withPropertyValues(
                     "axon.workflow.snapshots.enabled=true",
                     "axon.workflow.snapshots.running-workflows.after-events=250",
-                    "axon.workflow.snapshots.workflow-state.after-events=75"
+                    "axon.workflow.snapshots.workflow-state.after-events=75",
+                    "axon.workflow.snapshots.wait-associations.after-events=300"
             ).run(context -> {
                 // when
                 var snapshots = context.getBean(WorkflowProperties.class).getSnapshots();
@@ -139,6 +141,7 @@ class WorkflowPropertiesTest {
                 assertThat(snapshots.isEnabled()).isTrue();
                 assertThat(snapshots.getRunningWorkflows().getAfterEvents()).isEqualTo(250);
                 assertThat(snapshots.getWorkflowState().getAfterEvents()).isEqualTo(75);
+                assertThat(snapshots.getWaitAssociations().getAfterEvents()).isEqualTo(300);
             });
         }
 
@@ -149,7 +152,8 @@ class WorkflowPropertiesTest {
             autoConfigurationRunner.withPropertyValues("axon.workflow.snapshots.enabled=true")
                                    .run(context -> assertThat(context)
                                            .hasBean(WorkflowConfigurationDefaults.RUNNING_WORKFLOWS_SNAPSHOT_POLICY)
-                                           .hasBean(WorkflowConfigurationDefaults.WORKFLOW_STATE_SNAPSHOT_POLICY));
+                                           .hasBean(WorkflowConfigurationDefaults.WORKFLOW_STATE_SNAPSHOT_POLICY)
+                                           .hasBean(WorkflowConfigurationDefaults.WAIT_ASSOCIATIONS_SNAPSHOT_POLICY));
         }
     }
 

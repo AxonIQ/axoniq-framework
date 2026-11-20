@@ -66,4 +66,16 @@ public class WorkflowAutoConfiguration {
     public SnapshotPolicy workflowStateSnapshotPolicy(WorkflowProperties workflowProperties) {
         return SnapshotPolicy.afterEvents(workflowProperties.getSnapshots().getWorkflowState().getAfterEvents());
     }
+
+    /**
+     * Provides the {@link SnapshotPolicy} of the open-wait list when snapshots are enabled.
+     *
+     * @param workflowProperties the {@link WorkflowProperties} holding the snapshot settings
+     * @return the {@link SnapshotPolicy} of the open-wait list
+     */
+    @Bean(WorkflowConfigurationDefaults.WAIT_ASSOCIATIONS_SNAPSHOT_POLICY)
+    @ConditionalOnProperty(prefix = "axon.workflow.snapshots", name = "enabled", havingValue = "true")
+    public SnapshotPolicy waitAssociationsSnapshotPolicy(WorkflowProperties workflowProperties) {
+        return SnapshotPolicy.afterEvents(workflowProperties.getSnapshots().getWaitAssociations().getAfterEvents());
+    }
 }
