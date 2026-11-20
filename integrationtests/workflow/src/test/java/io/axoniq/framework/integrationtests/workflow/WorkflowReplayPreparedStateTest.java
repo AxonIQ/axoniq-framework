@@ -165,7 +165,7 @@ class WorkflowReplayPreparedStateTest {
         prepared.appendWarmupEvents();
         prepared.appendStartReplayWorkflowEvent("first", "wait-timeout");
         prepared.appendWorkflowStarted("first", payload("first", "wait-timeout"));
-        prepared.appendStepStarted("first", "waitForResume");
+        prepared.appendStepStarted("first", "waitForResume", Duration.ofMillis(200));
         prepared.seedProcessorToken(prepared.tokenAt(1));
 
         var executedWorkflowIds = new CopyOnWriteArrayList<String>();
@@ -293,13 +293,21 @@ class WorkflowReplayPreparedStateTest {
          * the resume event to the waiting workflow.
          */
         private void appendStepStarted(String workflowId, String stepName) {
+            appendStepStarted(workflowId, stepName, Duration.ofSeconds(60));
+        }
+
+        /**
+         * Appends the STARTED event of a wait with the given timeout. A restored wait keeps the deadline this event
+         * stores, so it must match the timeout the workflow waits with.
+         */
+        private void appendStepStarted(String workflowId, String stepName, Duration timeout) {
             var startTime = Instant.now();
             appendEvent(new GenericEventMessage(
                     new MessageType(stepName + "Started"),
                     Map.of("startTime", startTime,
                            "eventName", new MessageType(ResumeReplayWorkflowEvent.class).qualifiedName().toString(),
                            "associations", Set.of("payload:id=" + workflowId),
-                           "timeoutTime", startTime.plus(Duration.ofSeconds(60))),
+                           "timeoutTime", startTime.plus(timeout)),
                     MetadataUtils.markWaitForEventStep(MetadataUtils.create(workflowId, stepName, StepStatus.STARTED))
             ).withConverter(eventConverter));
         }
