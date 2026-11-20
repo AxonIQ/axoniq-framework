@@ -46,8 +46,6 @@ import java.util.regex.Pattern;
  * a saga; a lookup reads that value from the event and finds the rows by it, so its cost does not grow with the number
  * of such rows. Rows without such an association are kept under their event name only and checked one by one, and rows
  * without an event name match every event. Every row a lookup finds is still checked against all its associations.
- * <p>
- * Internal, because it is an implementation detail of the engine's event routing.
  *
  * @author Stefan Dragisic
  * @since 5.5.0
@@ -60,13 +58,13 @@ final class WaitAssociationIndex {
 
     private final Predicate<String> isMember;
     private final ValueComparisonOperatorRegistry registry = new ValueComparisonOperatorRegistry();
-    private final ConcurrentHashMap<RowKey, Row> rows = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<WaitAssociationKey, Row> waitAssociations = new ConcurrentHashMap<>();
     // Rows by place: a LookupKey, an event name alone, or WILDCARD. A changed row is placed anew before it leaves its
     // old place.
-    private final ConcurrentHashMap<Object, Set<RowKey>> places = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<Object, Set<WaitAssociationKey>> places = new ConcurrentHashMap<>();
     // The association paths keyed rows of an event name use. Never shrinks: a definition uses only a few paths.
     private final ConcurrentHashMap<QualifiedName, Set<KeyPath>> keyPaths = new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<String, Set<RowKey>> rowsByWorkflow = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, Set<WaitAssociationKey>> rowsByWorkflow = new ConcurrentHashMap<>();
     // Counts rows that moved to another place. A lookup that overlaps a move may miss the row, so it tries again.
     private final AtomicLong moves = new AtomicLong();
     private final ConcurrentHashMap<Integer, ClaimedSegment> claimedSegments = new ConcurrentHashMap<>();
@@ -121,7 +119,7 @@ final class WaitAssociationIndex {
      */
     void clear() {
         claimedSegments.clear();
-        rows.clear();
+        waitAssociations.clear();
         places.clear();
         keyPaths.clear();
         rowsByWorkflow.clear();
@@ -160,7 +158,7 @@ final class WaitAssociationIndex {
                 }
             }
             case WaitAssociationChange.WaitTerminated(var workflowId, var stepName) ->
-                    remove(new RowKey(workflowId, stepName));
+                    remove(new WaitAssociationKey(workflowId, stepName));
             case WaitAssociationChange.WorkflowTerminated(var workflowId) -> removeWorkflow(workflowId);
             case null -> {
                 // the event opens or closes no wait
@@ -189,7 +187,7 @@ final class WaitAssociationIndex {
         }
         // Rows keep moving: check every row, which a move cannot hide.
         var matches = new HashSet<String>();
-        addMatching(rows.keySet(), event, context, matches);
+        addMatching(waitAssociations.keySet(), event, context, matches);
         return matches;
     }
 
@@ -207,7 +205,7 @@ final class WaitAssociationIndex {
         return matches;
     }
 
-    private void addMatching(@Nullable Set<RowKey> candidates,
+    private void addMatching(@Nullable Set<WaitAssociationKey> candidates,
                              EventMessage event,
                              ProcessingContext context,
                              Set<String> matches) {
@@ -215,7 +213,7 @@ final class WaitAssociationIndex {
             return;
         }
         for (var key : candidates) {
-            var row = rows.get(key);
+            var row = waitAssociations.get(key);
             if (row != null && row.matches(event, context)) {
                 matches.add(key.workflowId());
             }
@@ -238,14 +236,14 @@ final class WaitAssociationIndex {
                              association, wait.stepName(), wait.workflowId(), e);
             }
         }
-        var key = new RowKey(wait.workflowId(), wait.stepName());
+        var key = new WaitAssociationKey(wait.workflowId(), wait.stepName());
         var row = new Row(wait, List.copyOf(checks), lookupKeyOf(wait, checkable));
         if (row.lookupKey() instanceof LookupKey lookupKey) {
             keyPaths.computeIfAbsent(lookupKey.eventName(), name -> ConcurrentHashMap.newKeySet()).add(lookupKey.path());
         }
         rowsByWorkflow.compute(key.workflowId(), (ignored, keys) -> addTo(keys, key));
         places.compute(row.place(), (ignored, keys) -> addTo(keys, key));
-        var previous = rows.put(key, row);
+        var previous = waitAssociations.put(key, row);
         if (previous != null && !previous.place().equals(row.place())) {
             moves.incrementAndGet();
             places.computeIfPresent(previous.place(), (ignored, keys) -> removeFrom(keys, key));
@@ -271,8 +269,8 @@ final class WaitAssociationIndex {
                         .orElse(null);
     }
 
-    private void remove(RowKey key) {
-        var row = rows.remove(key);
+    private void remove(WaitAssociationKey key) {
+        var row = waitAssociations.remove(key);
         if (row != null) {
             places.computeIfPresent(row.place(), (ignored, keys) -> removeFrom(keys, key));
         }
@@ -286,13 +284,13 @@ final class WaitAssociationIndex {
         }
     }
 
-    private static Set<RowKey> addTo(@Nullable Set<RowKey> keys, RowKey key) {
-        var result = keys == null ? ConcurrentHashMap.<RowKey>newKeySet() : keys;
+    private static Set<WaitAssociationKey> addTo(@Nullable Set<WaitAssociationKey> keys, WaitAssociationKey key) {
+        var result = keys == null ? ConcurrentHashMap.<WaitAssociationKey>newKeySet() : keys;
         result.add(key);
         return result;
     }
 
-    private static @Nullable Set<RowKey> removeFrom(Set<RowKey> keys, RowKey key) {
+    private static @Nullable Set<WaitAssociationKey> removeFrom(Set<WaitAssociationKey> keys, WaitAssociationKey key) {
         keys.remove(key);
         return keys.isEmpty() ? null : keys;
     }
@@ -312,7 +310,7 @@ final class WaitAssociationIndex {
 
     }
 
-    private record RowKey(String workflowId, String stepName) {
+    private record WaitAssociationKey(String workflowId, String stepName) {
 
     }
 

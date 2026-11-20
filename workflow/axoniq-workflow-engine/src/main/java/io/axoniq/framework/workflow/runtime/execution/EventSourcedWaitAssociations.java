@@ -60,7 +60,7 @@ public class EventSourcedWaitAssociations implements WaitAssociations {
      */
     public static final String ENTITY_ID = "__wait-associations";
 
-    private final Map<String, Map<String, WaitAssociation>> rowsByWorkflow = new LinkedHashMap<>();
+    private final Map<String, Map<String, WaitAssociation>> associationsPerWorkflow = new LinkedHashMap<>();
 
     /**
      * Returns the criteria selecting the events that open and close waits.
@@ -83,25 +83,27 @@ public class EventSourcedWaitAssociations implements WaitAssociations {
      */
     public void evolve(EventMessage event) {
         switch (WaitAssociationChange.of(event)) {
-            case WaitAssociationChange.WaitStarted(var row) -> add(row);
+            case WaitAssociationChange.WaitStarted(var association) -> add(association);
             case WaitAssociationChange.WaitTerminated(var workflowId, var stepName) -> {
-                var rows = rowsByWorkflow.get(workflowId);
+                var rows = associationsPerWorkflow.get(workflowId);
                 if (rows != null) {
                     rows.remove(stepName);
                     if (rows.isEmpty()) {
-                        rowsByWorkflow.remove(workflowId);
+                        associationsPerWorkflow.remove(workflowId);
                     }
                 }
             }
-            case WaitAssociationChange.WorkflowTerminated(var workflowId) -> rowsByWorkflow.remove(workflowId);
+            case WaitAssociationChange.WorkflowTerminated(var workflowId) ->
+                    associationsPerWorkflow.remove(workflowId);
             case null -> {
                 // the event opens or closes no wait
             }
         }
     }
 
-    private void add(WaitAssociation row) {
-        rowsByWorkflow.computeIfAbsent(row.workflowId(), id -> new LinkedHashMap<>()).put(row.stepName(), row);
+    private void add(WaitAssociation association) {
+        associationsPerWorkflow.computeIfAbsent(association.workflowId(), id -> new LinkedHashMap<>())
+                               .put(association.stepName(), association);
     }
 
     /**
@@ -121,16 +123,16 @@ public class EventSourcedWaitAssociations implements WaitAssociations {
      */
     @JsonProperty("waits")
     public void setWaits(List<WaitSnapshot> waits) {
-        rowsByWorkflow.clear();
+        associationsPerWorkflow.clear();
         waits.forEach(wait -> add(wait.toWaitAssociation()));
     }
 
     @Override
     public Collection<WaitAssociation> waitAssociations() {
-        return rowsByWorkflow.values()
-                             .stream()
-                             .flatMap(rows -> rows.values().stream())
-                             .collect(Collectors.toUnmodifiableList());
+        return associationsPerWorkflow.values()
+                                      .stream()
+                                      .flatMap(rows -> rows.values().stream())
+                                      .collect(Collectors.toUnmodifiableList());
     }
 
     /**

@@ -30,7 +30,6 @@ import java.util.stream.Collectors;
  * execution evaluates its full wait condition, including any predicate, when the event arrives. A row may therefore
  * match more events than the wait accepts, but never fewer.
  * <p>
- * A {@code sleep} is a wait for {@link Void}, which no business event is named after, so its row never routes an event.
  * A row whose STARTED payload cannot be read has no {@link #eventName()} and matches every routed event.
  *
  * @param workflowId   the identifier of the waiting workflow

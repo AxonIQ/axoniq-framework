@@ -19,9 +19,8 @@ import java.util.Optional;
  * history it extends exactly once.
  * <p>
  * An event carrying {@code workflowId} metadata, including an event published by a workflow, is sequenced by that id.
- * Any other event is sequenced by its own identifier: the history projector ignores events without a workflow id, so
- * delivering it to one segment is enough. The policy is stateless, so both evaluations of the processor agree.
- * Internal, because it only serves the history processor of a {@link WorkflowModule}.
+ * Any other event is sequenced by its own identifier. The policy is stateless, so both evaluations of the processor
+ * agree.
  *
  * @author Stefan Dragisic
  * @since 5.5.0

@@ -113,7 +113,6 @@ The built-in operator is `=`.
 
 The engine also uses associations to route events, see xref:configuration.adoc#event-routing[Event routing].
 An event reaches only the workflows whose wait names the event and whose `=` associations hold for it.
-A wait without associations, or a custom `EventCondition` that declares none, receives every event with that event name and checks its condition itself.
 
 [NOTE]
 ====

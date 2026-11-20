@@ -25,7 +25,6 @@ import org.jspecify.annotations.Nullable;
  *     <li>a lifecycle event with a terminal workflow status closes every wait of the workflow, because a terminal
  *     workflow writes no step events for the waits it interrupts.</li>
  * </ul>
- * Internal, because it only organizes the reading of workflow events for the wait association index.
  *
  * @author Stefan Dragisic
  * @since 5.5.0
@@ -63,9 +62,9 @@ sealed interface WaitAssociationChange {
     /**
      * A wait was opened.
      *
-     * @param row the row of the opened wait
+     * @param association the association of the opened wait
      */
-    record WaitStarted(WaitAssociation row) implements WaitAssociationChange {
+    record WaitStarted(WaitAssociation association) implements WaitAssociationChange {
 
     }
 
