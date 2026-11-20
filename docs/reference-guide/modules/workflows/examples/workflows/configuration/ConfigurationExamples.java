@@ -209,7 +209,7 @@ public class ConfigurationExamples {
         // tag::hibernation[]
         WorkflowModule.configure("order-workflows", SimpleWorkflowContext.class)
                       .definition(d -> d.autodetected(c -> new OrderFulfillmentWorkflow()))
-                      .hibernation(true);
+                      .withHibernation();
         // end::hibernation[]
     }
 

@@ -30,3 +30,40 @@ This includes every published event of such a type.
 
 An event no segment needs reaches at most one segment, which ignores it.
 A segment that receives no events still stores its token, on the processor's claim-extension cycle, once its workflows have no work in progress.
+
+[[hibernation]]
+== Hibernation
+
+=== When a workflow hibernates
+
+At every hibernation interval, the engine asks the workflows in memory to hibernate.
+A workflow hibernates only at a safe point:
+
+* its body waits on a step result, or on `anyMatch`, `allMatch` or `noneMatch` of step results,
+* every step it has not finished is a `waitForEvent` or a `sleep`,
+* no step call is still in progress, no task is queued, and no cancellation is pending.
+
+A running `execute` step keeps the workflow in memory, also while it waits for a retry.
+A hibernating workflow stops the way the workflows of a released segment stop, so it writes no events.
+
+=== How a workflow wakes up
+
+For each hibernated workflow, the engine keeps a timer for the nearest timeout of its waits, and a stand-in for its cancellations.
+The workflow wakes up when one of these happens:
+
+* an event it waits for arrives,
+* that timer fires,
+* a step or workflow cancellation is requested for it.
+
+The engine then loads the workflow from the event store and replays its history to the point where it waited.
+A lock per workflow keeps a wake, an event and a cancellation of the same workflow apart, so none of them gets lost while the workflow leaves memory.
+
+=== Restarts and segment claims
+
+With a `SnapshotStore` configured, the engine records the hibernated workflows of a segment when it releases that segment, also when the application stops.
+The next claim of the segment, on any node, keeps a recorded workflow out of memory, as long as its open waits are the ones it hibernated with.
+It replays only the other workflows.
+Without a `SnapshotStore`, a claim replays every unfinished workflow of the segment, which then hibernates again at the same wait.
+
+A segment split or merge replaces segments without releasing them.
+The claim of a new segment first forgets the hibernated workflows it owns that were kept for the old segment, and then restores them or keeps them out of memory again.

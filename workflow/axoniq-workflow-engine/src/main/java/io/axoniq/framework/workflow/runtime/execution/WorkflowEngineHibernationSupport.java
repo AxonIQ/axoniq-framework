@@ -10,7 +10,6 @@ package io.axoniq.framework.workflow.runtime.execution;
 import io.axoniq.framework.workflow.dsl.api.StepWaitInfo;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution.CheckpointWorkStateListener;
-import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.lock.LockFactory;
 import org.axonframework.common.lock.PessimisticLockFactory;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
@@ -25,6 +24,7 @@ import org.slf4j.LoggerFactory;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -35,9 +35,9 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 import java.util.function.Function;
-import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 /**
@@ -51,29 +51,24 @@ import java.util.function.Supplier;
  * hibernated, never neither. The execution itself only reports whether it is at a safe point, through its
  * {@link WorkflowExecutionHibernationSupport}.
  * <p>
- * Every 10 seconds, a pass asks the running executions in memory to hibernate. A hibernated workflow keeps a timer for
- * its nearest deadline and a stand-in {@link WorkflowCancellation}, and its wait association rows stay in the index.
+ * Every hibernation interval, a pass asks the running executions in memory to hibernate. A hibernated workflow keeps a
+ * timer for its nearest deadline and a stand-in {@link WorkflowCancellation}, and its wait association rows stay in the
+ * index.
+ * <p>
+ * The release of a segment, also when the application stops, records its hibernated workflows as
+ * {@link HibernatedWorkflows} in the {@link WorkflowStore}. The next claim of the segment, on any node, adopts the
+ * recorded workflows whose open waits did not change, instead of loading them into memory. An adopted workflow wakes
+ * only once the claim started its restored executions, so a wake never starts a body twice and never runs one while
+ * the segment catches up.
  * <p>
  * The {@link WorkflowEngine} creates it when the hibernation setting of the workflow module is enabled, starts it with
- * the engine and stops it on shutdown. Internal, because the policy, the interval and the bookkeeping are details of
- * the engine.
+ * the engine and stops it on shutdown.
  *
  * @author Stefan Dragisic
  * @since 5.5.0
  */
-@Internal
 final class WorkflowEngineHibernationSupport {
 
-    /**
-     * Time between 2 passes. Hibernation is meant for workflows that wait for days, so a workflow that stays in memory
-     * for up to this long after it started to wait costs nothing that matters.
-     */
-    static final Duration PASS_INTERVAL = Duration.ofSeconds(10);
-    /**
-     * Time before a hibernated workflow whose wake failed, for example because the event store was unreachable, is
-     * woken again. Its deadline timer already fired, and no event matches a sleep, so nothing else would wake it.
-     */
-    static final Duration DEFAULT_WAKE_RETRY_DELAY = Duration.ofSeconds(10);
     private static final Logger logger = LoggerFactory.getLogger(WorkflowEngineHibernationSupport.class);
 
     private final WorkflowScheduler scheduler;
@@ -84,15 +79,24 @@ final class WorkflowEngineHibernationSupport {
     private final UnitOfWorkFactory unitOfWorkFactory;
     private final Supplier<Duration> restoreTimeout;
     private final WorkflowLoader loader;
+    private final WorkflowStore workflowStore;
+    private final String name;
+    private final Duration interval;
+    private final Executor wakeExecutor;
     private final LockFactory locks = PessimisticLockFactory.usingDefaults();
-    private final Map<String, HibernatedWorkflow> hibernated = new ConcurrentHashMap<>();
-    // Wakes for a deadline or a cancellation load from the event store, so they never run on the timer thread.
-    private final Executor wakeExecutor = command -> Thread.ofVirtual().name("workflow-wake").start(command);
+    private final Map<String, Hibernation> hibernations = new ConcurrentHashMap<>();
+    // The hibernated workflows of each segment by segment id, like the records, so a segment's are found directly.
+    private final Map<Integer, Set<String>> hibernatedBySegment = new ConcurrentHashMap<>();
+    // The claim in progress of each segment and the claimed segments, by segment id.
+    private final Map<Integer, SegmentClaim> claims = new ConcurrentHashMap<>();
+    private final Map<Integer, Segment> claimedSegments = new ConcurrentHashMap<>();
+    // The last record store of each segment, so its stores land in order.
+    private final Map<Integer, CompletableFuture<Void>> recordStores = new ConcurrentHashMap<>();
+    // Keeps a hibernation and the completion of a claim apart from a release of the same segment.
+    private final ReentrantLock recordLock = new ReentrantLock();
     // Cleared on stop, so no workflow hibernates after the hibernated ones are dropped.
     private volatile boolean running;
     private volatile WorkflowScheduler.@Nullable ScheduledTask nextPass;
-    // Package-private so a test can shrink it instead of waiting out the production delay.
-    Duration wakeRetryDelay = DEFAULT_WAKE_RETRY_DELAY;
 
     /**
      * Creates the hibernation support of an engine.
@@ -105,6 +109,12 @@ final class WorkflowEngineHibernationSupport {
      * @param unitOfWorkFactory   creates the unit of work of a wake outside event handling
      * @param restoreTimeout      the time a wake may take to load a workflow
      * @param loader              loads a hibernated workflow back into the engine and starts it
+     * @param workflowStore       records the hibernated workflows of each segment
+     * @param name                names the engine in the identifier of each record, so engines of several workflow
+     *                            modules never share one
+     * @param interval            the time between 2 passes, and before a failed wake is tried again
+     * @param wakeExecutor        runs the wakes for a deadline or a cancellation, which load from the store, so they
+     *                            never run on the timer thread
      */
     WorkflowEngineHibernationSupport(WorkflowScheduler scheduler,
                                      Clock clock,
@@ -113,7 +123,11 @@ final class WorkflowEngineHibernationSupport {
                                      UnsafeCheckpointWorkIndex checkpointWorkIndex,
                                      UnitOfWorkFactory unitOfWorkFactory,
                                      Supplier<Duration> restoreTimeout,
-                                     WorkflowLoader loader) {
+                                     WorkflowLoader loader,
+                                     WorkflowStore workflowStore,
+                                     String name,
+                                     Duration interval,
+                                     Executor wakeExecutor) {
         this.scheduler = Objects.requireNonNull(scheduler, "The WorkflowScheduler must not be null.");
         this.clock = Objects.requireNonNull(clock, "The Clock must not be null.");
         this.repository = Objects.requireNonNull(repository, "The WorkflowExecutionRepository must not be null.");
@@ -124,6 +138,10 @@ final class WorkflowEngineHibernationSupport {
         this.unitOfWorkFactory = Objects.requireNonNull(unitOfWorkFactory, "The UnitOfWorkFactory must not be null.");
         this.restoreTimeout = Objects.requireNonNull(restoreTimeout, "The restore timeout must not be null.");
         this.loader = Objects.requireNonNull(loader, "The WorkflowLoader must not be null.");
+        this.workflowStore = Objects.requireNonNull(workflowStore, "The WorkflowStore must not be null.");
+        this.name = Objects.requireNonNull(name, "The name must not be null.");
+        this.interval = Objects.requireNonNull(interval, "The interval must not be null.");
+        this.wakeExecutor = Objects.requireNonNull(wakeExecutor, "The wake Executor must not be null.");
     }
 
     /**
@@ -143,7 +161,9 @@ final class WorkflowEngineHibernationSupport {
         if (pass != null) {
             pass.cancel();
         }
-        drop(workflowId -> true);
+        drop(Map.copyOf(hibernations));
+        claims.clear();
+        claimedSegments.clear();
     }
 
     /**
@@ -189,12 +209,12 @@ final class WorkflowEngineHibernationSupport {
                 execution.get().onEvent(event, context);
                 return true;
             }
-            var hibernatedWorkflow = hibernated.get(workflowId);
-            if (hibernatedWorkflow == null) {
+            var hibernation = hibernations.get(workflowId);
+            if (hibernation == null) {
                 return false;
             }
-            // ponytail: the processor thread waits for the load; load asynchronously if wakes show up in profiles
-            wake(workflowId, hibernatedWorkflow, context, restored -> restored.onEvent(event, context));
+            // The processor thread waits until the workflow is loaded.
+            wake(workflowId, hibernation, context, restored -> restored.onEvent(event, context));
             return true;
         }
     }
@@ -206,7 +226,7 @@ final class WorkflowEngineHibernationSupport {
      * @return {@code true} when the workflow is hibernated here
      */
     boolean isHibernated(String workflowId) {
-        return hibernated.containsKey(workflowId);
+        return hibernations.containsKey(workflowId);
     }
 
     /**
@@ -218,12 +238,7 @@ final class WorkflowEngineHibernationSupport {
      * @return {@code true} when the start is a duplicate and must be ignored
      */
     boolean isDuplicateStart(String workflowId) {
-        if (!hibernated.containsKey(workflowId) && repository.findById(workflowId).isEmpty()) {
-            return false;
-        }
-        logger.warn("A workflow with id '{}' is already running; ignoring the new start request. Workflow ids MUST be "
-                            + "unique, so the start is treated as a duplicate.", workflowId);
-        return true;
+        return hibernations.containsKey(workflowId) || repository.findById(workflowId).isPresent();
     }
 
     /**
@@ -267,26 +282,266 @@ final class WorkflowEngineHibernationSupport {
     }
 
     /**
-     * Forgets the hibernated workflows matching the given filter and cancels their deadlines. Their durable state is
-     * untouched: the next claim of their segment restores them.
+     * Forgets the given hibernated workflows and cancels their deadlines. Their durable state is untouched: the next
+     * claim of their segment restores them.
      * <p>
      * Takes the lock of each workflow, so a wake that is loading finishes first. Its execution is then in memory, and
      * the engine stops it with the other executions.
-     *
-     * @param filter selects the workflows to forget by identifier
      */
-    void drop(Predicate<String> filter) {
-        hibernated.forEach((workflowId, hibernatedWorkflow) -> {
-            if (!filter.test(workflowId)) {
-                return;
-            }
+    private void drop(Map<String, Hibernation> dropped) {
+        dropped.forEach((workflowId, hibernation) -> {
             try (var ignored = locks.obtainLock(workflowId)) {
-                if (hibernated.remove(workflowId, hibernatedWorkflow)) {
-                    hibernatedWorkflow.deadline().cancel();
+                if (removeHibernation(workflowId, hibernation)) {
+                    hibernation.wakeTimer().cancel();
                     cancellationService.unregister(workflowId);
+                    // A wake held until its segment started finds the workflow gone and does nothing.
+                    hibernation.armed().complete(null);
                 }
             }
         });
+    }
+
+    /**
+     * Adds the hibernation of the given workflow, also to the hibernated workflows of its segment. The caller holds
+     * the lock of the workflow.
+     */
+    private void addHibernation(String workflowId, Hibernation hibernation) {
+        hibernations.put(workflowId, hibernation);
+        var segment = hibernation.segment();
+        if (segment != null) {
+            hibernatedBySegment.computeIfAbsent(segment.getSegmentId(), segmentId -> ConcurrentHashMap.newKeySet())
+                               .add(workflowId);
+        }
+    }
+
+    /**
+     * Removes the given hibernation of the given workflow, unless another one replaced it. The caller holds the lock
+     * of the workflow.
+     *
+     * @return {@code true} when the given hibernation was removed
+     */
+    private boolean removeHibernation(String workflowId, Hibernation hibernation) {
+        if (!hibernations.remove(workflowId, hibernation)) {
+            return false;
+        }
+        var segment = hibernation.segment();
+        var ofSegment = segment == null ? null : hibernatedBySegment.get(segment.getSegmentId());
+        if (ofSegment != null) {
+            ofSegment.remove(workflowId);
+        }
+        return true;
+    }
+
+    /**
+     * Returns the hibernations of the workflows that hibernated in, or were adopted by, the given segment.
+     */
+    private Map<String, Hibernation> hibernationsOf(Segment segment) {
+        var ofSegment = new HashMap<String, Hibernation>();
+        for (var workflowId : hibernatedBySegment.getOrDefault(segment.getSegmentId(), Set.of())) {
+            var hibernation = hibernations.get(workflowId);
+            if (hibernation != null && hibernation.segment() != null
+                    && hibernation.segment().getSegmentId() == segment.getSegmentId()) {
+                ofSegment.put(workflowId, hibernation);
+            }
+        }
+        return ofSegment;
+    }
+
+    /**
+     * Starts a claim of the given segment. Only this claim may adopt the segment's recorded workflows, until it is
+     * {@link #claimed(Segment, SegmentClaim) completed} or the segment is released.
+     * <p>
+     * It first forgets the hibernated workflows the segment owns that are still listed under an earlier segment. A
+     * split or a merge replaces segments without releasing them, and the claim restores or adopts those workflows
+     * anew.
+     *
+     * @param segment the segment being claimed
+     * @return the claim, which the claim passes to
+     * {@link #adopt(String, Segment, HibernatedWorkflows.HibernatedWorkflow, SegmentClaim)} and
+     * {@link #claimed(Segment, SegmentClaim)}
+     */
+    SegmentClaim claiming(Segment segment) {
+        var leftovers = new HashMap<String, Hibernation>();
+        hibernations.forEach((workflowId, hibernation) -> {
+            if (WorkflowSegmentOwnership.ownedBy(segment, workflowId)) {
+                leftovers.put(workflowId, hibernation);
+            }
+        });
+        drop(leftovers);
+        var claim = new SegmentClaim();
+        claims.put(segment.getSegmentId(), claim);
+        return claim;
+    }
+
+    /**
+     * Completes the given claim, so changes to the segment's hibernated workflows are recorded from now on. Does
+     * nothing when the segment was released meanwhile, because a claim that timed out keeps loading after its release.
+     *
+     * @param segment the claimed segment
+     * @param claim   the claim {@link #claiming(Segment)} returned
+     */
+    void claimed(Segment segment, SegmentClaim claim) {
+        recordLock.lock();
+        try {
+            if (claims.remove(segment.getSegmentId(), claim)) {
+                claimedSegments.put(segment.getSegmentId(), segment);
+            }
+        } finally {
+            recordLock.unlock();
+        }
+    }
+
+    /**
+     * Loads the hibernated workflows last recorded for the given segment, by this node or another one. A record that
+     * cannot be loaded counts as none, so the claim restores every workflow of the segment.
+     *
+     * @param segment the claimed segment
+     * @param context the context the claim loads in
+     * @return the recorded hibernated workflows of the segment
+     */
+    CompletableFuture<HibernatedWorkflows> loadRecordedWorkflows(Segment segment, ProcessingContext context) {
+        return workflowStore.loadHibernatedWorkflows(identifier(segment), context)
+                            .exceptionally(failure -> {
+                                logger.warn("Could not load the hibernated workflows of segment {}; restoring all of "
+                                                    + "its workflows.", segment.getSegmentId(), failure);
+                                return HibernatedWorkflows.NONE;
+                            });
+    }
+
+    /**
+     * Keeps the given recorded workflow of a claimed segment hibernated instead of restoring it. It gets a deadline
+     * timer and a stand-in cancellation as when it hibernated, but wakes only after {@link #arm(Segment)} for its
+     * segment.
+     *
+     * @param workflowId the identifier of the workflow
+     * @param segment    the claimed segment that owns it
+     * @param workflow   the recorded workflow, whose open waits the caller found unchanged
+     * @param claim      the claim {@link #claiming(Segment)} returned
+     * @return {@code false}, so the claim restores the workflow, when hibernation stopped, the segment was released
+     * since the claim started, or the workflow is already known here
+     */
+    boolean adopt(String workflowId,
+                  Segment segment,
+                  HibernatedWorkflows.HibernatedWorkflow workflow,
+                  SegmentClaim claim) {
+        try (var ignored = locks.obtainLock(workflowId)) {
+            if (!running
+                    || claims.get(segment.getSegmentId()) != claim
+                    || hibernations.containsKey(workflowId)
+                    || repository.findById(workflowId).isPresent()) {
+                return false;
+            }
+            var wakesAt = Instant.parse(workflow.wakesAt());
+            park(workflowId, segment, workflow.openWaits(), wakesAt, new CompletableFuture<>());
+            return true;
+        }
+    }
+
+    /**
+     * Lets the workflows adopted by the claim of the given segment wake. The engine calls it once that claim started
+     * its restored executions, so a wake can neither start a body a second time nor run one while the segment catches
+     * up.
+     *
+     * @param segment the segment whose restored executions started, or {@code null} outside a segmented processor
+     */
+    void arm(@Nullable Segment segment) {
+        if (segment == null) {
+            return;
+        }
+        hibernationsOf(segment).values().forEach(hibernation -> hibernation.armed().complete(null));
+    }
+
+    /**
+     * Records the hibernated workflows of the given released segment once more and forgets them, so the next claim of
+     * the segment, on any node, adopts them. They are forgotten before the record is stored, so none of them wakes on
+     * this node meanwhile.
+     * <p>
+     * Only the release of a segment this node holds records it. The processor can report one release twice, and the
+     * second report, which finds nothing hibernated anymore, must not replace the record of the first.
+     *
+     * @param segment the released segment
+     * @return a future completing once the record is stored or failed to store, which never fails the release
+     */
+    CompletableFuture<Void> release(Segment segment) {
+        @Nullable HibernatedWorkflows record = null;
+        recordLock.lock();
+        try {
+            claims.remove(segment.getSegmentId());
+            if (claimedSegments.remove(segment.getSegmentId()) != null) {
+                record = recordOf(segment);
+            }
+        } finally {
+            recordLock.unlock();
+        }
+        // Outside the lock: dropping waits for wakes that are loading, and a hibernation must not wait for those.
+        drop(hibernationsOf(segment));
+        return record == null ? CompletableFuture.completedFuture(null) : store(segment, record);
+    }
+
+    private HibernatedWorkflows recordOf(Segment segment) {
+        var workflows = new HashMap<String, HibernatedWorkflows.HibernatedWorkflow>();
+        hibernationsOf(segment).forEach((workflowId, hibernation) -> workflows.put(
+                workflowId,
+                new HibernatedWorkflows.HibernatedWorkflow(hibernation.openWaits(), hibernation.wakesAt().toString())
+        ));
+        return new HibernatedWorkflows(workflows);
+    }
+
+    /**
+     * Stores the record of a segment after its earlier stores, off the calling thread, so an older record never lands
+     * after a newer one.
+     */
+    private CompletableFuture<Void> store(Segment segment, HibernatedWorkflows record) {
+        return recordStores.compute(
+                segment.getSegmentId(),
+                (segmentId, previous) -> (previous == null ? CompletableFuture.<Void>completedFuture(null) : previous)
+                        .thenComposeAsync(ignored -> write(segment, record), wakeExecutor)
+        );
+    }
+
+    /**
+     * Writes the record of a segment in a unit of work of its own. A failure only costs the next claim some restores.
+     */
+    private CompletableFuture<Void> write(Segment segment, HibernatedWorkflows record) {
+        var identifier = identifier(segment);
+        try {
+            return unitOfWorkFactory.create("record-" + identifier)
+                                    .executeWithResult(context -> workflowStore.storeHibernatedWorkflows(
+                                            identifier, record, context
+                                    ))
+                                    .orTimeout(restoreTimeout.get().toMillis(), TimeUnit.MILLISECONDS)
+                                    .exceptionally(failure -> {
+                                        recordFailed(segment, failure);
+                                        return null;
+                                    });
+        } catch (RuntimeException e) {
+            recordFailed(segment, e);
+            return CompletableFuture.completedFuture(null);
+        }
+    }
+
+    private void recordFailed(Segment segment, Throwable failure) {
+        logger.warn("Could not record the hibernated workflows of segment {}; its next claim restores them all.",
+                    segment.getSegmentId(), failure);
+    }
+
+    private String identifier(Segment segment) {
+        return name + "#" + segment.getSegmentId();
+    }
+
+    /**
+     * Keeps the given workflow out of memory until an awaited event, its deadline or a cancellation wakes it.
+     */
+    private void park(String workflowId,
+                      @Nullable Segment segment,
+                      Set<String> openWaits,
+                      Instant wakesAt,
+                      CompletableFuture<Void> armed) {
+        var timer = scheduler.schedule(wakesAt);
+        addHibernation(workflowId, new Hibernation(segment, Set.copyOf(openWaits), wakesAt, timer, armed));
+        cancellationService.register(workflowId, new HibernatedWorkflowCancellation(workflowId));
+        timer.completion().thenCompose(ignored -> wakeWhenArmed(workflowId, restored -> {
+        }));
     }
 
     private boolean isInMemory(WorkflowExecution execution) {
@@ -318,13 +573,18 @@ final class WorkflowEngineHibernationSupport {
                 return false;
             }
             var segment = Segment.fromContext(execution.processingContext()).orElse(null);
-            var timer = scheduler.schedule(deadline.get());
-            hibernated.put(workflowId, new HibernatedWorkflow(segment, timer));
-            cancellationService.register(workflowId, new HibernatedWorkflowCancellation(workflowId));
+            recordLock.lock();
+            try {
+                if (segment != null && !claimedSegments.containsKey(segment.getSegmentId())) {
+                    // Its segment is being released, and the release stops the execution instead.
+                    return false;
+                }
+                park(workflowId, segment, openWaits.get(), deadline.get(), CompletableFuture.completedFuture(null));
+            } finally {
+                recordLock.unlock();
+            }
             repository.remove(workflowId);
             checkpointWorkIndex.markSafe(workflowId);
-            timer.completion().thenRunAsync(() -> wakeDetached(workflowId, restored -> {
-            }), wakeExecutor);
             logger.debug("Workflow [{}] hibernated until an awaited event or its deadline at {}.",
                          workflowId, deadline.get());
             return true;
@@ -361,33 +621,56 @@ final class WorkflowEngineHibernationSupport {
      * before it sees what woke it.
      */
     private void wake(String workflowId,
-                      HibernatedWorkflow hibernatedWorkflow,
+                      Hibernation hibernation,
                       ProcessingContext executionContext,
                       Consumer<WorkflowExecution> beforeStart) {
-        loader.load(workflowId, executionContext, hibernatedWorkflow.segment(), beforeStart);
-        hibernated.remove(workflowId, hibernatedWorkflow);
-        hibernatedWorkflow.deadline().cancel();
+        var resident = repository.findById(workflowId);
+        if (resident.isPresent()) {
+            // A later claim of its segment already loaded it, so the request goes to that execution.
+            beforeStart.accept(resident.get());
+        } else {
+            loader.load(workflowId, executionContext, hibernation.segment(), beforeStart);
+        }
+        removeHibernation(workflowId, hibernation);
+        hibernation.wakeTimer().cancel();
+        // A wake held until its segment started finds the workflow gone and does nothing.
+        hibernation.armed().complete(null);
         logger.debug("Workflow [{}] woken from hibernation.", workflowId);
     }
 
     /**
-     * Wakes a hibernated workflow outside event handling, for its deadline or a cancellation request. The restored
-     * execution runs on a unit of work of its own, the way a claimed segment's executions do.
+     * Wakes a hibernated workflow outside event handling, for its deadline or a cancellation request, on a wake thread.
+     * A workflow a claim adopted wakes only once that claim started its restored executions.
+     *
+     * @return a future completing once the wake ran, or was found unnecessary
+     */
+    private CompletableFuture<Void> wakeWhenArmed(String workflowId, Consumer<WorkflowExecution> beforeStart) {
+        var hibernation = hibernations.get(workflowId);
+        if (hibernation == null) {
+            return CompletableFuture.completedFuture(null);
+        }
+        return hibernation.armed().thenRunAsync(() -> wakeDetached(workflowId, beforeStart), wakeExecutor);
+    }
+
+    /**
+     * Wakes a hibernated workflow on the calling wake thread. The restored execution runs on a unit of work of its own,
+     * the way a claimed segment's executions do. It waits for the load, so a failed wake schedules its retry on this
+     * thread rather than on the thread that times the load out.
      */
     private void wakeDetached(String workflowId, Consumer<WorkflowExecution> beforeStart) {
-        var hibernatedWorkflow = hibernated.get(workflowId);
-        if (hibernatedWorkflow == null) {
+        var hibernation = hibernations.get(workflowId);
+        if (hibernation == null) {
             return;
         }
         try {
             unitOfWorkFactory.create("wake-" + workflowId)
                              .executeWithResult(executionContext -> {
-                                 var segment = hibernatedWorkflow.segment();
+                                 var segment = hibernation.segment();
                                  if (segment != null) {
                                      executionContext.putResource(Segment.RESOURCE_KEY, segment);
                                  }
                                  try (var ignored = locks.obtainLock(workflowId)) {
-                                     var current = hibernated.get(workflowId);
+                                     var current = hibernations.get(workflowId);
                                      if (current != null) {
                                          wake(workflowId, current, executionContext, beforeStart);
                                      }
@@ -397,29 +680,29 @@ final class WorkflowEngineHibernationSupport {
                              .orTimeout(restoreTimeout.get().toMillis(), TimeUnit.MILLISECONDS)
                              .join();
         } catch (RuntimeException e) {
-            logger.warn("Could not wake hibernated workflow [{}]. Trying again in {}.", workflowId, wakeRetryDelay, e);
+            logger.warn("Could not wake hibernated workflow [{}]. Trying again in {}.", workflowId, interval, e);
             retryWake(workflowId);
         }
     }
 
     /**
      * Replaces the timer of a hibernated workflow whose wake failed with one that wakes it again after
-     * {@link #wakeRetryDelay}, unless it was woken or dropped meanwhile.
+     * one hibernation interval, unless it was woken or dropped meanwhile.
      */
     private void retryWake(String workflowId) {
         if (!running) {
             return;
         }
         try (var ignored = locks.obtainLock(workflowId)) {
-            var current = hibernated.get(workflowId);
+            var current = hibernations.get(workflowId);
             if (current == null) {
                 return;
             }
-            var retry = scheduler.schedule(clock.instant().plus(wakeRetryDelay));
-            current.deadline().cancel();
-            hibernated.put(workflowId, new HibernatedWorkflow(current.segment(), retry));
-            retry.completion().thenRunAsync(() -> wakeDetached(workflowId, restored -> {
-            }), wakeExecutor);
+            var retry = scheduler.schedule(clock.instant().plus(interval));
+            current.wakeTimer().cancel();
+            hibernations.put(workflowId, current.withWakeTimer(retry));
+            retry.completion().thenCompose(retried -> wakeWhenArmed(workflowId, restored -> {
+            }));
         }
     }
 
@@ -427,7 +710,7 @@ final class WorkflowEngineHibernationSupport {
         if (!running) {
             return;
         }
-        var pass = scheduler.schedule(clock.instant().plus(PASS_INTERVAL));
+        var pass = scheduler.schedule(clock.instant().plus(interval));
         nextPass = pass;
         pass.completion().thenRun(() -> {
             try {
@@ -461,13 +744,34 @@ final class WorkflowEngineHibernationSupport {
     }
 
     /**
-     * A workflow that left memory at a safe point.
+     * The hibernation of a workflow that left memory at a safe point, or that a claim adopted from its record.
      *
-     * @param segment  the segment that owns it, or {@code null} outside a segmented processor
-     * @param deadline the timer that wakes it at its nearest deadline
+     * @param segment   the segment that owns it, or {@code null} outside a segmented processor
+     * @param openWaits the step names of the open waits it hibernated with
+     * @param wakesAt   its nearest deadline
+     * @param wakeTimer the timer that wakes it at its nearest deadline
+     * @param armed     completes once it may wake: at once when it hibernated here, and once its claim started the
+     *                  restored executions when a claim adopted it
      */
-    private record HibernatedWorkflow(@Nullable Segment segment, WorkflowScheduler.ScheduledTask deadline) {
+    private record Hibernation(@Nullable Segment segment,
+                               Set<String> openWaits,
+                               Instant wakesAt,
+                               WorkflowScheduler.ScheduledTask wakeTimer,
+                               CompletableFuture<Void> armed) {
 
+        private Hibernation withWakeTimer(WorkflowScheduler.ScheduledTask newWakeTimer) {
+            return new Hibernation(segment, openWaits, wakesAt, newWakeTimer, armed);
+        }
+    }
+
+    /**
+     * A claim of a segment that is still loading. It is compared by identity, so a claim that timed out never passes
+     * for the next claim of the same segment.
+     */
+    static final class SegmentClaim {
+
+        private SegmentClaim() {
+        }
     }
 
     /**
@@ -534,7 +838,7 @@ final class WorkflowEngineHibernationSupport {
             var workflowId = execution.workflowId();
             try (var ignored = locks.obtainLock(workflowId)) {
                 var inMemory = repository.findById(workflowId).orElse(null);
-                if (inMemory == execution || (inMemory == null && !hibernated.containsKey(workflowId))) {
+                if (inMemory == execution || (inMemory == null && !hibernations.containsKey(workflowId))) {
                     return request.apply(delegate);
                 }
             }
@@ -573,47 +877,33 @@ final class WorkflowEngineHibernationSupport {
         }
 
         private <T> CompletableFuture<T> wakeThen(Supplier<CompletableFuture<T>> request) {
-            var result = new CompletableFuture<T>();
+            var ready = new CompletableFuture<Void>();
+            // Attached before the wake, so the request runs in the task that completes ready.
+            var result = ready.thenCompose(ignored -> request.get());
             var queued = new AtomicBoolean();
-            CompletableFuture
-                    .runAsync(() -> wakeDetached(workflowId, restored -> {
-                        queued.set(true);
-                        restored.appendTask(ignored -> completeWith(result, request));
-                    }), wakeExecutor)
-                    .whenComplete((ignored, failure) -> {
-                        if (queued.get()) {
-                            return;
-                        }
-                        if (failure != null) {
-                            result.completeExceptionally(failure);
-                        } else if (hibernated.containsKey(workflowId)) {
-                            result.completeExceptionally(new IllegalStateException(
-                                    "Workflow '" + workflowId + "' could not be woken from hibernation"
-                            ));
-                        } else {
-                            // Another wake restored it first, so queue the request there too, or it ended elsewhere
-                            // and the cancellation service answers for it.
-                            repository.findById(workflowId).ifPresentOrElse(
-                                    restored -> restored.appendTask(task -> completeWith(result, request)),
-                                    () -> completeWith(result, request)
-                            );
-                        }
-                    });
+            wakeWhenArmed(workflowId, restored -> {
+                queued.set(true);
+                restored.appendTask(ignored -> ready.complete(null));
+            }).whenComplete((ignored, failure) -> {
+                if (queued.get()) {
+                    return;
+                }
+                if (failure != null) {
+                    ready.completeExceptionally(failure);
+                } else if (hibernations.containsKey(workflowId)) {
+                    ready.completeExceptionally(new IllegalStateException(
+                            "Workflow '" + workflowId + "' could not be woken from hibernation"
+                    ));
+                } else {
+                    // Another wake restored it first, so queue the request there too, or it ended elsewhere and the
+                    // cancellation service answers for it.
+                    repository.findById(workflowId).ifPresentOrElse(
+                            restored -> restored.appendTask(task -> ready.complete(null)),
+                            () -> ready.complete(null)
+                    );
+                }
+            });
             return result;
-        }
-
-        private static <T> void completeWith(CompletableFuture<T> result, Supplier<CompletableFuture<T>> request) {
-            try {
-                request.get().whenComplete((value, failure) -> {
-                    if (failure != null) {
-                        result.completeExceptionally(failure);
-                    } else {
-                        result.complete(value);
-                    }
-                });
-            } catch (RuntimeException e) {
-                result.completeExceptionally(e);
-            }
         }
     }
 }

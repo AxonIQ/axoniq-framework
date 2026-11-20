@@ -52,6 +52,7 @@ import org.axonframework.messaging.eventstreaming.StreamableEventSource;
 import org.jspecify.annotations.Nullable;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -60,6 +61,7 @@ import java.util.function.Function;
 
 import static java.util.Objects.requireNonNull;
 import static org.axonframework.common.BuilderUtils.assertPositive;
+import static org.axonframework.common.BuilderUtils.assertStrictPositive;
 
 /**
  * Workflow module used to create multiple {@link WorkflowConfiguration} (one per workflow definition) defined for the
@@ -101,6 +103,7 @@ class SimpleWorkflowModule<C extends WorkflowContext>
     private boolean useHistory = true;
     private long checkpointInterval = 0L;
     private boolean hibernation = false;
+    private long hibernationInterval = 30_000L;
     private ComponentBuilder<MutableWorkflowHistoryRepository> historyRepository =
             config -> new InMemoryWorkflowHistoryRepository();
     private Function<PooledStreamingEventProcessorConfiguration, PooledStreamingEventProcessorConfiguration> historyConfigCustomizer =
@@ -206,8 +209,15 @@ class SimpleWorkflowModule<C extends WorkflowContext>
     }
 
     @Override
-    public OptionalPhase<C> hibernation(boolean enabled) {
-        this.hibernation = enabled;
+    public OptionalPhase<C> withHibernation() {
+        this.hibernation = true;
+        return this;
+    }
+
+    @Override
+    public OptionalPhase<C> hibernationInterval(long hibernationInterval) {
+        assertStrictPositive(hibernationInterval, "The hibernation interval must be positive.");
+        this.hibernationInterval = hibernationInterval;
         return this;
     }
 
@@ -312,8 +322,14 @@ class SimpleWorkflowModule<C extends WorkflowContext>
                                               c.getComponent(WorkflowEngineCheckpointingSupport.class)
                                       );
                                       if (hibernation) {
-                                          engine.enableHibernation(c.getComponent(WorkflowScheduler.class),
-                                                                   c.getComponent(Clock.class));
+                                          engine.enableHibernation(
+                                                  c.getComponent(WorkflowScheduler.class),
+                                                  c.getComponent(Clock.class),
+                                                  name,
+                                                  Duration.ofMillis(hibernationInterval),
+                                                  c.getComponent(ExecutorService.class,
+                                                                 WorkflowConfigurationDefaults.WORKFLOW_ENGINE_EXECUTOR)
+                                          );
                                       }
                                   })
                                   .onShutdown(POST_PROCESSOR_SHUTDOWN_PHASE, WorkflowEngine::shutdown);

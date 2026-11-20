@@ -7,12 +7,14 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
-import java.time.Duration;
+import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
+
 import java.util.Objects;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Lets a test outside this package run a hibernation pass of a {@link WorkflowEngine} now, instead of waiting for the
- * pass interval, and shorten the delay before a failed wake is tried again.
+ * hibernation interval.
  *
  * @author Stefan Dragisic
  */
@@ -34,13 +36,25 @@ public final class WorkflowEngineHibernationPasses {
     }
 
     /**
-     * Sets the time after which the given engine wakes a hibernated workflow again when its wake failed.
+     * Returns whether the given engine holds the given workflow hibernated.
      *
-     * @param engine the engine whose wake retries to speed up
-     * @param delay  the time between a failed wake and the next one
+     * @param engine     the engine to inspect
+     * @param workflowId the identifier of the workflow
+     * @return {@code true} when the workflow is hibernated in the engine
      */
-    public static void retryFailedWakesAfter(WorkflowEngine engine, Duration delay) {
-        hibernationOf(engine).wakeRetryDelay = delay;
+    public static boolean isHibernated(WorkflowEngine engine, String workflowId) {
+        return hibernationOf(engine).isHibernated(workflowId);
+    }
+
+    /**
+     * Runs the hibernation part of a segment release, which comes before the engine stops the segment's executions in
+     * memory.
+     *
+     * @param engine  the engine that releases the segment
+     * @param segment the segment being released
+     */
+    public static void startReleaseOf(WorkflowEngine engine, Segment segment) {
+        hibernationOf(engine).release(segment).orTimeout(5, TimeUnit.SECONDS).join();
     }
 
     private static WorkflowEngineHibernationSupport hibernationOf(WorkflowEngine engine) {

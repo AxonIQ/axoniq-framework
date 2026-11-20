@@ -36,12 +36,15 @@ import io.axoniq.framework.workflow.runtime.util.MetadataUtils;
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.common.infra.ComponentDescriptor;
+import org.axonframework.conversion.GeneralConverter;
 import org.axonframework.eventsourcing.eventstore.AppendCondition;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
 import org.axonframework.eventsourcing.eventstore.EventStore;
 import org.axonframework.eventsourcing.eventstore.SourcingCondition;
 import org.axonframework.eventsourcing.eventstore.TaggedEventMessage;
 import org.axonframework.eventsourcing.eventstore.inmemory.InMemoryEventStorageEngine;
+import org.axonframework.eventsourcing.snapshot.inmemory.InMemorySnapshotStore;
+import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
@@ -51,6 +54,7 @@ import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
 import org.axonframework.messaging.eventhandling.processing.EventProcessor;
 import org.axonframework.messaging.eventhandling.processing.streaming.pooled.PooledStreamingEventProcessor;
+import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.store.TokenStore;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.store.inmemory.InMemoryTokenStore;
@@ -65,6 +69,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -97,6 +102,10 @@ class WorkflowConfigurerHibernationTest {
     private final ControlledStorageEngine storageEngine =
             new ControlledStorageEngine(new InMemoryEventStorageEngine());
     private final List<AxonConfiguration> configurations = new ArrayList<>();
+    // Shared by the configurations of one test, so a restarted node reads the records of the stopped one.
+    private @Nullable SnapshotStore snapshotStore;
+    // The hibernation interval of the next configuration, in milliseconds; 0 keeps the default.
+    private long hibernationInterval;
     private final CountDownLatch chargeDone = new CountDownLatch(1);
     private final AtomicInteger flakyChargeAttempts = new AtomicInteger();
 
@@ -111,22 +120,12 @@ class WorkflowConfigurerHibernationTest {
     class SafeWorkflow {
 
         @Test
-        void leavesMemoryOnAPass() {
-            // given
+        void isRestoredAndCompletedByTheAwaitedEvent() {
+            // given: a hibernated workflow, which left memory without writing an event
             var configuration = start(true);
             var workflowId = startWorkflow(configuration, "wait", "order-1", WAIT_STEP);
-
-            // when / then
             awaitHibernated(configuration, workflowId);
             assertThat(durableState(configuration, workflowId).workflowStatus()).isEqualTo(WorkflowStatus.STARTED);
-        }
-
-        @Test
-        void isRestoredAndCompletedByTheAwaitedEvent() {
-            // given
-            var configuration = start(true);
-            var workflowId = startWorkflow(configuration, "wait", "order-1", WAIT_STEP);
-            awaitHibernated(configuration, workflowId);
 
             // when
             publish(configuration, "paid", "order-1", "");
@@ -146,22 +145,6 @@ class WorkflowConfigurerHibernationTest {
             awaitWorkflowStatus(configuration, workflowId, WorkflowStatus.COMPLETED);
             assertThat(durableState(configuration, workflowId).getStep(SLEEP_STEP).status())
                     .isEqualTo(StepStatus.TIMED_OUT);
-        }
-
-        @Test
-        void isRestoredAndCancelledByAWorkflowCancellation() {
-            // given
-            var configuration = start(true);
-            var workflowId = startWorkflow(configuration, "wait", "order-1", WAIT_STEP);
-            awaitHibernated(configuration, workflowId);
-
-            // when
-            cancellationService(configuration).requestWorkflowCancellation(workflowId, null)
-                                              .orTimeout(10, TimeUnit.SECONDS)
-                                              .join();
-
-            // then
-            awaitWorkflowStatus(configuration, workflowId, WorkflowStatus.CANCELLED);
         }
 
         @Test
@@ -204,9 +187,10 @@ class WorkflowConfigurerHibernationTest {
 
         @Test
         void isWokenAgainWhenTheWakeAtItsDeadlineFails() {
-            // given: a sleep of 2 seconds, and an event store that cannot be read when the deadline expires
+            // given: a sleep of 2 seconds, an event store that cannot be read when the deadline expires, and a
+            // hibernation interval of half a second, after which a failed wake is tried again
+            hibernationInterval = 500;
             var configuration = start(true);
-            WorkflowEngineHibernationPasses.retryFailedWakesAfter(engine(configuration), Duration.ofMillis(500));
             var workflowId = startWorkflow(configuration, "sleep", "order-1", SLEEP_STEP);
             awaitHibernated(configuration, workflowId);
             storageEngine.failSourcing(true);
@@ -266,12 +250,9 @@ class WorkflowConfigurerHibernationTest {
             var configuration = start(true);
             var workflowId = startWorkflow(configuration, "wait", "order-1", WAIT_STEP);
             awaitHibernated(configuration, workflowId);
-            var processor = engineProcessor(configuration);
 
             // when: every segment is released and claimed again, which restores the workflow from the event store
-            IntStream.range(0, SEGMENT_COUNT)
-                     .mapToObj(segment -> processor.releaseSegment(segment, 500, TimeUnit.MILLISECONDS))
-                     .forEach(release -> release.orTimeout(5, TimeUnit.SECONDS).join());
+            releaseAllSegments(configuration);
             publish(configuration, "paid", "order-1", "");
 
             // then
@@ -283,35 +264,13 @@ class WorkflowConfigurerHibernationTest {
     class UnsafeWorkflow {
 
         @Test
-        void staysInMemoryWhileAnExecuteStepRuns() {
-            // given
-            var configuration = start(true);
-            var workflowId = startWorkflow(configuration, "execute", "order-1", EXECUTE_STEP);
-
-            // when
-            var engine = engine(configuration);
-            await().during(Duration.ofSeconds(1)).atMost(3, TimeUnit.SECONDS).until(() -> {
-                WorkflowEngineHibernationPasses.runPass(engine);
-                return inMemory(configuration, workflowId);
-            });
-            chargeDone.countDown();
-
-            // then
-            awaitWorkflowStatus(configuration, workflowId, WorkflowStatus.COMPLETED);
-        }
-
-        @Test
         void staysInMemoryWhileACombinatorWaitsForARunningExecuteStep() {
             // given
             var configuration = start(true);
             var workflowId = startWorkflow(configuration, "anyMatchWaitAndExecute", "order-1", EXECUTE_STEP);
 
             // when
-            var engine = engine(configuration);
-            await().during(Duration.ofSeconds(1)).atMost(3, TimeUnit.SECONDS).until(() -> {
-                WorkflowEngineHibernationPasses.runPass(engine);
-                return inMemory(configuration, workflowId);
-            });
+            awaitStaysInMemory(configuration, workflowId);
             chargeDone.countDown();
 
             // then
@@ -326,11 +285,7 @@ class WorkflowConfigurerHibernationTest {
             await().atMost(5, TimeUnit.SECONDS).until(() -> flakyChargeAttempts.get() == 1);
 
             // when
-            var engine = engine(configuration);
-            await().during(Duration.ofSeconds(1)).atMost(3, TimeUnit.SECONDS).until(() -> {
-                WorkflowEngineHibernationPasses.runPass(engine);
-                return inMemory(configuration, workflowId);
-            });
+            awaitStaysInMemory(configuration, workflowId);
 
             // then
             awaitWorkflowStatus(configuration, workflowId, WorkflowStatus.COMPLETED);
@@ -345,11 +300,7 @@ class WorkflowConfigurerHibernationTest {
             assertThat(storageEngine.awaitHeldStart()).isTrue();
 
             // when: passes run while the second wait primitive waits for its STARTED event
-            var engine = engine(configuration);
-            await().during(Duration.ofSeconds(1)).atMost(3, TimeUnit.SECONDS).until(() -> {
-                WorkflowEngineHibernationPasses.runPass(engine);
-                return inMemory(configuration, workflowId);
-            });
+            awaitStaysInMemory(configuration, workflowId);
             storageEngine.releaseHeldStart();
 
             // then
@@ -360,17 +311,160 @@ class WorkflowConfigurerHibernationTest {
         }
 
         @Test
+        void staysInMemoryWhileItsSegmentIsBeingReleased() {
+            // given: the release of every segment has started, but has not stopped the workflow's execution yet
+            var configuration = start(true);
+            var workflowId = startWorkflow(configuration, "wait", "order-1", WAIT_STEP);
+            var engine = engine(configuration);
+            IntStream.range(0, SEGMENT_COUNT).forEach(segmentId -> WorkflowEngineHibernationPasses.startReleaseOf(
+                    engine, new Segment(segmentId, SEGMENT_COUNT - 1)
+            ));
+
+            // when / then: it is not parked on a node that no longer holds its segment
+            awaitStaysInMemory(configuration, workflowId);
+            assertThat(WorkflowEngineHibernationPasses.isHibernated(engine, workflowId)).isFalse();
+        }
+
+        @Test
         void staysInMemoryWhenHibernationIsDisabled() {
             // given
             var configuration = start(false);
             var workflowId = startWorkflow(configuration, "wait", "order-1", WAIT_STEP);
 
             // when / then
-            var engine = engine(configuration);
-            await().during(Duration.ofSeconds(1)).atMost(3, TimeUnit.SECONDS).until(() -> {
-                WorkflowEngineHibernationPasses.runPass(engine);
-                return inMemory(configuration, workflowId);
+            awaitStaysInMemory(configuration, workflowId);
+        }
+    }
+
+    @Nested
+    class HibernatedWorkflowOfAClaimedSegment {
+
+        @Test
+        void isAdoptedByTheNextNodeAfterARestart() {
+            // given: a hibernated workflow on a node that stops, which releases its segments
+            var stopped = startRecordingHibernatedWorkflows();
+            var workflowId = startWorkflow(stopped, "wait", "order-1", WAIT_STEP);
+            awaitHibernated(stopped, workflowId);
+            stopped.shutdown();
+
+            // when: a new node starts on the same stores
+            var restarted = startRecordingHibernatedWorkflows();
+
+            // then: it keeps the workflow out of memory, from the record the stopping node stored
+            awaitAdopted(restarted, workflowId);
+        }
+
+        @Test
+        void isWokenByTheAwaitedEventAfterTheClaim() {
+            // given: the claim adopted it from the record the release stored, instead of loading it
+            var configuration = startRecordingHibernatedWorkflows();
+            var workflowId = startWorkflow(configuration, "wait", "order-1", WAIT_STEP);
+            awaitHibernated(configuration, workflowId);
+            releaseAllSegments(configuration);
+            awaitAdopted(configuration, workflowId);
+
+            // when
+            publish(configuration, "paid", "order-1", "");
+
+            // then
+            awaitWorkflowStatus(configuration, workflowId, WorkflowStatus.COMPLETED);
+        }
+
+        @Test
+        void isWokenByAWorkflowCancellationAfterTheClaim() {
+            // given
+            var configuration = startRecordingHibernatedWorkflows();
+            var workflowId = startWorkflow(configuration, "wait", "order-1", WAIT_STEP);
+            awaitHibernated(configuration, workflowId);
+            releaseAllSegments(configuration);
+            awaitAdopted(configuration, workflowId);
+
+            // when
+            cancellationService(configuration).requestWorkflowCancellation(workflowId, null)
+                                              .orTimeout(10, TimeUnit.SECONDS)
+                                              .join();
+
+            // then
+            awaitWorkflowStatus(configuration, workflowId, WorkflowStatus.CANCELLED);
+        }
+
+        @Test
+        void isWokenAtItsDeadlineAfterTheClaim() {
+            // given: a sleep of 2 seconds
+            var configuration = startRecordingHibernatedWorkflows();
+            var workflowId = startWorkflow(configuration, "sleep", "order-1", SLEEP_STEP);
+            awaitHibernated(configuration, workflowId);
+
+            // when
+            releaseAllSegments(configuration);
+
+            // then
+            awaitWorkflowStatus(configuration, workflowId, WorkflowStatus.COMPLETED);
+            assertThat(durableState(configuration, workflowId).getStep(SLEEP_STEP).status())
+                    .isEqualTo(StepStatus.TIMED_OUT);
+        }
+    }
+
+    @Nested
+    class HibernatedWorkflowOfAResizedSegment {
+
+        @Test
+        void isCompletedByItsEventAndListedNowhereAfterItsSegmentSplits() {
+            // given
+            var configuration = start(true, true, true);
+            var workflowIds = startHibernatedWorkflows(configuration);
+
+            // when: segment 0 splits into segments 0 and 2, and every workflow then receives its payment
+            var processor = engineProcessor(configuration);
+            assertThat(processor.splitSegment(0).orTimeout(5, TimeUnit.SECONDS).join()).isTrue();
+            awaitSegments(processor, Set.of(0, 1, 2));
+            workflowIds.forEach(workflowId -> publish(configuration, "paid", workflowId, ""));
+
+            // then: none is lost, and none stays listed as hibernated under the segment it had before
+            awaitCompletedAndNotHibernated(configuration, workflowIds);
+        }
+
+        @Test
+        void isCompletedByItsEventAndListedNowhereAfterItsSegmentMerges() {
+            // given
+            var configuration = start(true, true, true);
+            var workflowIds = startHibernatedWorkflows(configuration);
+
+            // when: segments 0 and 1 merge into segment 0, and every workflow then receives its payment
+            var processor = engineProcessor(configuration);
+            assertThat(processor.mergeSegment(0).orTimeout(5, TimeUnit.SECONDS).join()).isTrue();
+            awaitSegments(processor, Set.of(0));
+            workflowIds.forEach(workflowId -> publish(configuration, "paid", workflowId, ""));
+
+            // then: none is lost, and none stays listed as hibernated under the segment it had before
+            awaitCompletedAndNotHibernated(configuration, workflowIds);
+        }
+
+        /**
+         * Starts 8 workflows whose id is their order id, so they spread over the segments the same way in every run,
+         * and waits until each one hibernated.
+         */
+        private List<String> startHibernatedWorkflows(AxonConfiguration configuration) {
+            var workflowIds = IntStream.rangeClosed(1, 8).mapToObj(i -> "order-" + i).toList();
+            workflowIds.forEach(workflowId -> {
+                publish(configuration, "start", workflowId, "wait");
+                awaitStepStarted(configuration, workflowId, WAIT_STEP);
             });
+            workflowIds.forEach(workflowId -> awaitHibernated(configuration, workflowId));
+            return workflowIds;
+        }
+
+        private static void awaitSegments(PooledStreamingEventProcessor processor, Set<Integer> segmentIds) {
+            await().atMost(10, TimeUnit.SECONDS)
+                   .until(() -> processor.processingStatus().keySet().equals(segmentIds));
+        }
+
+        private void awaitCompletedAndNotHibernated(AxonConfiguration configuration, List<String> workflowIds) {
+            workflowIds.forEach(workflowId -> awaitWorkflowStatus(configuration, workflowId, WorkflowStatus.COMPLETED));
+            var engine = engine(configuration);
+            assertThat(workflowIds).noneMatch(workflowId -> WorkflowEngineHibernationPasses.isHibernated(
+                    engine, workflowId
+            ));
         }
     }
 
@@ -380,7 +474,7 @@ class WorkflowConfigurerHibernationTest {
         @Test
         void wakesItWhenItAwaitsThatEventInsteadOfStartingADuplicate() {
             // given: the workflow id is the order id, and the workflow waits for the next start event of its order
-            var configuration = start(true, true);
+            var configuration = start(true, true, false);
             publish(configuration, "start", "order-1", "waitNextStart");
             awaitStepStarted(configuration, "order-1", WAIT_STEP);
             awaitHibernated(configuration, "order-1");
@@ -395,7 +489,7 @@ class WorkflowConfigurerHibernationTest {
         @Test
         void isIgnoredSoTheWorkflowStaysCancellable() {
             // given: the workflow id is the order id, so a second start event of the order is a duplicate
-            var configuration = start(true, true);
+            var configuration = start(true, true, false);
             publish(configuration, "start", "order-1", "wait");
             awaitStepStarted(configuration, "order-1", WAIT_STEP);
             awaitHibernated(configuration, "order-1");
@@ -423,7 +517,6 @@ class WorkflowConfigurerHibernationTest {
         var orderId = String.valueOf(ctx.workflowPayload().get("orderId"));
         switch (String.valueOf(ctx.workflowPayload().get("kind"))) {
             case "sleep" -> ctx.waitForEvent(sleep(Duration.ofSeconds(2))).await();
-            case "execute" -> ctx.awaitExecute(charge());
             case "retry" -> ctx.awaitExecute(flakyCharge());
             case "waitNextStart" -> ctx.awaitEvent(waitFor(WAIT_STEP,
                                                            EventConditions.fromQualifiedName(
@@ -517,14 +610,22 @@ class WorkflowConfigurerHibernationTest {
     }
 
     private AxonConfiguration start(boolean hibernation) {
-        return start(hibernation, false);
+        return start(hibernation, false, false);
+    }
+
+    /**
+     * Starts a configuration with hibernation and a snapshot store, which keeps the hibernated workflows the engine
+     * records.
+     */
+    private AxonConfiguration startRecordingHibernatedWorkflows() {
+        return start(true, false, true);
     }
 
     /**
      * Starts a configuration. The workflow id is the identifier of the start event, or its order id when
-     * {@code idFromOrder} is set.
+     * {@code idFromOrder} is set. With {@code snapshots}, a snapshot store keeps the recorded hibernated workflows.
      */
-    private AxonConfiguration start(boolean hibernation, boolean idFromOrder) {
+    private AxonConfiguration start(boolean hibernation, boolean idFromOrder, boolean snapshots) {
         var module = WorkflowModule.configure(MODULE, HibernationContext.class)
                                    .definition(d -> {
                                        var definition = d.declarative(c -> this::body)
@@ -537,21 +638,37 @@ class WorkflowConfigurerHibernationTest {
                                                        new PayloadPropertyWorkflowIdProvider("orderId")))
                                                : definition.notCustomized();
                                    })
-                                   .processorConfiguration(pc -> pc.initialSegmentCount(SEGMENT_COUNT))
+                                   // Claims a released segment again after half a second, instead of 5 seconds.
+                                   .processorConfiguration(pc -> pc.initialSegmentCount(SEGMENT_COUNT)
+                                                                   .tokenClaimInterval(500))
                                    .contextFactory(c -> HibernationContext::new);
         if (hibernation) {
             // left out otherwise, so the disabled case runs on the default
-            module.hibernation(true);
+            module.withHibernation();
+        }
+        if (hibernationInterval > 0) {
+            module.hibernationInterval(hibernationInterval);
         }
         var configurer = WorkflowConfigurer.create();
         configurer.componentRegistry(cr -> cr
                 .registerComponent(EventStorageEngine.class, cfg -> storageEngine)
                 .registerComponent(TokenStore.class, cfg -> tokenStore)
                 .registerModule(module));
+        if (snapshots) {
+            // Serializes each record, as a store backed by a database does.
+            configurer.componentRegistry(cr -> cr.registerComponent(SnapshotStore.class, this::snapshotStore));
+        }
         var configuration = configurer.build();
         configurations.add(configuration);
         configuration.start();
         return configuration;
+    }
+
+    private SnapshotStore snapshotStore(Configuration configuration) {
+        if (snapshotStore == null) {
+            snapshotStore = new InMemorySnapshotStore(configuration.getComponent(GeneralConverter.class));
+        }
+        return snapshotStore;
     }
 
     /**
@@ -580,6 +697,38 @@ class WorkflowConfigurerHibernationTest {
             WorkflowEngineHibernationPasses.runPass(engine);
             return !inMemory(configuration, workflowId);
         });
+    }
+
+    /**
+     * Runs hibernation passes for a second, and fails as soon as the workflow left memory.
+     */
+    private static void awaitStaysInMemory(AxonConfiguration configuration, String workflowId) {
+        var engine = engine(configuration);
+        await().during(Duration.ofSeconds(1)).atMost(3, TimeUnit.SECONDS).until(() -> {
+            WorkflowEngineHibernationPasses.runPass(engine);
+            return inMemory(configuration, workflowId);
+        });
+    }
+
+    /**
+     * Releases every segment of the engine's processor, which claims them again after half a second.
+     */
+    private static void releaseAllSegments(AxonConfiguration configuration) {
+        var processor = engineProcessor(configuration);
+        IntStream.range(0, SEGMENT_COUNT)
+                 .mapToObj(segment -> processor.releaseSegment(segment, 500, TimeUnit.MILLISECONDS))
+                 .forEach(release -> release.orTimeout(5, TimeUnit.SECONDS).join());
+    }
+
+    /**
+     * Waits until the claim of the workflow's segment adopted it as hibernated, and fails as soon as the workflow is in
+     * memory, which a claim that loads it would show.
+     */
+    private static void awaitAdopted(AxonConfiguration configuration, String workflowId) {
+        await().atMost(5, TimeUnit.SECONDS)
+               .pollInterval(Duration.ofMillis(10))
+               .failFast("The claim loaded the workflow into memory.", () -> inMemory(configuration, workflowId))
+               .until(() -> WorkflowEngineHibernationPasses.isHibernated(engine(configuration), workflowId));
     }
 
     private void awaitWorkflowStatus(AxonConfiguration configuration, String workflowId, WorkflowStatus status) {

@@ -9,7 +9,6 @@ package io.axoniq.framework.workflow.runtime.execution;
 
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.framework.workflow.runtime.util.WorkflowStateUtils;
-import org.axonframework.common.annotation.Internal;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -38,14 +37,13 @@ import java.util.function.Supplier;
  * handler recorded the workflow as hibernated, the execution stops the way a released segment stops it, through
  * {@link WorkflowExecution#stopForShutdown()}, so it writes no events.
  * <p>
- * Internal: {@link SimpleWorkflowExecution} creates it and hands it to the {@link WorkflowEngineHibernationSupport}
- * through {@link WorkflowHibernationProvider}, the way {@link WorkflowExecutionCheckpointingSupport} holds the
- * checkpoint mechanics of an execution.
+ * {@link SimpleWorkflowExecution} creates it and hands it to the {@link WorkflowEngineHibernationSupport} through
+ * {@link WorkflowHibernationProvider}, the way {@link WorkflowExecutionCheckpointingSupport} holds the checkpoint
+ * mechanics of an execution.
  *
  * @author Stefan Dragisic
  * @since 5.5.0
  */
-@Internal
 final class WorkflowExecutionHibernationSupport {
 
     private static final Logger logger = LoggerFactory.getLogger(WorkflowExecutionHibernationSupport.class);
