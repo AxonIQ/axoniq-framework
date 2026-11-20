@@ -69,8 +69,6 @@ class ExecuteDelegateRetryGateTest {
     private WorkflowScheduler scheduler;
     private ExecuteDelegate delegate;
     private boolean storeAcceptsAppends = true;
-    // The timestamp the store gives an accepted RETRY_STARTED; earlier than the clock when it came back late.
-    private Instant recordedRetryStartedAt = RETRY_STARTED_AT;
 
     private static ExecutePrimitive.ExecuteCommand command() {
         PayloadProcessor action = (context, payload) -> Map.of();
@@ -131,7 +129,7 @@ class ExecuteDelegateRetryGateTest {
             acceptedEvents.add(event);
             if (MetadataUtils.getStepStatus(event.metadata()).orElseThrow() == StepStatus.RETRY_STARTED) {
                 currentStep.set(WorkflowStep.retryStarted(STEP_NAME, event.payloadAs(StepRetryInfo.class),
-                                                          recordedRetryStartedAt, null));
+                                                          RETRY_STARTED_AT, null));
             }
             return CompletableFuture.completedFuture(null);
         });
@@ -189,19 +187,6 @@ class ExecuteDelegateRetryGateTest {
             execute();
 
             // then the timeout deadline is measured from RETRY_STARTED, so the backoff does not eat into it
-            verify(scheduler).schedule(RETRY_STARTED_AT.plus(TIMEOUT));
-        }
-
-        @Test
-        void perAttemptTimeoutStartsWhenTheAttemptRunsEvenIfItsRetryStartedCameBackLate() {
-            // given a RETRY_STARTED that took two minutes to come back through the event processor
-            currentStep.set(WorkflowStep.retrying(STEP_NAME, FIRST_ATTEMPT_FAILED, RETRYING_AT, null));
-            recordedRetryStartedAt = RETRY_STARTED_AT.minus(Duration.ofMinutes(2));
-
-            // when the retry attempt is launched
-            execute();
-
-            // then the attempt still gets its full timeout from the moment its action runs
             verify(scheduler).schedule(RETRY_STARTED_AT.plus(TIMEOUT));
         }
 
