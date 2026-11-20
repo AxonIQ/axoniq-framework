@@ -119,7 +119,7 @@ public class WorkflowEngine implements
         this.unitOfWorkFactory = requireNonNull(unitOfWorkFactory, "The UnitOfWorkFactory must not be null.");
         this.waitIndex = new WaitAssociationIndex(this::tracksWaitsOf);
         this.segmentedRouting = new WorkflowEngineSequencingPolicy(
-                workflowConfigurationRegistry, waitIndex, this::allClaimedSegmentsCaughtUp
+                workflowConfigurationRegistry, waitIndex, catchUpSupport::isCaughtUp
         );
         EntitlementManager.INSTANCE.registerAddon(WorkflowAxoniqAddon.class);
     }
@@ -423,10 +423,6 @@ public class WorkflowEngine implements
         return workflowExecutionRepository.findById(workflowId)
                                           .filter(execution -> !execution.state().workflowStatus().isTerminal())
                                           .isPresent();
-    }
-
-    private boolean allClaimedSegmentsCaughtUp() {
-        return waitIndex.allClaimedSegmentsMatch(catchUpSupport::isCaughtUp);
     }
 
     /**

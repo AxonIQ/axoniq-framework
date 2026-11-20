@@ -9,6 +9,7 @@ package io.axoniq.framework.workflow.runtime.execution;
 
 import io.axoniq.framework.workflow.runtime.util.MetadataUtils;
 import org.axonframework.common.annotation.Internal;
+import org.axonframework.messaging.core.Metadata;
 import org.axonframework.messaging.core.sequencing.SequencingPolicy;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
@@ -20,7 +21,7 @@ import java.util.HashSet;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
-import java.util.function.BooleanSupplier;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 /**
@@ -40,7 +41,7 @@ import java.util.stream.Collectors;
 
     private final WorkflowConfigurationRegistry<?> workflowConfigurationRegistry;
     private final WaitAssociationIndex waitIndex;
-    private final BooleanSupplier allClaimedSegmentsCaughtUp;
+    private final Predicate<Segment> isCaughtUp;
 
     /**
      * Creates the routing for the workflow definitions held by the given registry.
@@ -48,14 +49,14 @@ import java.util.stream.Collectors;
      * @param workflowConfigurationRegistry registry consulted to derive start-candidate workflow ids from business
      *                                      events
      * @param waitIndex                     the open waits of the workflows on this node's claimed segments
-     * @param allClaimedSegmentsCaughtUp    tells whether every claimed segment consumed its startup backlog
+     * @param isCaughtUp                    tells whether a claimed segment consumed its startup backlog
      */
     WorkflowEngineSequencingPolicy(WorkflowConfigurationRegistry<?> workflowConfigurationRegistry,
                                    WaitAssociationIndex waitIndex,
-                                   BooleanSupplier allClaimedSegmentsCaughtUp) {
+                                   Predicate<Segment> isCaughtUp) {
         this.workflowConfigurationRegistry = workflowConfigurationRegistry;
         this.waitIndex = waitIndex;
-        this.allClaimedSegmentsCaughtUp = allClaimedSegmentsCaughtUp;
+        this.isCaughtUp = isCaughtUp;
     }
 
     /**
@@ -89,12 +90,11 @@ import java.util.stream.Collectors;
             waitIndex.evolve(eventMessage);
         }
         var metadata = eventMessage.metadata();
-        boolean publish = MetadataUtils.isPublishStep(metadata);
-        if (!publish && MetadataUtils.hasWorkflowId().test(metadata)) {
+        if (belongsToOneWorkflow(metadata)) {
             return Optional.of(MetadataUtils.getWorkflowId(metadata));
         }
         try {
-            return Optional.of(route(eventMessage, processingContext, publish));
+            return Optional.of(route(eventMessage, processingContext, MetadataUtils.isPublishStep(metadata)));
         } catch (RuntimeException e) {
             // Sequencing runs before the event reaches a handler, so a value the index reads from the event may not be
             // available yet. Routing must not fail the work package for that: broadcasting is always correct.
@@ -102,6 +102,14 @@ import java.util.stream.Collectors;
                          eventMessage.type(), e);
             return Optional.of(SequencingPolicy.BROADCAST);
         }
+    }
+
+    /**
+     * Whether the event concerns only the workflow whose id it carries, so it goes to the segment owning that workflow.
+     * A published event carries the publisher's id too, but it is a business event for every other workflow.
+     */
+    private static boolean belongsToOneWorkflow(Metadata metadata) {
+        return MetadataUtils.hasWorkflowId().test(metadata) && !MetadataUtils.isPublishStep(metadata);
     }
 
     private Object route(EventMessage eventMessage, ProcessingContext processingContext, boolean publish) {
@@ -115,7 +123,7 @@ import java.util.stream.Collectors;
         } else if (publish) {
             targets.add(MetadataUtils.getWorkflowId(eventMessage.metadata()));
         }
-        if (!waitIndex.allClaimedSegmentsLoaded() || !allClaimedSegmentsCaughtUp.getAsBoolean()) {
+        if (!waitIndex.allClaimedSegmentsLoaded() || !waitIndex.allClaimedSegmentsMatch(isCaughtUp)) {
             return SequencingPolicy.BROADCAST;
         }
         targets.addAll(waitIndex.match(eventMessage, processingContext));

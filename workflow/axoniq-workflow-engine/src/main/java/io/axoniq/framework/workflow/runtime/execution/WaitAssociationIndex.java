@@ -58,7 +58,7 @@ final class WaitAssociationIndex {
 
     private final Predicate<String> isMember;
     private final ValueComparisonOperatorRegistry registry = new ValueComparisonOperatorRegistry();
-    private final ConcurrentHashMap<WaitAssociationKey, Row> waitAssociations = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<WaitAssociationKey, IndexedWait> waitAssociations = new ConcurrentHashMap<>();
     // Rows by place: a LookupKey, an event name alone, or WILDCARD. A changed row is placed anew before it leaves its
     // old place.
     private final ConcurrentHashMap<Object, Set<WaitAssociationKey>> places = new ConcurrentHashMap<>();
@@ -213,8 +213,8 @@ final class WaitAssociationIndex {
             return;
         }
         for (var key : candidates) {
-            var row = waitAssociations.get(key);
-            if (row != null && row.matches(event, context)) {
+            var indexed = waitAssociations.get(key);
+            if (indexed != null && indexed.matches(event, context)) {
                 matches.add(key.workflowId());
             }
         }
@@ -237,14 +237,14 @@ final class WaitAssociationIndex {
             }
         }
         var key = new WaitAssociationKey(wait.workflowId(), wait.stepName());
-        var row = new Row(wait, List.copyOf(checks), lookupKeyOf(wait, checkable));
-        if (row.lookupKey() instanceof LookupKey lookupKey) {
+        var indexed = new IndexedWait(wait.eventName(), List.copyOf(checks), lookupKeyOf(wait, checkable));
+        if (indexed.lookupKey() instanceof LookupKey lookupKey) {
             keyPaths.computeIfAbsent(lookupKey.eventName(), name -> ConcurrentHashMap.newKeySet()).add(lookupKey.path());
         }
         rowsByWorkflow.compute(key.workflowId(), (ignored, keys) -> addTo(keys, key));
-        places.compute(row.place(), (ignored, keys) -> addTo(keys, key));
-        var previous = waitAssociations.put(key, row);
-        if (previous != null && !previous.place().equals(row.place())) {
+        places.compute(indexed.place(), (ignored, keys) -> addTo(keys, key));
+        var previous = waitAssociations.put(key, indexed);
+        if (previous != null && !previous.place().equals(indexed.place())) {
             moves.incrementAndGet();
             places.computeIfPresent(previous.place(), (ignored, keys) -> removeFrom(keys, key));
         }
@@ -270,9 +270,9 @@ final class WaitAssociationIndex {
     }
 
     private void remove(WaitAssociationKey key) {
-        var row = waitAssociations.remove(key);
-        if (row != null) {
-            places.computeIfPresent(row.place(), (ignored, keys) -> removeFrom(keys, key));
+        var indexed = waitAssociations.remove(key);
+        if (indexed != null) {
+            places.computeIfPresent(indexed.place(), (ignored, keys) -> removeFrom(keys, key));
         }
         rowsByWorkflow.computeIfPresent(key.workflowId(), (ignored, keys) -> removeFrom(keys, key));
     }
@@ -335,12 +335,14 @@ final class WaitAssociationIndex {
 
     }
 
-    private record Row(WaitAssociation association,
-                       List<BiPredicate<EventMessage, ProcessingContext>> checks,
-                       @Nullable LookupKey lookupKey) {
+    /**
+     * An open wait as the index keeps it. A {@code null} event name matches every event.
+     */
+    private record IndexedWait(@Nullable QualifiedName eventName,
+                               List<BiPredicate<EventMessage, ProcessingContext>> checks,
+                               @Nullable LookupKey lookupKey) {
 
         Object place() {
-            var eventName = association.eventName();
             if (eventName == null) {
                 return WILDCARD;
             }
@@ -348,10 +350,10 @@ final class WaitAssociationIndex {
         }
 
         boolean matches(EventMessage event, ProcessingContext context) {
-            if (association.isWildcard()) {
+            if (eventName == null) {
                 return true;
             }
-            return event.type().qualifiedName().equals(association.eventName())
+            return event.type().qualifiedName().equals(eventName)
                     && checks.stream().allMatch(check -> check.test(event, context));
         }
     }
