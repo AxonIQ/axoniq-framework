@@ -8,26 +8,33 @@
 
 package org.axonframework.test.saga;
 
-import org.axonframework.messaging.eventhandling.EventMessage;
-import org.axonframework.messaging.eventhandling.GenericEventMessage;
 import org.axonframework.messaging.core.GenericMessage;
 import org.axonframework.messaging.core.MessageType;
+import org.axonframework.messaging.eventhandling.EventMessage;
+import org.axonframework.messaging.eventhandling.GenericEventMessage;
 import org.axonframework.test.AxonAssertionError;
+import org.hamcrest.CoreMatchers;
 import org.junit.jupiter.api.*;
 
+import java.time.Duration;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CopyOnWriteArrayList;
 
-import static org.assertj.core.api.Assertions.assertThatCode;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.*;
+import static org.axonframework.test.matchers.Matchers.*;
+import static org.hamcrest.CoreMatchers.any;
 
 /**
  * Test class validating numerous operations from the {@link SagaTestFixture}.
  * <p>
  * Ported from Axon Framework 4 with the test bodies unchanged. What changed is configuration: the Saga receives its
- * collaborators as handler parameters rather than injected fields, and the cases that drive the event scheduler or
- * deadlines stay commented out, as they were, until those are ported.
+ * collaborators as handler parameters rather than injected fields, and a callback behavior is a lambda instead of a
+ * mock.
  *
  * @author Allard Buijze
  */
@@ -148,130 +155,125 @@ class AnnotatedSagaTest {
                .expectPublishedEvents();
     }
 
-//    TODO #3104
-//    @Test
-//    void fixtureApi_WhenEventIsPublishedToEventBus() {
-//        String aggregate1 = UUID.randomUUID().toString();
-//        String aggregate2 = UUID.randomUUID().toString();
-//        SagaTestFixture<StubSaga> fixture = new SagaTestFixture<>(StubSaga.class);
-//        FixtureExecutionResult validator = fixture
-//                .givenAggregate(aggregate1).published(new TriggerSagaStartEvent(aggregate1),
-//                                                      new TriggerExistingSagaEvent(aggregate1))
-//                .whenAggregate(aggregate1).publishes(new TriggerExistingSagaEvent(aggregate1));
-//
-//        validator.expectActiveSagas(1);
-//        validator.expectAssociationWith("identifier", aggregate1);
-//        validator.expectNoAssociationWith("identifier", aggregate2);
-//        validator.expectScheduledEventMatching(Duration.ofMinutes(10),
-//                                               Matchers.messageWithPayload(CoreMatchers.any(Object.class)));
-//        validator.expectDispatchedCommands();
-//        validator.expectPublishedEventsMatching(listWithAnyOf(messageWithPayload(any(SagaWasTriggeredEvent.class))));
-//        validator.expectNoScheduledDeadlines();
-//    }
-//
-//    TODO #3104
-//    @Test
-//    void fixtureApi_ElapsedTimeBetweenEventsHasEffectOnScheduler() throws Exception {
-//        String aggregate1 = UUID.randomUUID().toString();
-//        SagaTestFixture<StubSaga> fixture = new SagaTestFixture<>(StubSaga.class);
-//        FixtureExecutionResult validator = fixture
-//                // event schedules a TriggerEvent after 10 minutes from t0
-//                .givenAggregate(aggregate1).published(new TriggerSagaStartEvent(aggregate1))
-//                // time shifts to t0+5
-//                .andThenTimeElapses(Duration.ofMinutes(5))
-//                // reset event schedules a TriggerEvent after 10 minutes from t0+5
-//                .andThenAggregate(aggregate1).published(new ResetTriggerEvent(aggregate1))
-//                // when time shifts to t0+10
-//                .whenTimeElapses(Duration.ofMinutes(6));
-//
-//        validator.expectActiveSagas(1);
-//        validator.expectAssociationWith("identifier", aggregate1);
-//        // 6 minutes have passed since the 10minute timer was reset,
-//        // so expect the timer to be scheduled for 4 minutes (t0 + 15)
-//        validator.expectScheduledEventMatching(Duration.ofMinutes(4),
-//                                               Matchers.messageWithPayload(CoreMatchers.any(Object.class)));
-//        validator.expectNoDispatchedCommands();
-//        validator.expectPublishedEvents();
-//        validator.expectNoScheduledDeadlines();
-//    }
-//
-//
-//    TODO #3104
-//    @Test
-//    void fixtureApi_givenCurrentTime() {
-//        String identifier = UUID.randomUUID().toString();
-//        Instant fourDaysAgo = Instant.now().minus(4, ChronoUnit.DAYS);
-//        Instant fourDaysMinusTenMinutesAgo = fourDaysAgo.plus(10, ChronoUnit.MINUTES);
-//
-//        SagaTestFixture<StubSaga> fixture = new SagaTestFixture<>(StubSaga.class);
-//        fixture.givenCurrentTime(fourDaysAgo)
-//               .whenPublishingA(new TriggerSagaStartEvent(identifier))
-//               .expectScheduledEvent(fourDaysMinusTenMinutesAgo, new TimerTriggeredEvent(identifier))
-//               .expectNoScheduledDeadlines();
-//    }
-//
-//    TODO #3104
-//    @Test
-//    void fixtureApi_WhenTimeElapses_UsingDefaults() {
-//        String identifier = UUID.randomUUID().toString();
-//        String identifier2 = UUID.randomUUID().toString();
-//        SagaTestFixture<StubSaga> fixture = new SagaTestFixture<>(StubSaga.class);
-//
-//        fixture.givenAggregate(identifier).published(new TriggerSagaStartEvent(identifier))
-//               .andThenAggregate(identifier2).published(new TriggerExistingSagaEvent(identifier2))
-//               .whenTimeElapses(Duration.ofMinutes(35))
-//               .expectActiveSagas(1)
-//               .expectAssociationWith("identifier", identifier)
-//               .expectNoAssociationWith("identifier", identifier2)
-//               .expectNoScheduledEvents()
-//               .expectNoScheduledDeadlines()
-//               // since we return null for the command, the other is never sent...
-//               .expectDispatchedCommands("Say hi!")
-//               .expectPublishedEventsMatching(noEvents());
-//    }
-//
-//    TODO #3104
-//    @Test
-//    void fixtureApi_WhenTimeElapses_UsingCallbackBehavior() throws Exception {
-//        String identifier = UUID.randomUUID().toString();
-//        String identifier2 = UUID.randomUUID().toString();
-//        SagaTestFixture<StubSaga> fixture = new SagaTestFixture<>(StubSaga.class);
-//        CallbackBehavior commandHandler = mock(CallbackBehavior.class);
-//        when(commandHandler.handle(eq("Say hi!"), isA(Metadata.class))).thenReturn("Hi again!");
-//        fixture.setCallbackBehavior(commandHandler);
-//
-//        fixture.givenAggregate(identifier).published(new TriggerSagaStartEvent(identifier))
-//               .andThenAggregate(identifier2).published(new TriggerExistingSagaEvent(identifier2))
-//               .whenTimeElapses(Duration.ofMinutes(35))
-//               .expectActiveSagas(1)
-//               .expectAssociationWith("identifier", identifier)
-//               .expectNoAssociationWith("identifier", identifier2)
-//               .expectNoScheduledEvents()
-//               .expectNoScheduledDeadlines()
-//               .expectDispatchedCommands("Say hi!", "Hi again!")
-//               .expectPublishedEventsMatching(noEvents());
-//
-//        verify(commandHandler, times(2)).handle(isA(Object.class), eq(Metadata.emptyInstance()));
-//    }
-//
-//    TODO #3104
-//    @Test
-//    void fixtureApi_WhenTimeAdvances() {
-//        String identifier = UUID.randomUUID().toString();
-//        String identifier2 = UUID.randomUUID().toString();
-//        SagaTestFixture<StubSaga> fixture = new SagaTestFixture<>(StubSaga.class);
-//        fixture.givenAggregate(identifier).published(new TriggerSagaStartEvent(identifier))
-//               .andThenAggregate(identifier2).published(new TriggerExistingSagaEvent(identifier2))
-//
-//               .whenTimeAdvancesTo(Instant.now().plus(Duration.ofDays(1)))
-//
-//               .expectActiveSagas(1)
-//               .expectAssociationWith("identifier", identifier)
-//               .expectNoAssociationWith("identifier", identifier2)
-//               .expectNoScheduledEvents()
-//               .expectNoScheduledDeadlines()
-//               .expectDispatchedCommands("Say hi!");
-//    }
+    @Test
+    void fixtureApi_WhenEventIsPublishedToEventBus() {
+        String aggregate1 = UUID.randomUUID().toString();
+        String aggregate2 = UUID.randomUUID().toString();
+        SagaTestFixture<StubSaga> fixture = new SagaTestFixture<>(StubSaga.class);
+        FixtureExecutionResult validator = fixture
+                .givenAggregate(aggregate1).published(new TriggerSagaStartEvent(aggregate1),
+                                                      new TriggerExistingSagaEvent(aggregate1))
+                .whenAggregate(aggregate1).publishes(new TriggerExistingSagaEvent(aggregate1));
+
+        validator.expectActiveSagas(1);
+        validator.expectAssociationWith("identifier", aggregate1);
+        validator.expectNoAssociationWith("identifier", aggregate2);
+        validator.expectScheduledEventMatching(Duration.ofMinutes(10),
+                                               messageWithPayload(any(Object.class)));
+        validator.expectDispatchedCommands();
+        validator.expectPublishedEventsMatching(listWithAnyOf(messageWithPayload(any(SagaWasTriggeredEvent.class))));
+        validator.expectNoScheduledDeadlines();
+    }
+
+    @Test
+    void fixtureApi_ElapsedTimeBetweenEventsHasEffectOnScheduler() {
+        String aggregate1 = UUID.randomUUID().toString();
+        SagaTestFixture<StubSaga> fixture = new SagaTestFixture<>(StubSaga.class);
+        FixtureExecutionResult validator = fixture
+                // event schedules a TriggerEvent after 10 minutes from t0
+                .givenAggregate(aggregate1).published(new TriggerSagaStartEvent(aggregate1))
+                // time shifts to t0+5
+                .andThenTimeElapses(Duration.ofMinutes(5))
+                // reset event schedules a TriggerEvent after 10 minutes from t0+5
+                .andThenAggregate(aggregate1).published(new ResetTriggerEvent(aggregate1))
+                // when time shifts to t0+10
+                .whenTimeElapses(Duration.ofMinutes(6));
+
+        validator.expectActiveSagas(1);
+        validator.expectAssociationWith("identifier", aggregate1);
+        // 6 minutes have passed since the 10minute timer was reset,
+        // so expect the timer to be scheduled for 4 minutes (t0 + 15)
+        validator.expectScheduledEventMatching(Duration.ofMinutes(4),
+                                               messageWithPayload(any(Object.class)));
+        validator.expectNoDispatchedCommands();
+        validator.expectPublishedEvents();
+        validator.expectNoScheduledDeadlines();
+    }
+
+    @Test
+    void fixtureApi_givenCurrentTime() {
+        String identifier = UUID.randomUUID().toString();
+        Instant fourDaysAgo = Instant.now().minus(4, ChronoUnit.DAYS);
+        Instant fourDaysMinusTenMinutesAgo = fourDaysAgo.plus(10, ChronoUnit.MINUTES);
+
+        SagaTestFixture<StubSaga> fixture = new SagaTestFixture<>(StubSaga.class);
+        fixture.givenCurrentTime(fourDaysAgo)
+               .whenPublishingA(new TriggerSagaStartEvent(identifier))
+               .expectScheduledEvent(fourDaysMinusTenMinutesAgo, new TimerTriggeredEvent(identifier))
+               .expectNoScheduledDeadlines();
+    }
+
+    @Test
+    void fixtureApi_WhenTimeElapses_UsingDefaults() {
+        String identifier = UUID.randomUUID().toString();
+        String identifier2 = UUID.randomUUID().toString();
+        SagaTestFixture<StubSaga> fixture = new SagaTestFixture<>(StubSaga.class);
+
+        fixture.givenAggregate(identifier).published(new TriggerSagaStartEvent(identifier))
+               .andThenAggregate(identifier2).published(new TriggerExistingSagaEvent(identifier2))
+               .whenTimeElapses(Duration.ofMinutes(35))
+               .expectActiveSagas(1)
+               .expectAssociationWith("identifier", identifier)
+               .expectNoAssociationWith("identifier", identifier2)
+               .expectNoScheduledEvents()
+               .expectNoScheduledDeadlines()
+               // since we return null for the command, the other is never sent...
+               .expectDispatchedCommands("Say hi!")
+               .expectPublishedEventsMatching(noEvents());
+    }
+
+    @Test
+    void fixtureApi_WhenTimeElapses_UsingCallbackBehavior() {
+        String identifier = UUID.randomUUID().toString();
+        String identifier2 = UUID.randomUUID().toString();
+        SagaTestFixture<StubSaga> fixture = new SagaTestFixture<>(StubSaga.class);
+        List<Object> handledCommands = new CopyOnWriteArrayList<>();
+        fixture.setCallbackBehavior((commandPayload, commandMetadata) -> {
+            handledCommands.add(commandPayload);
+            return "Say hi!".equals(commandPayload) ? "Hi again!" : null;
+        });
+
+        fixture.givenAggregate(identifier).published(new TriggerSagaStartEvent(identifier))
+               .andThenAggregate(identifier2).published(new TriggerExistingSagaEvent(identifier2))
+               .whenTimeElapses(Duration.ofMinutes(35))
+               .expectActiveSagas(1)
+               .expectAssociationWith("identifier", identifier)
+               .expectNoAssociationWith("identifier", identifier2)
+               .expectNoScheduledEvents()
+               .expectNoScheduledDeadlines()
+               .expectDispatchedCommands("Say hi!", "Hi again!")
+               .expectPublishedEventsMatching(noEvents());
+
+        assertThat(handledCommands).containsExactly("Say hi!", "Hi again!");
+    }
+
+    @Test
+    void fixtureApi_WhenTimeAdvances() {
+        String identifier = UUID.randomUUID().toString();
+        String identifier2 = UUID.randomUUID().toString();
+        SagaTestFixture<StubSaga> fixture = new SagaTestFixture<>(StubSaga.class);
+        fixture.givenAggregate(identifier).published(new TriggerSagaStartEvent(identifier))
+               .andThenAggregate(identifier2).published(new TriggerExistingSagaEvent(identifier2))
+
+               .whenTimeAdvancesTo(Instant.now().plus(Duration.ofDays(1)))
+
+               .expectActiveSagas(1)
+               .expectAssociationWith("identifier", identifier)
+               .expectNoAssociationWith("identifier", identifier2)
+               .expectNoScheduledEvents()
+               .expectNoScheduledDeadlines()
+               .expectDispatchedCommands("Say hi!");
+    }
 
     @Test
     void publishEventFromSecondFixtureCall() {
@@ -318,36 +320,35 @@ class AnnotatedSagaTest {
                 .isInstanceOf(AxonAssertionError.class);
     }
 
-//    TODO #3104
-//    @Test
-//    void fixtureApi_WhenEventOccurs() {
-//        String aggregate1 = UUID.randomUUID().toString();
-//        String aggregate2 = UUID.randomUUID().toString();
-//        SagaTestFixture<StubSaga> fixture = new SagaTestFixture<>(StubSaga.class);
-//        FixtureExecutionResult validator = fixture
-//                .givenAggregate(aggregate1).published(
-//                        asEventMessage(new TriggerSagaStartEvent(aggregate1)),
-//                        new TriggerExistingSagaEvent(aggregate1))
-//                .andThenAggregate(aggregate2).published(new TriggerSagaStartEvent(aggregate2))
-//                .whenAggregate(aggregate1).publishes(new TriggerSagaEndEvent(aggregate1));
-//
-//        validator.expectActiveSagas(1);
-//        validator.expectAssociationWith("identifier", aggregate2);
-//        validator.expectNoAssociationWith("identifier", aggregate1);
-//        validator.expectScheduledEventOfType(Duration.ofMinutes(10), TimerTriggeredEvent.class);
-//        validator.expectScheduledEventMatching(Duration.ofMinutes(10), messageWithPayload(CoreMatchers.any(
-//                TimerTriggeredEvent.class)));
-//        validator.expectScheduledEvent(Duration.ofMinutes(10), new TimerTriggeredEvent(aggregate1));
-//        validator.expectScheduledEventOfType(fixture.currentTime().plusSeconds(600), TimerTriggeredEvent.class);
-//        validator.expectScheduledEventMatching(fixture.currentTime().plusSeconds(600),
-//                                               messageWithPayload(CoreMatchers.any(TimerTriggeredEvent.class)));
-//        validator.expectScheduledEvent(fixture.currentTime().plusSeconds(600),
-//                                       new TimerTriggeredEvent(aggregate1));
-//        validator.expectDispatchedCommands();
-//        validator.expectNoDispatchedCommands();
-//        validator.expectPublishedEventsMatching(noEvents());
-//        validator.expectNoScheduledDeadlines();
-//    }
+    @Test
+    void fixtureApi_WhenEventOccurs() {
+        String aggregate1 = UUID.randomUUID().toString();
+        String aggregate2 = UUID.randomUUID().toString();
+        SagaTestFixture<StubSaga> fixture = new SagaTestFixture<>(StubSaga.class);
+        FixtureExecutionResult validator = fixture
+                .givenAggregate(aggregate1).published(
+                        asEventMessage(new TriggerSagaStartEvent(aggregate1)),
+                        new TriggerExistingSagaEvent(aggregate1))
+                .andThenAggregate(aggregate2).published(new TriggerSagaStartEvent(aggregate2))
+                .whenAggregate(aggregate1).publishes(new TriggerSagaEndEvent(aggregate1));
+
+        validator.expectActiveSagas(1);
+        validator.expectAssociationWith("identifier", aggregate2);
+        validator.expectNoAssociationWith("identifier", aggregate1);
+        validator.expectScheduledEventOfType(Duration.ofMinutes(10), TimerTriggeredEvent.class);
+        validator.expectScheduledEventMatching(Duration.ofMinutes(10), messageWithPayload(CoreMatchers.any(
+                TimerTriggeredEvent.class)));
+        validator.expectScheduledEvent(Duration.ofMinutes(10), new TimerTriggeredEvent(aggregate1));
+        validator.expectScheduledEventOfType(fixture.currentTime().plusSeconds(600), TimerTriggeredEvent.class);
+        validator.expectScheduledEventMatching(fixture.currentTime().plusSeconds(600),
+                                               messageWithPayload(CoreMatchers.any(TimerTriggeredEvent.class)));
+        validator.expectScheduledEvent(fixture.currentTime().plusSeconds(600),
+                                       new TimerTriggeredEvent(aggregate1));
+        validator.expectDispatchedCommands();
+        validator.expectNoDispatchedCommands();
+        validator.expectPublishedEventsMatching(noEvents());
+        validator.expectNoScheduledDeadlines();
+    }
 
     /**
      * Axon Framework 4 named this after the {@code DomainEventMessage} an aggregate publisher produced, which
