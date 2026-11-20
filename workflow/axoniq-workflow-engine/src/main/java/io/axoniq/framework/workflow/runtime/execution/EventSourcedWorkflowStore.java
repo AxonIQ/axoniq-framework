@@ -34,6 +34,13 @@ public class EventSourcedWorkflowStore implements WorkflowStore {
     private final Repository<String, EventSourcedWaitAssociations> waitAssociationsRepository;
     private final Repository<String, EventSourcedWorkflowState> workflowStateRepository;
 
+    /**
+     * Creates a store that loads each workflow entity through its own repository.
+     *
+     * @param runningWorkflowsRepository the repository of the list of running workflows
+     * @param waitAssociationsRepository the repository of the list of open waits
+     * @param workflowStateRepository    the repository of the state of each workflow instance
+     */
     public EventSourcedWorkflowStore(
             Repository<String, EventSourcedRunningWorkflows> runningWorkflowsRepository,
             Repository<String, EventSourcedWaitAssociations> waitAssociationsRepository,

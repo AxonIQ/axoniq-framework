@@ -78,7 +78,7 @@ public class WorkflowEngine implements
     private final WorkflowEngineCatchUpSupport catchUpSupport = new WorkflowEngineCatchUpSupport();
     private final WorkflowEngineSequencingPolicy segmentedRouting;
     private final UnsafeCheckpointWorkIndex checkpointWorkIndex = new UnsafeCheckpointWorkIndex();
-    private final WaitAssociationIndex waitIndex = new WaitAssociationIndex(this::tracksWaitsOf);
+    private final WaitAssociationIndex waitIndex;
     // Package-private so a test can shrink it instead of waiting out the production timeout.
     Duration restoreTimeout = DEFAULT_RESTORE_TIMEOUT;
     private WorkflowEngineCheckpointingSupport checkpointingSupport;
@@ -121,8 +121,9 @@ public class WorkflowEngine implements
         );
         this.workflowStore = requireNonNull(workflowStore, "The WorkflowStore must not be null.");
         this.unitOfWorkFactory = requireNonNull(unitOfWorkFactory, "The UnitOfWorkFactory must not be null.");
+        this.waitIndex = new WaitAssociationIndex(this::tracksWaitsOf);
         this.segmentedRouting = new WorkflowEngineSequencingPolicy(
-                workflowConfigurationRegistry, waitIndex, this::allClaimedSegmentsCaughtUp
+                workflowConfigurationRegistry, waitIndex, catchUpSupport::isCaughtUp
         );
         EntitlementManager.INSTANCE.registerAddon(WorkflowAxoniqAddon.class);
     }
@@ -236,12 +237,12 @@ public class WorkflowEngine implements
                                            @Nullable Segment segment,
                                            boolean workflowPublishedEvent,
                                            Set<String> created) {
-        var targets = new LinkedHashSet<>(waitIndex.match(event, context));
-        targets.addAll(created);
+        Set<String> workflowIds = new LinkedHashSet<>(waitIndex.match(event, context));
+        workflowIds.addAll(created);
         if (workflowPublishedEvent) {
-            targets.add(MetadataUtils.getWorkflowId(event.metadata()));
+            workflowIds.add(MetadataUtils.getWorkflowId(event.metadata()));
         }
-        for (var workflowId : targets) {
+        for (var workflowId : workflowIds) {
             if (WorkflowSegmentOwnership.ownedBy(segment, workflowId)) {
                 deliver(workflowId, event, context);
             }
@@ -461,10 +462,6 @@ public class WorkflowEngine implements
                 || workflowExecutionRepository.findById(workflowId)
                                               .filter(execution -> !execution.state().workflowStatus().isTerminal())
                                               .isPresent();
-    }
-
-    private boolean allClaimedSegmentsCaughtUp() {
-        return waitIndex.allClaimedSegmentsMatch(catchUpSupport::isCaughtUp);
     }
 
     /**

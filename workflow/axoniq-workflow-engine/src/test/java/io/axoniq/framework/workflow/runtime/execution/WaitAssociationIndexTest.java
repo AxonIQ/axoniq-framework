@@ -8,6 +8,7 @@
 package io.axoniq.framework.workflow.runtime.execution;
 
 import io.axoniq.framework.workflow.dsl.api.StepStatus;
+import io.axoniq.framework.workflow.dsl.api.StepWaitInfo;
 import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.util.MetadataUtils;
 import org.axonframework.messaging.core.MessageType;
@@ -20,6 +21,7 @@ import org.axonframework.messaging.eventhandling.GenericEventMessage;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 import org.junit.jupiter.api.*;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -57,7 +59,7 @@ class WaitAssociationIndexTest {
     private static EventMessage waitStarted(String workflowId, String stepName, Set<String> associations) {
         return new GenericEventMessage(
                 new MessageType(new QualifiedName("AwaitStarted")),
-                Map.of("eventName", PAYMENT_RECEIVED.toString(), "associations", associations),
+                new StepWaitInfo(Instant.EPOCH, PAYMENT_RECEIVED.toString(), associations, Instant.EPOCH),
                 MetadataUtils.markWaitForEventStep(MetadataUtils.create(workflowId, stepName, StepStatus.STARTED))
         );
     }
