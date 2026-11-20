@@ -7,6 +7,7 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
+import io.axoniq.framework.workflow.dsl.api.StepWaitInfo;
 import io.axoniq.framework.workflow.runtime.util.MetadataUtils;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.QualifiedName;
@@ -86,6 +87,10 @@ public record WaitAssociation(String workflowId,
         var workflowId = MetadataUtils.getWorkflowId(metadata);
         var stepName = Objects.requireNonNull(MetadataUtils.getStepName(metadata),
                                               "A wait-step STARTED event must carry a stepName.");
+        // An in-memory store hands back the published StepWaitInfo. A serialized one is read as a map of its fields.
+        if (startedWaitEvent.payload() instanceof StepWaitInfo info && !info.eventName().isBlank()) {
+            return new WaitAssociation(workflowId, stepName, new QualifiedName(info.eventName()), info.associations());
+        }
         try {
             Map<String, @Nullable Object> payload = startedWaitEvent.payloadAs(EventSourcedWorkflowState.PAYLOAD_TYPE);
             if (payload != null && payload.get(EVENT_NAME_KEY) instanceof CharSequence name && !name.isEmpty()) {
