@@ -38,6 +38,9 @@ import org.springframework.context.annotation.EnableMBeanExport;
 import org.springframework.jmx.support.RegistrationPolicy;
 import org.springframework.test.context.ContextConfiguration;
 
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 
 import static org.assertj.core.api.Assertions.as;
@@ -106,7 +109,7 @@ class PersistentStreamAutoConfigurationTest {
         @Test
         void defaultBuilderIsRegisteredWhenNonePresent() {
             testContext.run(context ->
-                    assertThat(context).hasSingleBean(PersistentStreamScheduledExecutorBuilder.class)
+                                    assertThat(context).hasSingleBean(PersistentStreamScheduledExecutorBuilder.class)
             );
         }
 
@@ -127,7 +130,7 @@ class PersistentStreamAutoConfigurationTest {
         @Test
         void noStreamBeansRegisteredWhenNoneConfigured() {
             testContext.run(context ->
-                    assertThat(context).doesNotHaveBean(PersistentStreamEventSource.class)
+                                    assertThat(context).doesNotHaveBean(PersistentStreamEventSource.class)
             );
         }
 
@@ -191,12 +194,60 @@ class PersistentStreamAutoConfigurationTest {
                                 assertThat(source)
                                         .extracting("persistentStreamConnection", as(InstanceOfAssertFactories.type(
                                                 PersistentStreamConnection.class)))
-                                        .extracting("scheduler", as(InstanceOfAssertFactories.type(ScheduledExecutorService.class)))
+                                        .extracting("scheduler",
+                                                    as(InstanceOfAssertFactories.type(ScheduledExecutorService.class)))
                                         .isSameAs(customExecutor);
                             }
 
 
                        );
+        }
+    }
+
+    @Nested
+    class ExecutorShutdown {
+
+        @Test
+        void executorsOfConfiguredStreamsAreShutDownWhenContextCloses() {
+            // given
+            List<ScheduledExecutorService> created = new CopyOnWriteArrayList<>();
+            PersistentStreamScheduledExecutorBuilder recordingBuilder = (threadCount, streamName) -> {
+                ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor();
+                created.add(executor);
+                return executor;
+            };
+
+            // when
+            testContext.withBean(PersistentStreamScheduledExecutorBuilder.class, () -> recordingBuilder)
+                       .withPropertyValues("axon.axonserver.persistent-streams.myStream.initial-segment-count=1")
+                       .run(context -> {
+                           assertThat(context).hasBean("myStream");
+                           assertThat(created).hasSize(1);
+                           assertThat(created.getFirst().isShutdown()).isFalse();
+                       });
+
+            // then
+            assertThat(created).allSatisfy(executor -> assertThat(executor.isShutdown()).isTrue());
+        }
+
+        @Test
+        void executorsOfAutoPersistentStreamsAreShutDownWhenContextCloses() {
+            // given
+            List<ScheduledExecutorService> created = new CopyOnWriteArrayList<>();
+            PersistentStreamScheduledExecutorBuilder recordingBuilder = (threadCount, streamName) -> {
+                ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor();
+                created.add(executor);
+                return executor;
+            };
+
+            // when
+            testContext.withBean(PersistentStreamScheduledExecutorBuilder.class, () -> recordingBuilder)
+                       .withPropertyValues("axon.axonserver.auto-persistent-streams-enabled=true")
+                       .withBean(TestEventHandlingComponent.class)
+                       .run(context -> assertThat(created).isNotEmpty());
+
+            // then
+            assertThat(created).allSatisfy(executor -> assertThat(executor.isShutdown()).isTrue());
         }
     }
 
