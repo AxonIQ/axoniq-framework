@@ -58,13 +58,32 @@ final class TransformationIndex {
         List<EventTransformation> predicateList = new ArrayList<>();
         Map<MessageType, EventTransformation> claimedSources = new HashMap<>();
         for (EventTransformation transformation : registrationOrder) {
-            switch (transformation.matcher()) {
+            switch (matcherOf(transformation)) {
                 case FromMatcher.Exact(MessageType source) ->
                         indexExact(transformation, source, exactBuckets, claimedSources);
                 case FromMatcher.PredicateBased ignored -> predicateList.add(transformation);
             }
         }
         return new TransformationIndex(exactBuckets, predicateList);
+    }
+
+    /**
+     * Reads the {@code from}-side matcher of the given {@code transformation}.
+     * <p>
+     * Each variant carries its own matcher rather than declaring one on {@link EventTransformation}, so that
+     * nothing a user holds exposes it. The switch is exhaustive because the hierarchy is sealed: a new variant
+     * fails to compile here until it is handled.
+     *
+     * @param transformation the transformation to read the matcher of
+     * @return the {@code from}-side matcher
+     */
+    private static FromMatcher matcherOf(EventTransformation transformation) {
+        return switch (transformation) {
+            case MappingEventTransformation<?, ?> mapping -> mapping.matcher();
+            case RenameEventTransformation rename -> rename.matcher();
+            case SplitEventTransformation<?> split -> split.matcher();
+            case DropEventTransformation drop -> drop.matcher();
+        };
     }
 
     /**
@@ -114,7 +133,7 @@ final class TransformationIndex {
         // At most one candidate can match: every exact source is claimed by a single transformation (duplicates
         // are rejected when the index is built), so the first match is necessarily the only match.
         for (EventTransformation candidate : bucket) {
-            if (candidate.matcher().matches(eventType)) {
+            if (matcherOf(candidate).matches(eventType)) {
                 return candidate;
             }
         }
@@ -123,7 +142,7 @@ final class TransformationIndex {
 
     private @Nullable EventTransformation findFirstPredicateMatch(MessageType eventType) {
         for (EventTransformation candidate : predicateTransformations) {
-            if (candidate.matcher().matches(eventType)) {
+            if (matcherOf(candidate).matches(eventType)) {
                 return candidate;
             }
         }
