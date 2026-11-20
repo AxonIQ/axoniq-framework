@@ -9,6 +9,7 @@ package io.axoniq.framework.workflow.runtime.execution;
 
 import io.axoniq.framework.workflow.dsl.api.WorkflowState;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
+import io.axoniq.framework.workflow.runtime.execution.WorkflowEngineHibernationSupport.SegmentClaim;
 import io.axoniq.framework.workflow.runtime.util.MetadataUtils;
 import io.axoniq.framework.workflow.runtime.util.ProcessingContextUtils;
 import io.axoniq.license.entitlement.EntitlementManager;
@@ -29,13 +30,19 @@ import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 import java.util.function.Predicate;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static io.axoniq.framework.workflow.runtime.execution.EventSourcedWorkflowState.PAYLOAD_TYPE;
@@ -75,9 +82,12 @@ public class WorkflowEngine implements
     private final WorkflowEngineCatchUpSupport catchUpSupport = new WorkflowEngineCatchUpSupport();
     private final WorkflowEngineSequencingPolicy segmentedRouting;
     private final UnsafeCheckpointWorkIndex checkpointWorkIndex = new UnsafeCheckpointWorkIndex();
+    private final WaitAssociationIndex waitIndex;
     // Package-private so a test can shrink it instead of waiting out the production timeout.
     Duration restoreTimeout = DEFAULT_RESTORE_TIMEOUT;
     private WorkflowEngineCheckpointingSupport checkpointingSupport;
+    // Package-private so a test can run a hibernation pass instead of waiting for the interval.
+    @Nullable WorkflowEngineHibernationSupport hibernation;
 
     /**
      * Creates a new workflow engine. Be sure to follow-up construction of a {@code WorkflowEngine} with an invocation
@@ -115,7 +125,10 @@ public class WorkflowEngine implements
         );
         this.workflowStore = requireNonNull(workflowStore, "The WorkflowStore must not be null.");
         this.unitOfWorkFactory = requireNonNull(unitOfWorkFactory, "The UnitOfWorkFactory must not be null.");
-        this.segmentedRouting = new WorkflowEngineSequencingPolicy(workflowConfigurationRegistry);
+        this.waitIndex = new WaitAssociationIndex(this::tracksWaitsOf);
+        this.segmentedRouting = new WorkflowEngineSequencingPolicy(
+                workflowConfigurationRegistry, waitIndex, catchUpSupport::isCaughtUp
+        );
         EntitlementManager.INSTANCE.registerAddon(WorkflowAxoniqAddon.class);
     }
 
@@ -156,6 +169,34 @@ public class WorkflowEngine implements
         );
     }
 
+    /**
+     * Enables hibernation: a workflow that only waits for an external event or a deadline is removed from memory, and
+     * restored from the event store when that event arrives or that deadline expires.
+     * <p>
+     * Set outside the constructor, like {@link #setCheckpointingSupport(WorkflowEngineCheckpointingSupport)}, by the
+     * workflow module when its hibernation setting is enabled. The {@link WorkflowEngineHibernationSupport} owns the
+     * bookkeeping; this engine only hands it events, cancellations and executions at a few hooks.
+     *
+     * @param scheduler    schedules the passes and the deadlines of hibernated workflows
+     * @param clock        the clock the scheduler measures deadlines with
+     * @param name         the name of the workflow module, which keeps the hibernated workflows this engine records
+     *                     apart from those of other modules
+     * @param interval     the time between 2 passes, and before a failed wake is tried again
+     * @param wakeExecutor runs the wakes for a deadline or a cancellation, like the workflows of this engine
+     */
+    @Internal
+    public void enableHibernation(WorkflowScheduler scheduler,
+                                  Clock clock,
+                                  String name,
+                                  Duration interval,
+                                  Executor wakeExecutor) {
+        this.hibernation = new WorkflowEngineHibernationSupport(
+                scheduler, clock, workflowExecutionRepository, workflowCancellationService, checkpointWorkIndex,
+                unitOfWorkFactory, () -> restoreTimeout, this::loadWorkflow, workflowStore, name, interval,
+                wakeExecutor
+        );
+    }
+
     @Override
     public MessageStream.Empty<Message> handle(EventMessage event,
                                                ProcessingContext context) {
@@ -179,28 +220,19 @@ public class WorkflowEngine implements
                 return MessageStream.empty();
             }
             // Skip events whose workflowId isn't owned by this engine (expected in multi-module setups).
-            var executionOpt = workflowExecutionRepository.findById(workflowId);
-            if (executionOpt.isEmpty()) {
+            if (!deliver(workflowId, event, context)) {
                 logger.debug("Ignoring event [{}] for workflowId [{}] - no matching execution in this engine.",
                              event.type(), workflowId);
                 activateSegmentWhenCaughtUp(segment, currentToken);
                 checkpointingSupport.requestCheckpoint(segment, currentToken);
                 return MessageStream.empty();
             }
-            executionOpt.get().onEvent(event, context);
         } else {
             // handle starting of new processes. Events published by a workflow through the publish primitive take
-            // this branch as well: they may start or wake other instances, and the publishing instance is one of the
-            // owned executions below, so delivering it there records the published step and unblocks the publisher.
-            checkAndCreateNewInstance(event, context);
-            // route external events to workflows waiting for them. Business events without a unique start candidate
-            // are broadcast to every segment (sequenced by SequencingPolicy.BROADCAST); the ownership filter keeps
-            // the wake exactly-once per instance - only the owning segment's delivery reaches an execution.
-            // The filter is pushed into the repository so the returned set holds this segment's instances only:
-            // the repository is node-wide, so materializing all of them once per claimed segment is wasted work.
-            for (var execution : workflowExecutionRepository.findAll(ownedBy(segment))) {
-                execution.onEvent(event, context);
-            }
+            // this branch as well: they may start or wake other instances, and the publishing instance must receive
+            // its own event, which records the published step and unblocks the publisher.
+            var created = checkAndCreateNewInstance(event, context);
+            deliverToWaitingWorkflows(event, context, segment, workflowPublishedEvent, created);
         }
 
         activateSegmentWhenCaughtUp(segment, currentToken);
@@ -209,8 +241,44 @@ public class WorkflowEngine implements
         return MessageStream.empty();
     }
 
-    private void checkAndCreateNewInstance(EventMessage eventMessage,
-                                           ProcessingContext processingContext) {
+    /**
+     * Delivers the event to the workflows of this segment waiting for it, plus the instances it just created and, for a
+     * published event, its publisher.
+     */
+    private void deliverToWaitingWorkflows(EventMessage event,
+                                           ProcessingContext context,
+                                           @Nullable Segment segment,
+                                           boolean workflowPublishedEvent,
+                                           Set<String> created) {
+        Set<String> workflowIds = new LinkedHashSet<>(waitIndex.match(event, context));
+        workflowIds.addAll(created);
+        if (workflowPublishedEvent) {
+            workflowIds.add(MetadataUtils.getWorkflowId(event.metadata()));
+        }
+        for (var workflowId : workflowIds) {
+            if (WorkflowSegmentOwnership.ownedBy(segment, workflowId)) {
+                deliver(workflowId, event, context);
+            }
+        }
+    }
+
+    /**
+     * Delivers the event to the execution of the given workflow, or hands it to the hibernation support, which also
+     * finds a hibernated workflow.
+     *
+     * @return {@code false} when this engine runs no such workflow, which is expected in multi-module setups
+     */
+    private boolean deliver(String workflowId, EventMessage event, ProcessingContext context) {
+        if (hibernation != null) {
+            return hibernation.deliver(workflowId, event, context);
+        }
+        var executionOpt = workflowExecutionRepository.findById(workflowId);
+        executionOpt.ifPresent(execution -> execution.onEvent(event, context));
+        return executionOpt.isPresent();
+    }
+
+    private Set<String> checkAndCreateNewInstance(EventMessage eventMessage,
+                                                  ProcessingContext processingContext) {
         // For brand-new starts, only the highest-registered version starts instances.
         // Older registered versions stay available for replay routing (selected later in the execution path
         // based on state.workflowDefinitionId().version(), itself sourced from the workflow's started event metadata).
@@ -223,6 +291,7 @@ public class WorkflowEngine implements
         // arrive at the owning segment directly; broadcast business events arrive everywhere and the ownership
         // guard keeps the start exactly-once.
         var segment = Segment.fromContext(processingContext).orElse(null);
+        var created = new HashSet<String>();
 
         configurations.forEach(configuration -> {
             if (!configuration.predicate().test(eventMessage, processingContext)) {
@@ -248,6 +317,11 @@ public class WorkflowEngine implements
             if (workflowId == null) {
                 return;
             }
+            if (hibernation != null && hibernation.isDuplicateStart(workflowId)) {
+                logger.warn("A workflow with id '{}' is already running; ignoring the new start request. Workflow ids "
+                                    + "MUST be unique, so the start is treated as a duplicate.", workflowId);
+                return;
+            }
 
             var payload = requireNonNull(eventMessage.payloadAs(PAYLOAD_TYPE), "Error converting initial payload");
             processingContext.putResource(WorkflowConfigurationRegistry.RESOURCE_KEY, workflowConfigurationRegistry);
@@ -260,11 +334,13 @@ public class WorkflowEngine implements
                 return workflowConfiguration.workflowExecutionFactory().create(workflowContext);
             });
             registerCancellation(execution);
-            checkpointWorkIndex.register(execution.workflowId(), execution::registerCheckpointWorkStateListener);
+            registerCheckpointWork(execution);
+            created.add(execution.workflowId());
             if (isSegmentCaughtUp(segment)) {
                 execute(execution, segment);
             }
         });
+        return created;
     }
 
     @Override
@@ -333,6 +409,9 @@ public class WorkflowEngine implements
      */
     public CompletableFuture<Void> start(@Nullable TrackingToken latestToken) {
         catchUpSupport.initialize(latestToken);
+        if (hibernation != null) {
+            hibernation.start();
+        }
         workflowConfigurationRegistry.warnAboutSameVersionDuplicates();
         return CompletableFuture.completedFuture(null);
     }
@@ -344,7 +423,8 @@ public class WorkflowEngine implements
      * so a segment migrating between nodes carries its instances with it. When another node dies, the coordinator hands
      * its segments to a surviving node and this callback rebuilds their instances there, without restarting anything.
      * <p>
-     * The instances are materialized from their current durable state and started immediately.
+     * The instances are materialized from their current durable state and started immediately. With hibernation, a
+     * workflow recorded as hibernated whose open waits did not change since stays out of memory instead.
      *
      * @param segment          the segment that was claimed
      * @param claimedFrom      the stored position the segment resumes from, or {@code null} when it has consumed
@@ -372,33 +452,115 @@ public class WorkflowEngine implements
         if (claimedFrom != null) {
             executionContext.putResource(TrackingToken.RESOURCE_KEY, claimedFrom);
         }
-        return loadRunningWorkflows(segment, claimedFrom, sourcingContext, executionContext)
+        // A split or a merge replaces segments without releasing them, so a reused segment id catches up anew.
+        catchUpSupport.release(segment);
+        // The segment's events are broadcast until its waits are loaded.
+        waitIndex.segmentClaimed(segment);
+        var claim = hibernation == null ? null : hibernation.claiming(segment);
+        // The waits are loaded first, as a recorded hibernated workflow is adopted only while its waits are unchanged,
+        // and indexed last, as the index keeps the rows of the workflows this engine holds.
+        return loadWaitAssociations(segment, sourcingContext)
+                .thenCompose(waits -> loadRecordedWorkflows(segment, sourcingContext)
+                        .thenCompose(recorded -> loadRunningWorkflows(
+                                segment,
+                                sourcingContext,
+                                executionContext,
+                                adoptsAsHibernated(segment, recorded, waits, claim)
+                        ))
+                        .thenRun(() -> {
+                            indexWaits(segment, waits);
+                            if (hibernation != null && claim != null) {
+                                hibernation.claimed(segment, claim);
+                            }
+                        }))
                 .orTimeout(restoreTimeout.toMillis(), TimeUnit.MILLISECONDS)
                 .whenComplete((restored, failure) -> logFailedRestore(segment, failure))
                 .thenRun(() -> startRestoredWorkflowsWhenCaughtUp(segment, claimedFrom));
+    }
+
+    private CompletableFuture<List<WaitAssociation>> loadWaitAssociations(Segment segment,
+                                                                           ProcessingContext sourcingContext) {
+        return workflowStore.loadWaitAssociations(sourcingContext).thenApply(
+                waitAssociations -> waitAssociations.waitAssociations()
+                                                    .stream()
+                                                    .filter(wait -> WorkflowSegmentOwnership.ownedBy(
+                                                            segment, wait.workflowId()
+                                                    ))
+                                                    .toList()
+        );
+    }
+
+    private void indexWaits(Segment segment, List<WaitAssociation> waits) {
+        waitIndex.segmentLoaded(segment, waits);
+        logger.debug("Loaded {} open wait(s) of segment {}.", waits.size(), segment.getSegmentId());
+    }
+
+    private CompletableFuture<HibernatedWorkflows> loadRecordedWorkflows(Segment segment,
+                                                                         ProcessingContext sourcingContext) {
+        return hibernation == null
+                ? CompletableFuture.completedFuture(HibernatedWorkflows.NONE)
+                : hibernation.loadRecordedWorkflows(segment, sourcingContext);
+    }
+
+    /**
+     * Returns whether the claim of the given segment adopts a running workflow as hibernated instead of restoring it:
+     * it is recorded as hibernated, and its open waits are exactly the ones it hibernated with.
+     */
+    private Predicate<String> adoptsAsHibernated(Segment segment,
+                                                 HibernatedWorkflows recorded,
+                                                 List<WaitAssociation> waits,
+                                                 @Nullable SegmentClaim claim) {
+        var support = hibernation;
+        if (support == null || claim == null || recorded.workflows().isEmpty()) {
+            return workflowId -> false;
+        }
+        var openWaits = waits.stream().collect(Collectors.groupingBy(
+                WaitAssociation::workflowId, Collectors.mapping(WaitAssociation::stepName, Collectors.toSet())
+        ));
+        return workflowId -> recorded.hibernated(workflowId, openWaits.getOrDefault(workflowId, Set.of()))
+                                     .map(workflow -> support.adopt(workflowId, segment, workflow, claim))
+                                     .orElse(false);
+    }
+
+    /**
+     * Whether the waits of the given workflow belong in the {@link WaitAssociationIndex}: it runs in this engine and
+     * has not reached a terminal status, or it is hibernated here.
+     */
+    private boolean tracksWaitsOf(String workflowId) {
+        return (hibernation != null && hibernation.isHibernated(workflowId))
+                || workflowExecutionRepository.findById(workflowId)
+                                              .filter(execution -> !execution.state().workflowStatus().isTerminal())
+                                              .isPresent();
     }
 
     /**
      * Drops the workflow executions owned by a segment this node no longer holds.
      * <p>
      * In-flight steps are stopped rather than cancelled, exactly as on {@link #shutdown()}: no cancellation events are
-     * emitted, so the node claiming the segment next resumes each instance from its persisted state.
+     * emitted, so the node claiming the segment next resumes each instance from its persisted state. With hibernation,
+     * the segment's hibernated workflows are recorded once more, so that claim keeps them out of memory.
      *
      * @param segment the segment that was released
-     * @return a future completed after this engine has requested every released execution to stop
+     * @return a future completed after this engine has requested every released execution to stop and, with
+     * hibernation, has stored or failed to store the record of the segment's hibernated workflows
      */
     public CompletableFuture<Void> releaseWorkflowsFor(Segment segment) {
+        waitIndex.segmentReleased(segment);
+        var recorded = hibernation == null
+                ? CompletableFuture.<Void>completedFuture(null)
+                : hibernation.release(segment);
+        // Also without executions in memory: the next claim of the segment must catch up and start its restored ones.
+        catchUpSupport.release(segment);
         var released = workflowExecutionRepository.findAll(ownedBy(segment));
         if (released.isEmpty()) {
-            return CompletableFuture.completedFuture(null);
+            return recorded;
         }
         logger.info("Releasing segment {}: stopping {} workflow execution(s).",
                     segment.getSegmentId(), released.size());
         released.forEach(WorkflowExecution::stopForShutdown);
         // An execution stopped for recovery skips the termination handler, so the release does its cleanup.
         released.forEach(execution -> removeExecution(execution.workflowId()));
-        catchUpSupport.release(segment);
-        return CompletableFuture.completedFuture(null);
+        return recorded;
     }
 
     /**
@@ -443,9 +605,9 @@ public class WorkflowEngine implements
     }
 
     private CompletableFuture<Void> loadRunningWorkflows(Segment segment,
-                                                         @Nullable TrackingToken claimedFrom,
                                                          ProcessingContext sourcingContext,
-                                                         ProcessingContext executionContext) {
+                                                         ProcessingContext executionContext,
+                                                         Predicate<String> adoptsAsHibernated) {
         return workflowStore.loadRunningWorkflows(sourcingContext)
                             .thenCompose(runningWorkflows -> {
                                 var ownedIds = runningWorkflows.workflowIds()
@@ -453,6 +615,7 @@ public class WorkflowEngine implements
                                                                .filter(id -> WorkflowSegmentOwnership.ownedBy(
                                                                        segment, id
                                                                ))
+                                                               .filter(adoptsAsHibernated.negate())
                                                                .toList();
                                 if (ownedIds.isEmpty()) {
                                     logger.debug("No running workflows to rehydrate for segment {}.",
@@ -564,9 +727,35 @@ public class WorkflowEngine implements
         execution.initializeState(state);
         var storedExecution = workflowExecutionRepository.save(workflowId, () -> execution);
         storedExecution.restoreAppendPosition(restoredAt);
-        checkpointWorkIndex.register(
-                storedExecution.workflowId(), storedExecution::registerCheckpointWorkStateListener
-        );
+        registerCheckpointWork(storedExecution);
+    }
+
+    /**
+     * Loads a hibernated workflow back from the event store and starts it, as the hibernation support's
+     * {@link WorkflowEngineHibernationSupport.WorkflowLoader}. The given action runs on the loaded execution before its
+     * body starts.
+     */
+    private void loadWorkflow(String workflowId,
+                              ProcessingContext executionContext,
+                              @Nullable Segment segment,
+                              Consumer<WorkflowExecution> beforeStart) {
+        restoreWorkflow(workflowId, executionContext, executionContext)
+                .orTimeout(restoreTimeout.toMillis(), TimeUnit.MILLISECONDS)
+                .join();
+        var execution = workflowExecutionRepository.findById(workflowId).orElseThrow();
+        if (execution.state().workflowStatus().isTerminal()) {
+            // Another node ended it while it hibernated here: forget it, as a claim does.
+            removeExecution(workflowId);
+            logger.debug("Workflow [{}] ended elsewhere while it hibernated here.", workflowId);
+            return;
+        }
+        beforeStart.accept(execution);
+        // A workflow adopted by a claim can wake while its segment catches up. It then starts with the other restored
+        // executions once the segment caught up, like them.
+        if (isSegmentCaughtUp(segment)) {
+            registerCancellation(execution);
+            execute(execution, segment);
+        }
     }
 
     /**
@@ -586,6 +775,10 @@ public class WorkflowEngine implements
         workflowExecutionRepository.removeAll(terminal);
         terminalExecutions.forEach(execution -> checkpointWorkIndex.markSafe(execution.workflowId()));
         var executionsToStart = workflowExecutionRepository.findAll(owned.and(execution -> !execution.isRunning()));
+        // From here on, a woken workflow of this segment starts itself, as it is not among the executions started here.
+        if (hibernation != null) {
+            hibernation.arm(segment);
+        }
         if (executionsToStart.isEmpty()) {
             logger.debug("No restored workflow executions require startup {}.", phase);
             return;
@@ -629,12 +822,33 @@ public class WorkflowEngine implements
 
     private void registerCancellation(WorkflowExecution execution) {
         if (execution instanceof WorkflowCancellationProvider provider) {
-            workflowCancellationService.register(execution.workflowId(), provider.workflowCancellation());
+            var cancellation = provider.workflowCancellation();
+            workflowCancellationService.register(
+                    execution.workflowId(),
+                    hibernation == null ? cancellation : hibernation.decorate(execution, cancellation)
+            );
         } else {
             throw new IllegalStateException(
                     "Provided workflow execution {} does not implement WorkflowCancellationProvider, but the cancellation was registered.".formatted(
                             execution.workflowId()));
         }
+    }
+
+    /**
+     * Lets the checkpoint work index follow the given execution, and lets the execution hibernate when hibernation is
+     * enabled.
+     */
+    private void registerCheckpointWork(WorkflowExecution execution) {
+        var support = hibernation;
+        if (support == null) {
+            checkpointWorkIndex.register(execution.workflowId(), execution::registerCheckpointWorkStateListener);
+            return;
+        }
+        checkpointWorkIndex.register(
+                execution.workflowId(),
+                listener -> execution.registerCheckpointWorkStateListener(support.decorate(execution, listener))
+        );
+        support.allow(execution);
     }
 
     /**
@@ -660,6 +874,9 @@ public class WorkflowEngine implements
      * requests no checkpoint.
      */
     public void shutdown() {
+        if (hibernation != null) {
+            hibernation.stop();
+        }
         var executions = workflowExecutionRepository.findAll();
         logger.info("Shutting down WorkflowEngine: interrupting running steps of {} workflow instance(s).",
                     executions.size());
@@ -668,6 +885,7 @@ public class WorkflowEngine implements
         }
         workflowExecutionRepository.clear();
         checkpointWorkIndex.clear();
+        waitIndex.clear();
         workflowCancellationService.clear();
     }
 

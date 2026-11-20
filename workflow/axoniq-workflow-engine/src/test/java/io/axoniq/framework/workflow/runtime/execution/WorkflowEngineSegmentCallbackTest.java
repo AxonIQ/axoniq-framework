@@ -79,8 +79,9 @@ class WorkflowEngineSegmentCallbackTest {
     @Test
     void aClaimWhoseStateLoadNeverCompletesFailsInsteadOfHoldingTheSegment() {
         var workflowStore = mock(WorkflowStore.class);
-        // A load that never completes, which is what a hanging store looks like from here.
+        // Loads that never complete, which is what a hanging store looks like from here.
         when(workflowStore.loadRunningWorkflows(any())).thenReturn(new CompletableFuture<>());
+        when(workflowStore.loadWaitAssociations(any())).thenReturn(new CompletableFuture<>());
         var engine = engine(new InMemoryWorkflowExecutionRepository(), workflowStore);
 
         var claim = engine.restoreWorkflowsFor(SEGMENT,

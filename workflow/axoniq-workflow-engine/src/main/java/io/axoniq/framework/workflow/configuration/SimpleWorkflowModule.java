@@ -12,6 +12,7 @@ import io.axoniq.framework.workflow.dsl.api.WorkflowContext;
 import io.axoniq.framework.workflow.history.inmemory.InMemoryWorkflowHistoryRepository;
 import io.axoniq.framework.workflow.history.inmemory.MutableWorkflowHistoryRepository;
 import io.axoniq.framework.workflow.history.inmemory.WorkflowHistoryProjector;
+import io.axoniq.framework.workflow.history.inmemory.WorkflowHistorySequencingPolicy;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContextFactory;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowDefinition;
@@ -26,6 +27,7 @@ import io.axoniq.framework.workflow.runtime.execution.WorkflowConfigurationRegis
 import io.axoniq.framework.workflow.runtime.execution.WorkflowEngine;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowEngineCheckpointingSupport;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowExecutionRepository;
+import io.axoniq.framework.workflow.runtime.execution.WorkflowScheduler;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowStore;
 import org.axonframework.common.AxonConfigurationException;
 import org.axonframework.common.annotation.Internal;
@@ -49,6 +51,8 @@ import org.axonframework.messaging.eventstreaming.EventCriteria;
 import org.axonframework.messaging.eventstreaming.StreamableEventSource;
 import org.jspecify.annotations.Nullable;
 
+import java.time.Clock;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -57,6 +61,7 @@ import java.util.function.Function;
 
 import static java.util.Objects.requireNonNull;
 import static org.axonframework.common.BuilderUtils.assertPositive;
+import static org.axonframework.common.BuilderUtils.assertStrictPositive;
 
 /**
  * Workflow module used to create multiple {@link WorkflowConfiguration} (one per workflow definition) defined for the
@@ -97,6 +102,8 @@ class SimpleWorkflowModule<C extends WorkflowContext>
             psepConfig -> psepConfig;
     private boolean useHistory = true;
     private long checkpointInterval = 0L;
+    private boolean hibernation = false;
+    private long hibernationInterval = 30_000L;
     private ComponentBuilder<MutableWorkflowHistoryRepository> historyRepository =
             config -> new InMemoryWorkflowHistoryRepository();
     private Function<PooledStreamingEventProcessorConfiguration, PooledStreamingEventProcessorConfiguration> historyConfigCustomizer =
@@ -202,6 +209,19 @@ class SimpleWorkflowModule<C extends WorkflowContext>
     }
 
     @Override
+    public OptionalPhase<C> withHibernation() {
+        this.hibernation = true;
+        return this;
+    }
+
+    @Override
+    public OptionalPhase<C> hibernationInterval(long hibernationInterval) {
+        assertStrictPositive(hibernationInterval, "The hibernation interval must be positive.");
+        this.hibernationInterval = hibernationInterval;
+        return this;
+    }
+
+    @Override
     public OptionalPhase<C> historyProcessorConfiguration(
             Function<PooledStreamingEventProcessorConfiguration, PooledStreamingEventProcessorConfiguration> historyProcessorConfiguration
     ) {
@@ -301,6 +321,16 @@ class SimpleWorkflowModule<C extends WorkflowContext>
                                       engine.setCheckpointingSupport(
                                               c.getComponent(WorkflowEngineCheckpointingSupport.class)
                                       );
+                                      if (hibernation) {
+                                          engine.enableHibernation(
+                                                  c.getComponent(WorkflowScheduler.class),
+                                                  c.getComponent(Clock.class),
+                                                  name,
+                                                  Duration.ofMillis(hibernationInterval),
+                                                  c.getComponent(ExecutorService.class,
+                                                                 WorkflowConfigurationDefaults.WORKFLOW_ENGINE_EXECUTOR)
+                                          );
+                                      }
                                   })
                                   .onShutdown(POST_PROCESSOR_SHUTDOWN_PHASE, WorkflowEngine::shutdown);
     }
@@ -448,8 +478,7 @@ class SimpleWorkflowModule<C extends WorkflowContext>
 
     private EventHandlingComponent historyHandlingComponent(Configuration config) {
         return new SequenceOverridingEventHandlingComponent(
-                config.getComponent(WorkflowEngine.class, engineName())
-                      .segmentedRouting(),
+                new WorkflowHistorySequencingPolicy(),
                 new EventHandlingComponentHandlingAny(
                         config.getComponent(WorkflowHistoryProjector.class, historyProjectorName())
                 )

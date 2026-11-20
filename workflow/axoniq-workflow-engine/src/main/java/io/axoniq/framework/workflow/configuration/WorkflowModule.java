@@ -266,6 +266,8 @@ public interface WorkflowModule<C extends WorkflowContext> extends Module {
      *         {@link PooledStreamingEventProcessorConfiguration} backing this module's event processor.</li>
      *     <li>{@link #withHistory(ComponentBuilder)} / {@link #withoutHistory()} - enable or disable workflow history
      *         tracking.</li>
+     *     <li>{@link #withHibernation()} / {@link #hibernationInterval(long)} - unload idle workflows from memory while
+     *         they wait, and set how often the engine asks them to.</li>
      *     <li>{@link #historyProcessorConfiguration(Function)} - customize the
      *         {@link PooledStreamingEventProcessorConfiguration} backing the history projector's own event
      *         processor.</li>
@@ -362,6 +364,39 @@ public interface WorkflowModule<C extends WorkflowContext> extends Module {
          * @return this phase, for further optional configuration
          */
         OptionalPhase<C> withoutHistory();
+
+        /**
+         * Enables hibernation of the workflows in this module. Disabled by default.
+         * <p>
+         * A hibernated workflow is removed from memory while it only waits for an external event or a deadline. It is
+         * restored from the event store when that event arrives or that deadline expires, and replays its history to
+         * the point where it waited. A workflow hibernates only at a safe point: its body waits on a step result, and
+         * every active step is an open {@code waitForEvent} or {@code sleep}. A running {@code execute} step keeps it
+         * in memory.
+         * <p>
+         * Enable it for workflows that wait for days or months. Keep it disabled for many short-lived workflows: every
+         * wake replays the workflow history, and so does every restart of the application. Workflows that need
+         * different settings go into separate workflow modules.
+         *
+         * @return this phase, for further optional configuration
+         */
+        OptionalPhase<C> withHibernation();
+
+        /**
+         * Sets the time between 2 hibernation passes of this module, in milliseconds. A pass asks every workflow in
+         * memory to hibernate when it is safe to. A wake that failed, for example because the event store was
+         * unreachable, is tried again after the same time.
+         * <p>
+         * Defaults to 30 seconds. It has no effect unless {@link #withHibernation()} is set.
+         *
+         * @param hibernationInterval the time, in milliseconds, between 2 hibernation passes
+         * @return this phase, for further optional configuration
+         * @throws org.axonframework.common.AxonConfigurationException if {@code hibernationInterval} is not positive
+         * @throws UnsupportedOperationException                       if this phase does not support hibernation
+         */
+        default OptionalPhase<C> hibernationInterval(long hibernationInterval) {
+            throw new UnsupportedOperationException();
+        }
 
         /**
          * Applies the given {@code historyProcessorConfiguration} function to the

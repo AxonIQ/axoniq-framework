@@ -258,6 +258,7 @@ public class WorkflowProperties {
         private boolean enabled = false;
         private final SnapshotPolicyProperties runningWorkflows = new SnapshotPolicyProperties();
         private final SnapshotPolicyProperties workflowState = new SnapshotPolicyProperties();
+        private final SnapshotPolicyProperties waitAssociations = new SnapshotPolicyProperties();
 
         /**
          * Returns whether snapshots are taken.
@@ -295,6 +296,16 @@ public class WorkflowProperties {
          */
         public SnapshotPolicyProperties getWorkflowState() {
             return workflowState;
+        }
+
+        /**
+         * The snapshot properties of the open-wait list, under the
+         * {@code axon.workflow.snapshots.wait-associations} prefix.
+         *
+         * @return the snapshot properties of the open-wait list
+         */
+        public SnapshotPolicyProperties getWaitAssociations() {
+            return waitAssociations;
         }
     }
 

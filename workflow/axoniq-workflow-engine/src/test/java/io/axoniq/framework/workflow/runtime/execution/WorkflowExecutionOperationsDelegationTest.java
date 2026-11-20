@@ -10,6 +10,7 @@ package io.axoniq.framework.workflow.runtime.execution;
 import io.axoniq.framework.workflow.dsl.api.WorkflowContext;
 import io.axoniq.framework.workflow.dsl.api.WorkflowState;
 import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
+import io.axoniq.framework.workflow.runtime.api.execution.context.PrimitiveCommands;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
 import org.axonframework.common.infra.ComponentDescriptor;
@@ -24,6 +25,7 @@ import java.time.Clock;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static io.axoniq.framework.workflow.configuration.WorkflowConfigurationDefaults.WORKFLOW_ENGINE_EXECUTOR;
 import static io.axoniq.framework.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.defaults;
@@ -142,6 +144,38 @@ class WorkflowExecutionOperationsDelegationTest {
 
             verify(descriptor).describeProperty("workflowId", "workflow-id");
             verify(descriptor).describeProperty("workflowName", "Order workflow");
+        }
+    }
+
+    @Nested
+    class StepsInProgress {
+
+        @Test
+        void markTheirOwnWaitsAsWaitsOfTheEngine() throws InterruptedException {
+            // given
+            var stepInProgressWhileWaiting = new AtomicBoolean();
+            doAnswer(invocation -> {
+                stepInProgressWhileWaiting.set(delegation.isStepInProgress());
+                return null;
+            }).when(workflowExecution).awaitStateChange(any());
+
+            // when
+            delegation.version(PrimitiveCommands.version("migrate-order", "2.0.0", defaults()));
+
+            // then
+            verify(workflowExecution).awaitStateChange(any());
+            assertThat(stepInProgressWhileWaiting).isTrue();
+            assertThat(delegation.isStepInProgress()).isFalse();
+        }
+
+        @Test
+        void endTheirMarkWhenTheyFail() {
+            // when the workflow already runs version 1.2.3, a downgrade is rejected
+            var downgrade = PrimitiveCommands.version("migrate-order", "1.0.0", defaults());
+            assertThatThrownBy(() -> delegation.version(downgrade)).isInstanceOf(IllegalArgumentException.class);
+
+            // then
+            assertThat(delegation.isStepInProgress()).isFalse();
         }
     }
 

@@ -77,6 +77,8 @@ class WorkflowEngineSegmentFailoverTest {
         running.evolve(MetadataUtils.create(OWNED_ID, WorkflowStatus.STARTED));
         running.evolve(MetadataUtils.create(foreignId, WorkflowStatus.STARTED));
         when(workflowStore.loadRunningWorkflows(any())).thenReturn(CompletableFuture.completedFuture(running));
+        when(workflowStore.loadWaitAssociations(any()))
+                .thenReturn(CompletableFuture.completedFuture(new EventSourcedWaitAssociations()));
         when(workflowStore.loadWorkflow(eq(OWNED_ID), any()))
                 .thenReturn(CompletableFuture.failedFuture(new IllegalStateException("sourced")));
 
