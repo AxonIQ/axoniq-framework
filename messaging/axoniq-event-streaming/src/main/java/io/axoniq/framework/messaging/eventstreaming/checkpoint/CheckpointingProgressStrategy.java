@@ -77,6 +77,18 @@ public final class CheckpointingProgressStrategy implements SegmentProgressStrat
      * checkpoint request is a no-op (a late async-write acknowledgement has no safe point left to record).
      */
     private final AtomicBoolean checkpointsReleased = new AtomicBoolean();
+    /**
+     * Fully-deferred mode only: the agreement the participants did not reach at once, awaited off the worker thread.
+     * While it is awaited, later requests are merged into {@link #requestedDuringAgreement} and follow it.
+     */
+    private final AtomicReference<@Nullable CompletableFuture<@Nullable TrackingToken>> awaitedAgreement =
+            new AtomicReference<>();
+    private final AtomicReference<@Nullable TrackingToken> requestedDuringAgreement = new AtomicReference<>();
+    /**
+     * Fully-deferred mode only: a position the participants agreed to off the worker thread, stored by the next cycle
+     * without asking them again.
+     */
+    private final AtomicReference<@Nullable TrackingToken> agreedCheckpoint = new AtomicReference<>();
     private final CheckpointTrigger trigger = this::onCheckpointRequested;
 
     /**
@@ -111,8 +123,10 @@ public final class CheckpointingProgressStrategy implements SegmentProgressStrat
      *     <li><b>Auto mode</b> checkpoints at the batch-end token ({@code lastConsumedToken}); a participant is
      *     therefore forced to cover it.</li>
      *     <li><b>Fully-deferred mode</b> stores the requested position when a participant explicitly requested a
-     *     checkpoint. Without a request, it stores the consumed position when the stored token already covers every
-     *     event handed to the participants, so the segment only moved past skipped events.</li>
+     *     checkpoint, once the participants agree to it. When they cannot agree at once, nothing is stored for this
+     *     batch, and the next cycle after they agree stores the agreed position. Without a request, it stores the
+     *     consumed position when the stored token already covers every event handed to the participants, so the segment
+     *     only moved past skipped events.</li>
      * </ul>
      * A requested or batch-end position is stored only after the participants are {@link #reconcile(Map) reconciled}
      * to a single agreed position, so no participant is left ahead of the stored token. The skipped-events position
@@ -120,6 +134,12 @@ public final class CheckpointingProgressStrategy implements SegmentProgressStrat
      */
     @Override
     public CompletableFuture<Void> onBatchCommit(ProcessingContext processingContext) {
+        TrackingToken agreed = autoCheckpointing ? null : agreedCheckpoint.getAndSet(null);
+        if (agreed != null) {
+            // Agreed off the worker thread: store it without asking the participants again. A request made since then
+            // stays pending for the next cycle.
+            return context.persistProgress(agreed, processingContext);
+        }
         TrackingToken pending = requestedCheckpoint.getAndSet(null);
         if (!autoCheckpointing && pending == null) {
             return context.persistProgress(skippedEventsPosition(), processingContext);
@@ -132,9 +152,74 @@ public final class CheckpointingProgressStrategy implements SegmentProgressStrat
         if (requested == null) {
             return emptyCompletedFuture();
         }
-        return persistOnCallingThread(requestEach(participant -> requestAdvance(participant, requested))
-                                              .thenCompose(this::reconcile),
-                                      processingContext);
+        return autoCheckpointing
+                ? persistOnCallingThread(agreeOn(requested), processingContext)
+                : persistOnceAgreed(requested, processingContext);
+    }
+
+    private CompletableFuture<@Nullable TrackingToken> agreeOn(TrackingToken requested) {
+        return requestEach(participant -> requestAdvance(participant, requested)).thenCompose(this::reconcile);
+    }
+
+    /**
+     * Stores the requested position once the participants agree to it, without holding the worker while they cannot
+     * yet. A participant agrees once its work up to that position is safe, and that work may wait for events this very
+     * worker still has to hand over, so waiting here could only end in a timeout that fails the batch and releases the
+     * segment.
+     * <p>
+     * An agreement reached at once is stored in this batch. Otherwise it is awaited off the worker thread, and the next
+     * cycle after it is reached stores the agreed position. One agreement is awaited at a time: requests made meanwhile
+     * are merged and follow it, so a participant is not asked again while it still works toward the previous request.
+     * Only fully-deferred mode does this: in auto mode, the co-located handlers commit with this batch, so its token
+     * must be stored with it.
+     */
+    private CompletableFuture<Void> persistOnceAgreed(TrackingToken requested, ProcessingContext processingContext) {
+        var awaited = awaitedAgreement.get();
+        if (awaited != null && !awaited.isDone()) {
+            requestedDuringAgreement.accumulateAndGet(requested,
+                                                      (current, next) -> current == null
+                                                              ? requested
+                                                              : current.upperBound(requested));
+            if (awaited.isDone()) {
+                // The agreement completed while this request was merged: make sure the request still follows it.
+                followUpRequestsMadeDuringAgreement();
+            }
+            return emptyCompletedFuture();
+        }
+        var agreed = agreeOn(requested);
+        if (agreed.isDone()) {
+            return persistOnCallingThread(agreed, processingContext);
+        }
+        awaitedAgreement.set(agreed);
+        agreed.whenComplete((agreedToken, error) -> {
+            if (error != null) {
+                logger.warn("The checkpointing components of {} could not agree on checkpoint {}; nothing is stored "
+                                    + "for it.",
+                            context.segment(), requested, error);
+            } else {
+                storeAgreed(agreedToken);
+            }
+            followUpRequestsMadeDuringAgreement();
+        });
+        return emptyCompletedFuture();
+    }
+
+    private void storeAgreed(@Nullable TrackingToken agreedToken) {
+        if (agreedToken == null || checkpointsReleased.get()) {
+            return;
+        }
+        agreedCheckpoint.accumulateAndGet(agreedToken,
+                                          (current, next) -> current == null
+                                                  ? agreedToken
+                                                  : current.upperBound(agreedToken));
+        context.scheduleWorker();
+    }
+
+    private void followUpRequestsMadeDuringAgreement() {
+        var waiting = requestedDuringAgreement.getAndSet(null);
+        if (waiting != null) {
+            onCheckpointRequested(waiting);
+        }
     }
 
     /**
@@ -152,8 +237,8 @@ public final class CheckpointingProgressStrategy implements SegmentProgressStrat
 
     @Override
     public boolean hasPendingWork() {
-        // Out-of-band request signal only: a checkpoint requested between worker cycles needs a cycle to be stored.
-        return requestedCheckpoint.get() != null;
+        // Out-of-band signal only: a checkpoint requested or agreed between worker cycles needs a cycle to be stored.
+        return requestedCheckpoint.get() != null || agreedCheckpoint.get() != null;
     }
 
     @Override
