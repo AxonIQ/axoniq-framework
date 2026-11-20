@@ -23,7 +23,7 @@
     <description>Collection of examples used for demonstration and test purposes.</description>
 
     <modules>
-        <!-- empty so far -->
+        <module>workflow-load-runner</module>
     </modules>
 
     <dependencyManagement>

@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ~ Copyright (c) 2010-2026. Axoniq B.V.
+  ~
+  ~ Licensed under the Axoniq Terms of Service (the "Terms"). You may not
+  ~ use this file except in compliance with the Terms, available at
+  ~ https://www.axoniq.io/legal/terms-of-service
+  -->
+<!-- The load runner stops the application in its own shutdown hook, and logs while doing so. -->
+<Configuration status="WARN" shutdownHook="disable">
+    <Appenders>
+        <Console name="Console" target="SYSTEM_OUT">
+            <PatternLayout pattern="%d{HH:mm:ss.SSS} %-5level [%t] %c{1} - %msg%n"/>
+        </Console>
+        <Console name="Report" target="SYSTEM_OUT">
+            <PatternLayout pattern="%d{HH:mm:ss.SSS} %msg%n"/>
+        </Console>
+    </Appenders>
+    <Loggers>
+        <!-- The measurements and progress of the load runner -->
+        <Logger name="report" level="INFO" additivity="false">
+            <AppenderRef ref="Report"/>
+        </Logger>
+        <!-- The workflow engine logs every instance it starts or restores at INFO -->
+        <Logger name="io.axoniq.framework.workflow" level="WARN"/>
+        <!-- Hibernate warns about a DELETE that matched no rows, when emptying an empty workflow index -->
+        <Logger name="org.hibernate" level="ERROR"/>
+        <Logger name="io.grpc" level="WARN"/>
+        <Logger name="io.netty" level="WARN"/>
+        <Root level="INFO">
+            <AppenderRef ref="Console"/>
+        </Root>
+    </Loggers>
+</Configuration>
