@@ -11,7 +11,7 @@ package io.axoniq.framework.axonserver.connector.event;
 import com.google.protobuf.ByteString;
 import io.axoniq.axonserver.grpc.event.dcb.ConsistencyCondition;
 import io.axoniq.axonserver.grpc.event.dcb.Criterion;
-import io.axoniq.axonserver.grpc.event.dcb.SnapshottedSourceRequest;
+import io.axoniq.axonserver.grpc.event.dcb.SourceWithSnapshotRequest;
 import io.axoniq.axonserver.grpc.event.dcb.SourceEventsRequest;
 import io.axoniq.axonserver.grpc.event.dcb.StreamEventsRequest;
 import io.axoniq.axonserver.grpc.event.dcb.TagsAndNamesCriterion;
@@ -114,15 +114,15 @@ class ConditionConverterTest {
     }
 
     @Test
-    void convertSnapshottedSourcingConditionThrowsNullPointerExceptionForNullSourcingCondition() {
+    void convertSourcingWithSnapshotConditionThrowsNullPointerExceptionForNullSourcingCondition() {
         ByteString snapshotKey = ByteString.copyFromUtf8("test-entity");
         //noinspection DataFlowIssue
-        assertThatThrownBy(() -> ConditionConverter.convertSnapshottedSourcingCondition(null, snapshotKey))
+        assertThatThrownBy(() -> ConditionConverter.convertSourcingWithSnapshotCondition(null, snapshotKey))
                 .isInstanceOf(NullPointerException.class);
     }
 
     @Test
-    void convertSnapshottedSourcingConditionConstructsSnapshottedSourceRequestAsExpected() {
+    void convertSourcingWithSnapshotConditionConstructsSourceWithSnapshotRequestAsExpected() {
         // given...
         ByteString snapshotKey = ByteString.copyFromUtf8("test-entity" + '\0' + "entity-id");
         SourcingCondition testCondition = SourcingCondition.conditionFor(
@@ -141,11 +141,13 @@ class ConditionConverterTest {
                              .havingTags(Tag.of("key1OnCriterion3", "value1OnCriterion3"))
         );
         // when...
-        SnapshottedSourceRequest result = ConditionConverter.convertSnapshottedSourcingCondition(
+        SourceWithSnapshotRequest result = ConditionConverter.convertSourcingWithSnapshotCondition(
                 testCondition, snapshotKey
         );
         // then...
-        assertThat(result.getSnapshotKey()).isEqualTo(snapshotKey);
+        assertThat(result.getCandidateList()).hasSize(1);
+        assertThat(result.getCandidate(0).getKey()).isEqualTo(snapshotKey);
+        assertThat(result.getCandidate(0).getAcceptableVersionList()).isEmpty();
         List<Criterion> resultCriterion = result.getCriterionList();
         assertThat(resultCriterion).hasSize(3);
         validateCriterion(resultCriterion.getFirst().getTagsAndNames());
