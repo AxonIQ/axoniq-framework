@@ -40,6 +40,7 @@ import static java.util.Objects.requireNonNull;
  * WorkflowConfigurer.create()
  *                   .registerWorkflowIndex(config -> new MyWorkflowIndex(...));
  * }</pre>
+ * In Spring Boot, define a bean of type {@code WorkflowIndex} instead.
  *
  * <h2>The index position is the token of the event processor</h2>
  * The index does not record a position of its own. The engine keeps every change that is not written yet in memory,
@@ -138,8 +139,9 @@ public interface WorkflowIndex {
      * The workflow engine keeps no index state at all with this index: it neither tracks nor writes the changes to the
      * running instances, and its checkpoints never wait for them, so it behaves as an engine without an index.
      * <p>
-     * This is the default when no other index is configured, as an index kept by one node only cannot tell whether the
-     * tokens stored by other nodes, or before a restart, passed changes it never saw.
+     * This is the default when no other index is configured, also in Spring Boot unless {@code axon.workflow.index}
+     * selects one, as an index kept by one node only cannot tell whether the tokens stored by other nodes, or before a
+     * restart, passed changes it never saw.
      *
      * @return an index that keeps nothing
      */

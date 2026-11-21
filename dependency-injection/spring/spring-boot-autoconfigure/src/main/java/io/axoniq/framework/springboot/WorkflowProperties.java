@@ -84,9 +84,22 @@ public class WorkflowProperties {
      * The minimum time, in milliseconds, between two checkpoint requests of one segment of the workflow event
      * processor.
      * <p>
-     * Defaults to {@code 0}, which requests a checkpoint after every event.
+     * A request within the interval is dropped, so the stored position lags by up to one interval, and the events of
+     * that interval are processed again after a restart. A segment that goes idle keeps that lag until its next event,
+     * or until the processor releases it. Defaults to {@code 0}, which requests a checkpoint after every event.
      */
     private long checkpointInterval = 0L;
+
+    /**
+     * The index of running workflow instances the workflow engine keeps, so that claiming a segment does not read every
+     * workflow lifecycle event ever written.
+     * <p>
+     * Defaults to {@link WorkflowIndexType#NONE}: every claim reads the running workflow instances from the event
+     * store. {@link WorkflowIndexType#JPA} keeps the index in the application's database, which requires an
+     * {@code EntityManagerFactory} bean. A {@code WorkflowIndex} bean the application defines is used whatever this
+     * property says.
+     */
+    private WorkflowIndexType index = WorkflowIndexType.NONE;
     private final HistoryProcessorProperties history = new HistoryProcessorProperties();
     private final SnapshotProperties snapshots = new SnapshotProperties();
 
@@ -204,7 +217,9 @@ public class WorkflowProperties {
      * Returns the minimum time, in milliseconds, between two checkpoint requests of one segment of the workflow event
      * processor.
      * <p>
-     * Defaults to {@code 0}, which requests a checkpoint after every event.
+     * A request within the interval is dropped, so the stored position lags by up to one interval, and the events of
+     * that interval are processed again after a restart. A segment that goes idle keeps that lag until its next event,
+     * or until the processor releases it. Defaults to {@code 0}, which requests a checkpoint after every event.
      *
      * @return the checkpoint interval, in milliseconds, where {@code 0} requests a checkpoint after every event
      */
@@ -216,7 +231,9 @@ public class WorkflowProperties {
      * Sets the minimum time, in milliseconds, between two checkpoint requests of one segment of the workflow event
      * processor.
      * <p>
-     * Defaults to {@code 0}, which requests a checkpoint after every event.
+     * A request within the interval is dropped, so the stored position lags by up to one interval, and the events of
+     * that interval are processed again after a restart. A segment that goes idle keeps that lag until its next event,
+     * or until the processor releases it. Defaults to {@code 0}, which requests a checkpoint after every event.
      *
      * @param checkpointInterval the checkpoint interval, in milliseconds, where {@code 0} requests a checkpoint after
      *                           every event
@@ -240,12 +257,51 @@ public class WorkflowProperties {
     }
 
     /**
+     * Returns the index of running workflow instances the workflow engine keeps.
+     *
+     * @return the type of workflow index, {@link WorkflowIndexType#NONE} unless configured otherwise
+     */
+    public WorkflowIndexType getIndex() {
+        return index;
+    }
+
+    /**
+     * Sets the index of running workflow instances the workflow engine keeps.
+     *
+     * @param index the type of workflow index
+     */
+    public void setIndex(WorkflowIndexType index) {
+        this.index = index;
+    }
+
+    /**
      * The snapshot properties of the workflow engine, under the {@code axon.workflow.snapshots} prefix.
      *
      * @return the snapshot properties of the workflow engine
      */
     public SnapshotProperties getSnapshots() {
         return snapshots;
+    }
+
+    /**
+     * The types of index of running workflow instances the workflow engine can keep, selected through the
+     * {@code axon.workflow.index} property.
+     */
+    public enum WorkflowIndexType {
+
+        /**
+         * Keeps no index: every claim of a segment reads the running workflow instances from the event store.
+         */
+        NONE,
+        /**
+         * Keeps the index in the application's database through a
+         * {@link io.axoniq.framework.workflow.index.jpa.JpaWorkflowIndex}.
+         * <p>
+         * Enable it only once every node that runs the workflow modules uses it: a node without the index advances the
+         * tokens without writing the index. See the reference guide for introducing the index into a running
+         * application.
+         */
+        JPA
     }
 
     /**

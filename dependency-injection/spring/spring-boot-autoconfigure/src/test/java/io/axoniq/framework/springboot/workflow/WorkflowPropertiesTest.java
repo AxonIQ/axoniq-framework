@@ -91,6 +91,19 @@ class WorkflowPropertiesTest {
     }
 
     @Test
+    void indexBindsFromTheApplicationProperties() {
+        contextRunner.withPropertyValues("axon.workflow.index=jpa")
+                     .run(context -> assertThat(context.getBean(WorkflowProperties.class).getIndex())
+                             .isEqualTo(WorkflowProperties.WorkflowIndexType.JPA));
+    }
+
+    @Test
+    void indexDefaultsToKeepingNoIndex() {
+        contextRunner.run(context -> assertThat(context.getBean(WorkflowProperties.class).getIndex())
+                .isEqualTo(WorkflowProperties.WorkflowIndexType.NONE));
+    }
+
+    @Test
     void everyPropertyDefaultsToTheSameValueAsEventProcessorPropertiesProcessorSettings() {
         contextRunner.run(context -> {
             var properties = context.getBean(WorkflowProperties.class);

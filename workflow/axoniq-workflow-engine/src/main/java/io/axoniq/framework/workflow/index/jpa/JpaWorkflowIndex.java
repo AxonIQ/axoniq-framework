@@ -62,7 +62,8 @@ import static org.axonframework.common.BuilderUtils.assertThat;
  *     <li>{@link WorkflowIndexInitialization}: one row per initialized index, with primary key
  *     {@code indexName VARCHAR(255)}.</li>
  * </ul>
- * Table and column names follow the JPA provider's naming strategy. The index does not create or migrate them. The
+ * Table and column names follow the JPA provider's naming strategy. The index does not create or migrate them. In
+ * Spring Boot, the entities are registered with the persistence unit once the index is selected. The
  * {@code workflowId} column holds the valid workflow ids the engine starts instances with, see {@link WorkflowIds}.
  * <p>
  * The index deletes and inserts its entries by workflow id, so the {@code workflowId} column must compare ids exactly:
@@ -123,7 +124,9 @@ import static org.axonframework.common.BuilderUtils.assertThat;
  *                                                    .entityManagerFactory(entityManagerFactory)
  *                                                    .build());
  * }</pre>
- * Register it only once every node that runs the workflow modules uses it.
+ * In Spring Boot, the auto-configuration registers a {@code JpaWorkflowIndex} when the application sets
+ * {@code axon.workflow.index=jpa}, an {@code EntityManagerFactory} bean is present, and no other {@code WorkflowIndex}
+ * bean is defined. Select it only once every node that runs the workflow modules uses it.
  * <p>
  * Marked {@link Internal} as a warning that API stability is not promised yet: this class is usable, and supported
  * for configuring the workflow index and for custom implementations, but its shape may still change in a minor
