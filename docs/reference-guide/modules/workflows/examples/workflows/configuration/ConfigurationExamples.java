@@ -21,7 +21,11 @@ import org.axonframework.messaging.core.correlation.MessageOriginProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.HashMap;
+import java.util.HexFormat;
 import java.util.concurrent.Executors;
 
 import static io.axoniq.framework.workflow.dsl.api.EventAssociationsUtils.equalsTo;
@@ -147,6 +151,35 @@ public class ConfigurationExamples {
                                       // end::workflow-id-provider[]
                               ));
     }
+
+    public void hashedWorkflowIdProvider() {
+        var workflow = new OrderFulfillmentWorkflow();
+
+        WorkflowModule.defaults("order-workflows", SimpleWorkflowContext.class)
+                      .definition(d -> d
+                              .declarative(c -> workflow::execute)
+                              .workflowName("OrderFulfillment")
+                              .on(EventConditions.fromType(OrderPlacedEvent.class))
+                              .customized((c, w) -> w
+                                      // tag::workflow-id-hashed[]
+                                      // The idProcessor also receives null when the event lacks the property
+                                      .workflowIdProvider(new PayloadPropertyWorkflowIdProvider(
+                                              "orderId", key -> key == null ? null : sha256Hex(key)
+                                      ))
+                                      // end::workflow-id-hashed[]
+                              ));
+    }
+
+    // tag::workflow-id-hash-function[]
+    private static String sha256Hex(String key) {
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256").digest(key.getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(digest); // 64 characters, always a valid workflow id
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 is not available", e);
+        }
+    }
+    // end::workflow-id-hash-function[]
 
     public void customizationOptions() {
         var workflow = new OrderFulfillmentWorkflow();

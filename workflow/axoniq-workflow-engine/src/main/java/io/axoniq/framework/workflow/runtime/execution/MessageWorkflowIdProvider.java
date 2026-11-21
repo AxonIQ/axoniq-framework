@@ -11,7 +11,9 @@ import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowIdProv
 import org.axonframework.messaging.eventhandling.EventMessage;
 
 /**
- * Workflow id provider using the message identifier as workflow id.
+ * Workflow id provider using the message identifier as workflow id. This is the default provider. An event identifier
+ * is a UUID unless the application assigns identifiers of its own, so the derived id is a valid workflow id, see
+ * {@link WorkflowIdProvider}.
  *
  * @author Simon Zambrovski
  * @since 5.4.0

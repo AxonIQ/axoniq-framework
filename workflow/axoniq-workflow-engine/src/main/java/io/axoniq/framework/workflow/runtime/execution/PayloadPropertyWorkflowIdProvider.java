@@ -19,7 +19,17 @@ import java.util.function.UnaryOperator;
 import static io.axoniq.framework.workflow.runtime.execution.EventSourcedWorkflowState.PAYLOAD_TYPE;
 
 /**
- * Workflow id provider accessing event message property.
+ * Workflow id provider reading the id from a property of the event's payload, optionally transforming it with an id
+ * processor.
+ * <p>
+ * The derived id must be a valid workflow id, see {@link WorkflowIdProvider}: at least one and at most 255
+ * characters, all printable ASCII. When the property may hold a longer or non-ASCII value, use the id processor to
+ * derive a valid id from it, for example its SHA-256 hash:
+ * <pre>{@code
+ * new PayloadPropertyWorkflowIdProvider("documentPath", path -> path == null ? null : sha256Hex(path))
+ * }</pre>
+ * The id processor also receives {@code null} when the payload lacks the property, and should then return {@code null},
+ * so the engine reports that no id could be derived.
  *
  * @author Simon Zambrovski
  * @since 5.4.0
@@ -43,7 +53,9 @@ public class PayloadPropertyWorkflowIdProvider implements WorkflowIdProvider {
      * Constructs id provider.
      *
      * @param attributeName name of the payload attribute.
-     * @param idProcessor   processor called on the result of attribute extractor.
+     * @param idProcessor   processor called on the result of attribute extractor, or on {@code null} when the
+     *                      payload lacks the attribute; must return a valid workflow id, see
+     *                      {@link WorkflowIdProvider}
      */
     public PayloadPropertyWorkflowIdProvider(
             String attributeName,

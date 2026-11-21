@@ -17,6 +17,10 @@ import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContex
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionFactory;
 import io.axoniq.framework.workflow.runtime.util.MetadataUtils;
+import org.apache.logging.log4j.Level;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.core.Logger;
+import org.apache.logging.log4j.core.test.appender.ListAppender;
 import org.axonframework.common.TypeReference;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.Metadata;
@@ -26,6 +30,7 @@ import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.StubProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventMessage;
+import org.axonframework.messaging.eventhandling.GenericEventMessage;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.GlobalSequenceTrackingToken;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
@@ -61,6 +66,9 @@ import static org.mockito.Mockito.*;
  *     <li><b>a {@code workflowIdProvider} deriving no id</b> - a misconfiguration, so that definition alone is
  *     dropped from the candidate set and skipped by the start path instead of stalling the segment, see
  *     {@link #aDefinitionDerivingNoWorkflowIdIsSkippedInsteadOfFailingTheWorkPackage()};</li>
+ *     <li><b>a {@code workflowIdProvider} deriving an invalid id</b> - logged and skipped like a missing id, so later
+ *     starts on that segment still run, see
+ *     {@link #aDefinitionDerivingAnInvalidWorkflowIdIsSkippedAndTheNextValidStartStillStarts()};</li>
  *     <li><b>several registered versions</b> - only the highest contributes a candidate, so the count is per
  *     definition and not per registration.</li>
  * </ul>
@@ -195,6 +203,10 @@ class NewInstanceCandidateRoutingTest {
 
     private static EventMessage unregisteredEvent() {
         return businessEvent(UNREGISTERED_EVENT);
+    }
+
+    private static EventMessage startEventWithId(String id) {
+        return new GenericEventMessage(new MessageType(START_EVENT), Map.of("id", id));
     }
 
     private static EventMessage businessEvent(QualifiedName name) {
@@ -376,6 +388,43 @@ class NewInstanceCandidateRoutingTest {
                 .doesNotThrowAnyException();
 
         assertThat(started).as("there is no id to start under, so no instance is created").isEmpty();
+    }
+
+    @Test
+    void aDefinitionDerivingAnInvalidWorkflowIdIsSkippedAndTheNextValidStartStillStarts() {
+        // given - a definition reading its id from the payload, and an event carrying an id longer than 255 characters
+        register("Alpha", "1.0.0", always(), new PayloadPropertyWorkflowIdProvider("id")::apply);
+        var invalidId = "order-" + "w".repeat(250);
+        var validId = "order-2";
+        Logger logger = (Logger) LogManager.getLogger(NewWorkflowInstanceRouting.class);
+        var appender = new ListAppender("NewInstanceCandidateRoutingTest");
+        appender.start();
+        logger.addAppender(appender);
+
+        try {
+            // when - the segment owning the invalid id handles its start event, and then the next start event
+            assertThatCode(() -> engine.handle(startEventWithId(invalidId), context(owningSegment(invalidId))))
+                    .as("an invalid id must not fail the work package, as that would stall the segment")
+                    .doesNotThrowAnyException();
+            engine.handle(startEventWithId(validId), context(owningSegment(validId)));
+
+            // then - only the valid id started, and the error names the definition, the event, the reason and the id
+            assertThat(started).containsExactly(validId);
+            assertThat(appender.getEvents())
+                    .singleElement()
+                    .satisfies(event -> {
+                        assertThat(event.getLevel()).isEqualTo(Level.ERROR);
+                        assertThat(event.getMessage().getFormattedMessage())
+                                .contains("invalid workflow id",
+                                          "'Alpha' version '1.0.0'",
+                                          "'" + START_EVENT + "'",
+                                          "256 characters",
+                                          "order-" + "w".repeat(58) + "...");
+                    });
+        } finally {
+            logger.removeAppender(appender);
+            appender.stop();
+        }
     }
 
     @Test

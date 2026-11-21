@@ -143,6 +143,38 @@ The workflow ID provider determines how each workflow instance gets its unique I
 include::example$workflows/configuration/ConfigurationExamples.java[tag=workflow-id-provider,indent=0]
 ----
 
+[[workflow-id-rules]]
+=== Valid workflow IDs
+
+Whichever provider you use, a workflow ID must be valid:
+
+* It has at least one and at most 255 characters: an empty ID is not allowed.
+* Every character is printable ASCII: from the space (`0x20`) up to the tilde (`~`, `0x7E`).
+Letters with accents, other non-ASCII characters, tabs, and line breaks are not allowed.
+
+These rules keep every workflow ID storable in a `VARCHAR(255)` column, and readable in logs and in your database.
+The engine checks the ID that the provider derives from a start event.
+When the ID is invalid, the engine does not start the workflow and logs an error naming the workflow, its version, the event, why the ID is invalid, and the first 64 characters of the ID.
+The event itself is handled as usual, so later events, including starts of other workflows, are not affected.
+
+The default `MessageWorkflowIdProvider` derives a valid ID: an event identifier is a UUID, unless your application assigns identifiers of its own.
+With `idProperty`, a `PayloadPropertyWorkflowIdProvider`, or a provider of your own, make sure the derived ID is valid.
+When your business key may be longer than 255 characters, or contain other characters, derive a valid ID from it.
+For example, pass an ID processor to the `PayloadPropertyWorkflowIdProvider` that hashes the key with SHA-256, which always yields 64 hexadecimal characters:
+
+[source,java]
+----
+include::example$workflows/configuration/ConfigurationExamples.java[tag=workflow-id-hashed,indent=0]
+----
+
+[source,java]
+----
+include::example$workflows/configuration/ConfigurationExamples.java[tag=workflow-id-hash-function,indent=0]
+----
+
+With the `@Workflow` annotation, set `idPropertyProvider` to a `WorkflowIdProvider` class of your own that derives the ID the same way.
+A hashed ID is no longer readable: log the business key together with the workflow ID when you need to find a workflow by its key.
+
 == Customization options
 
 The `.customized(...)` lambda receives the Axon `Configuration` and a `WorkflowCustomization` object:

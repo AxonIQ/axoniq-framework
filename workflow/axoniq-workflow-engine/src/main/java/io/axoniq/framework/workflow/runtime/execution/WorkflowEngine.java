@@ -41,8 +41,7 @@ import java.util.function.Predicate;
 import java.util.stream.Stream;
 
 import static io.axoniq.framework.workflow.runtime.execution.EventSourcedWorkflowState.PAYLOAD_TYPE;
-import static io.axoniq.framework.workflow.runtime.execution.NewWorkflowInstanceRouting.hasDerivedWorkflowId;
-import static io.axoniq.framework.workflow.runtime.execution.NewWorkflowInstanceRouting.resolveWorkflowIdForNewInstance;
+import static io.axoniq.framework.workflow.runtime.execution.NewWorkflowInstanceRouting.*;
 import static java.util.Objects.requireNonNull;
 
 /**
@@ -308,6 +307,10 @@ public class WorkflowEngine implements
             if (!WorkflowSegmentOwnership.ownedBy(segment, baseWorkflowId)) {
                 logger.debug("Not starting workflow '{}': the instance is owned by another segment than {}.",
                              baseWorkflowId, segment);
+                return;
+            }
+            // Follows the ownership guard, so only the segment owning an invalid id logs it, once per event.
+            if (!hasValidWorkflowId(baseWorkflowId, workflowConfiguration, eventMessage)) {
                 return;
             }
             var workflowId = resolveWorkflowIdForNewInstance(
