@@ -9,6 +9,7 @@
 package io.axoniq.framework.messaging.eventstreaming.checkpoint;
 
 import org.axonframework.common.annotation.Internal;
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventHandlingComponent;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
@@ -65,15 +66,14 @@ import java.util.concurrent.CompletableFuture;
  *     "blocked" until the asynchronous work has reached the checkpoint.</li>
  * </ul>
  * <p>
- * <b>The processor awaits the returned future without a timeout</b>: it stores the checkpoint (and, on release, frees
- * the claim) only once the future completes. A future that never completes therefore stalls progress for that segment
- * indefinitely. The framework deliberately does not impose a timeout: a unit that confirms durability out of band may
- * legitimately take a long time. If a unit's asynchronous work could hang, it should bound its <em>own</em> future, for
- * example:
+ * <b>The processor stores the checkpoint (and, on release, frees the claim) only once the returned future
+ * completes.</b> A unit that confirms durability out of band may legitimately take a while, but the processor may bound
+ * how long it waits, failing the checkpoint when the future does not complete in time. If a unit's asynchronous work
+ * could hang, it should bound its <em>own</em> future, so the failure is attributed to the unit, for example:
  * <pre>{@code
  * public CompletableFuture<TrackingToken> onCheckpointAdvanced(Segment segment, TrackingToken requested) {
  *     return flushToStore(requested)            // returns CompletableFuture<TrackingToken>
- *             .orTimeout(30, TimeUnit.SECONDS);  // fails the checkpoint instead of stalling the segment forever
+ *             .orTimeout(20, TimeUnit.SECONDS);  // fails the checkpoint with the unit's own failure
  * }
  * }</pre>
  * A future completed exceptionally (whether from such a timeout or any other failure) fails the checkpoint without
@@ -166,6 +166,44 @@ public interface Checkpointing {
      * last persisted checkpoint
      */
     CompletableFuture<TrackingToken> onCheckpointAdvanced(Segment segment, TrackingToken requested);
+
+    /**
+     * Invoked instead of {@link #onCheckpointAdvanced(Segment, TrackingToken)} for the first request of a checkpoint,
+     * on the thread processing the segment, while the given {@code context} runs: the context of the batch commit, or
+     * of the cycle storing a requested checkpoint. The processor stores the token within that context when the units
+     * agree on a position right away. Every other request, such as a re-request made to reconcile several units, which
+     * may run on another thread once the context is no longer usable, and every release, goes through the methods
+     * without a context.
+     * <p>
+     * A unit whose durable state lives in the same database as the token store may write it within the transaction of
+     * that context, on the calling thread, before this method returns, so its state and the token are committed
+     * together, and the checkpoint needs no connection besides the one the processor already holds. Such writes only
+     * become durable when the context commits: when it rolls back, the checkpoint fails as well, and the unit must
+     * treat the writes as not done. The context does not always store a new token: when the checkpoint does not
+     * advance the stored token, for example when it was requested at the token the segment already stored, the writes
+     * commit without it.
+     * <p>
+     * Such writes commit only while this node owns the claim of the segment, when the token store keeps its claims in
+     * that same transaction, as a JPA token store in the same database does. Storing the token refuses a token of a
+     * claim this node no longer owns, and when no token is stored, the {@link CheckpointingProgressStrategy} of a
+     * pooled streaming processor extends the claim within the context instead, which fails the same way. Either
+     * failure rolls the writes back. A token store that keeps its claims elsewhere, or keeps none, such as the
+     * {@link org.axonframework.messaging.eventhandling.processing.streaming.token.store.inmemory.InMemoryTokenStore},
+     * does not hold the writes back.
+     * <p>
+     * Defaults to {@link #onCheckpointAdvanced(Segment, TrackingToken)}, ignoring the context.
+     *
+     * @param segment   the segment being checkpointed
+     * @param requested the segment-scoped position this checkpoint must cover
+     * @param context   the context the processor stores the checkpoint in
+     * @return the highest token this unit is durably safe at, as for
+     * {@link #onCheckpointAdvanced(Segment, TrackingToken)}
+     */
+    default CompletableFuture<TrackingToken> onCheckpointAdvanced(Segment segment,
+                                                                  TrackingToken requested,
+                                                                  ProcessingContext context) {
+        return onCheckpointAdvanced(segment, requested);
+    }
 
     /**
      * Invoked when {@code segment} is being released. Flush everything handled so far, discard the segment's local

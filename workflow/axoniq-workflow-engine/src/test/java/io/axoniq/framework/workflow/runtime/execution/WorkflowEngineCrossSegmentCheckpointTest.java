@@ -321,7 +321,9 @@ class WorkflowEngineCrossSegmentCheckpointTest {
             this.segment = segment;
             this.strategy = new CheckpointingProgressStrategy(this,
                                                               List.<Checkpointing>of(checkpointingSupport),
-                                                              autoCheckpointing);
+                                                              autoCheckpointing,
+                                                              new InMemoryTokenStore(),
+                                                              "processor");
         }
 
         @Override

@@ -9,6 +9,7 @@
 package io.axoniq.framework.messaging.eventstreaming.checkpoint;
 
 import org.axonframework.messaging.eventhandling.processing.streaming.progress.SegmentProgressStrategyFactory;
+import org.axonframework.messaging.eventhandling.processing.streaming.token.store.inmemory.InMemoryTokenStore;
 
 import java.util.List;
 
@@ -23,6 +24,7 @@ class CheckpointingProgressStrategyTest extends CheckpointingProgressStrategyTes
     @Override
     protected SegmentProgressStrategyFactory checkpointingStrategy(boolean autoCheckpointing,
                                                                    List<Checkpointing> participants) {
-        return context -> new CheckpointingProgressStrategy(context, participants, autoCheckpointing);
+        return context -> new CheckpointingProgressStrategy(context, participants, autoCheckpointing,
+                                                            new InMemoryTokenStore(), "processor");
     }
 }

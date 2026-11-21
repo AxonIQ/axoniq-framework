@@ -19,8 +19,8 @@ import org.axonframework.messaging.eventhandling.processing.streaming.pooled.Poo
  * {@link org.axonframework.messaging.eventhandling.processing.streaming.pooled.PooledStreamingEventProcessor pooled
  * streaming event processors}.
  * <p>
- * The enhancer installs {@link CheckpointingProgressStrategyFactory#detecting()} as the progress-strategy factory
- * builder on every pooled streaming processor, through the type-level
+ * The enhancer installs {@link CheckpointingProgressStrategyFactory#detecting(String, java.util.function.Supplier)}
+ * as the progress-strategy factory builder on every pooled streaming processor, through the type-level
  * {@link PooledStreamingEventProcessorModule.Customization} hook. As a result, processors whose event handling
  * components implement {@link Checkpointing} automatically defer progress to the components' checkpoint requests,
  * while processors without such components keep the default token-storing behavior.
@@ -54,13 +54,19 @@ public class CheckpointingConfigurationEnhancer implements ConfigurationEnhancer
     }
 
     /**
-     * Returns the customization installing {@link CheckpointingProgressStrategyFactory#detecting() checkpointing
-     * detection} as the progress-strategy factory builder.
+     * Returns the customization installing
+     * {@link CheckpointingProgressStrategyFactory#detecting(String, java.util.function.Supplier) checkpointing
+     * detection} as the progress-strategy factory builder, with the processor's name and token store, so a checkpoint
+     * that stores no token still checks the claim of its segment.
      *
      * @return the customization enabling self-checkpointing detection on a pooled streaming processor
      */
     private static Customization checkpointingCustomization() {
         return (config, processorConfig) ->
-                processorConfig.progressStrategyFactoryBuilder(CheckpointingProgressStrategyFactory.detecting());
+                processorConfig.progressStrategyFactoryBuilder(CheckpointingProgressStrategyFactory.detecting(
+                        processorConfig.processorName(),
+                        // Read once the processor is constructed: a later customization may set the token store.
+                        processorConfig::tokenStore
+                ));
     }
 }

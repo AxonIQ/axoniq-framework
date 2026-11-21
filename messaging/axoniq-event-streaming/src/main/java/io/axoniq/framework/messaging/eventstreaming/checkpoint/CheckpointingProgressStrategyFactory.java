@@ -14,6 +14,7 @@ import org.axonframework.messaging.eventhandling.EventHandlingComponent;
 import org.axonframework.messaging.eventhandling.processing.streaming.progress.SegmentProgressContext;
 import org.axonframework.messaging.eventhandling.processing.streaming.progress.SegmentProgressStrategy;
 import org.axonframework.messaging.eventhandling.processing.streaming.progress.SegmentProgressStrategyFactory;
+import org.axonframework.messaging.eventhandling.processing.streaming.token.store.TokenStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -22,13 +23,14 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
 /**
  * {@link SegmentProgressStrategyFactory} that produces a {@link CheckpointingProgressStrategy} for every segment of a
  * processor whose components include one or more self-checkpointing {@link Checkpointing} units. It carries the
  * processor-scoped participants and the auto/deferred mode, and creates one strategy per work package.
  * <p>
- * Use {@link #detecting()} to obtain the component-driven selector: given a processor's
+ * Use {@link #detecting(String, Supplier)} to obtain the component-driven selector: given a processor's
  * {@link EventHandlingComponent}s it inspects them for {@code Checkpointing} units (via
  * {@link EventHandlingComponent#unwrap(Class)}) and returns either this checkpointing factory (when any participate) or
  * the default {@link SegmentProgressStrategyFactory#tokenStoring() token-storing} factory (when none do).
@@ -47,20 +49,33 @@ public final class CheckpointingProgressStrategyFactory implements SegmentProgre
 
     private final List<Checkpointing> participants;
     private final boolean autoCheckpointing;
+    private final TokenStore tokenStore;
+    private final String processorName;
 
     /**
-     * Constructs a {@code CheckpointingProgressStrategyFactory} for the given {@code participants}.
+     * Constructs a {@code CheckpointingProgressStrategyFactory} for the given {@code participants}, whose strategies
+     * extend the claim of their segment through the given {@code tokenStore} for a checkpoint that hands the
+     * participants its context but stores no token, see
+     * {@link CheckpointingProgressStrategy#CheckpointingProgressStrategy(SegmentProgressContext, List, boolean,
+     * TokenStore, String)}.
      *
      * @param participants      the self-checkpointing units of the processor; must not be empty
-     * @param autoCheckpointing {@code true} when an ordinary handler is co-located (auto mode), {@code false} when every
-     *                          handler is self-checkpointing (fully-deferred)
+     * @param autoCheckpointing {@code true} when an ordinary handler is co-located (auto mode), {@code false} when
+     *                          every handler is self-checkpointing (fully-deferred)
+     * @param tokenStore        the token store of the processor, holding the claims of its segments
+     * @param processorName     the name of the processor, under which the token store holds the claims
      */
-    public CheckpointingProgressStrategyFactory(List<Checkpointing> participants, boolean autoCheckpointing) {
+    public CheckpointingProgressStrategyFactory(List<Checkpointing> participants,
+                                                boolean autoCheckpointing,
+                                                TokenStore tokenStore,
+                                                String processorName) {
         this.participants = List.copyOf(Objects.requireNonNull(participants, "The participants may not be null."));
         if (this.participants.isEmpty()) {
             throw new IllegalArgumentException("The participants may not be empty.");
         }
         this.autoCheckpointing = autoCheckpointing;
+        this.tokenStore = Objects.requireNonNull(tokenStore, "The TokenStore may not be null.");
+        this.processorName = Objects.requireNonNull(processorName, "The processor name may not be null.");
         EntitlementManager.INSTANCE.registerAddon(CheckpointingAxoniqAddon.class);
     }
 
@@ -73,10 +88,23 @@ public final class CheckpointingProgressStrategyFactory implements SegmentProgre
      * resolves} to a {@code Checkpointing} unit. The processor runs in auto mode unless <em>every</em> component is
      * self-checkpointing (fully-deferred); a mixed processor is logged, since the self-checkpointing components cannot
      * then defer the stored token.
+     * <p>
+     * The strategies of the checkpointing factory extend the claim of their segment through the token store of the
+     * processor for a checkpoint that hands the participants its context but stores no token, so the writes the
+     * participants make within that context only commit while this node owns the claim. The token store is obtained
+     * from the given {@code tokenStore} supplier once the returned function is applied, which the processor does when
+     * it is constructed, so a token store configured after this selector still applies.
      *
+     * @param processorName the name of the processor, under which the token store holds the claims of its segments
+     * @param tokenStore    supplies the token store of the processor once the processor is constructed
      * @return a function mapping a processor's components to the appropriate progress-strategy factory
      */
-    public static Function<List<EventHandlingComponent>, SegmentProgressStrategyFactory> detecting() {
+    public static Function<List<EventHandlingComponent>, SegmentProgressStrategyFactory> detecting(
+            String processorName,
+            Supplier<TokenStore> tokenStore
+    ) {
+        Objects.requireNonNull(processorName, "The processor name may not be null.");
+        Objects.requireNonNull(tokenStore, "The TokenStore supplier may not be null.");
         return components -> {
             List<Checkpointing> participants = components.stream()
                                                          .map(c -> c.unwrap(Checkpointing.class))
@@ -98,12 +126,23 @@ public final class CheckpointingProgressStrategyFactory implements SegmentProgre
                                     + "to let them control when their segment's token advances.",
                             participants.size());
             }
-            return new CheckpointingProgressStrategyFactory(participants, autoCheckpointing);
+            return new CheckpointingProgressStrategyFactory(participants, autoCheckpointing, tokenStore.get(),
+                                                            processorName);
         };
+    }
+
+    /**
+     * Returns whether the processor runs fully-deferred: every component is self-checkpointing, so the stored token
+     * only advances on their requests (and past skipped events), never at the end of a batch on its own.
+     *
+     * @return {@code true} when the processor runs fully-deferred, {@code false} when it runs in auto mode
+     */
+    public boolean isFullyDeferred() {
+        return !autoCheckpointing;
     }
 
     @Override
     public SegmentProgressStrategy create(SegmentProgressContext context) {
-        return new CheckpointingProgressStrategy(context, participants, autoCheckpointing);
+        return new CheckpointingProgressStrategy(context, participants, autoCheckpointing, tokenStore, processorName);
     }
 }

@@ -49,6 +49,14 @@ import static org.axonframework.common.FutureUtils.joinAndUnwrap;
  *     token advances on an explicit {@link CheckpointTrigger} request, and without one only past skipped events.</li>
  * </ul>
  * <p>
+ * A participant may write within the transaction of a checkpoint, see
+ * {@link Checkpointing#onCheckpointAdvanced(Segment, TrackingToken, ProcessingContext)}. Such writes must only commit
+ * while this node owns the claim of the segment. Storing the token checks the owner of the claim, but a checkpoint that
+ * does not advance the stored token stores nothing. This strategy then
+ * {@link TokenStore#extendClaim(String, int, ProcessingContext) extends the claim} through the processor's
+ * {@link TokenStore} within that transaction instead, which fails, and so rolls the writes back, when another node
+ * owns the claim. It does so only for a checkpoint whose context it handed to the participants.
+ * <p>
  * <b>Internal API.</b> This class is marked {@link Internal}: it is part of the self-checkpointing support, intended
  * primarily for internal and advanced use, and its shape may change in a minor or patch release.
  *
@@ -65,6 +73,14 @@ public final class CheckpointingProgressStrategy implements SegmentProgressStrat
     private final SegmentProgressContext context;
     private final List<Checkpointing> participants;
     private final boolean autoCheckpointing;
+    /**
+     * The token store holding the claim of the segment, to extend it for a checkpoint that stores no token.
+     */
+    private final TokenStore tokenStore;
+    /**
+     * The name of the processor, under which the {@link #tokenStore} holds the claim of the segment.
+     */
+    private final String processorName;
 
     /**
      * The pending segment-scoped checkpoint request: the position any participant declared safe, forward-merged via
@@ -80,22 +96,30 @@ public final class CheckpointingProgressStrategy implements SegmentProgressStrat
     private final CheckpointTrigger trigger = this::onCheckpointRequested;
 
     /**
-     * Constructs a {@code CheckpointingProgressStrategy} bound to the given {@code context}.
+     * Constructs a {@code CheckpointingProgressStrategy} bound to the given {@code context}, which extends the claim of
+     * the segment through the given {@code tokenStore} within the transaction of a checkpoint that hands the
+     * participants its context but stores no token.
      *
      * @param context           the work package's progress context to persist progress through
      * @param participants      the self-checkpointing units on this segment; must not be empty
-     * @param autoCheckpointing {@code true} when an ordinary handler is co-located (auto mode), {@code false} when every
-     *                          handler is self-checkpointing (fully-deferred)
+     * @param autoCheckpointing {@code true} when an ordinary handler is co-located (auto mode), {@code false} when
+     *                          every handler is self-checkpointing (fully-deferred)
+     * @param tokenStore        the token store of the processor, holding the claim of the segment
+     * @param processorName     the name of the processor, under which the token store holds the claim
      */
     public CheckpointingProgressStrategy(SegmentProgressContext context,
                                          List<Checkpointing> participants,
-                                         boolean autoCheckpointing) {
+                                         boolean autoCheckpointing,
+                                         TokenStore tokenStore,
+                                         String processorName) {
         this.context = requireNonNull(context, "The SegmentProgressContext may not be null.");
         this.participants = List.copyOf(requireNonNull(participants, "The participants may not be null."));
         if (this.participants.isEmpty()) {
             throw new IllegalArgumentException("The participants may not be empty.");
         }
         this.autoCheckpointing = autoCheckpointing;
+        this.tokenStore = requireNonNull(tokenStore, "The TokenStore may not be null.");
+        this.processorName = requireNonNull(processorName, "The processor name may not be null.");
         EntitlementManager.INSTANCE.registerAddon(CheckpointingAxoniqAddon.class);
     }
 
@@ -115,8 +139,14 @@ public final class CheckpointingProgressStrategy implements SegmentProgressStrat
      *     event handed to the participants, so the segment only moved past skipped events.</li>
      * </ul>
      * A requested or batch-end position is stored only after the participants are {@link #reconcile(Map) reconciled}
-     * to a single agreed position, so no participant is left ahead of the stored token. The skipped-events position
-     * needs no participant, so it is stored directly. A store is skipped when nothing is to be checkpointed.
+     * to a single agreed position, so no participant is left ahead of the stored token. The first request to each
+     * participant runs on the calling thread and hands it the given {@code processingContext}, which the token is
+     * stored in as well; re-requests made to reconcile the participants do not. The skipped-events position needs no
+     * participant, so it is stored directly. A store is skipped when nothing is to be checkpointed.
+     * <p>
+     * When the participants were handed the {@code processingContext} but the agreed position does not advance the
+     * stored token, nothing is stored, so nothing checks the owner of the claim. The claim is then extended within the
+     * {@code processingContext}, so the writes of the participants only commit while this node owns the claim.
      */
     @Override
     public CompletableFuture<Void> onBatchCommit(ProcessingContext processingContext) {
@@ -132,9 +162,11 @@ public final class CheckpointingProgressStrategy implements SegmentProgressStrat
         if (requested == null) {
             return emptyCompletedFuture();
         }
-        return persistOnCallingThread(requestEach(participant -> requestAdvance(participant, requested))
+        return persistOnCallingThread(requestEach(participant -> requestAdvance(participant, requested,
+                                                                                processingContext))
                                               .thenCompose(this::reconcile),
-                                      processingContext);
+                                      processingContext,
+                                      true);
     }
 
     /**
@@ -167,10 +199,13 @@ public final class CheckpointingProgressStrategy implements SegmentProgressStrat
      * Performs the final checkpoint for the segment being released: asks each participant to drain toward
      * {@code lastConsumedToken} through {@link Checkpointing#onSegmentReleased(Segment, TrackingToken)}, then
      * {@link #reconcile(Map) reconciles} their reported positions to a single agreed token and persists that within the
-     * given {@code context} (if it advances). Only when reconciliation cannot be reached (a lagging participant fails to
-     * cover the agreed position) does it fall back to persisting the
-     * {@link TrackingTokenUtils#lowerBound(java.util.Collection) lowerBound} of the reported tokens, so the claim can still be
-     * released and the uncovered tail is simply reprocessed on the next claim.
+     * given {@code context} (if it advances). Only when reconciliation cannot be reached (a lagging participant fails
+     * to cover the agreed position) does it fall back to persisting the
+     * {@link TrackingTokenUtils#lowerBound(java.util.Collection) lowerBound} of the reported tokens, so the claim can
+     * still be released and the uncovered tail is simply reprocessed on the next claim.
+     * <p>
+     * The participants are not handed the release context: a participant failing a write within its transaction could
+     * make that transaction roll back, which would keep the processor from releasing the claim.
      */
     @Override
     public CompletableFuture<Void> onSegmentReleased(ProcessingContext processingContext) {
@@ -190,7 +225,7 @@ public final class CheckpointingProgressStrategy implements SegmentProgressStrat
                                         + "storing the lowest reported safe token.",
                                 segment, error);
                     return TrackingTokenUtils.lowerBound(reported.values());
-                })), processingContext)
+                })), processingContext, false)
                 // The claim must be released regardless of whether a final token could be stored: if a component's
                 // release future failed (so no safe token could even be determined) or the store itself failed, leave
                 // the stored token where it is and let the uncovered tail be reprocessed from there on the next claim.
@@ -239,8 +274,8 @@ public final class CheckpointingProgressStrategy implements SegmentProgressStrat
      * stored token and its own position on the next claim (events it already made durable), which is only safe if that
      * processing is idempotent. To avoid relying on idempotency, this reconciles the reported positions: it takes the
      * highest reported position and re-requests every component that has not yet reached it (through
-     * {@link Checkpointing#onCheckpointAdvanced(Segment, TrackingToken)}), repeating until every component reports the
-     * same position.
+     * {@link Checkpointing#onCheckpointAdvanced(Segment, TrackingToken)}, without a context, as a re-request may run on
+     * another thread once the context is no longer usable), repeating until every component reports the same position.
      * <p>
      * This terminates: the agreed position only ever rises and is bounded by {@code lastConsumedToken} (a component
      * cannot be durable past what it was handed). A component that cannot reach the agreed position fails its future,
@@ -268,19 +303,24 @@ public final class CheckpointingProgressStrategy implements SegmentProgressStrat
         // `agreed` only rises (bounded by lastConsumedToken), so this converges; a laggard that cannot reach it fails
         // the checkpoint via requestAdvance.
         return requestEach(participant -> laggards.contains(participant)
-                ? requestAdvance(participant, agreed)
+                ? requestAdvance(participant, agreed, null)
                 : CompletableFuture.completedFuture(reported.get(participant)))
                 .thenCompose(this::reconcile);
     }
 
     /**
      * Asks a single participant to ensure it is durable up to {@code target} and returns the (LATEST-resolved,
-     * cover-validated) position it reports.
+     * cover-validated) position it reports. The participant is handed the given {@code processingContext}, if any.
      */
-    private CompletableFuture<TrackingToken> requestAdvance(Checkpointing participant, TrackingToken target) {
-        return participant.onCheckpointAdvanced(context.segment(), target)
-                          .thenApply(this::resolveLatest)
-                          .thenApply(actual -> validateCovers(participant, actual, target));
+    private CompletableFuture<TrackingToken> requestAdvance(Checkpointing participant,
+                                                            TrackingToken target,
+                                                            @Nullable ProcessingContext processingContext) {
+        Segment segment = context.segment();
+        return (processingContext == null
+                ? participant.onCheckpointAdvanced(segment, target)
+                : participant.onCheckpointAdvanced(segment, target, processingContext))
+                .thenApply(this::resolveLatest)
+                .thenApply(actual -> validateCovers(participant, actual, target));
     }
 
     /**
@@ -299,13 +339,41 @@ public final class CheckpointingProgressStrategy implements SegmentProgressStrat
         return actual;
     }
 
+    /**
+     * Persists the {@code agreed} position within the given {@code processingContext}. When the participants were
+     * handed that context ({@code participantsJoined}) and the store is skipped, the claim is
+     * {@link #extendClaimUnlessStored(TrackingToken, ProcessingContext) extended} within it instead.
+     */
     private CompletableFuture<Void> persistOnCallingThread(CompletableFuture<@Nullable TrackingToken> agreed,
-                                                           ProcessingContext processingContext) {
+                                                           ProcessingContext processingContext,
+                                                           boolean participantsJoined) {
         try {
-            return context.persistProgress(joinAndUnwrap(agreed), processingContext);
+            @Nullable TrackingToken position = joinAndUnwrap(agreed);
+            @Nullable TrackingToken storedBefore = context.lastStoredToken();
+            CompletableFuture<Void> persisted = context.persistProgress(position, processingContext);
+            return participantsJoined
+                    ? persisted.thenCompose(stored -> extendClaimUnlessStored(storedBefore, processingContext))
+                    : persisted;
         } catch (Exception e) {
             return CompletableFuture.failedFuture(e);
         }
+    }
+
+    /**
+     * Extends the claim of the segment within the given {@code processingContext} when the stored token is still
+     * {@code storedBefore}, so no store checked the owner of the claim in this cycle. Fails with an
+     * {@link org.axonframework.messaging.eventhandling.processing.streaming.token.store.UnableToClaimTokenException}
+     * when another node owns the claim, which rolls back the writes the participants made within that context.
+     * <p>
+     * A context that does not track its stored token always reports {@code null}, so the claim is then extended on
+     * every such cycle: an extra write, never a missed check.
+     */
+    private CompletableFuture<Void> extendClaimUnlessStored(@Nullable TrackingToken storedBefore,
+                                                            ProcessingContext processingContext) {
+        if (context.lastStoredToken() != storedBefore) {
+            return emptyCompletedFuture();
+        }
+        return tokenStore.extendClaim(processorName, context.segment().getSegmentId(), processingContext);
     }
 
     /**

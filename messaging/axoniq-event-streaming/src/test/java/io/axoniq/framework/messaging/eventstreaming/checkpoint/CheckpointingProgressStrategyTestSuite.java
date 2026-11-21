@@ -8,6 +8,7 @@
 
 package io.axoniq.framework.messaging.eventstreaming.checkpoint;
 
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkTestUtils;
 import org.axonframework.messaging.eventhandling.processing.streaming.pooled.SegmentProgressStrategyTestSupport;
 import org.axonframework.messaging.eventhandling.processing.streaming.progress.SegmentProgressStrategyFactory;
@@ -132,6 +133,24 @@ public abstract class CheckpointingProgressStrategyTestSuite extends SegmentProg
         }
 
         @Test
+        void participantsAreAskedWithinTheContextTheCheckpointIsStoredIn() {
+            // given
+            RecordingCheckpointing participant = new RecordingCheckpointing();
+            WorkPackageHarness testSubject = deferred(participant);
+            testSubject.onSegmentClaimed();
+
+            // when
+            participant.trigger.requestCheckpoint(new GlobalSequenceTrackingToken(5L));
+
+            // then - a participant may write its state within the transaction the token is stored in
+            ArgumentCaptor<ProcessingContext> storedIn = ArgumentCaptor.forClass(ProcessingContext.class);
+            await().atMost(TIMEOUT).untilAsserted(() -> verify(tokenStore()).storeToken(
+                    any(), anyString(), anyInt(), storedIn.capture()
+            ));
+            assertThat(participant.contexts).containsExactly(storedIn.getValue());
+        }
+
+        @Test
         void aParticipantThatCannotBeReconciledUpToTheLeaderFailsTheCheckpointWithoutStoring() {
             // given -- a leader at 8 and a participant stuck at 6 that cannot advance when re-requested higher
             RecordingCheckpointing stuck = new RecordingCheckpointing();
@@ -192,6 +211,8 @@ public abstract class CheckpointingProgressStrategyTestSuite extends SegmentProg
             assertThat(lagging.advanced).containsExactly(
                     new GlobalSequenceTrackingToken(5L), new GlobalSequenceTrackingToken(10L)
             );
+            // only the first request hands over the context the token is stored in; the re-request does not
+            assertThat(lagging.contexts).hasSize(1);
         }
 
         @Test
@@ -589,6 +610,22 @@ public abstract class CheckpointingProgressStrategyTestSuite extends SegmentProg
         }
 
         @Test
+        void onReleaseParticipantsAreNotHandedTheContextTheFinalCheckpointIsStoredIn() {
+            // given
+            RecordingCheckpointing participant = new RecordingCheckpointing();
+            participant.releaseResult = upTo -> CompletableFuture.completedFuture(new GlobalSequenceTrackingToken(9L));
+            WorkPackageHarness testSubject = deferred(participant);
+            testSubject.onSegmentClaimed();
+
+            // when
+            testSubject.release().orTimeout(TIMEOUT.toMillis(), TimeUnit.MILLISECONDS).join();
+
+            // then -- a failing write within the release transaction could otherwise keep the claim from being released
+            verify(tokenStore()).storeToken(eq(new GlobalSequenceTrackingToken(9L)), anyString(), anyInt(), any());
+            assertThat(participant.contexts).isEmpty();
+        }
+
+        @Test
         void onReleaseALaggingParticipantIsReRequestedUpToTheLeaderAndTheHighestPositionIsStored() {
             // given -- two participants report DIFFERENT positions on release: a leader at 10 and a laggard at 7 that
             // can still advance to the agreed position when re-requested (via onCheckpointAdvanced)
@@ -786,6 +823,7 @@ public abstract class CheckpointingProgressStrategyTestSuite extends SegmentProg
 
         private final List<TrackingToken> advanced = new CopyOnWriteArrayList<>();
         private final List<TrackingToken> released = new ArrayList<>();
+        private final List<ProcessingContext> contexts = new CopyOnWriteArrayList<>();
         private volatile CheckpointTrigger trigger;
         private volatile TrackingToken claimedFrom;
         private volatile Function<TrackingToken, CompletableFuture<TrackingToken>> advanceResult =
@@ -813,6 +851,14 @@ public abstract class CheckpointingProgressStrategyTestSuite extends SegmentProg
                                                                   @NonNull TrackingToken upTo) {
             released.add(upTo);
             return releaseResult.apply(upTo);
+        }
+
+        @Override
+        public CompletableFuture<TrackingToken> onCheckpointAdvanced(@NonNull Segment segment,
+                                                                     @NonNull TrackingToken requested,
+                                                                     @NonNull ProcessingContext context) {
+            contexts.add(context);
+            return onCheckpointAdvanced(segment, requested);
         }
     }
 
