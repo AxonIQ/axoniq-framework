@@ -14,8 +14,11 @@ import io.axoniq.framework.workflow.dsl.api.StepStatus;
 import io.axoniq.framework.workflow.dsl.api.WorkflowState;
 import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
 import io.axoniq.framework.workflow.query.api.WorkflowStateQuery;
+import io.axoniq.framework.workflow.query.utils.WorkflowStateQueryMatcher;
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.framework.workflow.runtime.api.manager.WorkflowInstance;
 import io.axoniq.framework.workflow.runtime.api.manager.WorkflowManager;
+import io.axoniq.framework.workflow.runtime.execution.WorkflowEngine;
 import jakarta.persistence.EntityManagerFactory;
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.messaging.core.MessageTypeResolver;
@@ -37,6 +40,7 @@ import java.lang.management.ManagementFactory;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -48,6 +52,8 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -64,6 +70,10 @@ import java.util.concurrent.atomic.AtomicReference;
  *     {@link WorkflowManager} and publishes a {@link LoadApproved} event for each;</li>
  *     <li>logs its progress every five seconds, until stopped with Ctrl+C.</li>
  * </ol>
+ * The runner counts the workflow instances in memory and the hibernated ones through the
+ * {@link WorkflowEngine} of its workflow module. That is an internal component, used here because the
+ * {@link WorkflowManager} has no such counts, and sources every hibernated instance from the event store to answer a
+ * query; a measurement tool like this runner should not do that every few seconds.
  *
  * @author Allard Buijze
  */
@@ -80,6 +90,11 @@ public final class WorkflowLoadRunner implements AutoCloseable {
     private final String runId = "load-" + Long.toString(System.currentTimeMillis(), 36);
     private final LoadStatistics statistics = new LoadStatistics(runId);
     private final Set<String> approved = ConcurrentHashMap.newKeySet();
+    private final Set<String> toApprove = ConcurrentHashMap.newKeySet();
+    private final AtomicInteger peakResident = new AtomicInteger();
+    private final AtomicLong rehibernatedAfterMillis = new AtomicLong(-1);
+    private volatile long mainStartedAt = System.nanoTime();
+    private volatile boolean processorReady;
     private final AtomicBoolean closed = new AtomicBoolean();
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(2, runnable -> {
         var thread = new Thread(runnable, "load-runner");
@@ -90,6 +105,7 @@ public final class WorkflowLoadRunner implements AutoCloseable {
     private @Nullable EntityManagerFactory entityManagerFactory;
     private @Nullable AxonConfiguration configuration;
     private @Nullable WorkflowManager workflowManager;
+    private @Nullable WorkflowEngine workflowEngine;
     private @Nullable EventGateway eventGateway;
     private @Nullable MessageTypeResolver messageTypeResolver;
     private @Nullable EventConverter eventConverter;
@@ -156,9 +172,11 @@ public final class WorkflowLoadRunner implements AutoCloseable {
     }
 
     private StartupReport startUp(long startedAt) {
-        report.info("Starting: {} instances, {} index, event store {}, data in {}",
+        mainStartedAt = startedAt;
+        report.info("Starting: {} instances, {} index, hibernation {}, event store {}, data in {}",
                     options.instances(),
                     options.index(),
+                    options.hibernate() ? "after " + options.idleDelay() : "disabled",
                     options.inMemoryEvents() ? "in memory" : "Axon Server at " + options.axonServer(),
                     options.inMemoryEvents() ? "memory" : options.dataDirectory().toAbsolutePath());
         long jvmToMain = System.currentTimeMillis() - TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt)
@@ -171,6 +189,9 @@ public final class WorkflowLoadRunner implements AutoCloseable {
         Duration configurationStarted = since(startedAt);
         workflowManager = configuration.getComponents(WorkflowManager.class)
                                        .get("WorkflowManager[" + LoadRunnerSetup.MODULE + "]");
+        workflowEngine = configuration.getComponents(WorkflowEngine.class)
+                                      .get("WorkflowEngine[" + LoadRunnerSetup.MODULE + "]");
+        scheduler.scheduleWithFixedDelay(this::sampleResidency, 0, 1, TimeUnit.SECONDS);
         eventGateway = configuration.getComponent(EventGateway.class);
         messageTypeResolver = configuration.getComponent(MessageTypeResolver.class);
         eventConverter = configuration.getComponent(EventConverter.class);
@@ -178,6 +199,7 @@ public final class WorkflowLoadRunner implements AutoCloseable {
 
         Duration segmentsClaimed = awaitProcessorReady(startedAt);
         Duration processorReady = since(startedAt);
+        this.processorReady = true;
         int inProgress = inProgress();
 
         var startup = new StartupReport(Duration.ofMillis(jvmToMain), databaseOpened, configurationStarted,
@@ -191,10 +213,11 @@ public final class WorkflowLoadRunner implements AutoCloseable {
                             main -> all segments claimed:        {} ms
                             main -> workflow processor ready:    {} ms
                             workflow instances in progress:      {}
+                            {}
                             """,
                     startup.jvmToMain().toMillis(), startup.databaseOpened().toMillis(),
                     startup.configurationStarted().toMillis(), startup.segmentsClaimed().toMillis(),
-                    startup.processorReady().toMillis(), startup.inProgress());
+                    startup.processorReady().toMillis(), startup.inProgress(), memory());
         if (options.completeShare() > 0) {
             scheduler.scheduleWithFixedDelay(this::approveWaitingInstances, 1, 1, TimeUnit.SECONDS);
         }
@@ -223,6 +246,9 @@ public final class WorkflowLoadRunner implements AutoCloseable {
             var batch = new ArrayList<LoadStarted>();
             for (int n = first; n < Math.min(first + PUBLISH_BATCH_SIZE, instances); n++) {
                 batch.add(new LoadStarted(runId + "-" + n, n < toComplete));
+                if (n < toComplete) {
+                    toApprove.add(runId + "-" + n);
+                }
             }
             inFlight.acquire();
             publish(batch).whenComplete((result, error) -> {
@@ -253,11 +279,12 @@ public final class WorkflowLoadRunner implements AutoCloseable {
                             start events published in:           {} ms ({} events/s)
                             instances started in:                {} ms ({} instances/s)
                             workflow instances in progress:      {}
+                            {}
                             """,
                     instances,
                     published.toMillis(), perSecond(instances, published),
                     started.toMillis(), perSecond(instances, started),
-                    inProgress());
+                    inProgress(), memory());
         return start;
     }
 
@@ -269,10 +296,8 @@ public final class WorkflowLoadRunner implements AutoCloseable {
      */
     public void awaitInstancesWaiting() throws InterruptedException {
         var waiting = WorkflowStateQuery.byStepStatus(LoadWorkflow.AWAIT_APPROVAL_STEP, StepStatus.STARTED);
-        while (inProgress() > workflowManager.findMany(waiting)
-                                             .size()
-                                             .orTimeout(TIMEOUT.toSeconds(), TimeUnit.SECONDS)
-                                             .join()) {
+        // A workflow only hibernates while it waits, so every hibernated workflow waits for its approval.
+        while (inProgress() > residentMatching(waiting).size() + workflowEngine.hibernatedWorkflowIds().size()) {
             Thread.sleep(200);
         }
         report.info("All {} workflow instances in progress wait for their approval.", inProgress());
@@ -288,15 +313,63 @@ public final class WorkflowLoadRunner implements AutoCloseable {
     }
 
     /**
-     * Returns the number of workflow instances in progress on this node, according to the {@link WorkflowManager}.
+     * Returns the number of workflow instances in progress on this node: the executions in memory with status
+     * {@code STARTED}, plus the hibernated workflows.
      *
      * @return the number of workflow instances in progress
      */
     public int inProgress() {
-        return workflowManager.findMany(WorkflowStateQuery.byWorkflowStatus(WorkflowStatus.STARTED))
-                              .size()
-                              .orTimeout(TIMEOUT.toSeconds(), TimeUnit.SECONDS)
-                              .join();
+        var inProgress = new HashSet<>(residentMatching(WorkflowStateQuery.byWorkflowStatus(WorkflowStatus.STARTED)));
+        inProgress.addAll(workflowEngine.hibernatedWorkflowIds());
+        return inProgress.size();
+    }
+
+    /**
+     * Returns the ids of the workflow executions in memory whose state matches the given query.
+     */
+    private Set<String> residentMatching(WorkflowStateQuery query) {
+        var matching = new HashSet<String>();
+        for (WorkflowExecution execution : workflowEngine.workflowExecutions()) {
+            if (WorkflowStateQueryMatcher.matches(query, execution.state())) {
+                matching.add(execution.workflowId());
+            }
+        }
+        return matching;
+    }
+
+    /**
+     * Describes the memory use of this node: the workflow executions in memory, the hibernated workflows, and the
+     * used heap right after a {@link System#gc()}. The heap is approximate: {@code System.gc()} is only a request,
+     * and the used heap includes everything else the application holds.
+     */
+    private String memory() {
+        System.gc();
+        var runtime = Runtime.getRuntime();
+        long usedMb = (runtime.totalMemory() - runtime.freeMemory()) / (1024 * 1024);
+        return "executions in memory " + workflowEngine.workflowExecutions().size()
+                + ", hibernated " + workflowEngine.hibernatedWorkflowIds().size()
+                + ", used heap after GC ~" + usedMb + " MB";
+    }
+
+    /**
+     * Once a second, tracks the peak number of executions in memory, and, with hibernation, when at least 99% of the
+     * instances in progress were hibernated after the processor was ready, measured from {@code main}.
+     */
+    private void sampleResidency() {
+        try {
+            int resident = workflowEngine.workflowExecutions().size();
+            peakResident.accumulateAndGet(resident, Math::max);
+            if (options.hibernate() && processorReady && rehibernatedAfterMillis.get() < 0 && peakResident.get() > 0) {
+                int hibernated = workflowEngine.hibernatedWorkflowIds().size();
+                if (hibernated > 0 && hibernated >= 0.99 * (resident + hibernated)) {
+                    rehibernatedAfterMillis.set(since(mainStartedAt).toMillis());
+                    report.info("main -> 99% of the instances in progress hibernated: {} ms (peak executions in"
+                                        + " memory {})", rehibernatedAfterMillis.get(), peakResident.get());
+                }
+            }
+        } catch (RuntimeException e) {
+            logger.warn("Sampling the executions in memory failed", e);
+        }
     }
 
     /**
@@ -362,6 +435,15 @@ public final class WorkflowLoadRunner implements AutoCloseable {
      * {@link LoadApproved} event for each.
      */
     private void approveWaitingInstances() {
+        if (options.hibernate()) {
+            // Approves hibernated instances only, so the approval latency includes waking them.
+            approve(workflowEngine.hibernatedWorkflowIds().stream()
+                                  .filter(toApprove::contains)
+                                  .filter(approved::add)
+                                  .map(LoadApproved::new)
+                                  .toList());
+            return;
+        }
         try {
             var waiting = workflowManager.findMany(
                     WorkflowStateQuery.byStepStatus(LoadWorkflow.AWAIT_APPROVAL_STEP, StepStatus.STARTED)
@@ -376,8 +458,17 @@ public final class WorkflowLoadRunner implements AutoCloseable {
                                                  .filter(approved::add)
                                                  .map(LoadApproved::new)
                                                  .toList();
+            approve(approvals);
+        } catch (RuntimeException e) {
+            logger.warn("Approving the waiting instances failed", e);
+        }
+    }
+
+    private void approve(List<LoadApproved> approvals) {
+        try {
             for (int first = 0; first < approvals.size(); first += PUBLISH_BATCH_SIZE) {
                 var batch = approvals.subList(first, Math.min(first + PUBLISH_BATCH_SIZE, approvals.size()));
+                statistics.recordApprovalsPublishing(batch.stream().map(LoadApproved::loadId).toList());
                 publish(batch).orTimeout(TIMEOUT.toSeconds(), TimeUnit.SECONDS).join();
                 statistics.recordApprovals(batch.size());
             }
@@ -391,10 +482,12 @@ public final class WorkflowLoadRunner implements AutoCloseable {
             var processor = configuration.getComponents(StreamingEventProcessor.class).get(LoadRunnerSetup.MODULE);
             var status = processor.processingStatus().values();
             report.info("Progress: published {}, started {}, in progress {}, approvals {}, completed {}, failed {}"
-                                + " | processor: {} segments, {} caught up",
+                                + " | processor: {} segments, {} caught up | {}, peak executions in memory {}"
+                                + " | approval -> completed: {}",
                         statistics.published(), statistics.startedThisRun(), inProgress(),
                         statistics.approvalsPublished(), statistics.completed(), statistics.failed(),
-                        status.size(), status.stream().filter(EventTrackerStatus::isCaughtUp).count());
+                        status.size(), status.stream().filter(EventTrackerStatus::isCaughtUp).count(),
+                        memory(), peakResident.get(), statistics.approvalLatencies());
         } catch (RuntimeException e) {
             logger.warn("Reporting the progress failed", e);
         }
@@ -409,8 +502,13 @@ public final class WorkflowLoadRunner implements AutoCloseable {
         if (!closed.compareAndSet(false, true)) {
             return;
         }
-        report.info("Stopping...");
         scheduler.shutdownNow();
+        if (workflowEngine != null) {
+            report.info("Stopping: {}, peak executions in memory {}, approval -> completed: {}",
+                        memory(), peakResident.get(), statistics.approvalLatencies());
+        } else {
+            report.info("Stopping...");
+        }
         if (configuration != null) {
             configuration.shutdown();
         }

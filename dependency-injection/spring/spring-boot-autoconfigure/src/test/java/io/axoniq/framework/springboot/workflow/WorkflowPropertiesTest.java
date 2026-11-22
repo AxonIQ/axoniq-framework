@@ -9,6 +9,7 @@ package io.axoniq.framework.springboot.workflow;
 
 import io.axoniq.framework.springboot.WorkflowProperties;
 import io.axoniq.framework.springboot.autoconfig.WorkflowAutoConfiguration;
+import io.axoniq.framework.workflow.configuration.WorkflowHibernationConfiguration;
 import io.axoniq.framework.workflow.configuration.WorkflowSnapshotConfiguration;
 import org.axonframework.eventsourcing.snapshot.api.SnapshotPolicy;
 import org.junit.jupiter.api.*;
@@ -18,6 +19,8 @@ import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Configuration;
+
+import java.time.Duration;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -250,6 +253,58 @@ class WorkflowPropertiesTest {
                 assertThat(context).hasSingleBean(WorkflowSnapshotConfiguration.class)
                                    .doesNotHaveBean(SnapshotPolicy.class);
             });
+        }
+    }
+
+    @Nested
+    class Hibernation {
+
+        private final ApplicationContextRunner autoConfigurationRunner = new ApplicationContextRunner()
+                .withConfiguration(AutoConfigurations.of(WorkflowAutoConfiguration.class));
+
+        @Test
+        void isDisabledWithAThirtySecondIdleDelayAndATenSecondWakeTimeoutByDefault() {
+            autoConfigurationRunner.run(context -> {
+                // when
+                var hibernation = context.getBean(WorkflowHibernationConfiguration.class);
+
+                // then
+                assertThat(hibernation.enabled()).isFalse();
+                assertThat(hibernation.idleDelay()).isEqualTo(Duration.ofSeconds(30));
+                assertThat(hibernation.wakeTimeout()).isEqualTo(Duration.ofSeconds(10));
+            });
+        }
+
+        @Test
+        void bindsFromTheApplicationProperties() {
+            autoConfigurationRunner.withPropertyValues("axon.workflow.hibernation.enabled=true",
+                                                       "axon.workflow.hibernation.idle-delay=2m",
+                                                       "axon.workflow.hibernation.wake-timeout=1500ms")
+                                   .run(context -> {
+                                       // when
+                                       var hibernation = context.getBean(WorkflowHibernationConfiguration.class);
+
+                                       // then
+                                       assertThat(hibernation.enabled()).isTrue();
+                                       assertThat(hibernation.idleDelay()).isEqualTo(Duration.ofMinutes(2));
+                                       assertThat(hibernation.wakeTimeout()).isEqualTo(Duration.ofMillis(1500));
+                                   });
+        }
+
+        @Test
+        void aWorkflowHibernationConfigurationBeanOfTheApplicationReplacesTheProperties() {
+            autoConfigurationRunner.withPropertyValues("axon.workflow.hibernation.enabled=true")
+                                   .withBean(WorkflowHibernationConfiguration.class,
+                                             () -> new WorkflowHibernationConfiguration()
+                                                     .idleDelay(Duration.ofHours(1)))
+                                   .run(context -> {
+                                       // when
+                                       var hibernation = context.getBean(WorkflowHibernationConfiguration.class);
+
+                                       // then
+                                       assertThat(hibernation.enabled()).isFalse();
+                                       assertThat(hibernation.idleDelay()).isEqualTo(Duration.ofHours(1));
+                                   });
         }
     }
 

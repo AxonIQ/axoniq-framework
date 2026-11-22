@@ -8,12 +8,15 @@
 package io.axoniq.framework.workflow.runtime.execution;
 
 import org.axonframework.common.annotation.Internal;
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.jspecify.annotations.Nullable;
 
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 
 /**
@@ -22,11 +25,11 @@ import java.util.function.Consumer;
  * <p>
  * Catch-up state belongs to a claim, not to a segment id: every claim starts out behind, so state left by an earlier
  * claim of the same segment, or by a poller of that claim still running, never makes a later claim skip its activation.
- * An activation, and the start of a new instance on the handler thread, run under the monitor of their claim, so the
+ * An activation, and the start of a new instance on the handler thread, run under the lock of their claim, so the
  * start of a new instance and the activation that starts every restored execution never both start the same execution.
  * <p>
  * A claim whose restore failed is inert: it is never activated, and the executions its restore still adds afterwards
- * are dropped, as are those of a claim that ended. Adding them runs under the claim's monitor as well, so ending or
+ * are dropped, as are those of a claim that ended. Adding them runs under the claim's lock as well, so ending or
  * failing a claim never interleaves with it.
  *
  * @author Simon Zambrovski
@@ -47,11 +50,12 @@ final class WorkflowEngineCatchUpSupport {
      * Starts a new claim of the given {@code segment}, ending any claim of it that is still recorded. Returns once an
      * activation of that previous claim in progress has finished, so it cannot start executions of the new claim.
      *
-     * @param segment the claimed segment
+     * @param segment          the claimed segment
+     * @param executionContext the context the executions of the claim run on
      * @return the new claim
      */
-    Claim startClaim(Segment segment) {
-        Claim claim = new Claim(segment);
+    Claim startClaim(Segment segment, ProcessingContext executionContext) {
+        Claim claim = new Claim(segment, executionContext);
         end(claims.put(segment.getSegmentId(), claim));
         return claim;
     }
@@ -67,7 +71,7 @@ final class WorkflowEngineCatchUpSupport {
     }
 
     /**
-     * Marks the given {@code claim} as failed, and runs the given {@code cleanup} under its monitor unless the claim
+     * Marks the given {@code claim} as failed, and runs the given {@code cleanup} under its lock unless the claim
      * ended already. A failed claim is never activated, and runs no {@link #runWhileCurrent(Claim, Runnable) action}
      * anymore. Returns once an action or activation of the claim in progress has finished. A next claim of the segment
      * only starts once the cleanup finished, so the cleanup never touches what that claim restores.
@@ -76,11 +80,14 @@ final class WorkflowEngineCatchUpSupport {
      * @param cleanup drops what the claim restored
      */
     void fail(Claim claim, Runnable cleanup) {
-        synchronized (claim) {
+        claim.lock.lock();
+        try {
             claim.failed = true;
             if (!claim.ended) {
                 cleanup.run();
             }
+        } finally {
+            claim.lock.unlock();
         }
     }
 
@@ -98,8 +105,11 @@ final class WorkflowEngineCatchUpSupport {
         if (claim == null) {
             return false;
         }
-        synchronized (claim) {
+        claim.lock.lock();
+        try {
             return claim.failed;
+        } finally {
+            claim.lock.unlock();
         }
     }
 
@@ -112,8 +122,11 @@ final class WorkflowEngineCatchUpSupport {
      */
     void holdCheckpoint(Segment segment) {
         Claim claim = currentClaim(segment);
-        synchronized (claim) {
+        claim.lock.lock();
+        try {
             claim.checkpointHeld = true;
+        } finally {
+            claim.lock.unlock();
         }
     }
 
@@ -132,13 +145,16 @@ final class WorkflowEngineCatchUpSupport {
         if (claim == null) {
             return false;
         }
-        synchronized (claim) {
+        claim.lock.lock();
+        try {
             return claim.failed || claim.checkpointHeld;
+        } finally {
+            claim.lock.unlock();
         }
     }
 
     /**
-     * Runs the given {@code action} under the monitor of the given {@code claim}, but only while that claim is current:
+     * Runs the given {@code action} under the lock of the given {@code claim}, but only while that claim is current:
      * neither ended nor failed.
      *
      * @param claim  the claim the action belongs to
@@ -146,20 +162,26 @@ final class WorkflowEngineCatchUpSupport {
      * @return {@code true} when the action ran, {@code false} when the claim ended or failed
      */
     boolean runWhileCurrent(Claim claim, Runnable action) {
-        synchronized (claim) {
+        claim.lock.lock();
+        try {
             if (claim.ended || claim.failed) {
                 return false;
             }
             action.run();
             return true;
+        } finally {
+            claim.lock.unlock();
         }
     }
 
     private static void end(@Nullable Claim claim) {
         if (claim != null) {
-            // Waits for an activation holding the monitor; later ones see the claim is no longer current.
-            synchronized (claim) {
+            // Waits for an activation holding the lock; later ones see the claim is no longer current.
+            claim.lock.lock();
+            try {
                 claim.ended = true;
+            } finally {
+                claim.lock.unlock();
             }
         }
     }
@@ -167,7 +189,7 @@ final class WorkflowEngineCatchUpSupport {
     /**
      * Activates the given {@code claim} when the given {@code position} of its segment covers the startup head, unless
      * it ended, failed or was activated already. The {@code activation} runs at most once per claim, under the claim's
-     * monitor.
+     * lock.
      *
      * @param claim      the claim to activate
      * @param position   the position the segment consumed up to, or {@code null} when it has consumed nothing
@@ -176,7 +198,8 @@ final class WorkflowEngineCatchUpSupport {
      */
     boolean activate(Claim claim, @Nullable TrackingToken position, Runnable activation) {
         var head = startupHead;
-        synchronized (claim) {
+        claim.lock.lock();
+        try {
             if (claim.ended || claim.failed || claim.caughtUp) {
                 return true;
             }
@@ -186,6 +209,8 @@ final class WorkflowEngineCatchUpSupport {
             claim.caughtUp = true;
             activation.run();
             return true;
+        } finally {
+            claim.lock.unlock();
         }
     }
 
@@ -211,9 +236,59 @@ final class WorkflowEngineCatchUpSupport {
      * @return {@code true} when the claim still waits to catch up
      */
     boolean isWaiting(Claim claim) {
-        synchronized (claim) {
+        claim.lock.lock();
+        try {
             return !claim.ended && !claim.failed && !claim.caughtUp;
+        } finally {
+            claim.lock.unlock();
         }
+    }
+
+    /**
+     * Runs the given {@code action} under the lock of the given {@code claim}, telling it whether that claim caught
+     * up, but only while the claim is current: neither ended nor failed. An action that starts an execution when caught
+     * up thereby never races the activation of the claim, which starts every execution it finds.
+     *
+     * @param claim  the claim the action belongs to
+     * @param action receives whether the claim caught up
+     * @return {@code true} when the action ran, {@code false} when the claim ended or failed
+     */
+    boolean runWhileCurrent(Claim claim, Consumer<Boolean> action) {
+        var head = startupHead;
+        claim.lock.lock();
+        try {
+            if (claim.ended || claim.failed) {
+                return false;
+            }
+            action.accept(head == null || claim.caughtUp);
+            return true;
+        } finally {
+            claim.lock.unlock();
+        }
+    }
+
+    /**
+     * Returns the current claim of the given {@code segment}, without recording one when there is none.
+     *
+     * @param segment the segment to look up
+     * @return the current claim of the segment, or empty when none is recorded
+     */
+    Optional<Claim> claimOf(Segment segment) {
+        return Optional.ofNullable(claims.get(segment.getSegmentId()))
+                       .filter(claim -> claim.segment().equals(segment));
+    }
+
+    /**
+     * Returns whether the given thread waits for the lock of the given claim, which an activation or another action of
+     * that claim holds. Package-private so a test can tell that a thread is held up by that lock, instead of waiting a
+     * while for what the thread would do without it.
+     *
+     * @param claim  the claim whose lock to inspect
+     * @param thread the thread that may wait for the lock
+     * @return {@code true} when the thread waits to acquire the lock of the claim
+     */
+    boolean isWaitingForLock(Claim claim, Thread thread) {
+        return claim.lock.hasQueuedThread(thread);
     }
 
     /**
@@ -230,28 +305,48 @@ final class WorkflowEngineCatchUpSupport {
             return;
         }
         Claim claim = currentClaim(segment);
-        synchronized (claim) {
+        claim.lock.lock();
+        try {
             action.accept(startupHead == null || (claim.caughtUp && !claim.ended && !claim.failed));
+        } finally {
+            claim.lock.unlock();
         }
     }
 
     private Claim currentClaim(Segment segment) {
-        return claims.computeIfAbsent(segment.getSegmentId(), id -> new Claim(segment));
+        return claims.computeIfAbsent(segment.getSegmentId(), id -> new Claim(segment, null));
     }
 
     /**
-     * One claim of a segment. Its state is guarded by its own monitor.
+     * One claim of a segment. Its state is guarded by its own lock, which is no monitor: workflow threads are virtual
+     * threads, which take other locks and wait for timers while they hold it. A virtual thread that blocks while it
+     * holds a monitor, or while it waits to enter one, keeps its carrier thread. Once every carrier is kept that way,
+     * the virtual thread they wait for never runs again.
      */
     static final class Claim {
 
+        private final ReentrantLock lock = new ReentrantLock();
+
         private final Segment segment;
+        private final @Nullable ProcessingContext executionContext;
         private boolean caughtUp;
         private boolean ended;
         private boolean failed;
         private boolean checkpointHeld;
 
-        private Claim(Segment segment) {
+        private Claim(Segment segment, @Nullable ProcessingContext executionContext) {
             this.segment = segment;
+            this.executionContext = executionContext;
+        }
+
+        /**
+         * Returns the context the executions of this claim run on.
+         *
+         * @return the execution context of the claim, or {@code null} for a claim recorded by a segment that handles
+         * events without having been claimed through the engine
+         */
+        @Nullable ProcessingContext executionContext() {
+            return executionContext;
         }
 
         /**

@@ -10,7 +10,7 @@ Each workflow instance runs on a **virtual thread**.
 Virtual threads are lightweight.
 A suspended workflow (for example, waiting for an event) consumes almost no memory or OS resources, so you can run thousands of concurrent workflow instances without issue.
 Memory use is proportional to the number of non-terminal instances on the node.
-In a future version, the engine will support offloading long-running suspended workflows to disk, freeing memory entirely until they are resumed.
+With xref:configuration.adoc#hibernation[hibernation] enabled, a workflow that only waits for events or deadlines leaves memory entirely, and the engine restores it from the event store when one of them may wake it.
 ====
 
 == Workflow states
@@ -22,7 +22,8 @@ Once started, a workflow is always in one of these states:
 |Status |Description
 
 |`STARTED`
-|The workflow is actively executing steps.
+|The workflow is actively executing steps, or waiting.
+A hibernated workflow is `STARTED` as well: it is live, the workflow manager finds it, and you can cancel it.
 
 |`COMPLETED`
 |The workflow method returned normally since all work is done.

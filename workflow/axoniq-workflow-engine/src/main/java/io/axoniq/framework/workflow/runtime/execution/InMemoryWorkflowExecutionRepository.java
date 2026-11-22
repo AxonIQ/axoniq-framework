@@ -76,6 +76,13 @@ public class InMemoryWorkflowExecutionRepository implements WorkflowExecutionRep
     }
 
     @Override
+    public boolean remove(String workflowId, WorkflowExecution execution) {
+        Objects.requireNonNull(workflowId, "workflowId must not be null");
+        Objects.requireNonNull(execution, "execution must not be null");
+        return workflowExecutions.remove(workflowId, execution);
+    }
+
+    @Override
     public void removeAll(Predicate<WorkflowExecution> predicate) {
         workflowExecutions.values().removeIf(predicate);
     }

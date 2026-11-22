@@ -29,6 +29,7 @@ import io.axoniq.framework.workflow.runtime.execution.WorkflowEngine;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowEngineCheckpointingSupport;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowExecutionRepository;
 import io.axoniq.framework.workflow.index.api.WorkflowIndex;
+import io.axoniq.framework.workflow.runtime.execution.WorkflowScheduler;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowStore;
 import org.axonframework.common.AxonConfigurationException;
 import org.axonframework.common.annotation.Internal;
@@ -57,6 +58,7 @@ import org.axonframework.messaging.eventstreaming.EventCriteria;
 import org.axonframework.messaging.eventstreaming.StreamableEventSource;
 import org.jspecify.annotations.Nullable;
 
+import java.time.Clock;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -106,6 +108,8 @@ class SimpleWorkflowModule<C extends WorkflowContext>
             psepConfig -> psepConfig;
     private boolean useHistory = true;
     private long checkpointInterval = 0L;
+    private Function<WorkflowHibernationConfiguration, WorkflowHibernationConfiguration> hibernationCustomizer =
+            Function.identity();
     private ComponentBuilder<MutableWorkflowHistoryRepository> historyRepository =
             config -> new InMemoryWorkflowHistoryRepository();
     private Function<PooledStreamingEventProcessorConfiguration, PooledStreamingEventProcessorConfiguration> historyConfigCustomizer =
@@ -192,6 +196,14 @@ class SimpleWorkflowModule<C extends WorkflowContext>
     public OptionalPhase<C> checkpointInterval(long checkpointInterval) {
         assertPositive(checkpointInterval, "The checkpoint interval must not be negative.");
         this.checkpointInterval = checkpointInterval;
+        return this;
+    }
+
+    @Override
+    public OptionalPhase<C> hibernation(
+            Function<WorkflowHibernationConfiguration, WorkflowHibernationConfiguration> hibernation
+    ) {
+        this.hibernationCustomizer = requireNonNull(hibernation, "The hibernation function must not be null.");
         return this;
     }
 
@@ -312,8 +324,29 @@ class SimpleWorkflowModule<C extends WorkflowContext>
                                       engine.setCheckpointingSupport(
                                               c.getComponent(WorkflowEngineCheckpointingSupport.class)
                                       );
+                                      var hibernation = hibernationConfiguration(c);
+                                      if (hibernation.enabled()) {
+                                          engine.enableHibernation(
+                                                  c.getComponent(WorkflowScheduler.class),
+                                                  c.getComponent(Clock.class),
+                                                  hibernation.idleDelay(),
+                                                  hibernation.wakeTimeout(),
+                                                  c.getComponent(ExecutorService.class,
+                                                                 WorkflowConfigurationDefaults.WORKFLOW_ENGINE_EXECUTOR)
+                                          );
+                                      }
                                   })
                                   .onShutdown(POST_PROCESSOR_SHUTDOWN_PHASE, WorkflowEngine::shutdown);
+    }
+
+    /**
+     * Returns the hibernation settings of this module: the application's, customized by this module.
+     */
+    private WorkflowHibernationConfiguration hibernationConfiguration(Configuration config) {
+        var application = config.getOptionalComponent(WorkflowHibernationConfiguration.class)
+                                .orElseGet(WorkflowHibernationConfiguration::new);
+        return requireNonNull(hibernationCustomizer.apply(application.copy()),
+                              "The hibernation function must not return null.");
     }
 
     private String engineName() {
@@ -342,7 +375,12 @@ class SimpleWorkflowModule<C extends WorkflowContext>
                                           c.getComponent(
                                                   ExecutorService.class,
                                                   WorkflowConfigurationDefaults.WORKFLOW_ENGINE_EXECUTOR
-                                          )
+                                          ),
+                                          () -> c.getComponent(WorkflowEngine.class, engineName())
+                                                 .hibernatedWorkflowIds(),
+                                          listener -> c.getComponent(WorkflowEngine.class, engineName())
+                                                       .onWake(listener),
+                                          useHistory
                                   ));
     }
 

@@ -35,7 +35,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 
 import static io.axoniq.framework.workflow.configuration.WorkflowConfigurationDefaults.WORKFLOW_ENGINE_EXECUTOR;
 import static io.axoniq.framework.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.merge;
@@ -75,6 +77,9 @@ public class WorkflowExecutionOperationsDelegation implements WorkflowExecutionO
     private final ExecutorService executorService;
     private final WorkflowScheduler timeoutScheduler;
     private final ExecuteStepActionResolver executeStepActionResolver;
+
+    // Waits while a step is in progress, like a step waiting for its own STARTED event, are waits of the engine.
+    private final AtomicInteger stepsInProgress = new AtomicInteger();
 
 
     /**
@@ -180,6 +185,32 @@ public class WorkflowExecutionOperationsDelegation implements WorkflowExecutionO
     }
 
     /**
+     * Whether a step is in progress: a primitive call, like {@code waitForEvent} or {@code execute}, has not returned
+     * yet. A wait during one is a wait of the engine, so it is never a safe point for hibernation.
+     *
+     * @return {@code true} while a step is in progress
+     */
+    boolean isStepInProgress() {
+        return stepsInProgress.get() > 0;
+    }
+
+    private <T> T inStep(Supplier<T> call) {
+        stepsInProgress.incrementAndGet();
+        try {
+            return call.get();
+        } finally {
+            stepsInProgress.decrementAndGet();
+        }
+    }
+
+    private void inStep(Runnable call) {
+        inStep(() -> {
+            call.run();
+            return null;
+        });
+    }
+
+    /**
      * Returns the identifier of the workflow instance.
      *
      * @return the workflow instance identifier
@@ -218,7 +249,7 @@ public class WorkflowExecutionOperationsDelegation implements WorkflowExecutionO
     @Override
     public WorkflowStepResult modifyPayload(PayloadPrimitive.ModifyPayloadCommand command) {
         workflowExecution.state().throwTerminalCause();
-        return payloadDelegate.modifyPayload(command);
+        return inStep(() -> payloadDelegate.modifyPayload(command));
     }
 
     /**
@@ -262,7 +293,7 @@ public class WorkflowExecutionOperationsDelegation implements WorkflowExecutionO
     @Override
     public WorkflowStepResult execute(ExecutePrimitive.ExecuteCommand command) {
         workflowExecution.state().throwTerminalCause();
-        return retryableExecuteDelegate.execute(command);
+        return inStep(() -> retryableExecuteDelegate.execute(command));
     }
 
     /**
@@ -274,7 +305,7 @@ public class WorkflowExecutionOperationsDelegation implements WorkflowExecutionO
     @Override
     public WorkflowStepResult waitForEvent(WaitForPrimitive.WaitForCommand command) {
         workflowExecution.state().throwTerminalCause();
-        return waitForDelegate.waitForEvent(command);
+        return inStep(() -> waitForDelegate.waitForEvent(command));
     }
 
     /**
@@ -286,7 +317,7 @@ public class WorkflowExecutionOperationsDelegation implements WorkflowExecutionO
     @Override
     public WorkflowStepResult version(VersionPrimitive.VersionCommand command) {
         workflowExecution.state().throwTerminalCause();
-        return versionDelegate.version(command);
+        return inStep(() -> versionDelegate.version(command));
     }
 
     /**
@@ -298,7 +329,7 @@ public class WorkflowExecutionOperationsDelegation implements WorkflowExecutionO
     @Override
     public WorkflowStepResult publish(PublishPrimitive.PublishCommand command) {
         workflowExecution.state().throwTerminalCause();
-        return publishDelegate.publish(command);
+        return inStep(() -> publishDelegate.publish(command));
     }
 
     /**
@@ -309,10 +340,10 @@ public class WorkflowExecutionOperationsDelegation implements WorkflowExecutionO
     @Override
     public void cancelWorkflow(WorkflowLifecycleControl.CancelWorkflowCommand command) {
         workflowExecution.state().throwTerminalCause();
-        lifecycleControlDelegate.cancelWorkflow(PrimitiveCommands.cancelWorkflow(
+        inStep(() -> lifecycleControlDelegate.cancelWorkflow(PrimitiveCommands.cancelWorkflow(
                 command.cause(),
                 merge(workflowExecution.workflowConfiguration().eventNameCustomizer(), command.eventNameCustomizer())
-        ));
+        )));
     }
 
     /**
@@ -323,10 +354,10 @@ public class WorkflowExecutionOperationsDelegation implements WorkflowExecutionO
     @Override
     public void failWorkflow(WorkflowLifecycleControl.FailWorkflowCommand command) {
         workflowExecution.state().throwTerminalCause();
-        lifecycleControlDelegate.failWorkflow(PrimitiveCommands.failWorkflow(
+        inStep(() -> lifecycleControlDelegate.failWorkflow(PrimitiveCommands.failWorkflow(
                 command.cause(),
                 merge(workflowExecution.workflowConfiguration().eventNameCustomizer(), command.eventNameCustomizer())
-        ));
+        )));
     }
 
     /**
@@ -337,7 +368,7 @@ public class WorkflowExecutionOperationsDelegation implements WorkflowExecutionO
      */
     @Override
     public boolean cancelStep(WorkflowLifecycleControl.CancelStepCommand command) {
-        return lifecycleControlDelegate.cancelStep(command);
+        return inStep(() -> lifecycleControlDelegate.cancelStep(command));
     }
 
     /**

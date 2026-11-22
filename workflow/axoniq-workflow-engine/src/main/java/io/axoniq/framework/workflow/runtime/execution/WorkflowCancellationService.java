@@ -65,7 +65,34 @@ public final class WorkflowCancellationService implements DescribableComponent {
     }
 
     /**
-     * Removes every registered workflow cancellation coordinator.
+     * Unregisters the given cancellation of the given workflow, but only while it is the one registered for it, so a
+     * registration that replaced it stays.
+     *
+     * @param workflowId   the identifier of the workflow
+     * @param cancellation the cancellation to unregister
+     */
+    void unregister(String workflowId, WorkflowCancellation cancellation) {
+        if (cancellations.remove(Objects.requireNonNull(workflowId, "Workflow id is mandatory"),
+                                 Objects.requireNonNull(cancellation, "Workflow cancellation is mandatory"))) {
+            abortPendingWorkflowCancellation(cancellation,
+                                             "Workflow execution completed before cancellation was performed");
+        }
+    }
+
+    /**
+     * Returns the cancellation coordinator registered for the given workflow.
+     *
+     * @param workflowId the identifier of the workflow
+     * @return the registered cancellation coordinator, or {@code null} when none is registered
+     */
+    @Nullable
+    WorkflowCancellation registered(String workflowId) {
+        return cancellations.get(Objects.requireNonNull(workflowId, "Workflow id is mandatory"));
+    }
+
+    /**
+     * Removes every registered workflow cancellation coordinator, on shutdown of the engine. A workflow cancellation
+     * that is still pending fails with a {@link CancellationException}, as no workflow is left to perform it.
      */
     void clear() {
         cancellations.values().forEach(cancellation -> abortPendingWorkflowCancellation(

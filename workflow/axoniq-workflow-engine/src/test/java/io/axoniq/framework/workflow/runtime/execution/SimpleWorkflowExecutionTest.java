@@ -50,6 +50,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -234,21 +235,33 @@ class SimpleWorkflowExecutionTest {
     }
 
     @Test
-    void stopForShutdownQueuesAnInterruptForWorkflowDriver() throws Exception {
+    void stopForShutdownHandsOutNoFurtherTask() {
+        // given: a task queued before the stop
         var execution = execution();
+        var taskRan = new AtomicBoolean();
+        execution.appendTask(ignored -> taskRan.set(true));
 
+        // when
         execution.stopForShutdown();
 
-        var task = execution.getNextTask();
-        assertThat(task).isNotNull();
-        try (var worker = Executors.newSingleThreadExecutor()) {
-            var interrupted = worker.submit(() -> {
-                task.accept(execution);
-                return Thread.interrupted();
-            });
+        // then
+        assertThat(execution.hasTasks()).isFalse();
+        assertThat(execution.getNextTask()).isNull();
+        assertThat(taskRan).isFalse();
+    }
 
-            assertThat(interrupted.get(5, TimeUnit.SECONDS)).isTrue();
-        }
+    @Test
+    void stopForShutdownMakesAWaitThrowASignalThatIsNoException() {
+        // given
+        var execution = execution();
+
+        // when
+        execution.stopForShutdown();
+
+        // then: a body that catches every exception does not catch it
+        assertThatThrownBy(() -> execution.awaitStateChange(state -> true))
+                .isInstanceOf(WorkflowExecutionStoppedError.class)
+                .isNotInstanceOf(Exception.class);
     }
 
     @Test
@@ -619,6 +632,120 @@ class SimpleWorkflowExecutionTest {
             assertThat(terminationHandlerCalled.await(200, TimeUnit.MILLISECONDS)).isTrue();
             assertThat(execution.isRunning()).isFalse();
             assertThat(execution.state().workflowStatus()).isEqualTo(WorkflowStatus.NONE);
+        }
+
+        @Test
+        void stoppedExecutionAppendsNoEventWhenItsBodyHandlesTheInterruptionAndCompletes() throws Exception {
+            // given: a body that handles the interruption of its parked step and completes
+            var target = new AtomicReference<SimpleWorkflowExecution>();
+            var executor = Executors.newSingleThreadExecutor();
+            executorServices.add(executor);
+            var eventStore = echoingEventStore(target);
+            var execution = execution(eventStore, executor, ignored -> {
+                try {
+                    target.get().awaitStateChange(state -> false);
+                } catch (Throwable e) {
+                    // Handled, the way a body that catches every throwable handles a failed wait, and completes.
+                }
+            });
+            target.set(execution);
+            markStarted(execution);
+            var terminationHandlerCalled = new CountDownLatch(1);
+            var body = execution.execute(ignored -> terminationHandlerCalled.countDown());
+            awaitParkedDriver(execution);
+
+            // when
+            execution.stopForShutdown();
+            body.get(5, TimeUnit.SECONDS);
+
+            // then: the completion was not appended, and the execution exits for recovery
+            verify(eventStore, never()).publish(any(ProcessingContext.class), any(EventMessage.class));
+            assertThat(terminationHandlerCalled.await(200, TimeUnit.MILLISECONDS)).isFalse();
+            assertThat(execution.state().workflowStatus()).isEqualTo(WorkflowStatus.STARTED);
+            assertThat(execution.isRunning()).isFalse();
+        }
+
+        @Test
+        void stoppedExecutionUnwindsABodyThatCatchesEveryExceptionOfAWaitAndWaitsAgain() throws Exception {
+            // given: a body that catches every exception of its wait and waits again, bounded only so that a body that
+            // does not unwind ends this test instead of spinning on
+            var target = new AtomicReference<SimpleWorkflowExecution>();
+            var caughtWaits = new AtomicInteger();
+            var executor = Executors.newSingleThreadExecutor();
+            executorServices.add(executor);
+            var eventStore = eventStore();
+            var execution = execution(eventStore, executor, ignored -> {
+                while (caughtWaits.get() < 1_000) {
+                    try {
+                        target.get().awaitStateChange(state -> false);
+                    } catch (Exception e) {
+                        caughtWaits.incrementAndGet();
+                    }
+                }
+            });
+            target.set(execution);
+            markStarted(execution);
+            var terminationHandlerCalled = new CountDownLatch(1);
+            var body = execution.execute(ignored -> terminationHandlerCalled.countDown());
+            awaitParkedDriver(execution);
+
+            // when
+            execution.stopForShutdown();
+            body.get(5, TimeUnit.SECONDS);
+
+            // then: the body never caught the stop, so it did not wait again, and the execution exits for recovery
+            // without writing anything
+            assertThat(caughtWaits).hasValue(0);
+            verify(eventStore, never()).publish(any(ProcessingContext.class), any(EventMessage.class));
+            assertThat(terminationHandlerCalled.await(200, TimeUnit.MILLISECONDS)).isFalse();
+            assertThat(execution.state().workflowStatus()).isEqualTo(WorkflowStatus.STARTED);
+            assertThat(execution.isRunning()).isFalse();
+        }
+
+        @Test
+        void stoppedExecutionWhoseAppendWouldBeRejectedNeverCallsItsTerminationHandler() throws Exception {
+            // given: another writer recorded an event of the workflow, so any append of this execution is rejected
+            var target = new AtomicReference<SimpleWorkflowExecution>();
+            var executor = Executors.newSingleThreadExecutor();
+            executorServices.add(executor);
+            var execution = execution(
+                    failingEventStore(new AppendEventsTransactionRejectedException("another writer owns it")),
+                    executor,
+                    ignored -> {
+                        try {
+                            target.get().awaitStateChange(state -> false);
+                        } catch (Throwable e) {
+                            // Handled, and the body completes.
+                        }
+                    }
+            );
+            target.set(execution);
+            markStarted(execution);
+            var terminationHandlerCalled = new CountDownLatch(1);
+            var body = execution.execute(ignored -> terminationHandlerCalled.countDown());
+            awaitParkedDriver(execution);
+
+            // when: the engine stops it, and another execution of the workflow takes over
+            execution.stopForShutdown();
+            body.get(5, TimeUnit.SECONDS);
+
+            // then: the stopped execution never reports its end, which would remove the execution that took over
+            assertThat(terminationHandlerCalled.await(200, TimeUnit.MILLISECONDS)).isFalse();
+            assertThat(execution.isRunning()).isFalse();
+        }
+
+        @Test
+        void stoppedExecutionDropsTheTasksAppendedAfterItsStop() {
+            // given: a stopped execution
+            var execution = execution(eventStore(), new DirectExecutorService());
+            execution.stopForShutdown();
+
+            // when
+            execution.appendTask(ignored -> {
+            });
+
+            // then
+            assertThat(execution.hasTasks()).isFalse();
         }
 
         @Test

@@ -10,6 +10,8 @@ package io.axoniq.framework.springboot;
 import org.jspecify.annotations.Nullable;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
+import java.time.Duration;
+
 /**
  * The workflow properties exposed to Spring Boot applications under the {@code axon.workflow} prefix.
  * <p>
@@ -103,6 +105,7 @@ public class WorkflowProperties {
     private WorkflowIndexType index = WorkflowIndexType.NONE;
     private final HistoryProcessorProperties history = new HistoryProcessorProperties();
     private final SnapshotProperties snapshots = new SnapshotProperties();
+    private final HibernationProperties hibernation = new HibernationProperties();
 
     /**
      * Returns the number of segments to initialize the workflow event processor with.
@@ -282,6 +285,16 @@ public class WorkflowProperties {
      */
     public SnapshotProperties getSnapshots() {
         return snapshots;
+    }
+
+    /**
+     * The hibernation properties of the workflow engine, under the {@code axon.workflow.hibernation} prefix.
+     *
+     * @return the hibernation properties of the workflow engine
+     * @since 5.5.0
+     */
+    public HibernationProperties getHibernation() {
+        return hibernation;
     }
 
     /**
@@ -537,6 +550,85 @@ public class WorkflowProperties {
          */
         public void setCoordinatorClaimExtension(boolean coordinatorClaimExtension) {
             this.coordinatorClaimExtension = coordinatorClaimExtension;
+        }
+    }
+
+    /**
+     * The hibernation properties of the workflow engine, under the {@code axon.workflow.hibernation} prefix.
+     * <p>
+     * A hibernated workflow is removed from memory while it only waits for an external event or a deadline, and
+     * restored from the event store when that event arrives, that deadline expires, or a cancellation is requested for
+     * it. Hibernation is disabled by default.
+     *
+     * @since 5.5.0
+     */
+    public static class HibernationProperties {
+
+        /**
+         * Whether waiting workflows hibernate. Defaults to {@code false}.
+         */
+        private boolean enabled = false;
+        /**
+         * The time a workflow must make no progress before it hibernates. Defaults to 30 seconds.
+         */
+        private Duration idleDelay = Duration.ofSeconds(30);
+        /**
+         * The time a wake may take to load a hibernated workflow from the event store. Defaults to 10 seconds.
+         */
+        private Duration wakeTimeout = Duration.ofSeconds(10);
+
+        /**
+         * Returns whether waiting workflows hibernate.
+         *
+         * @return {@code true} when waiting workflows hibernate
+         */
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        /**
+         * Sets whether waiting workflows hibernate.
+         *
+         * @param enabled whether waiting workflows hibernate
+         */
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        /**
+         * Returns the time a workflow must make no progress before it hibernates.
+         *
+         * @return the idle delay
+         */
+        public Duration getIdleDelay() {
+            return idleDelay;
+        }
+
+        /**
+         * Sets the time a workflow must make no progress before it hibernates.
+         *
+         * @param idleDelay the idle delay
+         */
+        public void setIdleDelay(Duration idleDelay) {
+            this.idleDelay = idleDelay;
+        }
+
+        /**
+         * Returns the time a wake may take to load a hibernated workflow from the event store.
+         *
+         * @return the wake timeout
+         */
+        public Duration getWakeTimeout() {
+            return wakeTimeout;
+        }
+
+        /**
+         * Sets the time a wake may take to load a hibernated workflow from the event store.
+         *
+         * @param wakeTimeout the wake timeout
+         */
+        public void setWakeTimeout(Duration wakeTimeout) {
+            this.wakeTimeout = wakeTimeout;
         }
     }
 }

@@ -60,7 +60,8 @@ import static java.lang.Thread.currentThread;
  * @author Steven van Beelen
  * @since 5.4.0
  */
-public final class SimpleWorkflowExecution implements WorkflowExecution, WorkflowCancellationProvider {
+public final class SimpleWorkflowExecution
+        implements WorkflowExecution, WorkflowCancellationProvider, WorkflowHibernationProvider {
 
     private static final Logger logger = LoggerFactory.getLogger(SimpleWorkflowExecution.class);
     // Attributes
@@ -69,7 +70,8 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
     private final WorkflowConfiguration<?> workflowConfiguration;
     // Execution
     private final WorkflowExecutionOperationsDelegation contextDelegate;
-    // Why one of this execution's own appends stopped it. Set by the store callback before the body sees the failure.
+    // Why this execution stopped: one of its own appends, set by the store callback before the body sees the failure,
+    // or the engine, which stopped it for a shutdown, a segment release or hibernation.
     private final AtomicReference<StopReason> stopReason = new AtomicReference<>();
     private final BlockingQueue<Consumer<WorkflowExecution>> taskQueue = new ArrayBlockingQueue<>(1000);
     private final EventWaitConditions eventWaitConditions;
@@ -107,6 +109,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
     private boolean running = false;
     private boolean stoppedForRecovery = false;
     private volatile Thread workflowThread;
+    private final WorkflowExecutionHibernationSupport hibernationSupport;
     // State variables
     private volatile EventSourcedWorkflowState workflowState;
 
@@ -176,6 +179,15 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
                 contextDelegate.executorService()
         );
         this.workflowCancellationRequest = new DefaultWorkflowCancellation(this, contextDelegate, runningSteps);
+        this.hibernationSupport = new WorkflowExecutionHibernationSupport(
+                this,
+                () -> !contextDelegate.isStepInProgress()
+                        && taskQueue.isEmpty()
+                        && !workflowCancellationRequest.hasPendingWorkflowCancellation(),
+                eventWaitConditions,
+                runningSteps,
+                contextDelegate.clock()
+        );
 
         initializeState(
                 new EventSourcedWorkflowState(
@@ -236,8 +248,12 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
                                 }
                             } finally {
                                 // A non-terminal exit keeps the instance for recovery, unless another writer owns it.
-                                if (this.state().workflowStatus().isTerminal()
-                                        || stopReason.get() == StopReason.APPEND_REJECTED) {
+                                // An execution the engine stopped has left the engine already: it never finishes, so
+                                // its termination handler cannot touch the execution that replaced it.
+                                var reason = stopReason.get();
+                                if (reason != StopReason.STOPPED
+                                        && (this.state().workflowStatus().isTerminal()
+                                        || reason == StopReason.APPEND_REJECTED)) {
                                     finishWorkflow(terminationHandler);
                                 } else {
                                     stopRuntimeForRecovery();
@@ -273,7 +289,9 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
             try {
                 awaitStateChange(s -> s.workflowStatus() == WorkflowStatus.STARTED);
             } catch (Exception e) {
-                logger.error("Error waiting for start of workflow instance {}", workflowId, e);
+                if (!isStopped()) {
+                    logger.error("Error waiting for start of workflow instance {}", workflowId, e);
+                }
             }
         }
     }
@@ -328,6 +346,11 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
      * @param exception exception to handle.
      */
     private void handleWorkflowException(ProcessingContext ctx, Throwable exception) {
+        if (stopReason.get() == StopReason.STOPPED) {
+            // Whatever the body threw after the engine stopped it: it appends nothing more, and resumes elsewhere.
+            logger.debug("Workflow {} driver stopped: {}", workflowId, exception.getMessage());
+            return;
+        }
         if (completeCancellationRequest(ctx)) {
             return;
         }
@@ -498,19 +521,47 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
         terminalEventPublication.run();
         try {
             awaitStateChange(s -> s.workflowStatus().isTerminal());
-        } catch (Exception e) {
-            logger.error("Error waiting for termination of workflow instance {}", workflowId, e);
+        } catch (Exception | WorkflowExecutionStoppedError e) {
+            // The terminal event is durable already: a stop only ends the wait for it to be applied here.
+            if (!isStopped()) {
+                logger.error("Error waiting for termination of workflow instance {}", workflowId, e);
+            }
         }
     }
 
+    /**
+     * {@inheritDoc}
+     * <p>
+     * Throws a {@link WorkflowExecutionStoppedError} once the engine {@link #stopForShutdown() stopped} this execution,
+     * without running another task: a stopped execution acts on nothing anymore, also not on a task queued before its
+     * stop. That signal is no {@link Exception}, so a body that handles failed steps, or catches every exception, still
+     * unwinds instead of waiting again in a loop, and its driver exits.
+     */
     @Override
     public void awaitStateChange(
             Predicate<WorkflowState> predicate
     ) throws InterruptedException {
         do {
+            throwWhenStopped();
             var taken = taskQueue.take();
+            throwWhenStopped();
             checkpointingSupport.runTask(taken, this);
         } while (!predicate.test(this.state()));
+    }
+
+    private void throwWhenStopped() {
+        if (isStopped()) {
+            throw new WorkflowExecutionStoppedError(workflowId);
+        }
+    }
+
+    private boolean isStopped() {
+        return stopReason.get() == StopReason.STOPPED;
+    }
+
+    @Override
+    public WorkflowExecutionHibernationSupport workflowHibernation() {
+        return hibernationSupport;
     }
 
     @Override
@@ -518,6 +569,10 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
         // An event another instance published through the publish primitive is broadcast to every owned execution.
         // It carries that instance's step metadata, so it may wake a wait here but never evolves this state.
         boolean ownState = !isForeignStep(eventMessage);
+        if (isOwnEvent(eventMessage)) {
+            // Progress of this workflow: it stays in memory for at least the idle delay of hibernation.
+            hibernationSupport.active();
+        }
         if (running) {
             // live mode
             appendTask(i -> {
@@ -545,13 +600,22 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
     }
 
 
+    /**
+     * {@inheritDoc}
+     * <p>
+     * The engine calls this when it shuts down, when it releases the segment of this workflow, and when the workflow
+     * hibernates. In each case another execution of the workflow may take over, so from now on this execution appends
+     * no event: every wait of its body throws a {@link WorkflowExecutionStoppedError}, a body that catches even that
+     * and carries on finds every append refused, and tasks queued from now on, like a timeout firing late, are
+     * dropped. Its driver exits for recovery, without calling its termination handler.
+     */
     @Override
     public void stopForShutdown() {
+        stopReason.set(StopReason.STOPPED);
         runningSteps.cancelAll(new StepInterruptedException("Workflow engine shutdown"), s -> {
         });
-        // Unblock the workflow driver thread parked on taskQueue.take() inside the current step's await() loop.
-        // The task sets the driver thread's interrupt flag; the next taskQueue.take() observes it and throws
-        // InterruptedException, propagating up so the driver thread exits cleanly.
+        // Unblock the workflow driver thread parked on taskQueue.take() inside the current step's await() loop. The
+        // driver does not run this task: it finds the execution stopped once it took it, and unwinds.
         taskQueue.offer(i -> Thread.currentThread().interrupt());
     }
 
@@ -578,21 +642,45 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
         checkpointingSupport.registerListener(listener);
     }
 
+    /**
+     * {@inheritDoc}
+     * <p>
+     * Returns {@code null} once the engine {@link #stopForShutdown() stopped} this execution: a stopped execution runs
+     * no further task.
+     */
     @Override
     @Nullable
     public Consumer<WorkflowExecution> getNextTask() {
+        if (isStopped()) {
+            return null;
+        }
         var task = this.taskQueue.poll();
         return task == null ? null : execution -> checkpointingSupport.runTask(task, execution);
     }
 
     @Override
     public void appendTask(Consumer<WorkflowExecution> task) {
+        if (isStopped()) {
+            logger.trace("Dropping a task of workflow {}: its execution was stopped.", workflowId);
+            return;
+        }
         checkpointingSupport.appendTask(task);
     }
 
+    /**
+     * {@inheritDoc}
+     * <p>
+     * Returns {@code false} once the engine {@link #stopForShutdown() stopped} this execution, which runs no further
+     * task.
+     */
     @Override
     public boolean hasTasks() {
-        return !this.taskQueue.isEmpty();
+        return !isStopped() && !this.taskQueue.isEmpty();
+    }
+
+    private boolean isOwnEvent(EventMessage eventMessage) {
+        var metadata = eventMessage.metadata();
+        return MetadataUtils.hasWorkflowId().test(metadata) && workflowId.equals(MetadataUtils.getWorkflowId(metadata));
     }
 
     private boolean isForeignStep(EventMessage eventMessage) {
@@ -606,13 +694,22 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
         return running;
     }
 
+    /**
+     * {@inheritDoc}
+     * <p>
+     * Refuses the append, without writing, once the engine {@link #stopForShutdown() stopped} this execution.
+     */
     @Override
     public CompletableFuture<Void> appendWorkflowEvent(EventMessage eventMessage, Context parentContext) {
-        return appender.appendSequentially(marker -> workflowEventPublisher.publish(
-                eventMessage,
-                parentContext,
-                appendConditionFor(marker)
-        )).whenComplete((ignored, failure) -> {
+        return appender.appendSequentially(marker -> {
+            // Checked when this append's turn comes, so an append queued before the stop is refused as well.
+            if (isStopped()) {
+                return CompletableFuture.failedFuture(new StepInterruptedException(
+                        "Workflow execution " + workflowId + " was stopped; not appending " + eventMessage.type()
+                ));
+            }
+            return workflowEventPublisher.publish(eventMessage, parentContext, appendConditionFor(marker));
+        }).whenComplete((ignored, failure) -> {
             if (failure == null) {
                 return;
             }
@@ -620,8 +717,9 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
                 logger.warn("Append of {} for workflow '{}' was rejected: another writer already recorded events for "
                                     + "this instance. Stopping this execution.",
                             eventMessage.type(), workflowId);
-                // A rejection wins over an earlier store failure: the execution must leave this engine.
-                stopReason.set(StopReason.APPEND_REJECTED);
+                // A rejection wins over an earlier store failure: the execution must leave this engine. A stop by
+                // the engine wins over both: the engine removed the execution already.
+                stopReason.getAndUpdate(reason -> reason == StopReason.STOPPED ? reason : StopReason.APPEND_REJECTED);
                 interruptWorkflowDriver();
             } else {
                 stopReason.compareAndSet(null, StopReason.APPEND_FAILED);
@@ -708,12 +806,14 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
     }
 
     /**
-     * Why one of this execution's own appends stopped it. A rejection means another writer recorded an event for the
-     * instance first, so this execution leaves the engine. Any other failure means the store did not accept the event,
-     * so the workflow pauses and is re-driven from its history.
+     * Why this execution stopped. A rejection means another writer recorded an event for the instance first, so this
+     * execution leaves the engine. Any other failure of an append means the store did not accept the event, so the
+     * workflow pauses and is re-driven from its history. A stop means the engine stopped the execution, which it
+     * removed already, so it appends nothing more.
      */
     private enum StopReason {
         APPEND_REJECTED,
-        APPEND_FAILED
+        APPEND_FAILED,
+        STOPPED
     }
 }

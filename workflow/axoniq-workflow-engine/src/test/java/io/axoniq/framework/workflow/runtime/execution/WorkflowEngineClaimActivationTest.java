@@ -457,19 +457,19 @@ class WorkflowEngineClaimActivationTest {
             var execution = recordingExecution();
             claim(token(5)).join();
             // and - the handler pauses right after creating the new instance, while the catch-up poll that finds the
-            // segment caught up runs on another thread, until that poll has started the instance or one second passed,
-            // whichever comes first
+            // segment caught up runs on another thread, until that poll has either started the instance or waits for
+            // the handler to finish
             var cancellation = execution.workflowCancellation();
             var poller = new Thread(WorkflowEngineClaimActivationTest.this::runCatchUpPolls);
             var createdInstance = new AtomicBoolean();
             when(execution.workflowCancellation()).thenAnswer(invocation -> {
                 if (createdInstance.compareAndSet(false, true)) {
                     segmentPosition.set(STARTUP_HEAD);
+                    var claim = engine.catchUpSupport.claimOf(SEGMENT).orElseThrow();
                     poller.start();
-                    long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(1);
-                    while (bodyStarts.isEmpty() && System.nanoTime() < deadline) {
-                        Thread.onSpinWait();
-                    }
+                    await().atMost(Duration.ofSeconds(5)).until(
+                            () -> !bodyStarts.isEmpty() || engine.catchUpSupport.isWaitingForLock(claim, poller)
+                    );
                 }
                 return cancellation;
             });

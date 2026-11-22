@@ -84,9 +84,26 @@ class InMemoryWorkflowExecutionRepositoryTest {
 
         verify(descriptor).describeProperty("size", 2);
         verify(descriptor).describeProperty(eq("workflowIds"), any(Collection.class));
-        assertThat(repository.remove("order-42")).isSameAs(first);
-        assertThat(repository.remove("unknown")).isNull();
+        assertThat(repository.remove("order-42", first)).isTrue();
+        assertThat(repository.findById("order-42")).isEmpty();
+        assertThat(repository.remove("unknown", first)).isFalse();
         repository.clear();
         assertThat(repository.findAll()).isEmpty();
+    }
+
+    @Test
+    void removesWhateverExecutionIsStoredForAnIdentifier() {
+        // given
+        var repository = new InMemoryWorkflowExecutionRepository();
+        var stored = execution("order-42", WorkflowStatus.STARTED);
+        repository.save("order-42", () -> stored);
+
+        // when
+        var removed = repository.remove("order-42");
+
+        // then
+        assertThat(removed).isSameAs(stored);
+        assertThat(repository.findById("order-42")).isEmpty();
+        assertThat(repository.remove("order-42")).isNull();
     }
 }

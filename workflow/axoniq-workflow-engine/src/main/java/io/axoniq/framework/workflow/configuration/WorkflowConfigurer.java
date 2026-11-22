@@ -79,6 +79,8 @@ public class WorkflowConfigurer implements ApplicationConfigurer {
     private final EventSourcingConfigurer delegate;
     @Nullable
     private WorkflowSnapshotConfiguration snapshotConfiguration;
+    @Nullable
+    private WorkflowHibernationConfiguration hibernationConfiguration;
 
     private WorkflowConfigurer(EventSourcingConfigurer delegate) {
         this.delegate = requireNonNull(delegate, "The Event Sourcing Configurer cannot be null.");
@@ -193,6 +195,42 @@ public class WorkflowConfigurer implements ApplicationConfigurer {
             ));
         }
         this.snapshotConfiguration = snapshots;
+        return this;
+    }
+
+    /**
+     * Applies the given {@code hibernationConfiguration} function to a new {@link WorkflowHibernationConfiguration},
+     * and registers the result as the {@code WorkflowHibernationConfiguration} component, which decides whether, and
+     * when, the waiting workflows of every workflow module hibernate.
+     * <p>
+     * Hibernation is disabled by default. A hibernated workflow is removed from memory while it only waits for an
+     * external event or a deadline, and restored from the event store when it may be woken:
+     * <pre>{@code
+     * WorkflowConfigurer.create()
+     *                   .hibernation(hibernation -> hibernation.enabled(true)
+     *                                                          .idleDelay(Duration.ofMinutes(1)));
+     * }</pre>
+     * A workflow module overrides these settings for its own workflows through
+     * {@link WorkflowModule.OptionalPhase#hibernation(Function)}. Every invocation starts from a new
+     * {@code WorkflowHibernationConfiguration}, and replaces the configuration of an earlier invocation.
+     *
+     * @param hibernationConfiguration a function customizing the {@link WorkflowHibernationConfiguration}
+     * @return the current instance of the {@code Configurer} for a fluent API
+     */
+    public WorkflowConfigurer hibernation(
+            Function<WorkflowHibernationConfiguration, WorkflowHibernationConfiguration> hibernationConfiguration
+    ) {
+        var hibernation = requireNonNull(
+                requireNonNull(hibernationConfiguration, "The hibernation configuration function must not be null.")
+                        .apply(new WorkflowHibernationConfiguration()),
+                "The hibernation configuration function must not return null."
+        );
+        if (this.hibernationConfiguration == null) {
+            delegate.componentRegistry(cr -> cr.registerComponent(
+                    WorkflowHibernationConfiguration.class, c -> requireNonNull(this.hibernationConfiguration)
+            ));
+        }
+        this.hibernationConfiguration = hibernation;
         return this;
     }
 

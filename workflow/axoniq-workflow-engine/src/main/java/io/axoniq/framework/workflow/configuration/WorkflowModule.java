@@ -266,6 +266,7 @@ public interface WorkflowModule<C extends WorkflowContext> extends Module {
      *         {@link PooledStreamingEventProcessorConfiguration} backing this module's event processor.</li>
      *     <li>{@link #withHistory(ComponentBuilder)} / {@link #withoutHistory()} - enable or disable workflow history
      *         tracking.</li>
+     *     <li>{@link #hibernation(Function)} - customize the hibernation of waiting workflows for this module.</li>
      *     <li>{@link #historyProcessorConfiguration(Function)} - customize the
      *         {@link PooledStreamingEventProcessorConfiguration} backing the history projector's own event
      *         processor.</li>
@@ -340,6 +341,32 @@ public interface WorkflowModule<C extends WorkflowContext> extends Module {
          *                                                             interval
          */
         default OptionalPhase<C> checkpointInterval(long checkpointInterval) {
+            throw new UnsupportedOperationException();
+        }
+
+        /**
+         * Customizes the hibernation of this module's waiting workflows, starting from the application's
+         * {@link WorkflowHibernationConfiguration}, set through {@link WorkflowConfigurer#hibernation(Function)} or the
+         * Spring Boot {@code axon.workflow.hibernation} properties.
+         * <p>
+         * Use it to let only the workflows of this module hibernate, or to give them their own idle delay:
+         * <pre>{@code
+         * WorkflowModule.configure("orders", MyWorkflowContext.class)
+         *               .definition(...)
+         *               .hibernation(hibernation -> hibernation.enabled(true)
+         *                                                      .idleDelay(Duration.ofMinutes(5)));
+         * }</pre>
+         * Every invocation starts from the application's settings again, and replaces the customization of an earlier
+         * invocation.
+         *
+         * @param hibernation a function customizing a copy of the application's
+         *                    {@link WorkflowHibernationConfiguration}
+         * @return this phase, for further optional configuration
+         * @throws UnsupportedOperationException if this phase does not support hibernation
+         */
+        default OptionalPhase<C> hibernation(
+                Function<WorkflowHibernationConfiguration, WorkflowHibernationConfiguration> hibernation
+        ) {
             throw new UnsupportedOperationException();
         }
 

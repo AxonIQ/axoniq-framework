@@ -23,16 +23,21 @@ import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.SimpleUnitOfWorkFactory;
 import org.axonframework.messaging.core.unitofwork.StubProcessingContext;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.*;
 import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscriber;
 import org.reactivestreams.Subscription;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Supplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -226,6 +231,123 @@ class SimpleWorkflowManagerTest {
         assertThat(instance.state().join().workflowId()).isEqualTo("order-42");
     }
 
+    /**
+     * A query that names no workflow id, on a module that projects no history, listens for the workflows that wake
+     * while it looks up the hibernated workflows.
+     */
+    @Nested
+    class WakeListenerOfAQueryForEveryHibernatedWorkflow {
+
+        private final AtomicInteger registrations = new AtomicInteger();
+        private final AtomicInteger registeredListeners = new AtomicInteger();
+        // The failure that removing a listener throws, if any.
+        private @Nullable RuntimeException removalFailure;
+
+        private SimpleWorkflowManager manager(WorkflowHistoryRepository history,
+                                              Supplier<Set<String>> hibernatedWorkflowIds) {
+            return new SimpleWorkflowManager(history,
+                                             new InMemoryWorkflowExecutionRepository(),
+                                             new WorkflowCancellationService(),
+                                             storeMirroring(history),
+                                             new SimpleUnitOfWorkFactory(EmptyApplicationContext.INSTANCE),
+                                             Runnable::run,
+                                             hibernatedWorkflowIds,
+                                             listener -> {
+                                                 registrations.incrementAndGet();
+                                                 registeredListeners.incrementAndGet();
+                                                 return () -> {
+                                                     registeredListeners.decrementAndGet();
+                                                     if (removalFailure != null) {
+                                                         throw removalFailure;
+                                                     }
+                                                     return true;
+                                                 };
+                                             },
+                                             false);
+        }
+
+        @Test
+        void isRemovedOnceTheQuerySucceeded() {
+            // given
+            var manager = manager(history(new WorkflowHistory("order-42", state("order-42", "PaymentWorkflow"))),
+                                  Set::of);
+
+            // when
+            var size = manager.findMany(WorkflowStateQuery.all()).size();
+
+            // then
+            assertThat(size).succeedsWithin(Duration.ofSeconds(5)).isEqualTo(1);
+            assertThat(registrations).hasValue(1);
+            assertThat(registeredListeners).hasValue(0);
+        }
+
+        @Test
+        void isRemovedOnceTheLookupsFailed() {
+            // given - a history whose lookup fails
+            var failingHistory = new WorkflowHistoryRepository() {
+                @Override
+                public CompletableFuture<List<WorkflowHistory>> findAll(WorkflowStateQuery query) {
+                    return CompletableFuture.failedFuture(new IllegalStateException("history unavailable"));
+                }
+
+                @Override
+                public CompletableFuture<Optional<WorkflowHistory>> findById(String workflowId) {
+                    return CompletableFuture.completedFuture(Optional.empty());
+                }
+            };
+            var manager = manager(failingHistory, Set::of);
+
+            // when
+            var size = manager.findMany(WorkflowStateQuery.all()).size();
+
+            // then
+            assertThat(size).failsWithin(Duration.ofSeconds(5));
+            assertThat(registrations).hasValue(1);
+            assertThat(registeredListeners).hasValue(0);
+        }
+
+        @Test
+        void isRemovedWhenStartingTheLookupsThrowsAnError() {
+            // given - reading the hibernated workflows, the first lookup, throws an error
+            var manager = manager(history(), () -> {
+                throw new AssertionError("cannot read the hibernated workflows");
+            });
+
+            // when
+            var size = manager.findMany(WorkflowStateQuery.all()).size();
+
+            // then - the error fails the query, rather than escaping it
+            assertThat(size).failsWithin(Duration.ofSeconds(5))
+                            .withThrowableThat()
+                            .withRootCauseInstanceOf(AssertionError.class);
+            assertThat(registrations).hasValue(1);
+            assertThat(registeredListeners).hasValue(0);
+        }
+
+        @Test
+        void keepsTheErrorOfStartingTheLookupsWhenRemovingItFails() {
+            // given - reading the hibernated workflows, the first lookup, throws an error, and so does removing the
+            // listener after that
+            var failedRemoval = new IllegalStateException("cannot remove the listener");
+            removalFailure = failedRemoval;
+            var manager = manager(history(), () -> {
+                throw new AssertionError("cannot read the hibernated workflows");
+            });
+
+            // when
+            var size = manager.findMany(WorkflowStateQuery.all()).size();
+
+            // then - the error fails the query, carrying the failed removal, rather than the removal escaping it
+            assertThat(size).failsWithin(Duration.ofSeconds(5))
+                            .withThrowableThat()
+                            .havingRootCause()
+                            .isInstanceOf(AssertionError.class)
+                            .satisfies(error -> assertThat(error.getSuppressed()).containsExactly(failedRemoval));
+            assertThat(registrations).hasValue(1);
+            assertThat(registeredListeners).hasValue(0);
+        }
+    }
+
     private static SimpleWorkflowManager manager(WorkflowHistoryRepository history) {
         return manager(history, new InMemoryWorkflowExecutionRepository());
     }
@@ -243,7 +365,10 @@ class SimpleWorkflowManagerTest {
                                          cancellations,
                                          storeMirroring(history),
                                          new SimpleUnitOfWorkFactory(EmptyApplicationContext.INSTANCE),
-                                         Runnable::run);
+                                         Runnable::run,
+                                         Set::of,
+                                         listener -> () -> true,
+                                         true);
     }
 
     /**

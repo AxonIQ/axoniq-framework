@@ -9,6 +9,7 @@ package io.axoniq.framework.springboot.autoconfig;
 
 import io.axoniq.framework.springboot.WorkflowProperties;
 import io.axoniq.framework.springboot.workflow.WorkflowDefinitionLookup;
+import io.axoniq.framework.workflow.configuration.WorkflowHibernationConfiguration;
 import io.axoniq.framework.workflow.configuration.WorkflowSnapshotConfiguration;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowEngine;
 import org.axonframework.eventsourcing.snapshot.api.SnapshotPolicy;
@@ -69,5 +70,25 @@ public class WorkflowAutoConfiguration {
                 .workflowState(SnapshotPolicy.afterEvents(properties.getWorkflowState().getAfterEvents()));
         var enabled = properties.getEnabled();
         return enabled == null ? snapshots : snapshots.enabled(enabled);
+    }
+
+    /**
+     * Provides the {@link WorkflowHibernationConfiguration} of the {@code axon.workflow.hibernation} properties, which
+     * decides whether, and when, the waiting workflows of every workflow module hibernate.
+     * <p>
+     * Hibernation is disabled unless {@code axon.workflow.hibernation.enabled} is {@code true}. A workflow module
+     * overrides these settings through {@code WorkflowModule.OptionalPhase#hibernation}. An application defining its
+     * own {@code WorkflowHibernationConfiguration} bean replaces this one, and the properties with it.
+     *
+     * @param workflowProperties the {@link WorkflowProperties} holding the hibernation settings
+     * @return the {@link WorkflowHibernationConfiguration} of the {@code axon.workflow.hibernation} properties
+     */
+    @Bean
+    @ConditionalOnMissingBean
+    public WorkflowHibernationConfiguration workflowHibernationConfiguration(WorkflowProperties workflowProperties) {
+        var properties = workflowProperties.getHibernation();
+        return new WorkflowHibernationConfiguration().enabled(properties.isEnabled())
+                                                     .idleDelay(properties.getIdleDelay())
+                                                     .wakeTimeout(properties.getWakeTimeout());
     }
 }

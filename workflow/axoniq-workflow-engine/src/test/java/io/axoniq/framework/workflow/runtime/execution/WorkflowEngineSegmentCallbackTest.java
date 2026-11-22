@@ -11,6 +11,8 @@ import io.axoniq.framework.workflow.index.inmemory.InMemoryWorkflowIndex;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
 import org.axonframework.common.configuration.ComponentNotFoundException;
 import org.axonframework.messaging.core.ApplicationContext;
+import org.axonframework.messaging.core.QualifiedName;
+import org.axonframework.messaging.core.VersionedType;
 import org.axonframework.messaging.core.unitofwork.SimpleUnitOfWorkFactory;
 import org.axonframework.messaging.core.unitofwork.StubProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
@@ -61,9 +63,10 @@ class WorkflowEngineSegmentCallbackTest {
     }
 
     private static WorkflowExecution execution(String workflowId) {
-        var execution = mock(WorkflowExecution.class);
-        when(execution.workflowId()).thenReturn(workflowId);
-        return execution;
+        var definitionId = VersionedType.of(new QualifiedName("Sharded"), "1.0.0");
+        return WorkflowExecutionFixture.mockExecution(
+                workflowId, new EventSourcedWorkflowState(workflowId, definitionId), true
+        );
     }
 
     /**
@@ -106,16 +109,38 @@ class WorkflowEngineSegmentCallbackTest {
         var repository = new InMemoryWorkflowExecutionRepository();
         repository.save(OWNED_ID, () -> owned);
         repository.save(FOREIGN_ID, () -> foreign);
-        var cancellationService = mock(WorkflowCancellationService.class);
+        var cancellationService = new WorkflowCancellationService();
+        var engine = engine(repository, mock(WorkflowStore.class), cancellationService);
+        engine.registerCancellation(owned);
+        engine.registerCancellation(foreign);
 
-        var release = engine(repository, mock(WorkflowStore.class), cancellationService).releaseWorkflowsFor(SEGMENT);
+        var release = engine.releaseWorkflowsFor(SEGMENT);
 
         assertThat(release).isCompleted();
         verify(owned).stopForShutdown();
         verify(foreign, never()).stopForShutdown();
-        verify(cancellationService).unregister(OWNED_ID);
-        verify(cancellationService, never()).unregister(FOREIGN_ID);
+        assertThat(cancellationService.registered(OWNED_ID)).isNull();
+        assertThat(cancellationService.registered(FOREIGN_ID)).isNotNull();
         assertThat(repository.findAll()).containsExactly(foreign);
+    }
+
+    @Test
+    void aReleaseLeavesTheCancellationThatReplacedTheOneOfAReleasedExecutionRegistered() {
+        // given: a released execution, whose cancellation was replaced by another registration of its workflow
+        var owned = execution(OWNED_ID);
+        var repository = new InMemoryWorkflowExecutionRepository();
+        repository.save(OWNED_ID, () -> owned);
+        var cancellationService = new WorkflowCancellationService();
+        var engine = engine(repository, mock(WorkflowStore.class), cancellationService);
+        engine.registerCancellation(owned);
+        var replacement = mock(WorkflowCancellation.class);
+        cancellationService.register(OWNED_ID, replacement);
+
+        // when
+        engine.releaseWorkflowsFor(SEGMENT);
+
+        // then
+        assertThat(cancellationService.registered(OWNED_ID)).isSameAs(replacement);
     }
 
     @Test

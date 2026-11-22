@@ -429,6 +429,62 @@ IMPORTANT: The workflow index types are marked `@Internal`.
 They are usable and supported to configure the index and to write your own implementation, but their shape may still change in a minor release.
 
 
+[[hibernation]]
+=== Hibernation
+
+A workflow that waits for an event or a deadline keeps its execution in memory, with a parked thread.
+With many long waits, enable hibernation: a waiting workflow then leaves memory, and the engine restores it from the event store when it may be woken.
+
+[source,java]
+----
+include::example$workflows/configuration/ConfigurationExamples.java[tag=hibernation,indent=0]
+----
+<.> Hibernation is disabled by default.
+<.> A workflow hibernates once none of its own events was applied to it for this long. Defaults to 30 seconds. A restored workflow stays in memory for at least this long, so workflows that wake often stay in memory.
+<.> How long a wake may take to load a workflow from the event store. Defaults to 10 seconds.
+
+A workflow only hibernates at a safe point: its body waits on a step result, and every active step is an open `awaitEvent`, `waitForEvent` or `sleep` whose timeout the engine can read.
+A running `execute` step, also one that waits to retry, keeps the workflow in memory, as does a wait that a step is still starting.
+Combinators record no step of their own, so a workflow that waits in `anyMatch` or `allMatch` for events and deadlines hibernates as well.
+
+A hibernated workflow is still running.
+The workflow manager finds it, by ID and among the running workflows, and can cancel it.
+The engine wakes it when:
+
+* An event arrives that one of its waits may accept.
+The engine routes broadcast events by event name and by the `=` associations of each wait, see xref:waiting-for-events.adoc#hibernation[Waiting for events].
+* An event of the workflow itself arrives, such as one appended by another node.
+* Its nearest deadline expires. The wait then times out as usual.
+* A cancellation is requested for it.
+
+A wake restores the workflow from the event store, as a claim of its segment does, and hands it what woke it before its body continues.
+With <<snapshots,snapshots>>, a wake reads the latest snapshot plus the events after it.
+A wake by an event runs on the thread of the processor that handles the event, so the wake timeout bounds how long it holds up the segment.
+When a wake by an event fails, for example because the event store cannot be read, the event fails, every time it does.
+The segment then stores no position past that event, and the engine asks the processor to release the segment, also when its error handler does not propagate the failure.
+The next claim restores the workflow and handles the event again.
+A failed wake by a deadline or a cancellation is tried again after the idle delay.
+
+Hibernation is a decision of each node, and writes nothing.
+When a node claims a segment, it restores every running workflow of that segment, including those another node had hibernated, and they hibernate again after the idle delay.
+The <<workflow-index,workflow index>> keeps listing a hibernated workflow as running.
+A release of a segment, a split or merge of segments, and a shutdown forget the hibernated workflows of that segment on that node.
+A workflow that hibernates, or whose segment is released, appends no more events from the execution it leaves: the execution that restores it continues from its events.
+Every wait of the body in the execution it leaves ends with an `Error`, which is no failure of a step or of the workflow, so a body that catches `Exception`, for example to wait again in a loop, still unwinds.
+A body that catches `Throwable`, as Kotlin's `runCatching` does, must rethrow an `Error` it does not handle.
+Otherwise every wait of its loop ends at once, and the left execution keeps a thread of the workflow executor busy and stays in memory.
+
+To set hibernation for the workflows of one module only, customize it on the module.
+The function receives the settings of the application:
+
+[source,java]
+----
+include::example$workflows/configuration/ConfigurationExamples.java[tag=module-hibernation,indent=0]
+----
+
+The `hibernation` method of the `WorkflowConfigurer` registers a `WorkflowHibernationConfiguration` component.
+You can also register a component, or bean, of your own.
+
 [[spring-boot]]
 == Spring Boot
 
@@ -494,6 +550,26 @@ The history processor uses the same properties under `axon.workflow.history.*`.
 |Number of sourced events after which the state of a workflow instance is snapshotted.
 |===
 
+<<hibernation,Hibernation>> is configured with `axon.workflow.hibernation.*` properties.
+A `WorkflowHibernationConfiguration` bean of your own replaces them.
+
+[cols="2,1,3"]
+|===
+|Property |Default |Description
+
+|`enabled`
+|`false`
+|Whether waiting workflows hibernate.
+
+|`idle-delay`
+|`30s`
+|How long a workflow must make no progress before it hibernates.
+
+|`wake-timeout`
+|`10s`
+|How long a wake may take to load a workflow from the event store.
+|===
+
 The auto-configuration keeps no <<workflow-index,workflow index>> unless you select one.
 To keep the index in your database with a `JpaWorkflowIndex`, set `axon.workflow.index=jpa`.
 This requires an `EntityManagerFactory`, and adds the entities of the index to the persistence unit.
@@ -529,7 +605,7 @@ The auto-configuration only sees the declared type of a bean when it sets up the
 For a method that declares `WorkflowIndex`, set `axon.workflow.index=jpa` as well.
 <.> Replaces the index the auto-configuration selects, here with a `JpaWorkflowIndex` whose operations time out sooner.
 
-See <<running-on-several-nodes,Running on several nodes>> for the token store, failover, snapshots and the workflow index, and <<performance-tuning,Performance tuning>> for choosing the processor values.
+See <<running-on-several-nodes,Running on several nodes>> for the token store, failover, snapshots, the workflow index and hibernation, and <<performance-tuning,Performance tuning>> for choosing the processor values.
 
 [[performance-tuning]]
 == Performance tuning

@@ -50,4 +50,18 @@ final class WorkflowSegmentOwnership {
         }
         return segment.matches(workflowId);
     }
+
+    /**
+     * Returns whether the given segments share any workflow instance: whether one of them contains the other. A
+     * processor never holds two overlapping segments at once, so state kept for a segment that overlaps a segment being
+     * claimed or released belongs to a segment that was split or merged without a release.
+     *
+     * @param one   a segment
+     * @param other another segment
+     * @return {@code true} when the segments share workflow instances
+     */
+    static boolean overlap(Segment one, Segment other) {
+        int commonMask = one.getMask() & other.getMask();
+        return (one.getSegmentId() & commonMask) == (other.getSegmentId() & commonMask);
+    }
 }

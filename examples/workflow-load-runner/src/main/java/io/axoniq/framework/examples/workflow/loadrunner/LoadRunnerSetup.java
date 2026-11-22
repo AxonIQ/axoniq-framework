@@ -86,7 +86,7 @@ final class LoadRunnerSetup {
                                 )
                                 .registerWorkflowStatusChangeListener(
                                         WorkflowStatus.COMPLETED,
-                                        (status, context, pc) -> statistics.recordCompleted()
+                                        (status, context, pc) -> statistics.recordCompleted(context.workflowId())
                                 )
                                 .registerWorkflowStatusChangeListener(
                                         WorkflowStatus.FAILED,
@@ -108,6 +108,9 @@ final class LoadRunnerSetup {
                 .withoutHistory();
 
         var configurer = WorkflowConfigurer.create().registerWorkflowModule(module);
+        if (options.hibernate()) {
+            configurer.hibernation(hibernation -> hibernation.enabled(true).idleDelay(options.idleDelay()));
+        }
         configureEventStore(configurer, options);
         configureTokenStore(configurer, entityManagerFactory);
         configureWorkflowIndex(configurer, options.index(), entityManagerFactory);

@@ -76,6 +76,10 @@ Options:
   --axon-server=<address> Axon Server address (default: localhost:8124)
   --data-dir=<dir>        directory of the token store and workflow index database
                           (default: ./target/load-runner-data)
+  --hibernate             let waiting instances hibernate: leave memory once idle, and be
+                          restored from the event store when their approval arrives
+  --idle-delay=<duration> how long a waiting instance must make no progress before it
+                          hibernates, as an ISO-8601 duration (default: PT10S)
   --in-memory-events      use an in-memory event store instead of Axon Server; nothing survives
                           a restart, for trying the runner without Axon Server
   --exit                  stop once the instances are started and wait for their approval,
@@ -113,6 +117,28 @@ java -jar $JAR 0 --exit
 
 Compare the `main -> workflow processor ready` lines of steps 2 and 3. Both restore the same instances in progress.
 
+## Scenario: memory with and without hibernation
+
+With `--hibernate`, a waiting instance leaves memory once it made no progress for the idle delay (`--idle-delay`,
+ten seconds by default in this runner), and is restored from the event store when its approval arrives. The runner
+then only approves instances that are hibernated, so the approval latency includes waking them. Hibernation is a
+decision of a single node: it writes nothing, so a restart's segment claims restore every running instance into
+memory, after which they hibernate again once idle.
+
+```shell
+JAR=examples/workflow-load-runner/target/workflow-load-runner.jar
+
+# 1. Start 10000 instances with hibernation. Keep the runner running for a minute, so the instances hibernate and
+#    the approved ones are woken, then stop it with Ctrl+C.
+java -jar $JAR 10000 --hibernate --data-dir=target/hibernation
+
+# 2. Restart with hibernation. Watch the executions in memory right after the claims, and the line that reports when
+#    99% of the instances in progress hibernated again. Stop it with Ctrl+C after a minute.
+java -jar $JAR 0 --hibernate --data-dir=target/hibernation
+```
+
+Compare with the same steps without `--hibernate`, on a fresh Axon Server and data directory.
+
 ## What the numbers mean
 
 At startup the runner prints:
@@ -142,7 +168,12 @@ workflow instances in progress:      ...
   segment caught up when its coordinator checks again, at most the token claim interval later. The runner lowers that
   interval from 5 seconds to 500 milliseconds, so this number is accurate to about half a second.
 - **workflow instances in progress**: the number of workflow instances with status `STARTED` on this node at that
-  moment, according to the `WorkflowManager`.
+  moment: the executions in memory with that status, plus the hibernated instances.
+- **executions in memory, hibernated, used heap after GC**: the workflow executions the engine holds in memory, the
+  instances it hibernated, and the used heap right after a `System.gc()`. The heap is approximate: `System.gc()` is
+  only a request, and the used heap includes everything else the application holds. The runner reads the first two
+  from the module's `WorkflowEngine`, an internal component, because the `WorkflowManager` does not expose these
+  counts, and sources every hibernated instance from the event store to answer a query.
 
 After starting the instances it prints:
 
@@ -160,7 +191,11 @@ workflow instances in progress:      ...
 
 The progress line, every five seconds, shows the start events published, the instances of this run that started, the
 instances in progress on this node, the approvals published, the instances that completed or failed since this
-process started, and how many segments the processor holds and how many of those are caught up.
+process started, how many segments the processor holds and how many of those are caught up, the memory figures
+described above, the peak number of executions in memory, sampled every second, and the time from publishing an
+approval until the approved instance completed (median, 95th percentile and maximum). Stopping prints the same memory
+figures once more. With `--hibernate`, the runner also reports once when, after the processor was ready, at least 99%
+of the instances in progress hibernated.
 
 ## Without Axon Server
 

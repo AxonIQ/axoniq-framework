@@ -195,6 +195,21 @@ include::example$workflows/waitingforevents/WaitingForEventsExamples.java[tag=no
 Use `awaitSleep` whenever the workflow itself must wait for the delay.
 The Kotlin DSL offers the same blocking `awaitSleep(stepName, timeout)`.
 
+[[hibernation]]
+== Waiting while hibernated
+
+With xref:configuration.adoc#hibernation[hibernation] enabled, a workflow that waits only for events and deadlines leaves memory after the idle delay.
+The engine keeps the waits of a hibernated workflow, and restores the workflow from the event store when an event arrives that one of its waits may accept.
+
+The engine decides which events may be accepted from the name of the awaited event and from the associations of the wait that compare a payload or metadata property with `=`.
+An event of another name, or with another value for such a property, leaves the workflow hibernated.
+The workflow itself still checks its complete condition once it is restored.
+
+A wait whose condition is a predicate, or that has no `=` associations, accepts every event of its name as far as the engine can tell.
+Every such event therefore wakes the workflow.
+When the predicate rejects it, the workflow keeps waiting, and hibernates again after the idle delay.
+Prefer associations over predicates for waits on frequent events, so they wake only the workflows they concern.
+
 == Updated workflow
 
 Here's our workflow with the payment step added.

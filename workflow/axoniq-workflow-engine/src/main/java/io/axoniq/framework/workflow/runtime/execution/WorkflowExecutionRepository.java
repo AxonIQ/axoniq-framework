@@ -81,6 +81,27 @@ public interface WorkflowExecutionRepository extends DescribableComponent {
     WorkflowExecution remove(String workflowId);
 
     /**
+     * Removes the given workflow execution, but only while it is the one stored for the given identifier. An execution
+     * that left the engine and was replaced by another execution of the same workflow, for example one restored by a
+     * later claim of its segment or one woken from hibernation, thereby never removes its replacement.
+     * <p>
+     * The default implementation checks and removes in two steps. Implementations should override it to do both
+     * atomically.
+     *
+     * @param workflowId the identifier of the workflow
+     * @param execution  the execution to remove
+     * @return {@code true} when the given execution was stored and is removed, {@code false} otherwise
+     * @since 5.5.0
+     */
+    default boolean remove(String workflowId, WorkflowExecution execution) {
+        if (findById(workflowId).orElse(null) != execution) {
+            return false;
+        }
+        removeAll(candidate -> candidate == execution);
+        return true;
+    }
+
+    /**
      * Removes all workflow executions matching the given predicate.
      *
      * @param predicate the predicate to match workflow executions against

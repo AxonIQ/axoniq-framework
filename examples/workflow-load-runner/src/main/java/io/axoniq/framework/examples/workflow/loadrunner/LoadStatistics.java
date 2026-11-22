@@ -8,6 +8,13 @@
 
 package io.axoniq.framework.examples.workflow.loadrunner;
 
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -23,6 +30,8 @@ public final class LoadStatistics {
     private final AtomicLong approvalsPublished = new AtomicLong();
     private final AtomicLong completed = new AtomicLong();
     private final AtomicLong failed = new AtomicLong();
+    private final Map<String, Long> approvedAt = new ConcurrentHashMap<>();
+    private final Collection<Long> approvalLatenciesMillis = new ConcurrentLinkedQueue<>();
 
     /**
      * Creates statistics for the run with the given id.
@@ -43,12 +52,21 @@ public final class LoadStatistics {
         }
     }
 
+    void recordApprovalsPublishing(Collection<String> workflowIds) {
+        long now = System.nanoTime();
+        workflowIds.forEach(workflowId -> approvedAt.put(workflowId, now));
+    }
+
     void recordApprovals(int count) {
         approvalsPublished.addAndGet(count);
     }
 
-    void recordCompleted() {
+    void recordCompleted(String workflowId) {
         completed.incrementAndGet();
+        Long approved = approvedAt.remove(workflowId);
+        if (approved != null) {
+            approvalLatenciesMillis.add(TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - approved));
+        }
     }
 
     void recordFailed() {
@@ -89,6 +107,25 @@ public final class LoadStatistics {
      */
     public long completed() {
         return completed.get();
+    }
+
+    /**
+     * Describes the time from publishing an approval until the approved instance completed, over the approved
+     * instances that completed in this process: their count, and the median, 95th percentile and maximum in
+     * milliseconds. When the approved instance was hibernated, this includes waking it.
+     *
+     * @return a summary of the approval latencies, or {@code "none"} when no approved instance completed yet
+     */
+    public String approvalLatencies() {
+        List<Long> sorted = new ArrayList<>(approvalLatenciesMillis);
+        if (sorted.isEmpty()) {
+            return "none";
+        }
+        sorted.sort(null);
+        return "n=" + sorted.size()
+                + ", p50 " + sorted.get(sorted.size() / 2)
+                + " ms, p95 " + sorted.get((int) Math.min(sorted.size() - 1, Math.round(sorted.size() * 0.95)))
+                + " ms, max " + sorted.getLast() + " ms";
     }
 
     /**

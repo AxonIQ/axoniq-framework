@@ -65,6 +65,15 @@ final class DefaultWorkflowCancellation implements WorkflowCancellation.Request 
                 done.complete(workflowExecutionOperations.cancelStep(PrimitiveCommands.cancelStep(
                         stepName, cause, workflowExecution.workflowConfiguration().eventNameCustomizer()
                                                           .forStepInheritance())));
+            } catch (WorkflowExecutionStoppedError stopped) {
+                // Stopped while waiting for the cancellation to be recorded, which an append already under way may
+                // still do: the outcome is unknown. The caller gets no internal signal; the body still unwinds.
+                done.completeExceptionally(new IllegalStateException(
+                        "The execution of workflow " + workflowExecution.workflowId() + " stopped before the "
+                                + "cancellation of step '" + stepName + "' was known to be recorded: the step may "
+                                + "or may not be cancelled"
+                ));
+                throw stopped;
             } catch (Throwable t) {
                 done.completeExceptionally(t);
             }
@@ -80,8 +89,8 @@ final class DefaultWorkflowCancellation implements WorkflowCancellation.Request 
         }
         var done = new CompletableFuture<Integer>();
         workflowExecution.appendTask(ignored -> {
+            var cancelled = 0;
             try {
-                var cancelled = 0;
                 for (var stepName : stepNames) {
                     if (workflowExecutionOperations.cancelStep(PrimitiveCommands.cancelStep(
                             stepName, cause, workflowExecution.workflowConfiguration().eventNameCustomizer()
@@ -90,6 +99,15 @@ final class DefaultWorkflowCancellation implements WorkflowCancellation.Request 
                     }
                 }
                 done.complete(cancelled);
+            } catch (WorkflowExecutionStoppedError stopped) {
+                // Stopped while waiting for a cancellation to be recorded, which an append already under way may
+                // still do: the outcome is unknown. The caller gets no internal signal; the body still unwinds.
+                done.completeExceptionally(new IllegalStateException(
+                        "The execution of workflow " + workflowExecution.workflowId() + " stopped while cancelling "
+                                + "its steps, after " + cancelled + " were cancelled: the others may or may not be "
+                                + "cancelled"
+                ));
+                throw stopped;
             } catch (Throwable t) {
                 done.completeExceptionally(t);
             }

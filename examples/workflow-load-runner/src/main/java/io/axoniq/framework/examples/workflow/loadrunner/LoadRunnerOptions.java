@@ -23,6 +23,8 @@ import java.time.Duration;
  * @param axonServer     the address of Axon Server
  * @param dataDirectory  the directory holding the database of the token store and the workflow index
  * @param exitWhenDone   whether to stop after the startup measurement and starting the instances
+ * @param hibernate      whether waiting workflow instances hibernate: leave memory once idle for {@code idleDelay}
+ * @param idleDelay      how long a waiting instance must make no progress before it hibernates
  * @author Allard Buijze
  */
 public record LoadRunnerOptions(int instances,
@@ -33,7 +35,9 @@ public record LoadRunnerOptions(int instances,
                                 boolean inMemoryEvents,
                                 String axonServer,
                                 Path dataDirectory,
-                                boolean exitWhenDone) {
+                                boolean exitWhenDone,
+                                boolean hibernate,
+                                Duration idleDelay) {
 
     /**
      * The usage text printed for {@code --help}.
@@ -55,6 +59,10 @@ public record LoadRunnerOptions(int instances,
                                       (default: ./target/load-runner-data)
               --in-memory-events      use an in-memory event store instead of Axon Server; nothing survives
                                       a restart, for trying the runner without Axon Server
+              --hibernate             let waiting instances hibernate: leave memory once idle, and be
+                                      restored from the event store when their approval arrives
+              --idle-delay=<duration> how long a waiting instance must make no progress before it
+                                      hibernates, as an ISO-8601 duration (default: PT10S)
               --exit                  stop once the instances are started and wait for their approval,
                                       instead of running until Ctrl+C
               --help                  print this text
@@ -77,6 +85,8 @@ public record LoadRunnerOptions(int instances,
         String axonServer = "localhost:8124";
         Path dataDirectory = Path.of("target", "load-runner-data");
         boolean exit = false;
+        boolean hibernate = false;
+        Duration idleDelay = Duration.ofSeconds(10);
         for (String arg : args) {
             String value = arg.contains("=") ? arg.substring(arg.indexOf('=') + 1) : "";
             switch (arg.contains("=") ? arg.substring(0, arg.indexOf('=')) : arg) {
@@ -93,6 +103,8 @@ public record LoadRunnerOptions(int instances,
                 case "--data-dir" -> dataDirectory = Path.of(value);
                 case "--in-memory-events" -> inMemoryEvents = true;
                 case "--exit" -> exit = true;
+                case "--hibernate" -> hibernate = true;
+                case "--idle-delay" -> idleDelay = Duration.parse(value);
                 default -> {
                     if (arg.startsWith("--") || instances != null) {
                         throw new IllegalArgumentException("Unknown argument: " + arg);
@@ -108,7 +120,7 @@ public record LoadRunnerOptions(int instances,
             throw new IllegalArgumentException("--complete must be between 0 and 1");
         }
         return new LoadRunnerOptions(instances, wait, complete, segments, index, inMemoryEvents,
-                                     axonServer, dataDirectory, exit);
+                                     axonServer, dataDirectory, exit, hibernate, idleDelay);
     }
 
     /**

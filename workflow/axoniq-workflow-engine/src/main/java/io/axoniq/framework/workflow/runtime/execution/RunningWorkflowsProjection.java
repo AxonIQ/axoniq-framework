@@ -180,18 +180,11 @@ final class RunningWorkflowsProjection {
      */
     void discard(Segment segment) {
         segments.forEach((segmentId, projection) -> {
-            if (overlap(projection.segment, segment) && segments.remove(segmentId, projection)) {
+            if (WorkflowSegmentOwnership.overlap(projection.segment, segment)
+                    && segments.remove(segmentId, projection)) {
                 projection.close();
             }
         });
-    }
-
-    /**
-     * Returns whether the given segments share any workflow instance: whether one of them contains the other.
-     */
-    private static boolean overlap(Segment one, Segment other) {
-        int commonMask = one.getMask() & other.getMask();
-        return (one.getSegmentId() & commonMask) == (other.getSegmentId() & commonMask);
     }
 
     /**

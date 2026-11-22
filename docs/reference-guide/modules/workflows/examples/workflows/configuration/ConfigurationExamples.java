@@ -26,6 +26,7 @@ import org.slf4j.LoggerFactory;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.HexFormat;
 import java.util.concurrent.Executors;
@@ -232,6 +233,24 @@ public class ConfigurationExamples {
         WorkflowConfigurer.create()
                           .snapshots(snapshots -> snapshots.enabled(false));
         // end::disable-snapshots[]
+    }
+
+    public void hibernation() {
+        // tag::hibernation[]
+        WorkflowConfigurer.create()
+                          .hibernation(hibernation -> hibernation.enabled(true) // <1>
+                                                                 .idleDelay(Duration.ofMinutes(1)) // <2>
+                                                                 .wakeTimeout(Duration.ofSeconds(10))); // <3>
+        // end::hibernation[]
+    }
+
+    public void moduleHibernation() {
+        // tag::module-hibernation[]
+        WorkflowModule.defaults("order-workflows", SimpleWorkflowContext.class)
+                      .definition(d -> d.autodetected(c -> new OrderFulfillmentWorkflow()))
+                      .hibernation(hibernation -> hibernation.enabled(true)
+                                                             .idleDelay(Duration.ofMinutes(5)));
+        // end::module-hibernation[]
     }
 
     public void jpaWorkflowIndex(EntityManagerFactory entityManagerFactory) {
