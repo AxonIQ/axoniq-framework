@@ -35,6 +35,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Stream;
@@ -84,6 +85,8 @@ public class WorkflowEngine implements
     Duration restoreTimeout = DEFAULT_RESTORE_TIMEOUT;
     private WorkflowEngineCheckpointingSupport checkpointingSupport;
     private volatile Function<Segment, Optional<TrackingToken>> segmentPositions = segment -> Optional.empty();
+    private volatile Consumer<Segment> segmentReleaser = segment -> {
+    };
     private volatile boolean shutDown;
 
     /**
@@ -178,6 +181,20 @@ public class WorkflowEngine implements
         this.segmentPositions = requireNonNull(segmentPositions, "The segment positions must not be null.");
     }
 
+    /**
+     * Sets how this engine asks the processor to release a segment that failed to handle an event.
+     * <p>
+     * An error handler that does not propagate the failure of an event keeps the segment claimed, while the engine
+     * stores no position past that event until the segment is released and claimed again. Without a releaser, such a
+     * segment stays claimed, and handles the failed event again only once it is claimed again.
+     *
+     * @param segmentReleaser asks the processor to release the given segment
+     */
+    @Internal
+    public void setSegmentReleaser(Consumer<Segment> segmentReleaser) {
+        this.segmentReleaser = requireNonNull(segmentReleaser, "The segment releaser must not be null.");
+    }
+
     @Override
     public MessageStream.Empty<Message> handle(EventMessage event,
                                                ProcessingContext context) {
@@ -187,6 +204,45 @@ public class WorkflowEngine implements
         checkpointingSupport.getAndSetTriggerFrom(context);
 
         var segment = Segment.fromContext(context).orElse(null);
+        try {
+            route(segment, event, context);
+            activateSegmentWhenCaughtUp(segment, currentToken);
+            checkpointingSupport.requestCheckpoint(segment, currentToken);
+        } catch (RuntimeException | Error e) {
+            if (segment != null) {
+                holdCheckpointAndRelease(segment, event);
+            }
+            throw e;
+        }
+        logger.trace("Event [{}] handled successfully.", event.identifier());
+        return MessageStream.empty();
+    }
+
+    /**
+     * Keeps a segment that failed to handle the given event from storing a position past it, and asks the processor to
+     * release the segment, so its next claim handles the event again.
+     * <p>
+     * Until the segment is claimed again, no checkpoint and no release may store a position past the event. The release
+     * is asked for as well, because an error handler that does not propagate the failure keeps the segment claimed: it
+     * would then handle later events, never the failed one, and never store a position again.
+     */
+    private void holdCheckpointAndRelease(Segment segment, EventMessage event) {
+        catchUpSupport.holdCheckpoint(segment);
+        logger.warn("Handling event [{}] failed in segment {}; asking the processor to release the segment, so its "
+                            + "next claim handles the event again.",
+                    event.identifier(), segment.getSegmentId());
+        try {
+            segmentReleaser.accept(segment);
+        } catch (RuntimeException e) {
+            logger.error("Could not ask the processor to release segment {}.", segment.getSegmentId(), e);
+        }
+    }
+
+    /**
+     * Routes the given event to the workflows of the given segment: an event of a workflow to that workflow, any other
+     * event to the workflows it starts and to the workflows waiting for it.
+     */
+    private void route(@Nullable Segment segment, EventMessage event, ProcessingContext context) {
         // An event published by a workflow through the publish primitive carries the publisher's workflowId but is a
         // business event for everyone else, so it never takes the owner-only path below.
         boolean workflowPublishedEvent = MetadataUtils.isPublishStep(event.metadata());
@@ -196,18 +252,14 @@ public class WorkflowEngine implements
             if (!WorkflowSegmentOwnership.ownedBy(segment, workflowId)) {
                 logger.debug("Ignoring event [{}] for workflowId [{}] - instance is owned by another segment than {}.",
                              event.type(), workflowId, segment);
-                activateSegmentWhenCaughtUp(segment, currentToken);
-                checkpointingSupport.requestCheckpoint(segment, currentToken);
-                return MessageStream.empty();
+                return;
             }
             // Skip events whose workflowId isn't owned by this engine (expected in multi-module setups).
             var executionOpt = workflowExecutionRepository.findById(workflowId);
             if (executionOpt.isEmpty()) {
                 logger.debug("Ignoring event [{}] for workflowId [{}] - no matching execution in this engine.",
                              event.type(), workflowId);
-                activateSegmentWhenCaughtUp(segment, currentToken);
-                checkpointingSupport.requestCheckpoint(segment, currentToken);
-                return MessageStream.empty();
+                return;
             }
             executionOpt.get().onEvent(event, context);
         } else {
@@ -224,11 +276,6 @@ public class WorkflowEngine implements
                 execution.onEvent(event, context);
             }
         }
-
-        activateSegmentWhenCaughtUp(segment, currentToken);
-        checkpointingSupport.requestCheckpoint(segment, currentToken);
-        logger.trace("Event [{}] handled successfully.", event.identifier());
-        return MessageStream.empty();
     }
 
     private void checkAndCreateNewInstance(EventMessage eventMessage,
@@ -296,7 +343,8 @@ public class WorkflowEngine implements
 
     @Override
     public boolean holdsCheckpoint(Segment segment) {
-        return unsafeExecutionsOf(segment).anyMatch(execution -> !execution.isRunning());
+        return catchUpSupport.holdsCheckpoint(segment)
+                || unsafeExecutionsOf(segment).anyMatch(execution -> !execution.isRunning());
     }
 
     /**
@@ -394,6 +442,8 @@ public class WorkflowEngine implements
         if (claimedFrom != null) {
             executionContext.putResource(TrackingToken.RESOURCE_KEY, claimedFrom);
         }
+        // A new claim handles the events a failed event held the checkpoint of the previous claim for again.
+        catchUpSupport.startClaim(segment);
         return loadRunningWorkflows(segment, claimedFrom, sourcingContext, executionContext)
                 .orTimeout(restoreTimeout.toMillis(), TimeUnit.MILLISECONDS)
                 .whenComplete((restored, failure) -> logFailedRestore(segment, failure))

@@ -27,6 +27,8 @@ import java.util.concurrent.ConcurrentHashMap;
     private final Set<Integer> caughtUpSegments = ConcurrentHashMap.newKeySet();
     // Per segment that waits for catch-up, the handle of the claim that waits, so a wait outliving its claim ends.
     private final Map<Integer, Object> waits = new ConcurrentHashMap<>();
+    // Segments whose current claim failed to handle an event, so no position past it may be stored until a new claim.
+    private final Set<Integer> heldCheckpoints = ConcurrentHashMap.newKeySet();
     @Nullable
     private volatile TrackingToken startupHead;
 
@@ -69,6 +71,31 @@ import java.util.concurrent.ConcurrentHashMap;
      */
     boolean isWaiting(Segment segment, Object wait) {
         return waits.get(segment.getSegmentId()) == wait && !caughtUpSegments.contains(segment.getSegmentId());
+    }
+
+    /**
+     * Starts a new claim of the given {@code segment}, which handles again the events a previous claim held the
+     * checkpoint for.
+     */
+    void startClaim(Segment segment) {
+        heldCheckpoints.remove(segment.getSegmentId());
+    }
+
+    /**
+     * Keeps the current claim of the given {@code segment} from storing a position, as it failed to handle an event.
+     * Held until the segment is {@link #startClaim(Segment) claimed} again, also across its release, so a release
+     * reported more than once stores no position either.
+     */
+    void holdCheckpoint(Segment segment) {
+        heldCheckpoints.add(segment.getSegmentId());
+    }
+
+    /**
+     * Returns whether the current claim of the given {@code segment} may store no position, as it failed to handle an
+     * event.
+     */
+    boolean holdsCheckpoint(Segment segment) {
+        return heldCheckpoints.contains(segment.getSegmentId());
     }
 
     void release(Segment segment) {

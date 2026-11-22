@@ -416,9 +416,14 @@ class SimpleWorkflowModule<C extends WorkflowContext>
                                               requireEventStore(moduleName, c);
                                               WorkflowEngine engine = c.getComponent(WorkflowEngine.class, engineName);
                                               c.getOptionalComponent(StreamingEventProcessor.class, moduleName)
-                                               .ifPresent(processor -> engine.setSegmentPositions(
-                                                       segment -> consumedPosition(processor, segment)
-                                               ));
+                                               .ifPresent(processor -> {
+                                                   engine.setSegmentPositions(
+                                                           segment -> consumedPosition(processor, segment)
+                                                   );
+                                                   engine.setSegmentReleaser(
+                                                           segment -> processor.releaseSegment(segment.getSegmentId())
+                                                   );
+                                               });
                                               return c.getComponent(StreamableEventSource.class)
                                                       .latestToken(null)
                                                       .thenCompose(engine::start);
