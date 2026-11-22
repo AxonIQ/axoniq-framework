@@ -288,7 +288,7 @@ The event store remains the source of truth, and as long as every node that runs
 An index starts out empty and not initialized.
 The first claim then reads the list of running workflows from the event store, and initializes the index with it.
 From then on, every claim uses the index.
-This also applies when you introduce the index into an application that already runs workflows, or when you empty it.
+This also applies when you introduce the index into an application that already runs workflows, or when you empty its tables.
 
 The index must be shared by every node that runs the workflow module, and must survive a restart whenever the tokens do.
 In turn, the tokens of the processor of the workflow module must survive a restart whenever the index does.
@@ -301,17 +301,89 @@ By default, the engine keeps no index, so every claim reads the running workflow
 WARNING: Enable the index only once every node that runs the workflow module runs a version that writes it.
 A node that does not write the index, such as a node of an earlier version, or one without the index configured, can advance the token of a segment while workflows start in it.
 The index then misses those workflows, and a later claim that uses the index does not restore them.
-If that happened, stop every node that runs the workflow module, and empty the index: its entries and its initialization marker.
+If that happened, stop every node that runs the workflow module, and empty both tables of the index: the entries and the initialization marker.
 The next claim of each segment then initializes the index again from the event store.
 
 Enabling the index needs no reset or replay of the processor of the workflow module: the first claim initializes the index from the event store.
 Do not reset that processor to build the index: a reset is not a supported way to build it.
 
+To keep the index in your database, use a `JpaWorkflowIndex`:
+
+[source,java]
+----
+include::example$workflows/configuration/ConfigurationExamples.java[tag=jpa-workflow-index,indent=0]
+----
+<.> The entity manager factory of the persistence unit that holds the index. Use `transactionalExecutorProvider(...)` instead to provide the transactions yourself.
+
+When the processor of the workflow module runs its batches in a JPA transaction, as it does in Spring Boot with JPA, or with an `EntityManagerTransactionManager`, the `JpaWorkflowIndex` writes the changes of a checkpoint within that transaction.
+The changes and the token are then committed together, and a checkpoint needs no database connection besides the one the processor already holds.
+Like the JPA token store, the index then assumes that it lives in the database of that transaction.
+To keep the index in another database, pass a `transactionalExecutorProvider(...)` that ignores the processing context, such as `context -> provider.getTransactionalExecutor(null)`.
+
+Without such a transaction, for loading and initializing the index, and for the changes it writes when the processor releases a segment, the index runs every operation in a transaction of its own.
+The builder accepts an `executor(...)` that runs that database work, by default four daemon threads, and a `timeout(...)`, by default ten seconds.
+The timeout bounds how long an operation may wait for the executor before it fails, and each query of an operation that started.
+It does not bound the whole operation: a started operation completes once its transaction has ended.
+Such a write needs a connection of its own, see <<database-connections,Database connections>>.
+
 An `InMemoryWorkflowIndex` keeps the index in memory.
 Use it only in tests, or when a single node runs the workflow module: the index of one node does not know the changes the other nodes made.
 
+[[workflow-index-tables]]
+The `JpaWorkflowIndex` stores its data in two entities, `WorkflowIndexEntry` and `WorkflowIndexInitialization` from the `io.axoniq.framework.workflow.index.jpa` package.
+Add them to your persistence unit.
+If you manage your schema yourself, for example with Flyway or Liquibase, create their tables.
+Table and column names follow the naming strategy of your JPA provider:
+
+[cols="1,3"]
+|===
+|Entity |Columns
+
+|`WorkflowIndexEntry`
+|`indexName VARCHAR(255)` and `workflowId VARCHAR(255)` as primary key, `segmentKey BIGINT NOT NULL`, and an index on (`indexName`, `segmentKey`).
+
+|`WorkflowIndexInitialization`
+|`indexName VARCHAR(255)` as primary key.
+|===
+
+The `workflowId` column holds the workflow ID itself, so you can look up the entry of a workflow by its ID.
+It fits every <<workflow-id-rules,valid workflow ID>>: the engine never starts a workflow with an invalid one.
+
+[[workflow-index-collation]]
+The `workflowId` column must compare IDs exactly: case-sensitively, and without ignoring trailing spaces, as a binary collation does.
+The index deletes and inserts its entries by workflow ID.
+Under a case-insensitive or pad-space collation, the entries of `ORDER-1` and `order-1`, or of `order-1` and `order-1` followed by a space, overwrite each other, and a running workflow silently drops out of the index.
+When such IDs are written together, they fail on a duplicate key instead: at initialization, which keeps the index uninitialized, or in one checkpoint of the segment that owns both, which fails that checkpoint.
+Some databases use such a collation by default, so declare the column with a binary collation there:
+
+[cols="1,3"]
+|===
+|Database |`workflowId` column
+
+|MySQL 8.0.17 or later
+|`workflowId VARCHAR(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_bin NOT NULL`.
+The default collation, `utf8mb4_0900_ai_ci`, is case-insensitive.
+The older binary collations `utf8mb4_bin` and `ascii_bin` are case-sensitive, but ignore trailing spaces.
+
+|SQL Server
+|`workflowId VARCHAR(255) COLLATE Latin1_General_100_BIN2 NOT NULL`, or another `_BIN2` collation.
+The default collations are case-insensitive.
+SQL Server ignores trailing spaces when it compares strings, whatever the collation, so do not use workflow IDs that differ only in trailing spaces.
+
+|PostgreSQL, H2
+|`workflowId VARCHAR(255) NOT NULL`.
+The default collations already compare exactly.
+|===
+
+WARNING: Enable the `JpaWorkflowIndex` only when no running workflow has an invalid ID, such as a workflow that an earlier version of the engine started with an ID longer than 255 characters.
+The index cannot hold such a workflow, and rejects it with an error that names the first 64 characters of its ID.
+The segment that owns the workflow then makes no progress: every checkpoint fails, so its token does not advance past the first event it handles, and the processor keeps claiming that segment again and reprocessing the same events.
+Because the index is initialized with every running workflow, it also stays uninitialized, so every claim of every segment reads the full list of running workflows.
+This lasts until that workflow is cancelled or has ended, or until you disable the index.
+Let such workflows end, or cancel them, before you enable the index.
+
 Several workflow modules share one workflow index, each under its own name.
-To keep a durable index, implement the `WorkflowIndex` interface and register it with `registerWorkflowIndex(...)`.
+To store the index elsewhere, implement the `WorkflowIndex` interface and register it with `registerWorkflowIndex(...)`.
 Its Javadoc describes the contract an implementation must meet, such as completing a write only once it is durable.
 
 IMPORTANT: The workflow index types are marked `@Internal`.
@@ -404,11 +476,18 @@ A node claims segments regardless of its thread count, so segments beyond it wai
 Raise segments and threads together.
 More threads help until the event store is busy. After that point they add load without adding throughput.
 
+[[database-connections]]
 === Database connections
 
 With a JDBC or JPA event store or token store, every busy processor thread holds a database connection during its batch.
 Workflow steps that use the same database need connections of their own.
 Size the connection pool above the thread count, with room for those steps, so that threads never wait for a connection.
+
+A `JpaWorkflowIndex` that writes within the processor's JPA transaction needs no extra connection for its checkpoints.
+Only when the processor releases a segment does it write the remaining changes on a connection of its own, waiting at most three seconds for it.
+When it cannot, for example because the processor runs its batches in a JDBC transaction of the same database, every checkpoint waits for a write on a connection of its own while its thread holds the batch connection.
+Then size the pool for at least one connection per busy processor thread plus the threads of the index, four by default.
+Otherwise, checkpoints wait for connections their own threads hold, and fail once the index times out.
 
 === Batch size
 

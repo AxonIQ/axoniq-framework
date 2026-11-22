@@ -14,7 +14,9 @@ import io.axoniq.framework.workflow.dsl.api.EventConditions;
 import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
 import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContextFactory;
+import io.axoniq.framework.workflow.index.jpa.JpaWorkflowIndex;
 import io.axoniq.framework.workflow.runtime.execution.PayloadPropertyWorkflowIdProvider;
+import jakarta.persistence.EntityManagerFactory;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.eventsourcing.snapshot.api.SnapshotPolicy;
 import org.axonframework.messaging.core.correlation.MessageOriginProvider;
@@ -223,6 +225,16 @@ public class ConfigurationExamples {
                                   .runningWorkflows(SnapshotPolicy.afterEvents(500))   // <1>
                                   .workflowState(SnapshotPolicy.afterEvents(200)));    // <2>
         // end::snapshots[]
+    }
+
+    public void jpaWorkflowIndex(EntityManagerFactory entityManagerFactory) {
+        // tag::jpa-workflow-index[]
+        WorkflowConfigurer.create()
+                          .registerWorkflowIndex(config -> JpaWorkflowIndex
+                                  .builder()
+                                  .entityManagerFactory(entityManagerFactory) // <1>
+                                  .build());
+        // end::jpa-workflow-index[]
     }
 
     public void performanceTuning() {

@@ -121,12 +121,15 @@ public class WorkflowConfigurer implements ApplicationConfigurer {
      * no index, so every claim of a segment reads the running workflow instances from the event store.
      * <p>
      * Every workflow module of the application keeps its index of running workflow instances in this one
-     * {@code WorkflowIndex}, each under its own name. A durable index shared by every node lets a restarted
-     * application, or another node claiming a segment, restore the running workflow instances of the segment without
-     * reading every workflow lifecycle event:
+     * {@code WorkflowIndex}, each under its own name. A durable index shared by every node, such as the
+     * {@link io.axoniq.framework.workflow.index.jpa.JpaWorkflowIndex}, lets a restarted application, or another node
+     * claiming a segment, restore the running workflow instances of the segment without reading every workflow
+     * lifecycle event:
      * <pre>{@code
      * WorkflowConfigurer.create()
-     *                   .registerWorkflowIndex(config -> new MyDurableWorkflowIndex(...));
+     *                   .registerWorkflowIndex(config -> JpaWorkflowIndex.builder()
+     *                                                    .entityManagerFactory(entityManagerFactory)
+     *                                                    .build());
      * }</pre>
      * Every checkpoint of a segment writes the changes of the index first, within the transaction the token is stored
      * in when the index can join it. When the index cannot be written, the checkpoint fails, and the event processor

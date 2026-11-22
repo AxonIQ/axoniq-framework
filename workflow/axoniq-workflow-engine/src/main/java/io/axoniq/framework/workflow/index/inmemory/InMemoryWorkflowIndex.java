@@ -32,7 +32,8 @@ import static java.util.Objects.requireNonNull;
  * That is only correct as long as this JVM is the only one processing the segments of the workflow modules using the
  * index: the engine relies on every change up to a stored token being in the index, and changes written to the index of
  * another node are not. Use it in tests, or in an application that runs a single node. Every other application uses a
- * durable index shared by all nodes, or {@link WorkflowIndex#none() no index} at all, which is the default. A restart is safe: the index starts out not
+ * durable index shared by all nodes, such as the {@link io.axoniq.framework.workflow.index.jpa.JpaWorkflowIndex}, or
+ * {@link WorkflowIndex#none() no index} at all, which is the default. A restart is safe: the index starts out not
  * initialized again.
  * <p>
  * Operations complete immediately, and a load never observes a write half applied.

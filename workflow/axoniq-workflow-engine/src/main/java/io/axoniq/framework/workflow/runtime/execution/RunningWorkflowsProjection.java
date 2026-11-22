@@ -475,7 +475,7 @@ final class RunningWorkflowsProjection {
                                               .findFirst();
             if (invalidId.isPresent()) {
                 logger.error("Could not write the running workflows of segment {}, which contain the invalid "
-                                     + "workflow id '{}', as {}. An index that rejects such ids "
+                                     + "workflow id '{}', as {}. An index that rejects such ids, like the JPA index, "
                                      + "keeps the segment from making progress until that workflow is cancelled or "
                                      + "has ended, or the workflow index is disabled.",
                              segment.getSegmentId(),

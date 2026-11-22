@@ -233,8 +233,8 @@ final class RunningWorkflowsClaimLoader {
         Optional<String> invalidId = running.stream().filter(id -> !WorkflowIds.isValid(id)).findFirst();
         if (invalidId.isPresent()) {
             logger.error("Could not initialize the running-workflow index [{}], whose running workflows contain "
-                                 + "the invalid workflow id '{}', as {}. An index that rejects such ids "
-                                 + "stays uninitialized until that workflow is cancelled or has ended: every "
+                                 + "the invalid workflow id '{}', as {}. An index that rejects such ids, like the JPA "
+                                 + "index, stays uninitialized until that workflow is cancelled or has ended: every "
                                  + "claim reads the full running-workflow list, and the segment owning that workflow "
                                  + "makes no progress.",
                          indexName,

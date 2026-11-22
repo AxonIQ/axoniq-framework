@@ -11,6 +11,9 @@ import io.axoniq.framework.workflow.configuration.AbstractEventSourcedEntityRepo
 import io.axoniq.framework.workflow.dsl.api.EventConditions;
 import io.axoniq.framework.workflow.index.api.WorkflowIndex;
 import io.axoniq.framework.workflow.index.inmemory.InMemoryWorkflowIndex;
+import io.axoniq.framework.workflow.index.jpa.JpaWorkflowIndex;
+import jakarta.persistence.EntityManagerFactory;
+import jakarta.persistence.Persistence;
 import org.axonframework.common.AxonConfigurationException;
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
@@ -26,6 +29,8 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Proxy;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import java.util.function.UnaryOperator;
 
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -113,6 +118,34 @@ class WorkflowEngineProcessorTokenStoreTest {
 
             // when / then
             assertThatCode(() -> start(index, tokenStore, UnaryOperator.identity())).doesNotThrowAnyException();
+        }
+    }
+
+    @Nested
+    class WithAJpaWorkflowIndex {
+
+        private final EntityManagerFactory entityManagerFactory = Persistence.createEntityManagerFactory(
+                "workflowIndex", Map.of("jakarta.persistence.jdbc.url", "jdbc:hsqldb:mem:" + UUID.randomUUID())
+        );
+
+        @AfterEach
+        void closeEntityManagerFactory() {
+            entityManagerFactory.close();
+        }
+
+        @Test
+        void refusesToStartWithAnInMemoryTokenStore() {
+            // given
+            WorkflowIndex index = JpaWorkflowIndex.builder()
+                                                  .entityManagerFactory(entityManagerFactory)
+                                                  .build();
+
+            // when / then
+            assertThatThrownBy(() -> start(index, new InMemoryTokenStore(), UnaryOperator.identity()))
+                    .hasRootCauseInstanceOf(AxonConfigurationException.class)
+                    .rootCause()
+                    .hasMessageContaining(MODULE)
+                    .hasMessageContaining(JpaWorkflowIndex.class.getName());
         }
     }
 

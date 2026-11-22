@@ -31,8 +31,9 @@ import static java.util.Objects.requireNonNull;
  * segment.
  * <p>
  * Unless another index is configured, the workflow configuration uses {@link #none()}, which keeps nothing, so every
- * claim reads the running instances from the event store. A durable implementation shared by every node speeds up the
- * claims after a restart and on other nodes. Configure an implementation through
+ * claim reads the running instances from the event store. A durable implementation shared by every node, such as the
+ * {@link io.axoniq.framework.workflow.index.jpa.JpaWorkflowIndex}, speeds up the claims after a restart and on other
+ * nodes. Configure an implementation through
  * {@link io.axoniq.framework.workflow.configuration.WorkflowConfigurer#registerWorkflowIndex(
  *org.axonframework.common.configuration.ComponentBuilder)}:
  * <pre>{@code
