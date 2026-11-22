@@ -8,6 +8,7 @@
 package io.axoniq.framework.workflow.runtime.execution;
 
 import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
+import io.axoniq.framework.workflow.index.inmemory.InMemoryWorkflowIndex;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.framework.workflow.runtime.util.MetadataUtils;
 import org.axonframework.common.configuration.ComponentNotFoundException;
@@ -65,6 +66,8 @@ class WorkflowEngineSegmentFailoverTest {
                 repository,
                 mock(WorkflowCancellationService.class),
                 workflowStore,
+                new InMemoryWorkflowIndex(),
+                "WorkflowEngine",
                 restoreUnitOfWorkFactory()
         );
         workflowEngine.setCheckpointingSupport(mock(WorkflowEngineCheckpointingSupport.class));

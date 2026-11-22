@@ -11,6 +11,7 @@ import io.axoniq.framework.messaging.eventstreaming.checkpoint.CheckpointTrigger
 import io.axoniq.framework.messaging.eventstreaming.checkpoint.Checkpointing;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.messaging.eventhandling.EventHandlingComponent;
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.jspecify.annotations.Nullable;
@@ -68,6 +69,13 @@ public class CheckpointingEventHandlingComponentHandlingAny extends EventHandlin
     @Override
     public CompletableFuture<TrackingToken> onSegmentReleased(Segment segment, TrackingToken requested) {
         return checkpointingHandler.onSegmentReleased(segment, requested);
+    }
+
+    @Override
+    public CompletableFuture<TrackingToken> onCheckpointAdvanced(Segment segment,
+                                                                 TrackingToken requested,
+                                                                 ProcessingContext context) {
+        return checkpointingHandler.onCheckpointAdvanced(segment, requested, context);
     }
 
     @Override

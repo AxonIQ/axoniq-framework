@@ -8,14 +8,17 @@
 package io.axoniq.framework.workflow.runtime.execution;
 
 import org.axonframework.common.AxonConfigurationException;
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.GlobalSequenceTrackingToken;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.*;
 
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -98,6 +101,135 @@ class WorkflowEngineCheckpointingSupportTest {
             // then
             assertThat(released).isCompletedExceptionally();
             assertThat(coordinator.scheduledBarriers).isZero();
+        }
+
+        @Test
+        void keepsFailingTheReleaseOnceTheHeldWorkIsGoneUntilTheSegmentIsClaimedAgain() {
+            // given - a release that failed while the coordinator held the checkpoint
+            var coordinator = new InlineCheckpointLatchCoordinator();
+            coordinator.held = true;
+            var support = new WorkflowEngineCheckpointingSupport(coordinator, 0L);
+            support.onSegmentClaimed(Segment.ROOT_SEGMENT, null, token -> {
+            });
+            assertThat(support.onSegmentReleased(Segment.ROOT_SEGMENT, new GlobalSequenceTrackingToken(42)))
+                    .isCompletedExceptionally();
+            // and - the held work is dropped afterwards, as the release of its executions does
+            coordinator.held = false;
+
+            // when - the release is reported once more
+            var releasedAgain = support.onSegmentReleased(Segment.ROOT_SEGMENT, new GlobalSequenceTrackingToken(42));
+
+            // then
+            assertThat(releasedAgain).isCompletedExceptionally();
+            // and - a next claim of the segment releases normally again
+            support.onSegmentClaimed(Segment.ROOT_SEGMENT, null, token -> {
+            });
+            assertThat(support.onSegmentReleased(Segment.ROOT_SEGMENT, new GlobalSequenceTrackingToken(43)))
+                    .isCompletedWithValue(new GlobalSequenceTrackingToken(43));
+        }
+    }
+
+    @Nested
+    class WhileTheCoordinatorFlushes {
+
+        private final FlushingCoordinator coordinator = new FlushingCoordinator();
+        private final WorkflowEngineCheckpointingSupport support = new WorkflowEngineCheckpointingSupport(coordinator,
+                                                                                                          0L);
+        private final GlobalSequenceTrackingToken requested = new GlobalSequenceTrackingToken(42);
+
+        @Test
+        void completesTheCheckpointOnlyOnceTheFlushCompleted() {
+            // when
+            var checkpoint = support.onCheckpointAdvanced(Segment.ROOT_SEGMENT, requested);
+
+            // then
+            assertThat(checkpoint).isNotDone();
+
+            // when
+            coordinator.checkpointFlush.complete(null);
+
+            // then
+            assertThat(checkpoint).isCompletedWithValue(requested);
+        }
+
+        @Test
+        void completesTheCheckpointOnlyOnceTheWorkflowWorkIsSafeAsWell() {
+            // given
+            coordinator.pendingWork = true;
+            coordinator.checkpointFlush.complete(null);
+
+            // when
+            var checkpoint = support.onCheckpointAdvanced(Segment.ROOT_SEGMENT, requested);
+
+            // then
+            assertThat(checkpoint).isNotDone();
+
+            // when
+            coordinator.pendingWork = false;
+            coordinator.barrier.run();
+
+            // then
+            assertThat(checkpoint).isCompletedWithValue(requested);
+        }
+
+        @Test
+        void failsTheCheckpointWhenTheFlushFails() {
+            // given
+            coordinator.checkpointFlush.completeExceptionally(new IllegalStateException("database down"));
+
+            // when
+            var checkpoint = support.onCheckpointAdvanced(Segment.ROOT_SEGMENT, requested);
+
+            // then
+            assertThat(checkpoint).isCompletedExceptionally();
+        }
+
+        @Test
+        void failsTheCheckpointRightAwayWhenTheFlushFailsWhileWorkflowWorkIsUnsafe() {
+            // given
+            coordinator.pendingWork = true;
+            coordinator.checkpointFlush.completeExceptionally(new IllegalStateException("database down"));
+
+            // when
+            var checkpoint = support.onCheckpointAdvanced(Segment.ROOT_SEGMENT, requested);
+
+            // then - it does not wait for the workflow work first
+            assertThat(checkpoint).isCompletedExceptionally();
+        }
+
+        @Test
+        void failsTheCheckpointWhenTheFlushThrows() {
+            // given
+            coordinator.checkpointFlush = null;
+
+            // when
+            var checkpoint = support.onCheckpointAdvanced(Segment.ROOT_SEGMENT, requested);
+
+            // then
+            assertThat(checkpoint).isCompletedExceptionally();
+        }
+
+        @Test
+        void reportsTheReleasedTokenOnceTheReleaseFlushCompleted() {
+            // when
+            var released = support.onSegmentReleased(Segment.ROOT_SEGMENT, requested);
+
+            // then - the release flushes through its own, bounded flush
+            assertThat(released).isNotDone();
+            coordinator.releaseFlush.complete(null);
+            assertThat(released).isCompletedWithValue(requested);
+        }
+
+        @Test
+        void failsTheReleaseWhenTheReleaseFlushFails() {
+            // given
+            coordinator.releaseFlush.completeExceptionally(new IllegalStateException("database down"));
+
+            // when
+            var released = support.onSegmentReleased(Segment.ROOT_SEGMENT, requested);
+
+            // then - the release does not advance the stored token
+            assertThat(released).isCompletedExceptionally();
         }
     }
 
@@ -331,6 +463,47 @@ class WorkflowEngineCheckpointingSupportTest {
 
         private void crossBarrier() {
             barrier.run();
+        }
+    }
+
+    /**
+     * A coordinator whose flushes complete when the test completes them, and whose unsafe work stays unsafe until the
+     * test clears it and crosses the barrier.
+     */
+    private static final class FlushingCoordinator
+            implements WorkflowEngineCheckpointingSupport.CheckpointLatchCoordinator {
+
+        private boolean pendingWork;
+        private Runnable barrier;
+        private CompletableFuture<Void> checkpointFlush = new CompletableFuture<>();
+        private final CompletableFuture<Void> releaseFlush = new CompletableFuture<>();
+
+        @Override
+        public boolean hasUnsafeCheckpointWork(Segment segment) {
+            return pendingWork;
+        }
+
+        @Override
+        public boolean holdsCheckpoint(Segment segment) {
+            return false;
+        }
+
+        @Override
+        public void addCheckpointLatch(Segment segment, Runnable latch) {
+            barrier = latch;
+        }
+
+        @Override
+        public CompletableFuture<Void> flushCheckpoint(Segment segment, @Nullable ProcessingContext context) {
+            if (checkpointFlush == null) {
+                throw new IllegalStateException("cannot flush");
+            }
+            return checkpointFlush;
+        }
+
+        @Override
+        public CompletableFuture<Void> flushRelease(Segment segment) {
+            return releaseFlush;
         }
     }
 

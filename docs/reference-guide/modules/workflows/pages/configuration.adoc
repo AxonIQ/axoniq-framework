@@ -152,7 +152,8 @@ Whichever provider you use, a workflow ID must be valid:
 * Every character is printable ASCII: from the space (`0x20`) up to the tilde (`~`, `0x7E`).
 Letters with accents, other non-ASCII characters, tabs, and line breaks are not allowed.
 
-These rules keep every workflow ID storable in a `VARCHAR(255)` column, and readable in logs and in your database.
+These rules apply with and without a <<workflow-index,workflow index>>.
+They keep every workflow ID storable in a `VARCHAR(255)` column, and readable in logs and in your database.
 The engine checks the ID that the provider derives from a start event.
 When the ID is invalid, the engine does not start the workflow and logs an error naming the workflow, its version, the event, why the ID is invalid, and the first 64 characters of the ID.
 The event itself is handled as usual, so later events, including starts of other workflows, are not affected.
@@ -223,6 +224,7 @@ The processor claims its segments in the unnamed `TokenStore` component of your 
 Register a durable store, for example `JpaTokenStore`, as an unnamed component.
 Without one, the engine falls back to an in-memory token store and logs a warning.
 Claims then stay inside the process, so run a single node only.
+A workflow module whose engine keeps a durable <<workflow-index,workflow index>> refuses to start with an in-memory token store.
 
 === Processor settings
 
@@ -265,6 +267,56 @@ Axon Server and PostgreSQL each register one.
 An application that enables snapshots without a `SnapshotStore` fails to start.
 A snapshot is taken while an entity is sourced, so the first restore after enabling snapshots still replays the full history.
 See xref:snapshotting:index.adoc[Snapshotting] for snapshot policies and snapshot stores.
+
+[[workflow-index]]
+=== Workflow index
+
+When a node claims a segment, the engine restores the workflow instances of that segment that are still running.
+To find them without reading every workflow lifecycle event ever written, it keeps a workflow index: the running workflow instances, stored by workflow id.
+A claim loads the entries of its segment and only reads the workflow lifecycle events after the token the segment resumes from.
+
+The index has no position of its own: the token of the processor is its position.
+The engine keeps the changes of the index in memory, and writes them whenever the processor takes a checkpoint, before the processor stores the token.
+So a claim always finds the index complete up to the token it resumes from, and the lifecycle events after that token complete it.
+When the index cannot be written, the checkpoint fails: the processor releases the segment and claims it again after a back-off, restoring its running workflows from the event store as on any claim.
+After a crash, the processor reprocesses the events after its last stored token, which brings the index up to date again.
+So with an index, the engine decides when the processor of the workflow module stores its tokens.
+An application whose customization of that processor adds ordinary event handling components to it, which do not decide on their own when to store tokens, or replaces how it stores its tokens, fails to start.
+
+The workflow index is derived data.
+The event store remains the source of truth, and as long as every node that runs the workflow module writes the index, it never makes the engine lose a running workflow.
+An index starts out empty and not initialized.
+The first claim then reads the list of running workflows from the event store, and initializes the index with it.
+From then on, every claim uses the index.
+This also applies when you introduce the index into an application that already runs workflows, or when you empty it.
+
+The index must be shared by every node that runs the workflow module, and must survive a restart whenever the tokens do.
+In turn, the tokens of the processor of the workflow module must survive a restart whenever the index does.
+A processor without stored tokens starts at the head of the event stream, while the index is still initialized, so its claims miss the running workflows whose start the index did not store yet.
+A workflow module with an index other than an `InMemoryWorkflowIndex` therefore fails to start when its processor keeps its tokens in an `InMemoryTokenStore`, as it does without a token store.
+That processor takes its token store from the unnamed `TokenStore` component, or from the `processorConfiguration(...)` of the workflow module: a token store set through the event processing defaults does not reach it.
+For the same reason, when you delete or reset the tokens of that processor, empty the index as well: its entries and its initialization marker.
+By default, the engine keeps no index, so every claim reads the running workflows from the event store.
+
+WARNING: Enable the index only once every node that runs the workflow module runs a version that writes it.
+A node that does not write the index, such as a node of an earlier version, or one without the index configured, can advance the token of a segment while workflows start in it.
+The index then misses those workflows, and a later claim that uses the index does not restore them.
+If that happened, stop every node that runs the workflow module, and empty the index: its entries and its initialization marker.
+The next claim of each segment then initializes the index again from the event store.
+
+Enabling the index needs no reset or replay of the processor of the workflow module: the first claim initializes the index from the event store.
+Do not reset that processor to build the index: a reset is not a supported way to build it.
+
+An `InMemoryWorkflowIndex` keeps the index in memory.
+Use it only in tests, or when a single node runs the workflow module: the index of one node does not know the changes the other nodes made.
+
+Several workflow modules share one workflow index, each under its own name.
+To keep a durable index, implement the `WorkflowIndex` interface and register it with `registerWorkflowIndex(...)`.
+Its Javadoc describes the contract an implementation must meet, such as completing a write only once it is durable.
+
+IMPORTANT: The workflow index types are marked `@Internal`.
+They are usable and supported to configure the index and to write your own implementation, but their shape may still change in a minor release.
+
 
 [[spring-boot]]
 == Spring Boot
@@ -368,7 +420,9 @@ Each wait can take longer, because a batch touches more workflows.
 
 The engine requests a checkpoint after every event it handles.
 A positive checkpoint interval forwards at most one request per segment within that interval, so the processor waits less often under load.
-The stored position then lags by at most the events of one interval, and those events are processed again after a crash.
+The stored position then lags by up to the events of one interval, and those events are processed again after a crash.
+A segment that goes idle keeps that lag until its next event, or until the processor releases it.
+With a <<workflow-index,workflow index>>, every checkpoint also writes the changes of the index, so fewer checkpoints mean fewer, larger writes.
 The interval is in milliseconds. It defaults to `0`, which forwards every request.
 
 === Java version

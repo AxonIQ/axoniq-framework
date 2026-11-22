@@ -7,8 +7,10 @@
  */
 package io.axoniq.framework.workflow.configuration;
 
+import io.axoniq.framework.workflow.index.api.WorkflowIndex;
 import org.axonframework.common.configuration.ApplicationConfigurer;
 import org.axonframework.common.configuration.AxonConfiguration;
+import org.axonframework.common.configuration.ComponentBuilder;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.LifecycleRegistry;
 import org.axonframework.eventsourcing.configuration.EventSourcingConfigurer;
@@ -53,6 +55,9 @@ import static java.util.Objects.requireNonNull;
  *     {@link io.axoniq.framework.workflow.runtime.execution.EventSourcedWorkflowStore}</li>
  *     <li>{@link io.axoniq.framework.workflow.configuration.WorkflowMethodParameterResolverFactory}, so handler
  *     methods can inject the current workflow context, status, and other helpful information</li>
+ *     <li>{@link io.axoniq.framework.workflow.index.api.WorkflowIndex} - defaulting to
+ *     {@link io.axoniq.framework.workflow.index.api.WorkflowIndex#none()}, which keeps no index, see
+ *     {@link #registerWorkflowIndex(ComponentBuilder)}</li>
  * </ul>
  * Every {@link io.axoniq.framework.workflow.runtime.execution.WorkflowConfigurationRegistry},
  * {@link io.axoniq.framework.workflow.runtime.execution.WorkflowExecutionRepository},
@@ -108,6 +113,40 @@ public class WorkflowConfigurer implements ApplicationConfigurer {
     public WorkflowConfigurer registerWorkflowModule(WorkflowModule<?> workflowModule) {
         Objects.requireNonNull(workflowModule, "Workflow module must not be null");
         delegate.componentRegistry(cr -> cr.registerModule(workflowModule));
+        return this;
+    }
+
+    /**
+     * Registers the given {@link WorkflowIndex} builder, replacing the default {@link WorkflowIndex#none()}, which keeps
+     * no index, so every claim of a segment reads the running workflow instances from the event store.
+     * <p>
+     * Every workflow module of the application keeps its index of running workflow instances in this one
+     * {@code WorkflowIndex}, each under its own name. A durable index shared by every node lets a restarted
+     * application, or another node claiming a segment, restore the running workflow instances of the segment without
+     * reading every workflow lifecycle event:
+     * <pre>{@code
+     * WorkflowConfigurer.create()
+     *                   .registerWorkflowIndex(config -> new MyDurableWorkflowIndex(...));
+     * }</pre>
+     * Every checkpoint of a segment writes the changes of the index first, within the transaction the token is stored
+     * in when the index can join it. When the index cannot be written, the checkpoint fails, and the event processor
+     * releases the segment and claims it again later. With an index, the event processor of a workflow module must let
+     * the engine decide when to store its tokens: a module whose processor has ordinary event handling components,
+     * which do not checkpoint on their own, or another way of storing its tokens, fails to start.
+     * <p>
+     * The tokens of that event processor must survive a restart whenever the index does: a module that keeps an index
+     * other than {@link WorkflowIndex#none()} or an
+     * {@link io.axoniq.framework.workflow.index.inmemory.InMemoryWorkflowIndex}, while its processor keeps its tokens
+     * in an
+     * {@link org.axonframework.messaging.eventhandling.processing.streaming.token.store.inmemory.InMemoryTokenStore},
+     * fails to start. When you delete or reset the tokens of that processor, empty the index as well.
+     *
+     * @param workflowIndexBuilder the builder constructing the {@link WorkflowIndex}
+     * @return the current instance of the {@code Configurer} for a fluent API
+     */
+    public WorkflowConfigurer registerWorkflowIndex(ComponentBuilder<WorkflowIndex> workflowIndexBuilder) {
+        requireNonNull(workflowIndexBuilder, "The workflow index builder must not be null.");
+        delegate.componentRegistry(cr -> cr.registerComponent(WorkflowIndex.class, workflowIndexBuilder));
         return this;
     }
 

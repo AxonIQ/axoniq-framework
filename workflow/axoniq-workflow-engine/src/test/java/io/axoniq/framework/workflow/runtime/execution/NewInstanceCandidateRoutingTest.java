@@ -12,6 +12,7 @@ import io.axoniq.framework.workflow.dsl.api.StepStatus;
 import io.axoniq.framework.workflow.dsl.api.WorkflowContext;
 import io.axoniq.framework.workflow.dsl.api.WorkflowState;
 import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
+import io.axoniq.framework.workflow.index.inmemory.InMemoryWorkflowIndex;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContextFactory;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
@@ -241,6 +242,8 @@ class NewInstanceCandidateRoutingTest {
                                     repository,
                                     mock(WorkflowCancellationService.class),
                                     mock(WorkflowStore.class),
+                                    new InMemoryWorkflowIndex(),
+                                    "WorkflowEngine",
                                     mock(UnitOfWorkFactory.class));
         checkpointingSupport = new WorkflowEngineCheckpointingSupport(engine, 0L);
         engine.setCheckpointingSupport(checkpointingSupport);

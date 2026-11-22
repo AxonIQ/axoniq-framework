@@ -10,6 +10,7 @@ package io.axoniq.framework.workflow.runtime.execution;
 import io.axoniq.framework.workflow.dsl.api.EventConditions;
 import io.axoniq.framework.workflow.dsl.api.WorkflowContext;
 import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
+import io.axoniq.framework.workflow.index.inmemory.InMemoryWorkflowIndex;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContextFactory;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
@@ -136,6 +137,8 @@ class WorkflowEngineClaimGapWakeTest {
                 new InMemoryWorkflowExecutionRepository(),
                 mock(WorkflowCancellationService.class),
                 workflowStore,
+                new InMemoryWorkflowIndex(),
+                "WorkflowEngine",
                 restoreUnitOfWorkFactory()
         );
         checkpointingSupport = new WorkflowEngineCheckpointingSupport(workflowEngine, 0L);

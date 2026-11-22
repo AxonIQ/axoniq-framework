@@ -9,6 +9,7 @@ package io.axoniq.framework.workflow.runtime.execution;
 
 import io.axoniq.framework.workflow.dsl.api.WorkflowState;
 import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
+import io.axoniq.framework.workflow.index.api.WorkflowIndex;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowConfigurationRegistry.PredicatedWorkflowConfiguration;
 import org.axonframework.common.TypeReference;
@@ -26,6 +27,7 @@ import org.junit.jupiter.api.*;
 
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 import static io.axoniq.framework.workflow.runtime.execution.SegmentTestFixtures.FOUR_SEGMENTS;
 import static io.axoniq.framework.workflow.runtime.execution.SegmentTestFixtures.owningSegment;
@@ -89,12 +91,18 @@ class WorkflowEngineSegmentCheckpointTest {
                 configurationRegistry,
                 new InMemoryWorkflowExecutionRepository(),
                 mock(WorkflowCancellationService.class),
-                mock(WorkflowStore.class),
+                new RecordingWorkflowStore(),
+                WorkflowIndex.none(),
+                "WorkflowEngine",
                 mock(UnitOfWorkFactory.class)
         );
         checkpointingSupport = new WorkflowEngineCheckpointingSupport(workflowEngine, 0L);
         workflowEngine.setCheckpointingSupport(checkpointingSupport);
         registerStartConfiguration(configurationRegistry);
+        // The node holds every segment; a segment it does not hold never advances its checkpoint.
+        FOUR_SEGMENTS.forEach(segment -> workflowEngine.restoreWorkflowsFor(
+                segment, null, new StubProcessingContext(), new StubProcessingContext()
+        ).orTimeout(5, TimeUnit.SECONDS).join());
         // Delivered on the segment that owns it, exactly as the routing sequences a unique start candidate.
         workflowEngine.handle(startEvent(), processingContext(owningSegment(BUSY_WORKFLOW_ID)));
     }

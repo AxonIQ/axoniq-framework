@@ -18,10 +18,12 @@ import org.axonframework.messaging.eventhandling.processing.streaming.token.Trac
 import org.jspecify.annotations.Nullable;
 
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Supplier;
 
 import static java.util.Objects.requireNonNull;
 import static org.axonframework.common.BuilderUtils.assertPositive;
@@ -42,9 +44,16 @@ import static org.axonframework.common.BuilderUtils.assertPositive;
  * {@link #onCheckpointAdvanced(Segment, TrackingToken)} re-enters the support only after all the
  * {@link WorkflowExecution} latches (attached by the {@link CheckpointLatchCoordinator}) have been crossed.
  * <p>
+ * A checkpoint also makes the state the coordinator derives from the handled events durable, such as the index of
+ * running workflows: {@link #onCheckpointAdvanced(Segment, TrackingToken, ProcessingContext)} first runs
+ * {@link CheckpointLatchCoordinator#flushCheckpoint(Segment, ProcessingContext)}, within the context the processor
+ * stores the token in when it hands one over. When that flush fails, the checkpoint fails right away, and the processor
+ * releases the segment and claims it again after a back-off, restoring its workflows from the event store.
+ * <p>
  * A positive checkpoint interval forwards at most one checkpoint request per segment within that interval, so the
- * processor waits for safe points less often under load. The stored token then lags by at most the events of one
- * interval, and those events are processed again after a crash.
+ * processor waits for safe points less often under load. A request within the interval is dropped, so the stored token
+ * lags by up to the events of one interval, and those events are processed again after a crash. A segment that goes
+ * idle keeps that lag until its next event or its release.
  *
  * @author Simon Zambrovski
  * @author Steven van Beelen
@@ -57,6 +66,8 @@ public class WorkflowEngineCheckpointingSupport implements Checkpointing {
     private final Map<Integer, CheckpointTrigger> segmentIdToTrigger = new ConcurrentHashMap<>();
     private final long checkpointIntervalNanos;
     private final Map<Integer, Long> lastForwardNanos = new ConcurrentHashMap<>();
+    // Segments whose release failed, until they are claimed again.
+    private final Set<Integer> failedReleases = ConcurrentHashMap.newKeySet();
 
     /**
      * Creates checkpointing support for a {@link WorkflowEngine} that forwards at most one checkpoint request per
@@ -64,9 +75,9 @@ public class WorkflowEngineCheckpointingSupport implements Checkpointing {
      * <p>
      * Every forwarded request makes the event processor wait, at its next batch commit, until all workflows of the
      * segment reached a safe point. A request that is not forwarded is dropped, not deferred: the stored token stays
-     * at the last forwarded request until the next one or the release of the segment. So the stored token lags by at
-     * most the events of one interval, also on a segment that goes idle, and those events are processed again after a
-     * crash.
+     * at the last forwarded request until the next one or the release of the segment. So the stored token lags by up
+     * to the events of one interval, and those events are processed again after a crash. A segment that goes idle
+     * keeps that lag until its next event or its release.
      *
      * @param checkpointLatchCoordinator adds a latch to coordinated {@link WorkflowExecution WorkflowExecutions} to
      *                                   ensure all have reached a safe point to advance the checkpoint
@@ -83,19 +94,63 @@ public class WorkflowEngineCheckpointingSupport implements Checkpointing {
         this.checkpointIntervalNanos = TimeUnit.MILLISECONDS.toNanos(checkpointInterval);
     }
 
+    /**
+     * {@inheritDoc}
+     * <p>
+     * Clears a failed release of the segment, see {@link #onSegmentReleased(Segment, TrackingToken)}.
+     */
     @Override
     public void onSegmentClaimed(Segment segment,
                                  @Nullable TrackingToken from,
                                  CheckpointTrigger trigger) {
+        failedReleases.remove(segment.getSegmentId());
         segmentIdToTrigger.put(segment.getSegmentId(), trigger);
     }
 
+    /**
+     * {@inheritDoc}
+     * <p>
+     * As {@link #onCheckpointAdvanced(Segment, TrackingToken, ProcessingContext)}, without a context to write in.
+     */
     @Override
     public CompletableFuture<TrackingToken> onCheckpointAdvanced(Segment segment,
                                                                  TrackingToken requested) {
+        return advance(segment, requested, null);
+    }
+
+    /**
+     * {@inheritDoc}
+     * <p>
+     * First {@link CheckpointLatchCoordinator#flushCheckpoint(Segment, ProcessingContext) flushes} the coordinator,
+     * right away on the calling thread, so it can write within the transaction of the given {@code context}. Fails as
+     * soon as that flush fails; otherwise completes once the workflow work of the segment is safe as well.
+     */
+    @Override
+    public CompletableFuture<TrackingToken> onCheckpointAdvanced(Segment segment,
+                                                                 TrackingToken requested,
+                                                                 ProcessingContext context) {
+        return advance(segment, requested, context);
+    }
+
+    private CompletableFuture<TrackingToken> advance(Segment segment,
+                                                     TrackingToken requested,
+                                                     @Nullable ProcessingContext context) {
+        return flush(() -> checkpointLatchCoordinator.flushCheckpoint(segment, context))
+                .thenCompose(flushed -> awaitSafe(segment, requested));
+    }
+
+    private CompletableFuture<TrackingToken> awaitSafe(Segment segment, TrackingToken requested) {
         CompletableFuture<TrackingToken> result = new CompletableFuture<>();
         completeWhenSafe(segment, requested, result);
         return result;
+    }
+
+    private static CompletableFuture<Void> flush(Supplier<CompletableFuture<Void>> flush) {
+        try {
+            return flush.get();
+        } catch (RuntimeException e) {
+            return CompletableFuture.failedFuture(e);
+        }
     }
 
     /**
@@ -135,13 +190,32 @@ public class WorkflowEngineCheckpointingSupport implements Checkpointing {
         }
     }
 
+    /**
+     * {@inheritDoc}
+     * <p>
+     * A release fails while the {@link CheckpointLatchCoordinator} holds the checkpoint of the segment. It then keeps
+     * failing for every later report of the same release, until the segment is claimed again: the processor may report
+     * a release more than once, and by the next report the engine may have dropped the work that held the checkpoint,
+     * which was never made durable.
+     * <p>
+     * Otherwise, the release reports {@code requested} once the workflow work of the segment is safe and the
+     * {@link CheckpointLatchCoordinator#flushRelease(Segment) release flush} of the coordinator completed. It fails
+     * when that flush fails, which releases the segment without advancing its stored token.
+     */
     @Override
     public CompletableFuture<TrackingToken> onSegmentReleased(Segment segment,
                                                               TrackingToken requested) {
-        var released = checkpointLatchCoordinator.holdsCheckpoint(segment)
-                ? CompletableFuture.<TrackingToken>failedFuture(new IllegalStateException(
-                        "Segment " + segment.getSegmentId() + " holds workflow work that is not durable yet"))
-                : onCheckpointAdvanced(segment, requested);
+        int segmentId = segment.getSegmentId();
+        CompletableFuture<TrackingToken> released;
+        if (failedReleases.contains(segmentId) || checkpointLatchCoordinator.holdsCheckpoint(segment)) {
+            failedReleases.add(segmentId);
+            released = CompletableFuture.failedFuture(new IllegalStateException(
+                    "Segment " + segmentId + " holds its checkpoint: it has workflow work that is not durable yet, or "
+                            + "its workflows could not be restored"));
+        } else {
+            var flushed = flush(() -> checkpointLatchCoordinator.flushRelease(segment));
+            released = awaitSafe(segment, requested).thenCombine(flushed, (safe, ignored) -> safe);
+        }
         return released
                 // Only this segment's trigger dies with its claim; the segments still held keep checkpointing.
                 .whenComplete((ignored, cause) -> {
@@ -161,7 +235,8 @@ public class WorkflowEngineCheckpointingSupport implements Checkpointing {
     void getAndSetTriggerFrom(ProcessingContext context) {
         Segment.fromContext(context).ifPresent(
                 segment -> CheckpointTrigger.fromContext(context)
-                                            .ifPresent(trigger -> onSegmentClaimed(segment, null, trigger))
+                                            .ifPresent(trigger -> segmentIdToTrigger.put(segment.getSegmentId(),
+                                                                                         trigger))
         );
     }
 
@@ -220,6 +295,13 @@ public class WorkflowEngineCheckpointingSupport implements Checkpointing {
          */
         boolean hasUnsafeCheckpointWork(Segment segment);
 
+        /**
+         * Returns whether the stored position of the given {@code segment} must not advance at all: neither through a
+         * checkpoint request, which is dropped, nor on its release, which fails.
+         *
+         * @param segment the segment whose checkpoint is being advanced
+         * @return {@code true} when the stored position of the segment must stay where it is
+         */
         boolean holdsCheckpoint(Segment segment);
 
         /**
@@ -234,5 +316,33 @@ public class WorkflowEngineCheckpointingSupport implements Checkpointing {
          *                it
          */
         void addCheckpointLatch(Segment segment, Runnable latch);
+
+        /**
+         * Makes the state the given {@code segment} derived from the events it handled so far durable, ahead of a
+         * checkpoint of the segment, within the given {@code context} where possible.
+         * <p>
+         * Defaults to a completed future: no other state needs to be durable before the checkpoint.
+         *
+         * @param segment the segment whose checkpoint is being advanced
+         * @param context the context the processor stores the checkpoint in, or {@code null} when unknown
+         * @return a future completing once the state is durable, or written within the {@code context}, or failing
+         * when it could not be made durable, which fails the checkpoint
+         */
+        default CompletableFuture<Void> flushCheckpoint(Segment segment, @Nullable ProcessingContext context) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        /**
+         * Makes the state the given {@code segment} derived from the events it handled durable, ahead of its release.
+         * <p>
+         * Defaults to a completed future: no other state needs to be durable before the release.
+         *
+         * @param segment the segment being released
+         * @return a future completing once the state is durable, or failing when it could not be made durable, which
+         * releases the segment without advancing its stored token
+         */
+        default CompletableFuture<Void> flushRelease(Segment segment) {
+            return CompletableFuture.completedFuture(null);
+        }
     }
 }

@@ -12,6 +12,7 @@ import io.axoniq.framework.messaging.eventstreaming.checkpoint.Checkpointing;
 import io.axoniq.framework.messaging.eventstreaming.checkpoint.CheckpointingProgressStrategy;
 import io.axoniq.framework.workflow.dsl.api.WorkflowState;
 import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
+import io.axoniq.framework.workflow.index.api.WorkflowIndex;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowConfigurationRegistry.PredicatedWorkflowConfiguration;
 import org.axonframework.common.TypeReference;
@@ -135,7 +136,9 @@ class WorkflowEngineCrossSegmentCheckpointTest {
         workflowEngine = new WorkflowEngine(configurationRegistry,
                                             repository,
                                             mock(WorkflowCancellationService.class),
-                                            mock(WorkflowStore.class),
+                                            new RecordingWorkflowStore(),
+                                            WorkflowIndex.none(),
+                                            "WorkflowEngine",
                                             mock(UnitOfWorkFactory.class));
         checkpointingSupport = new WorkflowEngineCheckpointingSupport(workflowEngine, 0L);
         workflowEngine.setCheckpointingSupport(checkpointingSupport);
@@ -231,8 +234,8 @@ class WorkflowEngineCrossSegmentCheckpointTest {
         var b = FOUR_SEGMENTS.get(1);
         var triggerA = mock(CheckpointTrigger.class);
         var triggerB = mock(CheckpointTrigger.class);
-        checkpointingSupport.onSegmentClaimed(a, null, triggerA);
-        checkpointingSupport.onSegmentClaimed(b, null, triggerB);
+        claim(a, triggerA);
+        claim(b, triggerB);
 
         checkpointingSupport.requestCheckpoint(a, token(FAST_SEGMENT_HANDLED_POSITION));
 
@@ -250,8 +253,8 @@ class WorkflowEngineCrossSegmentCheckpointTest {
         var held = FOUR_SEGMENTS.get(1);
         var releasedTrigger = mock(CheckpointTrigger.class);
         var heldTrigger = mock(CheckpointTrigger.class);
-        checkpointingSupport.onSegmentClaimed(released, null, releasedTrigger);
-        checkpointingSupport.onSegmentClaimed(held, null, heldTrigger);
+        claim(released, releasedTrigger);
+        claim(held, heldTrigger);
 
         checkpointingSupport.onSegmentReleased(released, token(FAST_SEGMENT_HANDLED_POSITION)).join();
 
@@ -260,6 +263,22 @@ class WorkflowEngineCrossSegmentCheckpointTest {
 
         checkpointingSupport.requestCheckpoint(released, token(SLOW_SEGMENT_UNHANDLED_POSITION));
         verifyNoInteractions(releasedTrigger);
+    }
+
+    /**
+     * Claims the given segment the way the processor does: hands the checkpointing support its trigger, and lets the
+     * engine restore the segment, without which the engine allows the segment no checkpoint.
+     */
+    private void claim(Segment segment, CheckpointTrigger trigger) {
+        checkpointingSupport.onSegmentClaimed(segment, null, trigger);
+        restore(segment, null);
+    }
+
+    private void restore(Segment segment, @Nullable TrackingToken claimedFrom) {
+        var context = new StubProcessingContext();
+        workflowEngine.restoreWorkflowsFor(segment, claimedFrom, context, new StubProcessingContext())
+                      .orTimeout(5, TimeUnit.SECONDS)
+                      .join();
     }
 
     private ProcessingContext processingContext(Segment segment, @Nullable TrackingToken trackingToken) {
@@ -367,6 +386,7 @@ class WorkflowEngineCrossSegmentCheckpointTest {
 
         private void claim() {
             strategy.onSegmentClaimed();
+            restore(segment, stored);
         }
 
         private void consume(long position) {

@@ -7,11 +7,13 @@
  */
 package io.axoniq.framework.workflow.configuration;
 
+import io.axoniq.framework.messaging.eventstreaming.checkpoint.CheckpointingProgressStrategyFactory;
 import io.axoniq.framework.workflow.dsl.api.EventCondition;
 import io.axoniq.framework.workflow.dsl.api.WorkflowContext;
 import io.axoniq.framework.workflow.history.inmemory.InMemoryWorkflowHistoryRepository;
 import io.axoniq.framework.workflow.history.inmemory.MutableWorkflowHistoryRepository;
 import io.axoniq.framework.workflow.history.inmemory.WorkflowHistoryProjector;
+import io.axoniq.framework.workflow.index.inmemory.InMemoryWorkflowIndex;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContextFactory;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowDefinition;
@@ -26,6 +28,7 @@ import io.axoniq.framework.workflow.runtime.execution.WorkflowConfigurationRegis
 import io.axoniq.framework.workflow.runtime.execution.WorkflowEngine;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowEngineCheckpointingSupport;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowExecutionRepository;
+import io.axoniq.framework.workflow.index.api.WorkflowIndex;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowStore;
 import org.axonframework.common.AxonConfigurationException;
 import org.axonframework.common.annotation.Internal;
@@ -40,13 +43,14 @@ import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventHandlingComponent;
 import org.axonframework.messaging.eventhandling.configuration.EventProcessorModule;
+import org.axonframework.messaging.eventhandling.processing.streaming.StreamingEventProcessor;
 import org.axonframework.messaging.eventhandling.processing.streaming.pooled.PooledStreamingEventProcessorConfiguration;
 import org.axonframework.messaging.eventhandling.processing.streaming.pooled.PooledStreamingEventProcessorModule;
-import org.axonframework.messaging.eventhandling.processing.streaming.StreamingEventProcessor;
+import org.axonframework.messaging.eventhandling.processing.streaming.progress.SegmentProgressStrategyFactory;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.EventTrackerStatus;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
-import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.SequenceOverridingEventHandlingComponent;
+import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.store.TokenStore;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.store.inmemory.InMemoryTokenStore;
 import org.axonframework.messaging.eventstreaming.EventCriteria;
@@ -300,6 +304,8 @@ class SimpleWorkflowModule<C extends WorkflowContext>
                                           c.getComponent(WorkflowExecutionRepository.class, executionRepositoryName()),
                                           c.getComponent(WorkflowCancellationService.class, cancellationServiceName()),
                                           c.getComponent(WorkflowStore.class),
+                                          c.getComponent(WorkflowIndex.class),
+                                          name,
                                           c.getComponent(UnitOfWorkFactory.class)
                                   ))
                                   .onStart(Phase.LOCAL_MESSAGE_HANDLER_REGISTRATIONS, (c, engine) -> {
@@ -395,16 +401,85 @@ class SimpleWorkflowModule<C extends WorkflowContext>
             Configuration config,
             PooledStreamingEventProcessorConfiguration psepConfig
     ) {
-        return engineConfigCustomizer.apply(defaultProcessorConfig(config, psepConfig))
-                                     // Start at the head of the stream. A workflow reacts to events published after
-                                     // it was deployed. The pooled streaming default (first token) would start a
-                                     // workflow for every historical start event, duplicating work still owned by
-                                     // the process it replaces.
-                                     .initialToken(source -> source.latestToken(null))
-                                     .eventCriteria(SimpleWorkflowModule::eventCriteria)
-                                     .addSegmentChangeListener(config.getComponent(
-                                             WorkflowSegmentChangeListener.class, segmentChangeListenerName()
-                                     ));
+        var processorConfig =
+                engineConfigCustomizer.apply(defaultProcessorConfig(config, psepConfig))
+                                      // Start at the head of the stream. A workflow reacts to events published after
+                                      // it was deployed. The pooled streaming default (first token) would start a
+                                      // workflow for every historical start event, duplicating work still owned by
+                                      // the process it replaces.
+                                      .initialToken(source -> source.latestToken(null))
+                                      .eventCriteria(SimpleWorkflowModule::eventCriteria)
+                                      .addSegmentChangeListener(config.getComponent(
+                                              WorkflowSegmentChangeListener.class, segmentChangeListenerName()
+                                      ));
+        requireDurableTokenStore(config, processorConfig.tokenStore());
+        var progressStrategy = processorConfig.progressStrategyFactoryBuilder();
+        return processorConfig.progressStrategyFactoryBuilder(
+                components -> requireFullyDeferred(config, progressStrategy.apply(components))
+        );
+    }
+
+    /**
+     * Fails when the engine keeps a workflow index that may survive a restart while the processor of the engine keeps
+     * its tokens in memory. Any index other than {@link WorkflowIndex#none()} or an {@link InMemoryWorkflowIndex} is
+     * taken to survive a restart.
+     * <p>
+     * The token of the processor is the position of the index. After a restart, a processor without stored tokens
+     * starts at the head of the event stream, while an index that survived the restart is still initialized. A claim
+     * then loads the stored entries and reads no lifecycle events before the head, so it misses every workflow whose
+     * start was not written to the index before the restart. An index kept in memory is lost together with the tokens,
+     * and a claim that finds it not initialized reads the running workflows from the event store.
+     * <p>
+     * The processor of the engine takes its token store from the unnamed {@link TokenStore} component, unless the
+     * {@link #processorConfiguration(Function) processorConfiguration} of this module sets another one. A token store
+     * set through the event processing defaults is replaced by that component, which falls back to an
+     * {@link InMemoryTokenStore} when the application registers none.
+     */
+    private void requireDurableTokenStore(Configuration config, @Nullable TokenStore tokenStore) {
+        WorkflowIndex workflowIndex = config.getComponent(WorkflowIndex.class);
+        boolean durableIndex = workflowIndex != WorkflowIndex.none()
+                && !(workflowIndex instanceof InMemoryWorkflowIndex);
+        if (durableIndex && tokenStore instanceof InMemoryTokenStore) {
+            throw new AxonConfigurationException(
+                    "The event processor of workflow module " + name + " keeps its tokens in an "
+                            + "InMemoryTokenStore, while the workflow engine keeps a workflow index that may survive a "
+                            + "restart, a " + workflowIndex.getClass().getName() + ". After a restart, a claim would "
+                            + "miss the running workflows whose start the index did not store yet. This processor "
+                            + "takes its TokenStore from the unnamed TokenStore component, which falls back to an "
+                            + "InMemoryTokenStore when none is registered, or from the processorConfiguration of the "
+                            + "workflow module; a TokenStore set through the event processing defaults is not used "
+                            + "by it. Register a durable TokenStore, such as a JpaTokenStore, as an unnamed "
+                            + "component, set one through the processorConfiguration of the workflow module, or keep "
+                            + "no workflow index or an InMemoryWorkflowIndex."
+            );
+        }
+    }
+
+    /**
+     * Returns the given progress strategy of the engine's processor, unless the engine keeps a workflow index and the
+     * processor would store tokens on its own.
+     * <p>
+     * With a workflow index, every checkpoint the engine asks for writes the changes of the index first, within the
+     * transaction the token is stored in where possible, and the engine holds back the checkpoints that must not pass
+     * a change, such as one of a workflow instance that did not run yet. A processor that also has ordinary event
+     * handling components, which do not checkpoint on their own, checkpoints at the end of every batch instead,
+     * without regard for what the engine holds back, and a processor that does not checkpoint through the engine could
+     * store tokens beyond changes of the index that are not durable yet. Either way, a later claim could miss running
+     * workflows.
+     */
+    private SegmentProgressStrategyFactory requireFullyDeferred(Configuration config,
+                                                               SegmentProgressStrategyFactory progressStrategy) {
+        boolean fullyDeferred = progressStrategy instanceof CheckpointingProgressStrategyFactory checkpointing
+                && checkpointing.isFullyDeferred();
+        if (!fullyDeferred && config.getComponent(WorkflowIndex.class) != WorkflowIndex.none()) {
+            throw new AxonConfigurationException(
+                    "The event processor of workflow module " + name + " must let its event handling components "
+                            + "decide when to store its tokens, as the workflow engine keeps a workflow index. Remove "
+                            + "the event handling components that do not checkpoint on their own from this processor, "
+                            + "and do not replace its progress strategy."
+            );
+        }
+        return progressStrategy;
     }
 
     private ComponentDefinition<Object> engineStartHandlerComponent(String moduleName, String engineName) {

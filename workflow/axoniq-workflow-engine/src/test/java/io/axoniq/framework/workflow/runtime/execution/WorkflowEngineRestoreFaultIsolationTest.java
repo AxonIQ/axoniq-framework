@@ -10,6 +10,7 @@ package io.axoniq.framework.workflow.runtime.execution;
 import io.axoniq.framework.workflow.dsl.api.WorkflowContext;
 import io.axoniq.framework.workflow.dsl.api.WorkflowState;
 import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
+import io.axoniq.framework.workflow.index.inmemory.InMemoryWorkflowIndex;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContextFactory;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionFactory;
@@ -97,6 +98,8 @@ class WorkflowEngineRestoreFaultIsolationTest {
                 new InMemoryWorkflowExecutionRepository(),
                 mock(WorkflowCancellationService.class),
                 workflowStore,
+                new InMemoryWorkflowIndex(),
+                "WorkflowEngine",
                 restoreUnitOfWorkFactory()
         );
         workflowEngine.setCheckpointingSupport(new WorkflowEngineCheckpointingSupport(workflowEngine, 0L));

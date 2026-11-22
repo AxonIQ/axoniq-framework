@@ -19,12 +19,13 @@ import static java.util.Objects.requireNonNull;
  * <p>
  * The workflow engine applies these rules whenever a
  * {@link io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowIdProvider} derives the id of a new
- * workflow instance: it does not start an instance with an invalid id and logs an error instead. The rules keep every
- * id storable in a {@code VARCHAR(255)} column, where each character takes one byte in any database character set, and
- * readable in logs and by operators. An empty id is invalid, as it identifies nothing. To use a longer or non-ASCII
- * business key, derive a valid id from it, for example its SHA-256 hash as 64 hexadecimal characters.
+ * workflow instance, with or without a workflow index: it does not start an instance with an invalid id and logs an
+ * error instead. The rules keep every id storable in a {@code VARCHAR(255)} column, where each character takes one
+ * byte in any database character set, and readable in logs and by operators. An empty id is invalid, as it identifies
+ * nothing. To use a longer or non-ASCII business key, derive a valid id from it, for example its SHA-256 hash as 64
+ * hexadecimal characters.
  * <p>
- * Internal, as it serves the workflow engine only; the rules themselves are documented on
+ * Internal, as it serves the workflow engine and the workflow index only; the rules themselves are documented on
  * {@link io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowIdProvider}.
  *
  * @author Allard Buijze

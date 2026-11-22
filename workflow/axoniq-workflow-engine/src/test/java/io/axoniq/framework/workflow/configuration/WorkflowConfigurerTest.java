@@ -7,6 +7,8 @@
  */
 package io.axoniq.framework.workflow.configuration;
 
+import io.axoniq.framework.workflow.index.api.WorkflowIndex;
+import io.axoniq.framework.workflow.index.inmemory.InMemoryWorkflowIndex;
 import org.axonframework.common.configuration.ApplicationConfigurerTestSuite;
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.common.configuration.ComponentRegistry;
@@ -20,8 +22,7 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.*;
 
 /**
  * Test for the {@link WorkflowConfigurer}.
@@ -86,6 +87,38 @@ class WorkflowConfigurerTest extends ApplicationConfigurerTestSuite<WorkflowConf
         @Test
         void startSucceedsWithDefaultWorkflowEventProcessingModulesRegistered() {
             assertThatCode(() -> testSubject.start()).doesNotThrowAnyException();
+        }
+    }
+
+    @Nested
+    class RegisterWorkflowIndex {
+
+        @Test
+        void defaultsToNoWorkflowIndex() {
+            // when
+            Configuration configuration = buildConfiguration();
+
+            // then - an index kept by one node only cannot vouch for the tokens other nodes stored
+            assertThat(configuration.getComponent(WorkflowIndex.class)).isSameAs(WorkflowIndex.none());
+        }
+
+        @Test
+        void replacesTheDefaultWorkflowIndex() {
+            // given
+            WorkflowIndex custom = new InMemoryWorkflowIndex();
+            testSubject.registerWorkflowIndex(c -> custom);
+
+            // when
+            Configuration configuration = buildConfiguration();
+
+            // then
+            assertThat(configuration.getComponent(WorkflowIndex.class)).isSameAs(custom);
+        }
+
+        @Test
+        void rejectsANullBuilder() {
+            assertThatThrownBy(() -> testSubject.registerWorkflowIndex(null))
+                    .isInstanceOf(NullPointerException.class);
         }
     }
 

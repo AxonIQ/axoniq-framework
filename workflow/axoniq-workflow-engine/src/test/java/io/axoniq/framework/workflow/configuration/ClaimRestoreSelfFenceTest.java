@@ -29,12 +29,14 @@ import org.axonframework.messaging.core.VersionedType;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventMessage;
+import org.axonframework.messaging.eventhandling.processing.streaming.StreamingEventProcessor;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.axonframework.messaging.eventstreaming.StreamingCondition;
 import org.axonframework.messaging.eventstreaming.Tag;
 import org.junit.jupiter.api.*;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -42,6 +44,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
 
 /**
  * Restores two workflow instances of one segment while a previous owner appends for one of them.
@@ -67,6 +70,7 @@ class ClaimRestoreSelfFenceTest extends AbstractEventSourcedEntityRepositoryTest
         var storageEngine = new PreviousOwnerWritingStorageEngine(new InMemoryEventStorageEngine());
         configuration = configurationWith(storageEngine);
         configuration.start();
+        awaitProcessorClaim();
 
         var instanceA = workflowExecutionOperations("wf-a", Version.DEFAULT_VERSION);
         var instanceB = workflowExecutionOperations("wf-b", Version.DEFAULT_VERSION);
@@ -94,6 +98,7 @@ class ClaimRestoreSelfFenceTest extends AbstractEventSourcedEntityRepositoryTest
     void aPreviousOwnerAppendingAfterRestoreSourcingFencesTheRestoredExecution() {
         configuration = configurationWith(new PreviousOwnerWritingStorageEngine(new InMemoryEventStorageEngine()));
         configuration.start();
+        awaitProcessorClaim();
 
         var instance = workflowExecutionOperations("wf-a", Version.DEFAULT_VERSION);
         publish(EventMessageUtils.startedWorkflow(instance, MODULE, DEFINITION_ID, customizer));
@@ -109,6 +114,14 @@ class ClaimRestoreSelfFenceTest extends AbstractEventSourcedEntityRepositoryTest
         assertThat(failure)
                 .as("a previous owner writing after the restore read must fence the restored execution")
                 .hasRootCauseInstanceOf(AppendEventsTransactionRejectedException.class);
+    }
+
+    /**
+     * Waits until the engine's own processor claimed its segment, restoring the instances it owns, which are none yet.
+     */
+    private void awaitProcessorClaim() {
+        var processor = configuration.getComponents(StreamingEventProcessor.class).get(MODULE);
+        await().atMost(Duration.ofSeconds(5)).until(() -> !processor.processingStatus().isEmpty());
     }
 
     /**
@@ -161,6 +174,9 @@ class ClaimRestoreSelfFenceTest extends AbstractEventSourcedEntityRepositoryTest
                                            .on(c -> EventConditions.fromQualifiedName(new QualifiedName("start")))
                                            .notCustomized()
                                    )
+                                   // One segment, the one this test claims by hand as well, so that once the
+                                   // processor claimed it, no claim of the processor restores an instance concurrently.
+                                   .processorConfiguration(pc -> pc.initialSegmentCount(1))
                                    .contextFactory(c -> TestContext::new);
         var configurer = WorkflowConfigurer.create();
         configurer.componentRegistry(cr -> cr

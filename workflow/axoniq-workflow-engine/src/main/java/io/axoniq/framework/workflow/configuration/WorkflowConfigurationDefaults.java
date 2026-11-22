@@ -16,6 +16,7 @@ import io.axoniq.framework.workflow.runtime.execution.EventSourcedWorkflowState;
 import io.axoniq.framework.workflow.runtime.execution.EventSourcedWorkflowStore;
 import io.axoniq.framework.workflow.runtime.execution.ExecuteStepActionResolver;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowEventTagResolver;
+import io.axoniq.framework.workflow.index.api.WorkflowIndex;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowScheduler;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowStore;
 import io.axoniq.framework.workflow.runtime.execution.payload.PayloadReducerRegistry;
@@ -132,6 +133,7 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
         registerRunningWorkflowsModule(componentRegistry);
         registerWorkflowEngineExecutor(componentRegistry);
         registerWorkflowStore(componentRegistry);
+        registerWorkflowIndex(componentRegistry);
     }
 
     private void registerPayloadReducerRegistry(ComponentRegistry componentRegistry) {
@@ -255,6 +257,10 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
                                     )));
                     return new EventSourcedWorkflowStore(runningWorkflowsRepository, workflowStateRepository);
                 });
+    }
+
+    void registerWorkflowIndex(ComponentRegistry componentRegistry) {
+        componentRegistry.registerIfNotPresent(WorkflowIndex.class, cfg -> WorkflowIndex.none());
     }
 
     @Override

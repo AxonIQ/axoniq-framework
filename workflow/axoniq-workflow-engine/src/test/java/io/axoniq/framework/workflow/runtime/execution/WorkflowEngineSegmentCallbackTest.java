@@ -7,6 +7,7 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
+import io.axoniq.framework.workflow.index.inmemory.InMemoryWorkflowIndex;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
 import org.axonframework.common.configuration.ComponentNotFoundException;
 import org.axonframework.messaging.core.ApplicationContext;
@@ -51,6 +52,8 @@ class WorkflowEngineSegmentCallbackTest {
                                         repository,
                                         cancellationService,
                                         workflowStore,
+                                        new InMemoryWorkflowIndex(),
+                                        "WorkflowEngine",
                                         restoreUnitOfWorkFactory());
         engine.setCheckpointingSupport(new WorkflowEngineCheckpointingSupport(engine, 0L));
         engine.restoreTimeout = SHORT_TIMEOUT;
@@ -130,6 +133,8 @@ class WorkflowEngineSegmentCallbackTest {
                                         new InMemoryWorkflowExecutionRepository(),
                                         mock(WorkflowCancellationService.class),
                                         mock(WorkflowStore.class),
+                                        new InMemoryWorkflowIndex(),
+                                        "WorkflowEngine",
                                         restoreUnitOfWorkFactory());
 
         assertThat(engine.restoreTimeout).isEqualTo(WorkflowEngine.DEFAULT_RESTORE_TIMEOUT);
