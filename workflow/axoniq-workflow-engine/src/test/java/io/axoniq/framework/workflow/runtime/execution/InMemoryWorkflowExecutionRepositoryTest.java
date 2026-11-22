@@ -15,7 +15,10 @@ import org.axonframework.common.infra.ComponentDescriptor;
 import org.junit.jupiter.api.*;
 
 import java.util.Collection;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -84,6 +87,7 @@ class InMemoryWorkflowExecutionRepositoryTest {
 
         verify(descriptor).describeProperty("size", 2);
         verify(descriptor).describeProperty(eq("workflowIds"), any(Collection.class));
+        assertThat(repository.findById("order-43")).isEmpty();
         assertThat(repository.remove("order-42", first)).isTrue();
         assertThat(repository.findById("order-42")).isEmpty();
         assertThat(repository.remove("unknown", first)).isFalse();
@@ -105,5 +109,51 @@ class InMemoryWorkflowExecutionRepositoryTest {
         assertThat(removed).isSameAs(stored);
         assertThat(repository.findById("order-42")).isEmpty();
         assertThat(repository.remove("order-42")).isNull();
+    }
+
+    @Nested
+    class RemoveAll {
+
+        @Test
+        void removesTheMatchingExecutionsOfEveryBucketAndKeepsTheOthers() {
+            // given - executions whose ids spread over many buckets
+            var repository = new InMemoryWorkflowExecutionRepository();
+            var workflowIds = IntStream.range(0, 200).mapToObj(i -> "workflow-" + i).toList();
+            workflowIds.forEach(id -> repository.save(id, () -> new InspectionCountingWorkflowExecution(id)));
+            Set<String> removedIds = workflowIds.stream()
+                                                .filter(id -> id.hashCode() % 2 == 0)
+                                                .collect(Collectors.toSet());
+            assertThat(removedIds.stream()
+                                 .map(id -> id.hashCode() & (SegmentBucketedMap.BUCKET_COUNT - 1))
+                                 .distinct()
+                                 .count()).isGreaterThan(1);
+
+            // when
+            repository.removeAll(execution -> removedIds.contains(execution.workflowId()));
+
+            // then
+            assertThat(repository.findAll())
+                    .extracting(WorkflowExecution::workflowId)
+                    .containsExactlyInAnyOrderElementsOf(
+                            workflowIds.stream().filter(id -> !removedIds.contains(id)).toList()
+                    );
+        }
+
+        @Test
+        void leavesTheExecutionThatReplacedAMatchingOneAlone() {
+            // given - an execution that left the repository and was replaced by another one of the same workflow
+            var repository = new InMemoryWorkflowExecutionRepository();
+            var original = new InspectionCountingWorkflowExecution("order-42");
+            var replacement = new InspectionCountingWorkflowExecution("order-42");
+            repository.save("order-42", () -> original);
+            repository.remove("order-42");
+            repository.save("order-42", () -> replacement);
+
+            // when
+            repository.removeAll(execution -> execution == original);
+
+            // then
+            assertThat(repository.findById("order-42")).containsSame(replacement);
+        }
     }
 }

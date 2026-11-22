@@ -95,7 +95,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiPredicate;
 import java.util.function.Function;
-import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -563,6 +562,27 @@ class WorkflowConfigurerHibernationTest {
                                  .withThrowableThat()
                                  .havingRootCause()
                                  .isInstanceOf(NoSuchElementException.class);
+        }
+
+        @Test
+        void isAnsweredOffTheThreadOnWhichTheWokenExecutionLeftMemory() throws InterruptedException {
+            // given: a step cancellation woke a hibernated workflow, whose restored body waits for a gate before it
+            // takes the request
+            var configuration = start(true);
+            var workflowId = startWorkflow(configuration, "gatedWait", "order-1", WAIT_STEP);
+            awaitHibernated(configuration, workflowId);
+            var cancelled = cancellationService(configuration).requestStepCancellation(workflowId, WAIT_STEP, null);
+            var answeredOn = cancelled.handle((result, failure) -> Thread.currentThread());
+            assertThat(gateReached.await(5, TimeUnit.SECONDS)).isTrue();
+
+            // when: the woken execution leaves memory on this thread, as it does under the lock of a claim that stops
+            // the executions of its segment
+            var stoppingThread = Thread.currentThread();
+            engine(configuration).shutdown();
+            gate.countDown();
+
+            // then: the request is not made again on this thread, which may hold a lock its workflow lock must precede
+            assertThat(answeredOn).succeedsWithin(Duration.ofSeconds(10)).isNotSameAs(stoppingThread);
         }
 
         @Test
@@ -1162,7 +1182,9 @@ class WorkflowConfigurerHibernationTest {
 
         @Test
         void forgetsTheHibernatedWorkflowsOfAReleasedSegment() {
-            // given
+            // given: an idle delay long enough for the test to see the restored workflow in memory before it
+            // hibernates again
+            idleDelay = Duration.ofSeconds(2);
             var configuration = start(true);
             var workflowId = startWorkflow(configuration, "wait", "order-1", WAIT_STEP);
             awaitHibernated(configuration, workflowId);
@@ -1962,15 +1984,9 @@ class WorkflowConfigurerHibernationTest {
         }
 
         @Override
-        public Set<WorkflowExecution> findAll() {
-            // Lists every execution, as the hibernation passes and the test do, which is no lookup to intercept.
-            return super.findAll(execution -> true);
-        }
-
-        @Override
-        public Set<WorkflowExecution> findAll(Predicate<WorkflowExecution> predicate) {
+        public Set<WorkflowExecution> findAllOwnedBy(@Nullable Segment segment) {
             runOnce(beforeNextSegmentListing);
-            var listing = super.findAll(predicate);
+            var listing = super.findAllOwnedBy(segment);
             runOnce(afterNextSegmentListing);
             return listing;
         }

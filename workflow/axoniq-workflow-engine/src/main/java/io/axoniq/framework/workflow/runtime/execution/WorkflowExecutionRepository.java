@@ -11,6 +11,8 @@ import io.axoniq.framework.workflow.query.api.WorkflowStateQuery;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.infra.DescribableComponent;
+import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
+import org.jspecify.annotations.Nullable;
 
 import java.util.Optional;
 import java.util.Set;
@@ -64,6 +66,24 @@ public interface WorkflowExecutionRepository extends DescribableComponent {
     Set<WorkflowExecution> findAll(Predicate<WorkflowExecution> predicate);
 
     /**
+     * Returns all stored workflow executions owned by the given segment: those whose workflow identifier the segment
+     * {@link Segment#matches(Object) matches}. An event processor handles an event once per segment it holds, and acts
+     * on the executions of that segment only, so this lookup is on the path of every event broadcast to the workflows
+     * of a segment.
+     * <p>
+     * The default implementation filters all stored executions. Implementations should override it to visit only the
+     * executions of the given segment, so the cost of a lookup does not grow with the executions of other segments.
+     *
+     * @param segment the segment owning the executions, or {@code null} for all executions, as outside a segmented
+     *                processor every execution is in scope
+     * @return an unmodifiable collection of the workflow executions owned by the segment
+     * @since 5.5.0
+     */
+    default Set<WorkflowExecution> findAllOwnedBy(@Nullable Segment segment) {
+        return findAll(execution -> WorkflowSegmentOwnership.ownedBy(segment, execution.workflowId()));
+    }
+
+    /**
      * Atomically stores a new workflow execution if no execution exists for the given workflow identifier. If an
      * execution already exists, returns the existing one without invoking the factory.
      *
@@ -78,6 +98,7 @@ public interface WorkflowExecutionRepository extends DescribableComponent {
      * @param workflowId the identifier of the workflow to remove
      * @return the removed {@link WorkflowExecution}, or {@code null} if no execution was found
      */
+    @Nullable
     WorkflowExecution remove(String workflowId);
 
     /**

@@ -12,9 +12,12 @@ import io.axoniq.framework.workflow.query.utils.WorkflowStateQueryMatcher;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.infra.ComponentDescriptor;
+import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -24,7 +27,12 @@ import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 /**
- * In-memory implementation of {@link WorkflowExecutionRepository} backed by a {@link ConcurrentHashMap}.
+ * In-memory implementation of {@link WorkflowExecutionRepository} backed by
+ * {@link ConcurrentHashMap ConcurrentHashMaps}.
+ * <p>
+ * Executions are spread over buckets by the hash of their workflow id, the value segment ownership is decided on, so
+ * {@link #findAllOwnedBy(Segment)} visits the executions of the given segment only, rather than every execution on this
+ * node.
  *
  * @author Stefan Dragisic
  * @since 5.4.0
@@ -33,7 +41,7 @@ import java.util.function.Supplier;
 public class InMemoryWorkflowExecutionRepository implements WorkflowExecutionRepository {
 
     private static final Logger logger = LoggerFactory.getLogger(InMemoryWorkflowExecutionRepository.class);
-    private final ConcurrentHashMap<String, WorkflowExecution> workflowExecutions = new ConcurrentHashMap<>();
+    private final SegmentBucketedMap<WorkflowExecution> workflowExecutions = new SegmentBucketedMap<>();
 
     /**
      * Creates a new instance of .
@@ -50,14 +58,18 @@ public class InMemoryWorkflowExecutionRepository implements WorkflowExecutionRep
 
     @Override
     public Set<WorkflowExecution> findAll(Predicate<WorkflowExecution> predicate) {
-        return Set.copyOf(workflowExecutions.values().stream().filter(predicate).toList());
+        return Set.copyOf(workflowExecutions.values().filter(predicate).toList());
+    }
+
+    @Override
+    public Set<WorkflowExecution> findAllOwnedBy(@Nullable Segment segment) {
+        return Set.copyOf(workflowExecutions.entriesOf(segment).map(Map.Entry::getValue).toList());
     }
 
     @Override
     public CompletableFuture<Set<WorkflowExecution>> findAll(WorkflowStateQuery query) {
         return CompletableFuture.completedFuture(
                 Set.copyOf(workflowExecutions.values()
-                                             .stream()
                                              .filter(execution -> WorkflowStateQueryMatcher.matches(
                                                      query, execution.state()
                                              ))
@@ -71,6 +83,7 @@ public class InMemoryWorkflowExecutionRepository implements WorkflowExecutionRep
     }
 
     @Override
+    @Nullable
     public WorkflowExecution remove(String workflowId) {
         return workflowExecutions.remove(workflowId);
     }
@@ -84,7 +97,7 @@ public class InMemoryWorkflowExecutionRepository implements WorkflowExecutionRep
 
     @Override
     public void removeAll(Predicate<WorkflowExecution> predicate) {
-        workflowExecutions.values().removeIf(predicate);
+        workflowExecutions.removeIf(predicate);
     }
 
     @Override
@@ -95,6 +108,6 @@ public class InMemoryWorkflowExecutionRepository implements WorkflowExecutionRep
     @Override
     public void describeTo(ComponentDescriptor descriptor) {
         descriptor.describeProperty("size", workflowExecutions.size());
-        descriptor.describeProperty("workflowIds", workflowExecutions.keySet().stream().toList());
+        descriptor.describeProperty("workflowIds", workflowExecutions.ids().toList());
     }
 }

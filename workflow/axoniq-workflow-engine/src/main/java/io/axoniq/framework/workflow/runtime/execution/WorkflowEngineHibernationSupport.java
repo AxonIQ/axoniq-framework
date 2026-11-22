@@ -36,6 +36,7 @@ import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -242,8 +243,7 @@ final class WorkflowEngineHibernationSupport {
         // removed, so a workflow that wakes while the executions are listed is found here.
         var awaiting = new LinkedHashSet<>(waitIndex.match(event, context));
         var workflowIds = new LinkedHashSet<String>();
-        repository.findAll(execution -> WorkflowSegmentOwnership.ownedBy(segment, execution.workflowId()))
-                  .forEach(execution -> workflowIds.add(execution.workflowId()));
+        repository.findAllOwnedBy(segment).forEach(execution -> workflowIds.add(execution.workflowId()));
         // Matched after the executions are listed: a workflow hibernates by adding its waits before it leaves the
         // repository, so a workflow that hibernates while the executions are listed is found here.
         awaiting.addAll(waitIndex.match(event, context));
@@ -398,6 +398,11 @@ final class WorkflowEngineHibernationSupport {
      * {@link WorkflowCancellationService}: it reaches the workflow wherever it runs now, hibernated again, restored by
      * a claim, or nowhere on this node, in which case it fails with a {@link java.util.NoSuchElementException}. With a
      * failure, which made a wake fail, each request fails with it.
+     * <p>
+     * The requests are answered on the wake executor, never on the calling thread: an execution may leave memory under
+     * the lock of a claim, and a request made again takes the lock of its workflow, which the engine otherwise takes
+     * before the lock of a claim. Only when the wake executor no longer accepts tasks, on shutdown, are they answered
+     * on the calling thread.
      *
      * @param execution the execution that left memory
      * @param failure   the failure that made the execution leave memory, or {@code null} when it left otherwise
@@ -407,12 +412,17 @@ final class WorkflowEngineHibernationSupport {
         if (queued == null) {
             return;
         }
-        for (var ready : queued) {
+        Runnable answer = () -> queued.forEach(ready -> {
             if (failure == null) {
                 ready.complete(null);
             } else {
                 ready.completeExceptionally(failure);
             }
+        });
+        try {
+            wakeExecutor.execute(answer);
+        } catch (RejectedExecutionException e) {
+            answer.run();
         }
     }
 

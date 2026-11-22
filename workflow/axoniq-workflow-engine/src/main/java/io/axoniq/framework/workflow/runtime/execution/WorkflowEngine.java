@@ -45,7 +45,6 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import java.util.function.Function;
-import java.util.function.Predicate;
 import java.util.stream.Stream;
 
 import static io.axoniq.framework.workflow.runtime.execution.EventSourcedWorkflowState.PAYLOAD_TYPE;
@@ -384,14 +383,14 @@ public class WorkflowEngine implements
             // route external events to workflows waiting for them. Business events without a unique start candidate
             // are broadcast to every segment (sequenced by SequencingPolicy.BROADCAST); the ownership filter keeps
             // the wake exactly-once per instance - only the owning segment's delivery reaches an execution.
-            // The filter is pushed into the repository so the returned set holds this segment's instances only:
-            // the repository is node-wide, so materializing all of them once per claimed segment is wasted work.
+            // The repository lists this segment's instances only: it is node-wide, and every segment handles a
+            // broadcast event, so visiting all of them once per claimed segment would cost quadratic work.
             // With hibernation, hibernated workflows waiting for the event are woken as well.
             var support = hibernation;
             if (support != null) {
                 support.broadcast(segment, event, context);
             } else {
-                for (var execution : workflowExecutionRepository.findAll(ownedBy(segment))) {
+                for (var execution : workflowExecutionRepository.findAllOwnedBy(segment)) {
                     execution.onEvent(event, context);
                 }
             }
@@ -711,7 +710,7 @@ public class WorkflowEngine implements
      * Stops and drops the workflow executions owned by the given {@code segment}, without emitting any event.
      */
     private void stopExecutionsOf(Segment segment) {
-        var stopped = workflowExecutionRepository.findAll(ownedBy(segment));
+        var stopped = workflowExecutionRepository.findAllOwnedBy(segment);
         if (!stopped.isEmpty()) {
             logger.info("Stopping {} workflow execution(s) of segment {}.", stopped.size(), segment.getSegmentId());
             stopped.forEach(WorkflowExecution::stopForShutdown);
@@ -813,10 +812,6 @@ public class WorkflowEngine implements
         catchUpSupport.activateOnDelivery(
                 segment, currentToken, () -> removeTerminalAndStartRestoredWorkflowExecutions(segment, "after catch-up")
         );
-    }
-
-    private Predicate<WorkflowExecution> ownedBy(@Nullable Segment segment) {
-        return execution -> WorkflowSegmentOwnership.ownedBy(segment, execution.workflowId());
     }
 
     /**
@@ -1049,16 +1044,23 @@ public class WorkflowEngine implements
      * @param phase   startup phase in which the executions are started
      */
     private void removeTerminalAndStartRestoredWorkflowExecutions(@Nullable Segment segment, String phase) {
-        var owned = ownedBy(segment);
-        var terminal = owned.and(execution -> execution.state().workflowStatus().isTerminal());
-        var terminalExecutions = workflowExecutionRepository.findAll(terminal);
-        workflowExecutionRepository.removeAll(terminal);
+        var terminalExecutions = workflowExecutionRepository.findAllOwnedBy(segment)
+                                                           .stream()
+                                                           .filter(execution -> execution.state()
+                                                                                         .workflowStatus()
+                                                                                         .isTerminal())
+                                                           .toList();
         terminalExecutions.forEach(execution -> {
-            unregisterCancellation(execution);
-            checkpointWorkIndex.markSafe(execution.workflowId());
-            leftMemory(execution, null);
+            if (workflowExecutionRepository.remove(execution.workflowId(), execution)) {
+                unregisterCancellation(execution);
+                checkpointWorkIndex.markSafe(execution.workflowId());
+                leftMemory(execution, null);
+            }
         });
-        var executionsToStart = workflowExecutionRepository.findAll(owned.and(execution -> !execution.isRunning()));
+        var executionsToStart = workflowExecutionRepository.findAllOwnedBy(segment)
+                                                           .stream()
+                                                           .filter(execution -> !execution.isRunning())
+                                                           .toList();
         if (executionsToStart.isEmpty()) {
             logger.debug("No restored workflow executions require startup {}.", phase);
             return;
@@ -1216,9 +1218,7 @@ public class WorkflowEngine implements
      * not be marked safe on its behalf either.
      */
     private Stream<String> unsafeWorkflowIdsOf(Segment segment) {
-        return checkpointWorkIndex.unsafeWorkflowIds()
-                                  .stream()
-                                  .filter(workflowId -> WorkflowSegmentOwnership.ownedBy(segment, workflowId));
+        return checkpointWorkIndex.unsafeWorkflowIdsOf(segment).stream();
     }
 
     private Stream<WorkflowExecution> unsafeExecutionsOf(Segment segment) {

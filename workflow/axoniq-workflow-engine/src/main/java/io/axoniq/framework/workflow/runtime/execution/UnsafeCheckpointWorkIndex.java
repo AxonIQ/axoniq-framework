@@ -10,9 +10,10 @@ package io.axoniq.framework.workflow.runtime.execution;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution.CheckpointWorkStateListener;
 import org.axonframework.common.annotation.Internal;
+import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 
+import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 
 /**
@@ -24,14 +25,18 @@ import java.util.function.Consumer;
  */
 @Internal final class UnsafeCheckpointWorkIndex {
 
-    private final Set<String> unsafeWorkflowIds = ConcurrentHashMap.newKeySet();
+    private final SegmentBucketedMap<Boolean> unsafeWorkflowIds = new SegmentBucketedMap<>();
 
-    boolean hasUnsafeCheckpointWork() {
-        return !unsafeWorkflowIds.isEmpty();
-    }
-
-    Set<String> unsafeWorkflowIds() {
-        return Set.copyOf(unsafeWorkflowIds);
+    /**
+     * Returns the identifiers of the unsafe workflows owned by the given segment, without visiting those of other
+     * segments: a segment checks them on every checkpoint, while the index holds the workflows of every segment on this
+     * node.
+     *
+     * @param segment the segment owning the workflows
+     * @return a snapshot of the identifiers of the unsafe workflows owned by the segment
+     */
+    Set<String> unsafeWorkflowIdsOf(Segment segment) {
+        return Set.copyOf(unsafeWorkflowIds.entriesOf(segment).map(Map.Entry::getKey).toList());
     }
 
     void markSafe(String workflowId) {
@@ -39,7 +44,7 @@ import java.util.function.Consumer;
     }
 
     void markUnsafe(String workflowId) {
-        unsafeWorkflowIds.add(workflowId);
+        unsafeWorkflowIds.put(workflowId, Boolean.TRUE);
     }
 
     /**
