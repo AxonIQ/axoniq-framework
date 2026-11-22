@@ -8,7 +8,10 @@
 package io.axoniq.framework.workflow.index.jpa;
 
 import io.axoniq.framework.workflow.index.api.WorkflowIndex;
+import io.axoniq.framework.workflow.index.api.WorkflowIndex.Entry;
+import io.axoniq.framework.workflow.index.api.WorkflowIndex.HibernationHint;
 import io.axoniq.framework.workflow.index.api.WorkflowIndex.IndexDelta;
+import io.axoniq.framework.workflow.index.api.WorkflowIndex.OpenWait;
 import io.axoniq.framework.workflow.index.api.WorkflowIndexContractTest;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityManagerFactory;
@@ -28,8 +31,10 @@ import org.axonframework.messaging.eventhandling.processing.streaming.segmenting
 import org.junit.jupiter.api.*;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -42,6 +47,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.*;
 
@@ -74,6 +80,10 @@ class JpaWorkflowIndexTest extends WorkflowIndexContractTest {
         return future.orTimeout(5, TimeUnit.SECONDS).join();
     }
 
+    private static Optional<Set<String>> ids(CompletableFuture<Optional<Set<Entry>>> load) {
+        return await(load).map(entries -> entries.stream().map(Entry::workflowId).collect(Collectors.toSet()));
+    }
+
     @Nested
     class ValidWorkflowIds {
 
@@ -87,7 +97,7 @@ class JpaWorkflowIndexTest extends WorkflowIndexContractTest {
             await(workflowIndex.initialize(INDEX, Set.of(longest)));
 
             // then
-            assertThat(await(workflowIndex.load(INDEX, Segment.ROOT_SEGMENT))).hasValue(Set.of(longest));
+            assertThat(ids(workflowIndex.load(INDEX, Segment.ROOT_SEGMENT))).hasValue(Set.of(longest));
         }
 
         @Test
@@ -106,7 +116,7 @@ class JpaWorkflowIndexTest extends WorkflowIndexContractTest {
                     .cause()
                     .hasMessageContaining("order-" + "w".repeat(58) + "...")
                     .hasMessageContaining("256 characters");
-            assertThat(await(workflowIndex.load(INDEX, Segment.ROOT_SEGMENT))).hasValue(Set.of("order-1"));
+            assertThat(ids(workflowIndex.load(INDEX, Segment.ROOT_SEGMENT))).hasValue(Set.of("order-1"));
         }
 
         @Test
@@ -122,7 +132,7 @@ class JpaWorkflowIndexTest extends WorkflowIndexContractTest {
                     .isInstanceOf(CompletionException.class)
                     .cause()
                     .hasMessageContaining("bestellung-\\u00FC");
-            assertThat(await(workflowIndex.load(INDEX, Segment.ROOT_SEGMENT))).isEmpty();
+            assertThat(ids(workflowIndex.load(INDEX, Segment.ROOT_SEGMENT))).isEmpty();
         }
     }
 
@@ -154,7 +164,7 @@ class JpaWorkflowIndexTest extends WorkflowIndexContractTest {
 
             // then
             assertThatThrownBy(() -> await(write)).isInstanceOf(CompletionException.class);
-            assertThat(await(workflowIndex.load(INDEX, Segment.ROOT_SEGMENT))).hasValue(Set.of("order-1"));
+            assertThat(ids(workflowIndex.load(INDEX, Segment.ROOT_SEGMENT))).hasValue(Set.of("order-1"));
         }
 
         @Test
@@ -167,10 +177,10 @@ class JpaWorkflowIndexTest extends WorkflowIndexContractTest {
 
             // then
             assertThatThrownBy(() -> await(initialization)).isInstanceOf(CompletionException.class);
-            assertThat(await(workflowIndex.load(INDEX, Segment.ROOT_SEGMENT))).isEmpty();
+            assertThat(ids(workflowIndex.load(INDEX, Segment.ROOT_SEGMENT))).isEmpty();
             // and - initializing it afterward shows that the entry of order-1 was not added either
             await(workflowIndex.initialize(INDEX, Set.of()));
-            assertThat(await(workflowIndex.load(INDEX, Segment.ROOT_SEGMENT))).hasValue(Set.of());
+            assertThat(ids(workflowIndex.load(INDEX, Segment.ROOT_SEGMENT))).hasValue(Set.of());
         }
     }
 
@@ -197,14 +207,15 @@ class JpaWorkflowIndexTest extends WorkflowIndexContractTest {
 
             // when
             await(transactional.create().executeWithResult(context -> {
-                var write = workflowIndex.store(INDEX, new IndexDelta(Set.of("order-2"), Set.of("order-1")), context);
+                var write = workflowIndex.storeWithin(INDEX, new IndexDelta(Set.of("order-2"), Set.of("order-1")), context)
+                                         .orElseThrow();
                 // then - the write ran within the context's transaction before the store returned
                 assertThat(write).isCompleted();
                 return write;
             }));
 
             // then - it is durable once the context committed
-            assertThat(await(workflowIndex.load(INDEX, Segment.ROOT_SEGMENT))).hasValue(Set.of("order-2"));
+            assertThat(ids(workflowIndex.load(INDEX, Segment.ROOT_SEGMENT))).hasValue(Set.of("order-2"));
         }
 
         @Test
@@ -215,12 +226,13 @@ class JpaWorkflowIndexTest extends WorkflowIndexContractTest {
 
             // when - the context fails after the write
             var execution = transactional.create().executeWithResult(context -> workflowIndex
-                    .store(INDEX, new IndexDelta(Set.of("order-2"), Set.of("order-1")), context)
+                    .storeWithin(INDEX, new IndexDelta(Set.of("order-2"), Set.of("order-1")), context)
+                    .orElseThrow()
                     .thenCompose(written -> CompletableFuture.failedFuture(new IllegalStateException("rolled back"))));
 
             // then
             assertThatThrownBy(() -> await(execution)).isInstanceOf(CompletionException.class);
-            assertThat(await(workflowIndex.load(INDEX, Segment.ROOT_SEGMENT))).hasValue(Set.of("order-1"));
+            assertThat(ids(workflowIndex.load(INDEX, Segment.ROOT_SEGMENT))).hasValue(Set.of("order-1"));
         }
 
         @Test
@@ -235,28 +247,171 @@ class JpaWorkflowIndexTest extends WorkflowIndexContractTest {
 
             // when - each write runs in a later transaction of that entity manager
             deltas.forEach(delta -> await(transactional.create().executeWithResult(
-                    context -> workflowIndex.store(INDEX, delta, context)
+                    context -> workflowIndex.storeWithin(INDEX, delta, context).orElseThrow()
             )));
 
             // then
-            assertThat(await(workflowIndex.load(INDEX, Segment.ROOT_SEGMENT))).hasValue(Set.of("order-1"));
+            assertThat(ids(workflowIndex.load(INDEX, Segment.ROOT_SEGMENT))).hasValue(Set.of("order-1"));
         }
 
         @Test
-        void writesInATransactionOfItsOwnWhenTheContextHasNoneToJoin() {
+        void writesNothingWhenTheContextHasNoTransactionToJoin() {
             // given
             var workflowIndex = createIndex();
             await(workflowIndex.initialize(INDEX, Set.of("order-1")));
             var withoutTransaction = new SimpleUnitOfWorkFactory(EmptyApplicationContext.INSTANCE);
 
-            // when - the context fails after the write, which did not join it
-            var execution = withoutTransaction.create().executeWithResult(context -> workflowIndex
-                    .store(INDEX, new IndexDelta(Set.of("order-2"), Set.of()), context)
-                    .thenCompose(written -> CompletableFuture.failedFuture(new IllegalStateException("rolled back"))));
+            // when
+            var write = await(withoutTransaction.create().executeWithResult(context -> CompletableFuture.completedFuture(
+                    workflowIndex.storeWithin(INDEX, new IndexDelta(Set.of("order-2"), Set.of()), context)
+            )));
+
+            // then - it reports that it did not join, so the engine writes without hints in a transaction of its own
+            assertThat(write).isEmpty();
+            assertThat(ids(workflowIndex.load(INDEX, Segment.ROOT_SEGMENT))).hasValue(Set.of("order-1"));
+        }
+
+        @Test
+        void writesNothingWithinTheContextWhenConfiguredForAnotherDatabase() {
+            // given - the provider documented for an index in another database than the processor's transaction
+            var provider = new JpaTransactionalExecutorProvider(entityManagerFactory);
+            var workflowIndex = JpaWorkflowIndex.builder()
+                                                .transactionalExecutorProvider(
+                                                        context -> context == null
+                                                                ? provider.getTransactionalExecutor(null)
+                                                                : null
+                                                )
+                                                .build();
+            await(workflowIndex.initialize(INDEX, Set.of("order-1")));
+            var hint = new HibernationHint(Instant.parse("2026-11-21T10:15:30Z"),
+                                          List.of(new OpenWait("awaitPayment", "paid", Set.of())));
+
+            // when
+            var within = await(transactional.create().executeWithResult(context -> CompletableFuture.completedFuture(
+                    workflowIndex.storeWithin(INDEX, new IndexDelta(Map.of("order-2", hint), Set.of()), context)
+            )));
+
+            // then - it reports that it did not join, so no hint is written, and the engine writes in a transaction
+            // of the index's own instead
+            assertThat(within).isEmpty();
+            await(workflowIndex.store(INDEX, new IndexDelta(Set.of("order-2"), Set.of())));
+            assertThat(await(workflowIndex.load(INDEX, Segment.ROOT_SEGMENT)))
+                    .hasValue(Set.of(Entry.running("order-1"), Entry.running("order-2")));
+        }
+    }
+
+    @Nested
+    class HibernationHintColumns {
+
+        @Test
+        void storesTheWaitsAsReadableJsonAndTheWakeUpTimeAsATimestamp() {
+            // given
+            var workflowIndex = createIndex();
+            await(workflowIndex.initialize(INDEX, Set.of()));
+            var wakeAt = Instant.parse("2026-11-21T10:15:30Z");
+            var hint = new HibernationHint(wakeAt, List.of(
+                    new OpenWait("awaitPayment", "com.acme.PaymentReceived", Set.of("payload:orderId=42")),
+                    new OpenWait("anyEvent", null, Set.of())
+            ));
+
+            // when
+            await(workflowIndex.store(INDEX, new IndexDelta(Map.of("order-1", hint), Set.of())));
+
+            // then - an operator reads which events the workflow waits for, and until when
+            try (var entityManager = entityManagerFactory.createEntityManager()) {
+                var entry = entityManager.find(WorkflowIndexEntry.class, new WorkflowIndexEntry.PK(INDEX, "order-1"));
+                assertThat(entry.getWakeAt()).isEqualTo(wakeAt);
+                assertThat(entry.getHibernationWaits()).isEqualTo(
+                        "[{\"step\":\"anyEvent\",\"event\":null,\"associations\":[]},"
+                                + "{\"step\":\"awaitPayment\",\"event\":\"com.acme.PaymentReceived\","
+                                + "\"associations\":[\"payload:orderId=42\"]}]"
+                );
+            }
+        }
+
+        @Test
+        void leavesBothColumnsEmptyForAnEntryWithoutAHint() {
+            // given
+            var workflowIndex = createIndex();
+
+            // when
+            await(workflowIndex.store(INDEX, new IndexDelta(Set.of("order-1"), Set.of())));
 
             // then
-            assertThatThrownBy(() -> await(execution)).isInstanceOf(CompletionException.class);
-            assertThat(await(workflowIndex.load(INDEX, Segment.ROOT_SEGMENT))).hasValue(Set.of("order-1", "order-2"));
+            try (var entityManager = entityManagerFactory.createEntityManager()) {
+                var entry = entityManager.find(WorkflowIndexEntry.class, new WorkflowIndexEntry.PK(INDEX, "order-1"));
+                assertThat(entry.getWakeAt()).isNull();
+                assertThat(entry.getHibernationWaits()).isNull();
+            }
+        }
+
+        @Test
+        void ignoresAHintWhoseWaitsCannotBeRead() {
+            // given - an entry whose waits an operator edited into something unreadable
+            var workflowIndex = createIndex();
+            await(workflowIndex.initialize(INDEX, Set.of()));
+            await(workflowIndex.store(INDEX, new IndexDelta(Map.of("order-1", new HibernationHint(
+                    Instant.parse("2026-11-21T10:15:30Z"), List.of(new OpenWait("awaitPayment", null, Set.of()))
+            )), Set.of())));
+            try (var entityManager = entityManagerFactory.createEntityManager()) {
+                entityManager.getTransaction().begin();
+                entityManager.createQuery("update WorkflowIndexEntry e set e.hibernationWaits = '[{\"step\":'")
+                             .executeUpdate();
+                entityManager.getTransaction().commit();
+            }
+
+            // when
+            var entries = await(workflowIndex.load(INDEX, Segment.ROOT_SEGMENT));
+
+            // then - the claim restores the workflow instead
+            assertThat(entries).hasValue(Set.of(Entry.running("order-1")));
+        }
+
+        @Test
+        void ignoresAHintWhoseWaitsAreNestedTooDeeplyToRead() {
+            // given - an entry whose waits were corrupted into deeply nested arrays
+            var workflowIndex = createIndex();
+            await(workflowIndex.initialize(INDEX, Set.of()));
+            await(workflowIndex.store(INDEX, new IndexDelta(Map.of("order-1", new HibernationHint(
+                    Instant.parse("2026-11-21T10:15:30Z"), List.of(new OpenWait("awaitPayment", null, Set.of()))
+            )), Set.of())));
+            try (var entityManager = entityManagerFactory.createEntityManager()) {
+                entityManager.getTransaction().begin();
+                entityManager.createQuery("update WorkflowIndexEntry e set e.hibernationWaits = :waits")
+                             .setParameter("waits", "[".repeat(100_000))
+                             .executeUpdate();
+                entityManager.getTransaction().commit();
+            }
+
+            // when
+            var entries = await(workflowIndex.load(INDEX, Segment.ROOT_SEGMENT));
+
+            // then - the claim restores the workflow instead
+            assertThat(entries).hasValue(Set.of(Entry.running("order-1")));
+        }
+
+        @Test
+        void storesTextOutsidePrintableAsciiAsEscapesAndReadsItBack() {
+            // given - waits with non-ASCII text, a supplementary character and a lone surrogate
+            var workflowIndex = createIndex();
+            await(workflowIndex.initialize(INDEX, Set.of()));
+            var hint = new HibernationHint(Instant.parse("2026-11-21T10:15:30Z"), List.of(
+                    new OpenWait("caf\u00e9", "\ud83d\ude00", Set.of("payload:note=\ud800"))
+            ));
+
+            // when
+            await(workflowIndex.store(INDEX, new IndexDelta(Map.of("order-1", hint), Set.of())));
+
+            // then - the column holds printable ASCII only, and the hint reads back unchanged
+            try (var entityManager = entityManagerFactory.createEntityManager()) {
+                var entry = entityManager.find(WorkflowIndexEntry.class, new WorkflowIndexEntry.PK(INDEX, "order-1"));
+                assertThat(entry.getHibernationWaits()).isEqualTo(
+                        "[{\"step\":\"caf\\u00e9\",\"event\":\"\\ud83d\\ude00\","
+                                + "\"associations\":[\"payload:note=\\ud800\"]}]"
+                );
+            }
+            assertThat(await(workflowIndex.load(INDEX, Segment.ROOT_SEGMENT)))
+                    .hasValue(Set.of(new Entry("order-1", hint)));
         }
     }
 
@@ -269,7 +424,7 @@ class JpaWorkflowIndexTest extends WorkflowIndexContractTest {
             await(createIndex().initialize(INDEX, Set.of("order-1")));
 
             // when
-            var index = await(createIndex().load(INDEX, Segment.ROOT_SEGMENT));
+            var index = ids(createIndex().load(INDEX, Segment.ROOT_SEGMENT));
 
             // then
             assertThat(index).hasValue(Set.of("order-1"));
@@ -315,7 +470,7 @@ class JpaWorkflowIndexTest extends WorkflowIndexContractTest {
             heldBack.forEach(Runnable::run);
 
             // then - it does not write behind the back of the caller, which considers it failed
-            assertThat(await(createIndex().load(INDEX, Segment.ROOT_SEGMENT))).isEmpty();
+            assertThat(ids(createIndex().load(INDEX, Segment.ROOT_SEGMENT))).isEmpty();
         }
 
         @Test
@@ -360,7 +515,7 @@ class JpaWorkflowIndexTest extends WorkflowIndexContractTest {
                 assertThat(write).isNotDone();
                 proceed.countDown();
                 await(write);
-                assertThat(await(createIndex().load(INDEX, Segment.ROOT_SEGMENT))).hasValue(Set.of("order-1"));
+                assertThat(ids(createIndex().load(INDEX, Segment.ROOT_SEGMENT))).hasValue(Set.of("order-1"));
             } finally {
                 executor.shutdownNow();
             }

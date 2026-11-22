@@ -29,7 +29,7 @@ final class NoWorkflowIndex implements WorkflowIndex {
     }
 
     @Override
-    public CompletableFuture<Optional<Set<String>>> load(String indexName, Segment segment) {
+    public CompletableFuture<Optional<Set<Entry>>> load(String indexName, Segment segment) {
         return CompletableFuture.completedFuture(Optional.empty());
     }
 

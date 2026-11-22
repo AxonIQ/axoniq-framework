@@ -8,6 +8,7 @@
 package io.axoniq.framework.workflow.runtime.execution;
 
 import io.axoniq.framework.workflow.index.api.WorkflowIndex;
+import io.axoniq.framework.workflow.index.api.WorkflowIndex.HibernationHint;
 import io.axoniq.framework.workflow.index.api.WorkflowIndex.IndexDelta;
 import io.axoniq.framework.workflow.runtime.execution.RunningWorkflowsClaimLoader.ClaimedIndex;
 import io.axoniq.framework.workflow.runtime.util.MetadataUtils;
@@ -31,6 +32,9 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 import static java.util.Objects.requireNonNull;
 
@@ -44,6 +48,9 @@ import static java.util.Objects.requireNonNull;
  *     index does not hold yet, {@link #initialize(Segment, ClaimedIndex)} starts tracking the segment.</li>
  *     <li>On the handler thread, {@link #apply(Segment, EventMessage)} applies every handled lifecycle event of an
  *     owned instance, keeping the change in memory.</li>
+ *     <li>With hibernation, {@link #recordHibernated(Segment, String, HibernationHint)} and
+ *     {@link #recordWoken(Segment, String)} record the {@link HibernationHint hint} of an instance that left memory,
+ *     and clear it again when it wakes.</li>
  *     <li>Every checkpoint of the segment first writes every pending change through
  *     {@link #flushForCheckpoint(Segment, ProcessingContext)}, and fails when that write fails or does not complete in
  *     time.</li>
@@ -51,9 +58,18 @@ import static java.util.Objects.requireNonNull;
  *     transaction of the index's own, and {@link #discard(Segment)} stops tracking the segment.</li>
  * </ul>
  * A checkpoint write gets the context in which the processor stores the token, so an index in the same database can
- * write within that transaction, see {@link WorkflowIndex#store(String, IndexDelta, ProcessingContext)}. Such a write
+ * write within that transaction, see {@link WorkflowIndex#storeWithin(String, IndexDelta, ProcessingContext)}. Such a write
  * is durable only once the context commits: when the context fails instead, its changes become pending again, unless
  * a later change of the same instance replaced them.
+ *
+ * <h2>Hibernation hints</h2>
+ * A hint is not derived from the events, so a write that sets one must never land after a later claim of the segment
+ * cleared it. A change that sets a hint is therefore only written by a checkpoint whose write joins the transaction in
+ * which the processor stores its token, see {@link WorkflowIndex#storeWithin(String, IndexDelta, ProcessingContext)}.
+ * Every other write, including that of a release, writes the instance without a hint instead, and keeps the hint
+ * pending for a later checkpoint; the hints that are still pending when the segment is released are dropped. Clearing
+ * a hint, adding and removing instances are written by every write. As a safety net, any event of an instance whose
+ * latest recorded change set a hint clears that hint, as the instance then no longer waits where it hibernated.
  *
  * <h2>Why a stored token never passes an unwritten change</h2>
  * The processor stores a token of a segment that handled events only after a checkpoint, and every checkpoint writes
@@ -164,7 +180,57 @@ final class RunningWorkflowsProjection {
      */
     void initialize(Segment segment, ClaimedIndex claimed) {
         if (indexed) {
-            segments.put(segment.getSegmentId(), new SegmentProjection(segment, claimed.changes()));
+            segments.put(segment.getSegmentId(),
+                         new SegmentProjection(segment, claimed.changes(), claimed.hibernated().keySet()));
+        }
+    }
+
+    /**
+     * Records that the given workflow instance of the given {@code segment} hibernated with the given {@code hint}.
+     * <p>
+     * The hint is written by the next checkpoint of the segment whose write joins the transaction of the processor,
+     * see {@link WorkflowIndex#storeWithin(String, IndexDelta, ProcessingContext)}. Ignored when the segment is not
+     * tracked.
+     *
+     * @param segment    the segment owning the instance
+     * @param workflowId the id of the hibernated instance
+     * @param hint       the open waits and nearest deadline the instance hibernated with
+     */
+    void recordHibernated(Segment segment, String workflowId, HibernationHint hint) {
+        requireNonNull(hint, "The hibernation hint must not be null.");
+        withProjectionOf(segment, projection -> projection.recordHint(workflowId, hint));
+    }
+
+    /**
+     * Records that the given workflow instance of the given {@code segment} is in memory again, clearing the hint it
+     * hibernated with. Does nothing when no hint of the instance is recorded or stored, or when the segment is not
+     * tracked.
+     *
+     * @param segment    the segment owning the instance
+     * @param workflowId the id of the instance that woke
+     */
+    void recordWoken(Segment segment, String workflowId) {
+        withProjectionOf(segment, projection -> projection.clearHint(workflowId));
+    }
+
+    /**
+     * Records that the given workflow instance of the given {@code segment} is no longer running, as its state turned
+     * out terminal when it woke. Ignored when the segment is not tracked.
+     *
+     * @param segment    the segment owning the instance
+     * @param workflowId the id of the instance that turned out terminal
+     */
+    void recordRemoved(Segment segment, String workflowId) {
+        withProjectionOf(segment, projection -> projection.recordRemoved(workflowId));
+    }
+
+    private void withProjectionOf(Segment segment, Consumer<SegmentProjection> action) {
+        if (!indexed) {
+            return;
+        }
+        SegmentProjection projection = segments.get(segment.getSegmentId());
+        if (projection != null && projection.segment.equals(segment)) {
+            action.accept(projection);
         }
     }
 
@@ -190,8 +256,9 @@ final class RunningWorkflowsProjection {
     /**
      * Applies a handled event to the projection of the given {@code segment}.
      * <p>
-     * Only lifecycle events of instances the segment owns change the projection; events published by a workflow
-     * through the publish primitive never do. A segment that is not tracked, because its claim did not finish loading,
+     * Only lifecycle events of instances the segment owns change the projection, and any event of an owned instance
+     * whose latest recorded change set a hint, which it clears; events published by a workflow through the publish
+     * primitive never do. A segment that is not tracked, because its claim did not finish loading,
      * is ignored: its checkpoints fail, see {@link #flushForCheckpoint(Segment, ProcessingContext)}.
      *
      * @param segment the segment handling the event, or {@code null} outside a segmented processor
@@ -266,68 +333,156 @@ final class RunningWorkflowsProjection {
     /**
      * A change to the index that is not durable yet.
      *
-     * @param running whether the instance is running after the latest change
-     * @param seq     the number of the latest change, telling whether a write covered it
+     * @param running     whether the instance is running after the latest change
+     * @param hint        the hint the running instance hibernated with, or {@code null} for none
+     * @param seq         the number of the latest change, telling whether a write covered it
+     * @param baseWritten whether a write without the hint already wrote that the instance runs, so only a write within
+     *                    the processor's transaction still has to write this change
      */
-    private record Change(boolean running, long seq) {
+    private record Change(boolean running, @Nullable HibernationHint hint, long seq, boolean baseWritten) {
 
-    }
+        boolean setsHint() {
+            return running && hint != null;
+        }
 
-    /**
-     * A write in flight: the changes it carries, by workflow id, and the future settling once the index settled it,
-     * whatever the outcome.
-     */
-    private record Write(Map<String, Change> changes, CompletableFuture<Void> settled) {
-
-        IndexDelta delta() {
-            Set<String> added = new HashSet<>();
-            Set<String> removed = new HashSet<>();
-            changes.forEach((id, change) -> (change.running() ? added : removed).add(id));
-            return new IndexDelta(added, removed);
+        Change withBaseWritten() {
+            return new Change(running, hint, seq, true);
         }
     }
 
     /**
-     * The projection of one claimed segment. Updated from the handler thread and flushed from the thread taking a
-     * checkpoint or releasing the segment, so all state is guarded by this object's monitor. Index writes are issued
-     * outside of it.
+     * A write in flight: the changes it writes in full, those it writes without their hint, which stay pending, and
+     * the future settling once the index settled it, whatever the outcome.
+     */
+    private record Write(Map<String, Change> changes,
+                         Map<String, Change> withoutHint,
+                         CompletableFuture<Void> settled) {
+
+        /**
+         * Returns the delta writing every change of this write, those without their hint as running without a hint.
+         */
+        IndexDelta delta() {
+            Map<String, @Nullable HibernationHint> running = new HashMap<>();
+            Set<String> removed = new HashSet<>();
+            changes.forEach((id, change) -> {
+                if (change.running()) {
+                    running.put(id, change.hint());
+                } else {
+                    removed.add(id);
+                }
+            });
+            withoutHint.keySet().forEach(id -> running.put(id, null));
+            return new IndexDelta(running, removed);
+        }
+
+        boolean isEmpty() {
+            return changes.isEmpty() && withoutHint.isEmpty();
+        }
+    }
+
+    /**
+     * The projection of one claimed segment. Updated from the handler thread and the workflow threads, and flushed
+     * from the thread taking a checkpoint or releasing the segment, so all state is guarded by a lock. That is no
+     * monitor: a workflow thread is a virtual thread, which keeps its carrier thread while it waits to enter a monitor.
+     * Index writes are issued outside of the lock.
      */
     private final class SegmentProjection {
 
+        private final ReentrantLock lock = new ReentrantLock();
         private final Segment segment;
         // Every change that is not durable, including those of the write in flight.
         private final Map<String, Change> unwritten = new HashMap<>();
+        // The instances whose latest recorded change set a hint, or whose stored hint the claim adopted.
+        private final Set<String> hinted = new HashSet<>();
         // The changes of each write within a context that has not ended yet, less those a later change replaced.
         private final List<Map<String, Change>> uncommitted = new ArrayList<>();
         private long changeCount;
         @Nullable
-        private Write writeInFlight;
+        private CompletableFuture<Void> writeInFlight;
         private boolean closed;
 
-        private SegmentProjection(Segment segment, Map<String, Boolean> changes) {
+        private SegmentProjection(Segment segment, Map<String, Boolean> changes, Set<String> adoptedHints) {
             this.segment = segment;
-            changes.forEach(this::record);
+            changes.forEach((id, running) -> record(id, running, null));
+            hinted.addAll(adoptedHints);
         }
 
-        synchronized void apply(EventMessage event) {
-            if (closed) {
+        private <T> T locked(Supplier<T> action) {
+            lock.lock();
+            try {
+                return action.get();
+            } finally {
+                lock.unlock();
+            }
+        }
+
+        private void locked(Runnable action) {
+            lock.lock();
+            try {
+                action.run();
+            } finally {
+                lock.unlock();
+            }
+        }
+
+        void apply(EventMessage event) {
+            Metadata metadata = event.metadata();
+            if (MetadataUtils.isPublishStep(metadata) || !MetadataUtils.hasWorkflowId().test(metadata)) {
                 return;
             }
-            Metadata metadata = event.metadata();
-            membershipChange(metadata).ifPresent(isRunning -> {
-                String workflowId = MetadataUtils.getWorkflowId(metadata);
-                if (WorkflowSegmentOwnership.ownedBy(segment, workflowId)) {
-                    record(workflowId, isRunning);
+            String workflowId = MetadataUtils.getWorkflowId(metadata);
+            if (!WorkflowSegmentOwnership.ownedBy(segment, workflowId)) {
+                return;
+            }
+            Optional<Boolean> membership = membershipChange(metadata);
+            locked(() -> {
+                if (closed) {
+                    return;
+                }
+                // Any event of an instance shows it no longer waits where it hibernated.
+                if (hinted.contains(workflowId)) {
+                    record(workflowId, true, null);
+                }
+                membership.ifPresent(isRunning -> record(workflowId, isRunning, null));
+            });
+        }
+
+        void recordHint(String workflowId, HibernationHint hint) {
+            locked(() -> {
+                if (!closed) {
+                    record(workflowId, true, hint);
+                }
+            });
+        }
+
+        void clearHint(String workflowId) {
+            locked(() -> {
+                if (!closed && hinted.contains(workflowId)) {
+                    record(workflowId, true, null);
+                }
+            });
+        }
+
+        void recordRemoved(String workflowId) {
+            locked(() -> {
+                if (!closed) {
+                    record(workflowId, false, null);
                 }
             });
         }
 
         /**
-         * Records a change. Must be called while holding this object's monitor.
+         * Records a change. Must be called while holding the lock.
          */
-        private void record(String workflowId, boolean isRunning) {
+        private void record(String workflowId, boolean isRunning, @Nullable HibernationHint hint) {
             uncommitted.forEach(changes -> changes.remove(workflowId));
-            unwritten.put(workflowId, new Change(isRunning, ++changeCount));
+            Change change = new Change(isRunning, isRunning ? hint : null, ++changeCount, false);
+            unwritten.put(workflowId, change);
+            if (change.setsHint()) {
+                hinted.add(workflowId);
+            } else {
+                hinted.remove(workflowId);
+            }
         }
 
         /**
@@ -338,44 +493,38 @@ final class RunningWorkflowsProjection {
          * A write within the context runs on the calling thread and has settled when this returns, so a later flush
          * never waits for it. Only writes in a transaction of their own are ever in flight. A flush that has to wait
          * for one writes in a transaction of its own as well, as it then no longer runs on the calling thread, which
-         * the context's transaction is bound to.
+         * the context's transaction is bound to. Changes that set a hint are only written in full within the context;
+         * any other write writes their instance as running without a hint, and keeps them pending.
          */
         CompletableFuture<Void> flush(@Nullable ProcessingContext context) {
-            Write write;
             CompletableFuture<Void> inFlight;
-            synchronized (this) {
+            Map<String, Change> pending;
+            CompletableFuture<Void> settled = new CompletableFuture<>();
+            lock.lock();
+            try {
                 if (closed) {
                     return CompletableFuture.failedFuture(new IllegalStateException(
                             "The running workflows of segment " + segment.getSegmentId() + " are no longer tracked."
                     ));
                 }
-                inFlight = writeInFlight == null ? null : writeInFlight.settled();
-                write = inFlight == null ? prepareWrite() : null;
+                inFlight = writeInFlight;
+                pending = inFlight == null && !unwritten.isEmpty() ? Map.copyOf(unwritten) : null;
+                if (pending != null) {
+                    writeInFlight = settled;
+                }
+            } finally {
+                lock.unlock();
             }
             if (inFlight != null) {
                 // Whatever its outcome: the changes of a failed write are pending again, and written next.
-                return inFlight.thenCompose(settled -> flush(null));
+                return inFlight.thenCompose(ignored -> flush(null));
             }
-            return write == null ? CompletableFuture.completedFuture(null) : issue(write, context);
+            return pending == null ? CompletableFuture.completedFuture(null) : issue(pending, settled, context);
         }
 
         /**
-         * Takes every pending change into a new write, or returns {@code null} when there are none. Must be called
-         * while holding this object's monitor, with no write in flight.
-         */
-        @Nullable
-        private Write prepareWrite() {
-            if (unwritten.isEmpty()) {
-                return null;
-            }
-            Write write = new Write(Map.copyOf(unwritten), new CompletableFuture<>());
-            writeInFlight = write;
-            return write;
-        }
-
-        /**
-         * Issues the given write, and returns a future completing once it is durable, or failing when it failed. The
-         * index bounds its own futures, so a write always settles, failing when it takes too long.
+         * Issues a write of the given pending changes, and returns a future completing once it is durable, or failing
+         * when it failed. The index bounds its own futures, so a write always settles, failing when it takes too long.
          * <p>
          * The returned future is a new one, completed after the write settled: a caller may time it out without
          * skipping the bookkeeping of the write, which a callback on a future the caller times out would skip.
@@ -385,29 +534,52 @@ final class RunningWorkflowsProjection {
          * fails, except those a later change replaced meanwhile. That is registered on the calling thread, while the
          * context surely still runs.
          */
-        private CompletableFuture<Void> issue(Write write, @Nullable ProcessingContext context) {
+        private CompletableFuture<Void> issue(Map<String, Change> pending,
+                                              CompletableFuture<Void> settled,
+                                              @Nullable ProcessingContext context) {
+            Write write;
             CompletableFuture<Void> stored;
+            Map<String, Change> restorable = null;
             try {
-                if (context == null) {
-                    stored = workflowIndex.store(indexName, write.delta());
-                } else {
-                    Map<String, Change> restorable = trackUncommitted(write);
-                    CompletableFuture<Void> written = workflowIndex.store(indexName, write.delta(), context);
+                Optional<CompletableFuture<Void>> joined = Optional.empty();
+                Write full = new Write(pending, Map.of(), settled);
+                if (context != null) {
+                    restorable = trackUncommitted(pending);
+                    joined = workflowIndex.storeWithin(indexName, full.delta(), context);
+                }
+                if (joined.isPresent()) {
+                    write = full;
+                    CompletableFuture<Void> written = joined.get();
+                    Map<String, Change> restore = requireNonNull(restorable);
                     context.onError((failedContext, phase, error) -> {
                         // A write still in flight settles on its own; rewriting one that did not join is harmless.
                         if (written.isDone() && !written.isCompletedExceptionally()) {
-                            restore(restorable);
+                            restore(restore);
                         }
                     });
-                    context.whenComplete(completedContext -> forget(restorable));
+                    context.whenComplete(completedContext -> forget(restore));
                     stored = written;
+                } else {
+                    if (restorable != null) {
+                        forget(restorable);
+                    }
+                    write = withoutHintSets(pending, settled);
+                    stored = write.isEmpty()
+                            ? CompletableFuture.completedFuture(null)
+                            : workflowIndex.store(indexName, write.delta());
                 }
             } catch (RuntimeException e) {
+                if (restorable != null) {
+                    // The write failed as a whole, which keeps its changes pending: nothing is left to restore.
+                    forget(restorable);
+                }
+                write = new Write(pending, Map.of(), settled);
                 stored = CompletableFuture.failedFuture(e);
             }
             CompletableFuture<Void> result = new CompletableFuture<>();
+            Write issued = write;
             stored.whenComplete((ignored, failure) -> {
-                onWriteSettled(write, failure);
+                onWriteSettled(issued, failure);
                 if (failure == null) {
                     result.complete(null);
                 } else {
@@ -418,47 +590,69 @@ final class RunningWorkflowsProjection {
         }
 
         /**
-         * Starts tracking the changes of the given write within a context, until that context ended.
+         * Returns a write of the given pending changes for a transaction of the index's own: a change that sets a
+         * hint is written as running without the hint, unless an earlier such write already did, and stays pending.
          */
-        private synchronized Map<String, Change> trackUncommitted(Write write) {
-            Map<String, Change> restorable = new HashMap<>(write.changes());
-            uncommitted.add(restorable);
+        private static Write withoutHintSets(Map<String, Change> pending, CompletableFuture<Void> settled) {
+            Map<String, Change> changes = new HashMap<>();
+            Map<String, Change> withoutHint = new HashMap<>();
+            pending.forEach((id, change) -> {
+                if (!change.setsHint()) {
+                    changes.put(id, change);
+                } else if (!change.baseWritten()) {
+                    withoutHint.put(id, change);
+                }
+            });
+            return new Write(changes, withoutHint, settled);
+        }
+
+        /**
+         * Starts tracking the given changes of a write within a context, until that context ended.
+         */
+        private Map<String, Change> trackUncommitted(Map<String, Change> changes) {
+            Map<String, Change> restorable = new HashMap<>(changes);
+            locked(() -> uncommitted.add(restorable));
             return restorable;
         }
 
         /**
          * Makes the given changes of a write pending again, except those a later change of the same instance replaced,
-         * see {@link #record(String, boolean)}: the transaction the write joined did not commit.
+         * see {@link #record(String, boolean, HibernationHint)}: the transaction the write joined did not commit.
          */
-        private synchronized void restore(Map<String, Change> restorable) {
-            if (forget(restorable)) {
-                restorable.forEach(unwritten::putIfAbsent);
-            }
+        private void restore(Map<String, Change> restorable) {
+            locked(() -> {
+                if (forget(restorable)) {
+                    restorable.forEach(unwritten::putIfAbsent);
+                }
+            });
         }
 
         /**
          * Stops tracking the given changes of a write within a context, returning whether they were still tracked.
          */
-        private synchronized boolean forget(Map<String, Change> restorable) {
-            return uncommitted.removeIf(tracked -> tracked == restorable);
+        private boolean forget(Map<String, Change> restorable) {
+            return locked(() -> uncommitted.removeIf(tracked -> tracked == restorable));
         }
 
         /**
          * Stops applying events and flushing. A write in flight still lands.
          */
-        synchronized void close() {
-            closed = true;
+        void close() {
+            locked(() -> closed = true);
         }
 
         private void onWriteSettled(Write write, @Nullable Throwable failure) {
-            synchronized (this) {
+            locked(() -> {
                 writeInFlight = null;
                 if (failure == null) {
                     // A change applied after the write was taken stays pending.
                     write.changes().forEach((id, written) -> unwritten.remove(id, written));
+                    // A hint written without its hint stays pending, until a write within a context writes it.
+                    write.withoutHint().forEach((id, written) -> unwritten.replace(id, written,
+                                                                                   written.withBaseWritten()));
                 }
                 // A failed write keeps its changes pending.
-            }
+            });
             write.settled().complete(null);
             if (failure == null) {
                 return;

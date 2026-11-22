@@ -14,6 +14,7 @@ import org.axonframework.messaging.eventhandling.processing.streaming.segmenting
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -26,7 +27,8 @@ import java.util.function.Function;
  * Loads read what completed writes made durable. Every write is recorded as a {@link PendingWrite} until the test
  * {@link #completeNextWrite() completes} or {@link #failNextWrite(Throwable) fails} it, unless the index
  * {@link #completeWritesImmediately() completes writes immediately}. Initializations take effect immediately, unless
- * the index {@link #failInitializations(Throwable) fails them}.
+ * the index {@link #failInitializations(Throwable) fails them}. Every write within a processing context joins it, unless
+ * the index {@link #refuseToJoin(boolean) refuses to join}.
  *
  * @author Allard Buijze
  */
@@ -37,12 +39,13 @@ class ControllableWorkflowIndex implements WorkflowIndex {
     private final List<PendingWrite> issued = new ArrayList<>();
     private final List<Set<String>> initializations = new ArrayList<>();
     private boolean completeImmediately;
+    private boolean refuseToJoin;
     @Nullable
     private Throwable writeFailure;
     @Nullable
     private Throwable initializationFailure;
     @Nullable
-    private Function<Segment, CompletableFuture<Optional<Set<String>>>> loads;
+    private Function<Segment, CompletableFuture<Optional<Set<Entry>>>> loads;
 
     /**
      * Makes this and every later write durable as soon as it is issued, completing pending writes first.
@@ -70,6 +73,43 @@ class ControllableWorkflowIndex implements WorkflowIndex {
             failNextWrite(failure);
         }
         return this;
+    }
+
+    /**
+     * Makes every later write within a processing context report that it could not join, so the engine writes in a
+     * transaction of the index's own instead, or join again.
+     *
+     * @param refuse whether later writes within a processing context refuse to join it
+     * @return this index, for chaining
+     */
+    synchronized ControllableWorkflowIndex refuseToJoin(boolean refuse) {
+        refuseToJoin = refuse;
+        return this;
+    }
+
+    /**
+     * Stores the given entry, with its hint, as if a completed write stored it.
+     *
+     * @param indexName the name of the index
+     * @param entry     the entry to store
+     * @return this index, for chaining
+     */
+    synchronized ControllableWorkflowIndex stored(String indexName, Entry entry) {
+        var running = new HashMap<String, @Nullable HibernationHint>();
+        running.put(entry.workflowId(), entry.hint());
+        durable.store(indexName, new IndexDelta(running, Set.of()));
+        return this;
+    }
+
+    /**
+     * Returns the entries of the given segment that completed writes made durable.
+     *
+     * @param indexName the name of the index
+     * @param segment   the segment to load the entries of
+     * @return the durable entries of the segment, empty when the index is not initialized
+     */
+    Set<Entry> durableEntries(String indexName, Segment segment) {
+        return durable.load(indexName, segment).getNow(Optional.empty()).orElse(Set.of());
     }
 
     /**
@@ -117,7 +157,7 @@ class ControllableWorkflowIndex implements WorkflowIndex {
     }
 
     @Override
-    public synchronized CompletableFuture<Optional<Set<String>>> load(String indexName, Segment segment) {
+    public synchronized CompletableFuture<Optional<Set<Entry>>> load(String indexName, Segment segment) {
         return loads != null ? loads.apply(segment) : durable.load(indexName, segment);
     }
 
@@ -127,8 +167,15 @@ class ControllableWorkflowIndex implements WorkflowIndex {
     }
 
     @Override
-    public CompletableFuture<Void> store(String indexName, IndexDelta delta, ProcessingContext context) {
-        return record(indexName, delta, context);
+    public Optional<CompletableFuture<Void>> storeWithin(String indexName,
+                                                         IndexDelta delta,
+                                                         ProcessingContext context) {
+        synchronized (this) {
+            if (refuseToJoin) {
+                return Optional.empty();
+            }
+        }
+        return Optional.of(record(indexName, delta, context));
     }
 
     private synchronized CompletableFuture<Void> record(String indexName,

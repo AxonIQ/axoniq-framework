@@ -31,6 +31,7 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 import static io.axoniq.framework.workflow.runtime.execution.LifecycleEventFixtures.*;
 import static io.axoniq.framework.workflow.runtime.execution.SegmentTestFixtures.token;
@@ -111,7 +112,10 @@ class WorkflowEngineRunningWorkflowsIndexTest {
     }
 
     private Set<String> stored() {
-        return await(workflowIndex.load(INDEX, SEGMENT)).orElseThrow();
+        return await(workflowIndex.load(INDEX, SEGMENT)).orElseThrow()
+                                                        .stream()
+                                                        .map(WorkflowIndex.Entry::workflowId)
+                                                        .collect(Collectors.toSet());
     }
 
     private CompletableFuture<TrackingToken> checkpoint(long position) {

@@ -10,9 +10,17 @@ package io.axoniq.framework.workflow.index.api;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
+import org.jspecify.annotations.Nullable;
 
+import java.time.Instant;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.concurrent.CompletableFuture;
 
 import static java.util.Objects.requireNonNull;
@@ -27,8 +35,8 @@ import static java.util.Objects.requireNonNull;
  * event ever written. With an index, the engine loads the running instances of the segment through
  * {@link #load(String, Segment)}, and only reads the lifecycle events after the token its event processor resumes the
  * segment from. While it holds the segment, the engine writes the changes to the set of running instances through
- * {@link #store(String, IndexDelta, ProcessingContext)} whenever its event processor takes a checkpoint of the
- * segment.
+ * {@link #storeWithin(String, IndexDelta, ProcessingContext)} or {@link #store(String, IndexDelta)} whenever its
+ * event processor takes a checkpoint of the segment.
  * <p>
  * Unless another index is configured, the workflow configuration uses {@link #none()}, which keeps nothing, so every
  * claim reads the running instances from the event store. A durable implementation shared by every node, such as the
@@ -51,7 +59,7 @@ import static java.util.Objects.requireNonNull;
  * <p>
  * The engine hands every write of a checkpoint the context in which the processor stores the token. An index kept in
  * the same database as the tokens may write within the transaction of that context, so the changes and the token are
- * committed together, see {@link #store(String, IndexDelta, ProcessingContext)}. This only works while the processor
+ * committed together, see {@link #storeWithin(String, IndexDelta, ProcessingContext)}. This only works while the processor
  * of the workflow module stores its tokens solely when the engine asks for it: with an index, a workflow module
  * refuses to start when its processor has ordinary event handling components, which do not checkpoint on their own,
  * or another way of storing its tokens.
@@ -63,6 +71,23 @@ import static java.util.Objects.requireNonNull;
  * whether an instance runs is decided by its last lifecycle event: re-applying the events from the token converges to
  * the same set of running instances. A crash between a write and the store of the token thus costs nothing but
  * re-applying those events.
+ *
+ * <h2>Hibernation hints</h2>
+ * When hibernation is enabled, a workflow instance that only waits for events or a deadline leaves memory. An entry
+ * may then carry a {@link HibernationHint}: the open waits the instance hibernated with and its nearest deadline. A
+ * claim that finds a hint, and no event of that instance after the token it resumes from, leaves the instance out of
+ * memory instead of restoring it, and wakes it when an awaited event arrives, its deadline expires, or a cancellation is
+ * requested for it. Every other entry is restored. A hint is not derived from the events: the engine sets it when the
+ * instance hibernates, and clears it, by writing the entry without a hint, when the instance wakes, when an event of the
+ * instance is handled, or when a claim does not leave the instance hibernated.
+ * <p>
+ * As a hint is not derived from the events, a hint written late, after a later claim of the segment cleared it, would
+ * bring back waits the instance no longer has. The engine therefore only passes a delta that <em>sets</em> a hint to a
+ * write that joins the transaction in which the processor stores its token, through
+ * {@link #storeWithin(String, IndexDelta, ProcessingContext)}: such a write is committed only together with a token of
+ * a claim that still owns the segment. Every other write only clears hints. An index that cannot join that
+ * transaction therefore never stores a hint, and every claim restores every running instance, as without
+ * hibernation.
  *
  * <h2>Initialization</h2>
  * Without a position, an index cannot tell from its entries alone whether they cover the stored tokens: an index that
@@ -88,16 +113,18 @@ import static java.util.Objects.requireNonNull;
  * with its initialization, only makes claims slower, as they read more lifecycle events from the event store. The
  * engine relies on the following:
  * <ul>
- *     <li><b>A write is atomic.</b> {@link #store(String, IndexDelta) store} and
+ *     <li><b>A write is atomic.</b> {@link #store(String, IndexDelta) store},
+ *     {@link #storeWithin(String, IndexDelta, ProcessingContext) storeWithin} and
  *     {@link #initialize(String, Set) initialize} either take effect as a whole or not at all, and a
  *     {@link #load(String, Segment) load} never sees part of one.</li>
- *     <li><b>Re-applying writes converges.</b> Adding an id that is stored, or removing one that is not, has no
- *     effect, so a write may be applied again.</li>
+ *     <li><b>Re-applying writes converges.</b> Writing an entry replaces the stored entry of its id, hint included,
+ *     and removing an id that is not stored has no effect, so a write may be applied again.</li>
  *     <li><b>Writes may arrive out of order.</b> While it holds a segment, an engine issues the next write for that
  *     segment only once the previous one settled. Writes are not coordinated otherwise: writes of successive claims of
  *     a segment, on one node or on several, may interleave. A late write can only leave entries of instances that
  *     ended meanwhile, never drop a running one, as an instance never runs again once it ended; a later claim removes
- *     such entries once it finds the instance's state terminal.</li>
+ *     such entries once it finds the instance's state terminal. Only a write within the transaction of the processor
+ *     sets a hint, see above.</li>
  *     <li><b>A future settles once the operation can no longer take effect.</b> A returned future completes once the
  *     operation took effect, and fails once it failed. A write must never take effect after its future reported it
  *     as failed or timed out: a durable implementation completes the future only once its transaction has ended,
@@ -150,26 +177,28 @@ public interface WorkflowIndex {
     }
 
     /**
-     * Loads the running workflow instances owned by the given {@code segment}, or reports that the index was not
-     * initialized.
+     * Loads the entries of the running workflow instances owned by the given {@code segment}, or reports that the index
+     * was not initialized.
      * <p>
-     * The ids returned are those of the entries of the given index whose workflow id the segment
-     * {@link Segment#matches(Object) matches}. An index that was not {@link #initialize(String, Set) initialized} under
-     * the given name returns an empty {@link Optional}, whatever entries it holds.
+     * The entries returned are those of the given index whose workflow id the segment
+     * {@link Segment#matches(Object) matches}, each with its {@link HibernationHint hint}, if any. An index that was
+     * not {@link #initialize(String, Set) initialized} under the given name returns an empty {@link Optional}, whatever
+     * entries it holds.
      *
      * @param indexName the name of the index, unique per workflow module
      * @param segment   the segment to load the running instances of
-     * @return a future completing with the ids of the running instances the segment owns, empty when the index was not
-     * initialized, or failing when it cannot be loaded
+     * @return a future completing with the entries of the running instances the segment owns, empty when the index was
+     * not initialized, or failing when it cannot be loaded
      */
-    CompletableFuture<Optional<Set<String>>> load(String indexName, Segment segment);
+    CompletableFuture<Optional<Set<Entry>>> load(String indexName, Segment segment);
 
     /**
-     * Applies the given {@code delta} to the index, in one atomic step.
+     * Applies the given {@code delta} to the index, in one atomic step, in a transaction of the index's own.
      * <p>
-     * Removing an id that is not stored, or adding one that is, has no effect, so a write may safely be applied again.
-     * The returned future completes only once the delta took effect, and must not complete exceptionally while the
-     * write may still take effect afterward.
+     * Writing an entry replaces the stored entry of its id, and removing an id that is not stored has no effect, so a
+     * write may safely be applied again. The returned future completes only once the delta took effect, and must not
+     * complete exceptionally while the write may still take effect afterward. The engine never passes a delta that sets
+     * a {@link HibernationHint hint} to this method.
      *
      * @param indexName the name of the index, unique per workflow module
      * @param delta     the changes to the set of running instances
@@ -178,26 +207,39 @@ public interface WorkflowIndex {
     CompletableFuture<Void> store(String indexName, IndexDelta delta);
 
     /**
-     * Applies the given {@code delta} to the index, in one atomic step, as part of the checkpoint the processor stores
-     * within the given {@code context}.
+     * Applies the given {@code delta} to the index, in one atomic step, within the transaction in which the processor
+     * stores the checkpoint of the given {@code context}, or writes nothing when the index cannot join that
+     * transaction.
      * <p>
-     * An implementation may write within the transaction of the {@code context}, on the calling thread, when the index
-     * lives in the database that transaction belongs to. The changes and the token are then committed together, and the
-     * write needs no database connection besides the one the processor already holds. The returned future then completes
-     * once the delta is written within that transaction; the changes become durable only when the {@code context}
-     * commits, and the engine keeps them pending again when it does not. An implementation that cannot join the
-     * transaction writes as {@link #store(String, IndexDelta)} does.
+     * An index that lives in the database that transaction belongs to writes on the calling thread, within that
+     * transaction, and returns the future of that write. The changes and the token are then committed together, and the
+     * write needs no database connection besides the one the processor already holds. The returned future completes once
+     * the delta is written within that transaction; the changes become durable only when the {@code context} commits,
+     * and the engine keeps them pending again when it does not. An index that cannot join the transaction returns an
+     * empty {@link Optional} without writing anything, and the engine writes the delta through
+     * {@link #store(String, IndexDelta)} instead, without the {@link HibernationHint hints} it sets.
      * <p>
-     * Defaults to {@link #store(String, IndexDelta)}, ignoring the {@code context}.
+     * Whether a write joined is what keeps a hint from being written late: a write within the transaction of the
+     * processor commits only while the node owns the claim of the segment. The processor either stores a token within
+     * that transaction, which the token store refuses for a claim that no longer owns the segment, or, when the
+     * checkpoint does not advance the stored token, extends the claim within it, which fails the same way. Both checks
+     * need a token store that keeps its claims in that transaction, such as a JPA token store in the database of the
+     * index; a token store that keeps no claims, such as an in-memory one, checks nothing. An implementation must
+     * therefore only return a future when the write is part of that transaction.
+     * An index that keeps its entries in the memory of one node, where a write takes effect at once, may treat every
+     * write as joined.
+     * <p>
+     * Defaults to writing nothing, so an index that does not implement it never stores a hint.
      *
      * @param indexName the name of the index, unique per workflow module
      * @param delta     the changes to the set of running instances
      * @param context   the context the processor stores the checkpoint in
-     * @return a future completing once the write took effect, or took effect within the transaction of the
-     * {@code context}, or failing once it can no longer take effect
+     * @return the future of the write within the transaction of the {@code context}, completing once the write took
+     * effect within that transaction or failing once it can no longer take effect, or empty when the index cannot
+     * join that transaction and wrote nothing
      */
-    default CompletableFuture<Void> store(String indexName, IndexDelta delta, ProcessingContext context) {
-        return store(indexName, delta);
+    default Optional<CompletableFuture<Void>> storeWithin(String indexName, IndexDelta delta, ProcessingContext context) {
+        return Optional.empty();
     }
 
     /**
@@ -206,7 +248,7 @@ public interface WorkflowIndex {
      * The engine calls this with every running instance of the workflow module, of all segments, as read from the
      * event store, when a claim found the index not initialized. It never removes an entry: another claim may have
      * written an instance that started after the given ids were read. Initializing an initialized index only adds the
-     * given ids. The returned future completes only once the write took effect, and must not complete exceptionally
+     * given ids. The entries it writes carry no {@link HibernationHint hint}. The returned future completes only once the write took effect, and must not complete exceptionally
      * while the write may still take effect afterward.
      *
      * @param indexName          the name of the index, unique per workflow module
@@ -216,36 +258,161 @@ public interface WorkflowIndex {
     CompletableFuture<Void> initialize(String indexName, Set<String> runningWorkflowIds);
 
     /**
-     * A change to the set of running workflow instances.
-     * <p>
-     * An id is never both added and removed by one delta.
+     * An entry of the index: a running workflow instance, and the {@link HibernationHint hint} it hibernated with, if
+     * any.
      * <p>
      * Marked {@link Internal} as a warning that API stability is not promised yet: this record is usable, and supported
      * for custom {@link WorkflowIndex} implementations, but its shape may still change in a minor release.
      *
-     * @param added   the ids of the instances that started running
+     * @param workflowId the id of the running instance
+     * @param hint       the hint the instance hibernated with, or {@code null} when it is not known to be hibernated
+     */
+    @Internal
+    record Entry(String workflowId, @Nullable HibernationHint hint) {
+
+        /**
+         * Creates an entry.
+         *
+         * @param workflowId the id of the running instance
+         * @param hint       the hint the instance hibernated with, or {@code null} when it is not known to be
+         *                   hibernated
+         */
+        public Entry {
+            requireNonNull(workflowId, "The workflow id must not be null.");
+        }
+
+        /**
+         * Creates an entry of a running instance without a hint.
+         *
+         * @param workflowId the id of the running instance
+         * @return an entry without a hint
+         */
+        public static Entry running(String workflowId) {
+            return new Entry(workflowId, null);
+        }
+    }
+
+    /**
+     * The hint that a running workflow instance hibernated: it left memory while it waited for the given open waits,
+     * and the earliest deadline among them.
+     * <p>
+     * A claim that accepts a hint routes the events the waits may match to the instance, and wakes it at
+     * {@code wakeAt}, without restoring it first. The waits only route events: the woken instance still checks its full
+     * conditions, so a wait may match more events than its step accepts, never fewer.
+     * <p>
+     * Marked {@link Internal} as a warning that API stability is not promised yet: this record is usable, and supported
+     * for custom {@link WorkflowIndex} implementations, but its shape may still change in a minor release.
+     *
+     * @param wakeAt the earliest deadline of the open waits, at which the instance wakes
+     * @param waits  the open waits, ordered by step name
+     */
+    @Internal
+    record HibernationHint(Instant wakeAt, List<OpenWait> waits) {
+
+        /**
+         * Creates a hint, copying the waits ordered by step name.
+         *
+         * @param wakeAt the earliest deadline of the open waits, at which the instance wakes
+         * @param waits  the open waits
+         */
+        public HibernationHint {
+            requireNonNull(wakeAt, "The wake-up time must not be null.");
+            waits = requireNonNull(waits, "The waits must not be null.")
+                    .stream()
+                    .sorted(Comparator.comparing(OpenWait::stepName))
+                    .toList();
+        }
+    }
+
+    /**
+     * An open wait of a hibernated workflow instance.
+     * <p>
+     * Marked {@link Internal} as a warning that API stability is not promised yet: this record is usable, and supported
+     * for custom {@link WorkflowIndex} implementations, but its shape may still change in a minor release.
+     *
+     * @param stepName     the name of the waiting step
+     * @param eventName    the name of the awaited event, or {@code null} when the wait accepts events of any name
+     * @param associations the canonical serialized associations the awaited event must satisfy, ordered
+     */
+    @Internal
+    record OpenWait(String stepName, @Nullable String eventName, Set<String> associations) {
+
+        /**
+         * Creates an open wait, copying the associations in their natural order.
+         *
+         * @param stepName     the name of the waiting step
+         * @param eventName    the name of the awaited event, or {@code null} when the wait accepts events of any name
+         * @param associations the canonical serialized associations the awaited event must satisfy
+         */
+        public OpenWait {
+            requireNonNull(stepName, "The step name must not be null.");
+            associations = Collections.unmodifiableSortedSet(new TreeSet<>(
+                    requireNonNull(associations, "The associations must not be null.")
+            ));
+        }
+    }
+
+    /**
+     * A change to the entries of the index.
+     * <p>
+     * Every id in {@code running} is written, replacing its stored entry: with the given {@link HibernationHint hint},
+     * or without one when the value is {@code null}, which clears a stored hint. Every id in {@code removed} is removed.
+     * An id is never both written and removed by one delta.
+     * <p>
+     * Marked {@link Internal} as a warning that API stability is not promised yet: this record is usable, and supported
+     * for custom {@link WorkflowIndex} implementations, but its shape may still change in a minor release.
+     *
+     * @param running the entries to write, by workflow id, with their hint or {@code null} for none
      * @param removed the ids of the instances that are no longer running
      */
     @Internal
-    record IndexDelta(Set<String> added, Set<String> removed) {
+    record IndexDelta(Map<String, @Nullable HibernationHint> running, Set<String> removed) {
 
         /**
-         * Creates a delta, copying the given ids.
+         * Creates a delta, copying the given entries and ids.
          *
-         * @param added   the ids of the instances that started running
+         * @param running the entries to write, by workflow id, with their hint or {@code null} for none
          * @param removed the ids of the instances that are no longer running
-         * @throws IllegalArgumentException if an id is both added and removed
+         * @throws IllegalArgumentException if an id is both written and removed
          */
         public IndexDelta {
-            added = Set.copyOf(requireNonNull(added, "The added ids must not be null."));
+            running = Collections.unmodifiableMap(new HashMap<>(
+                    requireNonNull(running, "The running entries must not be null.")
+            ));
             removed = Set.copyOf(requireNonNull(removed, "The removed ids must not be null."));
-            for (String id : added) {
+            for (String id : running.keySet()) {
                 if (removed.contains(id)) {
                     throw new IllegalArgumentException(
-                            "The workflow id [" + id + "] cannot be both added and removed by one delta."
+                            "The workflow id [" + id + "] cannot be both written and removed by one delta."
                     );
                 }
             }
+        }
+
+        /**
+         * Creates a delta that writes the given ids without a hint and removes the given ids.
+         *
+         * @param added   the ids of the running instances to write without a hint
+         * @param removed the ids of the instances that are no longer running
+         * @throws IllegalArgumentException if an id is both added and removed
+         */
+        public IndexDelta(Set<String> added, Set<String> removed) {
+            this(withoutHints(added), removed);
+        }
+
+        private static Map<String, @Nullable HibernationHint> withoutHints(Set<String> ids) {
+            Map<String, @Nullable HibernationHint> entries = new HashMap<>();
+            requireNonNull(ids, "The added ids must not be null.").forEach(id -> entries.put(id, null));
+            return entries;
+        }
+
+        /**
+         * Returns the ids of the entries this delta writes, with or without a hint.
+         *
+         * @return the ids of the written entries
+         */
+        public Set<String> added() {
+            return running.keySet();
         }
     }
 }

@@ -61,6 +61,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -201,7 +202,10 @@ class JpaWorkflowIndexConnectionPoolTest {
         return reader.load(MODULE, Segment.ROOT_SEGMENT)
                      .orTimeout(5, TimeUnit.SECONDS)
                      .join()
-                     .orElse(Set.of());
+                     .orElse(Set.of())
+                     .stream()
+                     .map(WorkflowIndex.Entry::workflowId)
+                     .collect(Collectors.toSet());
     }
 
     /**
@@ -271,7 +275,7 @@ class JpaWorkflowIndexConnectionPoolTest {
         }
 
         @Override
-        public CompletableFuture<Optional<Set<String>>> load(String indexName, Segment segment) {
+        public CompletableFuture<Optional<Set<WorkflowIndex.Entry>>> load(String indexName, Segment segment) {
             loads.incrementAndGet();
             return delegate.load(indexName, segment);
         }
@@ -282,8 +286,10 @@ class JpaWorkflowIndexConnectionPoolTest {
         }
 
         @Override
-        public CompletableFuture<Void> store(String indexName, IndexDelta delta, ProcessingContext context) {
-            return counted(delegate.store(indexName, delta, context));
+        public Optional<CompletableFuture<Void>> storeWithin(String indexName,
+                                                             IndexDelta delta,
+                                                             ProcessingContext context) {
+            return delegate.storeWithin(indexName, delta, context).map(this::counted);
         }
 
         @Override

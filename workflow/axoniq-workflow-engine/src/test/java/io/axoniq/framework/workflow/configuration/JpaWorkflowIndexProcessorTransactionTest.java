@@ -66,6 +66,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -297,7 +298,10 @@ class JpaWorkflowIndexProcessorTransactionTest {
         return reader.load(MODULE, Segment.ROOT_SEGMENT)
                      .orTimeout(5, TimeUnit.SECONDS)
                      .join()
-                     .orElse(Set.of());
+                     .orElse(Set.of())
+                     .stream()
+                     .map(WorkflowIndex.Entry::workflowId)
+                     .collect(Collectors.toSet());
     }
 
     private List<@Nullable String> owners() {
@@ -369,7 +373,7 @@ class JpaWorkflowIndexProcessorTransactionTest {
         }
 
         @Override
-        public CompletableFuture<Optional<Set<String>>> load(String indexName, Segment segment) {
+        public CompletableFuture<Optional<Set<WorkflowIndex.Entry>>> load(String indexName, Segment segment) {
             return delegate.load(indexName, segment);
         }
 
@@ -383,12 +387,14 @@ class JpaWorkflowIndexProcessorTransactionTest {
         }
 
         @Override
-        public CompletableFuture<Void> store(String indexName, IndexDelta delta, ProcessingContext context) {
+        public Optional<CompletableFuture<Void>> storeWithin(String indexName,
+                                                             IndexDelta delta,
+                                                             ProcessingContext context) {
             if (failWrites.get()) {
                 // An entry whose index name is longer than its column, which the database rejects.
-                return delegate.store("i".repeat(256), new IndexDelta(Set.of("rejected"), Set.of()), context);
+                return delegate.storeWithin("i".repeat(256), new IndexDelta(Set.of("rejected"), Set.of()), context);
             }
-            return delegate.store(indexName, delta, context);
+            return delegate.storeWithin(indexName, delta, context);
         }
 
         @Override

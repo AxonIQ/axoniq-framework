@@ -8,6 +8,8 @@
 package io.axoniq.framework.workflow.runtime.execution;
 
 import io.axoniq.framework.workflow.dsl.api.StepWaitInfo;
+import io.axoniq.framework.workflow.index.api.WorkflowIndex.HibernationHint;
+import io.axoniq.framework.workflow.index.api.WorkflowIndex.OpenWait;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution.CheckpointWorkStateListener;
 import org.axonframework.common.Registration;
@@ -25,8 +27,10 @@ import org.slf4j.LoggerFactory;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Objects;
@@ -37,6 +41,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -55,17 +60,22 @@ import java.util.function.Supplier;
  * <p>
  * Every half idle delay, a pass asks the running executions in memory that made no progress for the idle delay to
  * hibernate. A hibernated workflow keeps a timer for its nearest deadline, a stand-in {@link WorkflowCancellation}, and
- * the rows of its open waits in a {@link WaitAssociationIndex}, which routes broadcast events to it. Hibernation is a
- * decision of this node only: nothing is written, and the claim of a segment, here or on another node, restores the
- * hibernated workflows of that segment from the event store like every other running workflow. Releasing or claiming
- * a segment therefore forgets the hibernated workflows of that segment.
+ * the rows of its open waits in a {@link WaitAssociationIndex}, which routes broadcast events to it. No event is written:
+ * a hibernating workflow records its {@link HibernationHint hint}, its open waits and nearest deadline, in the
+ * {@link RunningWorkflowsProjection}, which writes it to the workflow index with a checkpoint that joins the
+ * processor's transaction, and clears it again when the workflow wakes. Releasing or claiming a segment forgets the
+ * hibernated workflows of that segment. A claim of the segment, here or on another node, restores every running
+ * workflow of the segment, except those whose hint it accepts: it {@link #adopt(WorkflowEngineCatchUpSupport.Claim,
+ * String, HibernationHint) adopts} those as hibernated workflows instead, which wake for an event like any other, but
+ * for their deadline or a cancellation only once the claim caught up.
  * <p>
  * A wake restores the workflow from the event store in a unit of work of its own, on the execution context of the
  * claim that holds its segment, and hands it what woke it before its body starts. A wake by an event runs on the
  * thread handling the event, bounded by the wake timeout. A failed wake by an event fails the event: the engine stores
  * no position past it and asks the event processor to release the segment, so the next claim restores the workflow and
- * handles the event again. A wake by a deadline or a cancellation runs on the wake executor, and is tried again after
- * the idle delay when it fails.
+ * handles the event again. A wake by a deadline or a cancellation runs on the wake executor, at most
+ * {@value #MAX_CONCURRENT_DETACHED_WAKES} at a time, so the deadlines that passed while a segment was not processed do
+ * not all load at once, and is tried again after the idle delay when it fails.
  * <p>
  * The {@link WorkflowEngine} creates it when hibernation is enabled for its workflow module, starts it with the engine
  * and stops it on shutdown.
@@ -76,6 +86,10 @@ import java.util.function.Supplier;
  */
 final class WorkflowEngineHibernationSupport {
 
+    /**
+     * The number of wakes for a deadline or a cancellation that load a workflow at the same time.
+     */
+    static final int MAX_CONCURRENT_DETACHED_WAKES = 16;
     private static final Duration MIN_PASS_INTERVAL = Duration.ofMillis(10);
     private static final Logger logger = LoggerFactory.getLogger(WorkflowEngineHibernationSupport.class);
 
@@ -85,12 +99,14 @@ final class WorkflowEngineHibernationSupport {
     private final WorkflowCancellationService cancellationService;
     private final UnsafeCheckpointWorkIndex checkpointWorkIndex;
     private final WorkflowEngineCatchUpSupport catchUpSupport;
+    private final RunningWorkflowsProjection projection;
     private final WorkflowLoader loader;
     private final Duration idleDelay;
     private final Executor wakeExecutor;
     private final LockFactory locks = PessimisticLockFactory.usingDefaults();
     private final Map<String, Hibernation> hibernations = new ConcurrentHashMap<>();
     private final WaitAssociationIndex waitIndex = new WaitAssociationIndex();
+    private final Semaphore detachedWakes = new Semaphore(MAX_CONCURRENT_DETACHED_WAKES);
     // The cancellation requests of hibernated workflows queued on the executions that woke for them, until they run.
     private final Map<WorkflowExecution, Set<CompletableFuture<Void>>> queuedRequests = new ConcurrentHashMap<>();
     // The broadcasts and manager queries looking up hibernated workflows, which a wake tells the workflow it woke.
@@ -108,6 +124,7 @@ final class WorkflowEngineHibernationSupport {
      * @param cancellationService the cancellation registrations of the live workflows
      * @param checkpointWorkIndex the workflows with unsafe checkpoint work
      * @param catchUpSupport      the claims of the engine, which a workflow hibernates and wakes under
+     * @param projection          records the hints of hibernated workflows for the workflow index
      * @param loader              loads a hibernated workflow back into the engine and starts it
      * @param idleDelay           the time a workflow must make no progress before it hibernates, and before a failed
      *                            wake by a deadline or a cancellation is tried again
@@ -120,6 +137,7 @@ final class WorkflowEngineHibernationSupport {
                                      WorkflowCancellationService cancellationService,
                                      UnsafeCheckpointWorkIndex checkpointWorkIndex,
                                      WorkflowEngineCatchUpSupport catchUpSupport,
+                                     RunningWorkflowsProjection projection,
                                      WorkflowLoader loader,
                                      Duration idleDelay,
                                      Executor wakeExecutor) {
@@ -131,6 +149,7 @@ final class WorkflowEngineHibernationSupport {
         this.checkpointWorkIndex = Objects.requireNonNull(checkpointWorkIndex,
                                                           "The UnsafeCheckpointWorkIndex must not be null.");
         this.catchUpSupport = Objects.requireNonNull(catchUpSupport, "The catch-up support must not be null.");
+        this.projection = Objects.requireNonNull(projection, "The RunningWorkflowsProjection must not be null.");
         this.loader = Objects.requireNonNull(loader, "The WorkflowLoader must not be null.");
         this.idleDelay = Objects.requireNonNull(idleDelay, "The idle delay must not be null.");
         this.wakeExecutor = Objects.requireNonNull(wakeExecutor, "The wake Executor must not be null.");
@@ -444,6 +463,62 @@ final class WorkflowEngineHibernationSupport {
     }
 
     /**
+     * Leaves the given workflow, whose hint a claim accepted, out of memory as a hibernated workflow of that claim,
+     * instead of restoring it.
+     * <p>
+     * The workflow wakes for an awaited event or one of its own like any hibernated workflow, also while the claim
+     * catches up, in which case its body starts once the claim caught up. Its deadline and a cancellation only wake it
+     * once the claim caught up: see {@link #arm(Segment)}.
+     *
+     * @param claim      the claim that accepted the hint
+     * @param workflowId the identifier of the hibernated workflow
+     * @param hint       the open waits and nearest deadline the workflow hibernated with
+     * @return {@code false} when the workflow was not adopted, as hibernation stopped, the claim is no longer current,
+     * or the workflow is in memory or hibernated already
+     */
+    boolean adopt(WorkflowEngineCatchUpSupport.Claim claim, String workflowId, HibernationHint hint) {
+        try (var ignored = locks.obtainLock(workflowId)) {
+            if (!running || hibernations.containsKey(workflowId) || repository.findById(workflowId).isPresent()) {
+                return false;
+            }
+            return catchUpSupport.runWhileCurrent(claim, caughtUp -> park(
+                    workflowId, claim, hint,
+                    caughtUp ? CompletableFuture.completedFuture(null) : new CompletableFuture<>()
+            ));
+        }
+    }
+
+    /**
+     * Lets the workflows adopted by the claim of the given segment wake for their deadline or a cancellation, as the
+     * claim caught up. A deadline that passed meanwhile wakes its workflow right away.
+     *
+     * @param segment the segment whose claim caught up
+     */
+    void arm(Segment segment) {
+        hibernations.values().forEach(hibernation -> {
+            if (hibernation.claim().segment().equals(segment)) {
+                hibernation.armed().complete(null);
+            }
+        });
+    }
+
+    /**
+     * Forgets the hibernated workflows of the given claim, whose restore failed. Leaves those of a later claim of the
+     * same segment in place.
+     *
+     * @param claim the claim that failed
+     */
+    void drop(WorkflowEngineCatchUpSupport.Claim claim) {
+        var dropped = new HashMap<String, Hibernation>();
+        hibernations.forEach((workflowId, hibernation) -> {
+            if (hibernation.claim() == claim) {
+                dropped.put(workflowId, hibernation);
+            }
+        });
+        drop(dropped);
+    }
+
+    /**
      * Forgets the hibernated workflows of the given segment, and of every segment overlapping it, which a split or a
      * merge replaced without a release. Their durable state is untouched: the next claim of their segment restores
      * them.
@@ -527,8 +602,10 @@ final class WorkflowEngineHibernationSupport {
                                 .map(StepWaitInfo::timeoutTime)
                                 .min(Instant::compareTo)
                                 .orElseThrow();
+            var hint = hintOf(waits.get(), deadline);
             boolean parked = catchUpSupport.runWhileCurrent(claim, () -> {
-                park(workflowId, claim, waits.get(), deadline);
+                park(workflowId, claim, hint, CompletableFuture.completedFuture(null));
+                projection.recordHibernated(claim.segment(), workflowId, hint);
                 repository.remove(workflowId, execution);
                 checkpointWorkIndex.markSafe(workflowId);
             });
@@ -564,22 +641,32 @@ final class WorkflowEngineHibernationSupport {
     }
 
     /**
-     * Keeps the given workflow out of memory until an awaited event, its deadline or a cancellation wakes it. The
-     * caller holds the lock of the workflow.
+     * Returns the hint of a workflow hibernating with the given open waits until the given deadline.
+     */
+    private static HibernationHint hintOf(Map<String, StepWaitInfo> waits, Instant deadline) {
+        List<OpenWait> openWaits = new ArrayList<>();
+        waits.forEach((stepName, info) -> openWaits.add(new OpenWait(
+                stepName,
+                info.eventName() == null || info.eventName().isEmpty() ? null : info.eventName(),
+                Objects.requireNonNullElse(info.associations(), Set.of())
+        )));
+        return new HibernationHint(deadline, openWaits);
+    }
+
+    /**
+     * Keeps the given workflow out of memory until an awaited event, its deadline or a cancellation wakes it, the
+     * latter two only once the given {@code armed} future completed. The caller holds the lock of the workflow.
      */
     private void park(String workflowId, WorkflowEngineCatchUpSupport.Claim claim,
-                      Map<String, StepWaitInfo> waits, Instant wakesAt) {
-        var timer = scheduler.schedule(wakesAt);
+                      HibernationHint hint, CompletableFuture<Void> armed) {
+        var timer = scheduler.schedule(hint.wakeAt());
         var cancellation = new HibernatedWorkflowCancellation(workflowId);
-        hibernations.put(workflowId, new Hibernation(claim,
-                                                     timer,
-                                                     CompletableFuture.completedFuture(null),
-                                                     cancellation));
-        waits.forEach((stepName, info) -> waitIndex.add(
+        hibernations.put(workflowId, new Hibernation(claim, timer, armed, cancellation));
+        hint.waits().forEach(wait -> waitIndex.add(
                 workflowId,
-                stepName,
-                info.eventName() == null || info.eventName().isEmpty() ? null : new QualifiedName(info.eventName()),
-                Objects.requireNonNullElse(info.associations(), Set.of())
+                wait.stepName(),
+                wait.eventName() == null ? null : new QualifiedName(wait.eventName()),
+                wait.associations()
         ));
         cancellationService.register(workflowId, cancellation);
         timer.completion().thenCompose(ignored -> wakeWhenArmed(workflowId, restored -> {
@@ -610,6 +697,7 @@ final class WorkflowEngineHibernationSupport {
         }
         forget(workflowId, hibernation);
         if (loaded) {
+            projection.recordWoken(hibernation.claim().segment(), workflowId);
             logger.debug("Workflow [{}] woken from hibernation.", workflowId);
         } else {
             // It ended elsewhere, or its claim ended meanwhile: its stand-in has nothing left to stand in for.
@@ -633,9 +721,16 @@ final class WorkflowEngineHibernationSupport {
     }
 
     /**
-     * Wakes a hibernated workflow on the calling wake thread. A failed wake schedules its retry after the idle delay.
+     * Wakes a hibernated workflow on the calling wake thread, once fewer than
+     * {@value #MAX_CONCURRENT_DETACHED_WAKES} such wakes load a workflow. A failed wake schedules its retry after the
+     * idle delay.
      */
     private void wakeDetached(String workflowId, Consumer<WorkflowExecution> beforeStart) {
+        if (!hibernations.containsKey(workflowId)) {
+            // Woken or dropped meanwhile: no need to wait for a permit only to find that out under the lock.
+            return;
+        }
+        detachedWakes.acquireUninterruptibly();
         try (var ignored = locks.obtainLock(workflowId)) {
             var current = hibernations.get(workflowId);
             if (current != null) {
@@ -644,7 +739,20 @@ final class WorkflowEngineHibernationSupport {
         } catch (RuntimeException e) {
             logger.warn("Could not wake hibernated workflow [{}]. Trying again in {}.", workflowId, idleDelay, e);
             retryWake(workflowId);
+        } finally {
+            detachedWakes.release();
         }
+    }
+
+    /**
+     * Returns the number of wakes for a deadline or a cancellation that wait for one of the
+     * {@value #MAX_CONCURRENT_DETACHED_WAKES} permits to load a workflow. Package-private so a test can tell that every
+     * wake either loads a workflow or waits for a permit, instead of inspecting the states of their threads.
+     *
+     * @return the number of wakes waiting for a permit
+     */
+    int wakesWaitingForAPermit() {
+        return detachedWakes.getQueueLength();
     }
 
     /**

@@ -7,7 +7,9 @@
  */
 package io.axoniq.framework.workflow.index.jpa;
 
+import io.axoniq.framework.workflow.index.api.WorkflowIndex.HibernationHint;
 import jakarta.persistence.Basic;
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.IdClass;
@@ -15,9 +17,11 @@ import jakarta.persistence.Index;
 import jakarta.persistence.Table;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
+import org.jspecify.annotations.Nullable;
 
 import java.io.Serial;
 import java.io.Serializable;
+import java.time.Instant;
 import java.util.Objects;
 
 import static java.util.Objects.requireNonNull;
@@ -32,6 +36,13 @@ import static java.util.Objects.requireNonNull;
  * of segment keys. A load selects them with a range condition that an index on ({@code indexName}, {@code segmentKey})
  * serves, where a condition on the masked hash would need a bitwise operation JPQL does not offer, and would scan every
  * entry of the index.
+ * <p>
+ * An entry of a workflow instance that hibernated carries its
+ * {@link io.axoniq.framework.workflow.index.api.WorkflowIndex.HibernationHint hibernation hint} in two nullable
+ * columns: {@code wakeAt}, the earliest deadline of its open waits, and {@code hibernationWaits}, its open waits as
+ * readable JSON, such as
+ * {@code [{"step":"awaitPayment","event":"com.acme.PaymentReceived","associations":["payload:orderId=42"]}]}. Both are
+ * {@code null} for an instance that is not known to be hibernated.
  * <p>
  * The entity is part of the database schema of the {@link JpaWorkflowIndex}: include it in the persistence unit that
  * index uses. It is not meant to be read or written by application code.
@@ -66,16 +77,30 @@ public class WorkflowIndexEntry {
     @Basic(optional = false)
     private long segmentKey;
 
+    @Basic
+    @Nullable
+    private Instant wakeAt;
+
+    @Column(length = Integer.MAX_VALUE)
+    @Nullable
+    private String hibernationWaits;
+
     /**
-     * Creates an entry for the given running workflow instance in the index with the given name.
+     * Creates an entry for the given running workflow instance in the index with the given name, with the given
+     * hibernation hint.
      *
      * @param indexName  the name of the index the entry belongs to
      * @param workflowId the id of the running workflow instance
+     * @param hint       the hint the instance hibernated with, or {@code null} for none
      */
-    public WorkflowIndexEntry(String indexName, String workflowId) {
+    public WorkflowIndexEntry(String indexName, String workflowId, @Nullable HibernationHint hint) {
         this.indexName = requireNonNull(indexName, "The index name must not be null.");
         this.workflowId = requireNonNull(workflowId, "The workflow id must not be null.");
         this.segmentKey = segmentKey(workflowId);
+        if (hint != null) {
+            this.wakeAt = hint.wakeAt();
+            this.hibernationWaits = HibernationWaitsCodec.encode(hint.waits());
+        }
     }
 
     /**
@@ -145,6 +170,39 @@ public class WorkflowIndexEntry {
      */
     public long getSegmentKey() {
         return segmentKey;
+    }
+
+    /**
+     * Returns the earliest deadline of the open waits of the hibernated instance.
+     *
+     * @return the time the hibernated instance wakes, or {@code null} when it is not known to be hibernated
+     */
+    public @Nullable Instant getWakeAt() {
+        return wakeAt;
+    }
+
+    /**
+     * Returns the open waits of the hibernated instance, as JSON.
+     *
+     * @return the JSON text of the open waits, or {@code null} when the instance is not known to be hibernated
+     */
+    public @Nullable String getHibernationWaits() {
+        return hibernationWaits;
+    }
+
+    /**
+     * Returns the hibernation hint stored in the given column values.
+     *
+     * @param wakeAt           the value of the {@code wakeAt} column
+     * @param hibernationWaits the value of the {@code hibernationWaits} column
+     * @return the hint, or {@code null} when either column is {@code null}
+     * @throws IllegalArgumentException if the open waits cannot be read
+     */
+    static @Nullable HibernationHint hint(@Nullable Instant wakeAt, @Nullable String hibernationWaits) {
+        if (wakeAt == null || hibernationWaits == null) {
+            return null;
+        }
+        return new HibernationHint(wakeAt, HibernationWaitsCodec.decode(hibernationWaits));
     }
 
     /**

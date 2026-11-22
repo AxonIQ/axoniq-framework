@@ -20,8 +20,11 @@ import org.axonframework.messaging.core.unitofwork.transaction.TransactionalExec
 import org.axonframework.messaging.core.unitofwork.transaction.jpa.JpaTransactionalExecutorProvider;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 import org.jspecify.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -57,8 +60,9 @@ import static org.axonframework.common.BuilderUtils.assertThat;
  * The index uses two entities, which the persistence unit must include:
  * <ul>
  *     <li>{@link WorkflowIndexEntry}: one row per running workflow instance, with primary key
- *     ({@code indexName VARCHAR(255)}, {@code workflowId VARCHAR(255)}), a {@code segmentKey BIGINT NOT NULL} column
- *     and an index on ({@code indexName}, {@code segmentKey}).</li>
+ *     ({@code indexName VARCHAR(255)}, {@code workflowId VARCHAR(255)}), a {@code segmentKey BIGINT NOT NULL} column,
+ *     the nullable hibernation hint columns {@code wakeAt TIMESTAMP} and {@code hibernationWaits}, an unbounded text
+ *     column such as {@code TEXT} or {@code CLOB}, and an index on ({@code indexName}, {@code segmentKey}).</li>
  *     <li>{@link WorkflowIndexInitialization}: one row per initialized index, with primary key
  *     {@code indexName VARCHAR(255)}.</li>
  * </ul>
@@ -86,6 +90,15 @@ import static org.axonframework.common.BuilderUtils.assertThat;
  * disabled. As initialization receives the id of every running instance, the index also stays uninitialized
  * meanwhile, so every claim of every segment reads the full running-workflow list.
  * <p>
+ * <h2>Hibernation hints</h2>
+ * The entry of a hibernated workflow instance stores its
+ * {@link io.axoniq.framework.workflow.index.api.WorkflowIndex.HibernationHint hint}: its earliest deadline in
+ * {@code wakeAt}, and its open waits as readable JSON in {@code hibernationWaits}, so a claim can leave it out of memory.
+ * The index only writes a hint within the transaction in which the event processor stores its token, see below: a hint
+ * written in a transaction of its own could land after a later claim of the segment cleared it. Without such a
+ * transaction, the entries carry no hints, and every claim restores every running instance. A hint whose open waits
+ * cannot be read is ignored, so the claim restores that instance.
+ *
  * <h2>Transactions</h2>
  * The writes of a checkpoint join the transaction in which the event processor stores its token, whenever the
  * {@link TransactionalExecutorProvider} finds one bound to the processing context of that checkpoint: with a
@@ -95,8 +108,14 @@ import static org.axonframework.common.BuilderUtils.assertThat;
  * writes on the processor's thread, through the processor's {@link EntityManager}, so the changes and the token are
  * committed together, and a checkpoint uses no database connection besides the one the processor already holds. This
  * is the same rule the JPA token store follows, and it assumes that the index lives in the database of that
- * transaction. To keep the index in another database, configure a {@link TransactionalExecutorProvider} that ignores
- * the processing context, for example {@code context -> provider.getTransactionalExecutor(null)}.
+ * transaction. To keep the index in another database, configure a {@link TransactionalExecutorProvider} that finds no
+ * transactional executor for a processing context, for example
+ * {@code context -> context == null ? provider.getTransactionalExecutor(null) : null}: the index then writes every
+ * change in a transaction of its own, and stores no hints. A provider that ignores the processing context, such as
+ * {@code context -> provider.getTransactionalExecutor(null)}, would make the index report writes in their own
+ * transactions as joined, and write hints that a node which lost the claim of the segment can still commit. Hints also
+ * need the token store in the same transaction: a token store that keeps no claims there, such as an in-memory one,
+ * does not hold back the hints of a node that lost the claim.
  * <p>
  * Every other operation, and a checkpoint without such a transaction, runs in a transaction of its own, obtained from
  * the {@link TransactionalExecutorProvider} without a processing context, on the configured {@link Executor}: the
@@ -154,6 +173,7 @@ public class JpaWorkflowIndex implements WorkflowIndex {
     public static final int DEFAULT_QUEUE_CAPACITY = 1024;
     private static final int MAX_IDS_PER_STATEMENT = 500;
     private static final String QUERY_TIMEOUT_HINT = "jakarta.persistence.query.timeout";
+    private static final Logger logger = LoggerFactory.getLogger(JpaWorkflowIndex.class);
 
     private final TransactionalExecutorProvider<EntityManager> transactionalExecutorProvider;
     private final Executor executor;
@@ -217,30 +237,52 @@ public class JpaWorkflowIndex implements WorkflowIndex {
     }
 
     @Override
-    public CompletableFuture<Optional<Set<String>>> load(String indexName, Segment segment) {
+    public CompletableFuture<Optional<Set<Entry>>> load(String indexName, Segment segment) {
         requireNonNull(indexName, "The index name must not be null.");
         requireNonNull(segment, "The segment must not be null.");
         return inTransaction(transaction -> transaction.apply(em -> {
             if (em.find(WorkflowIndexInitialization.class, indexName, hints()) == null) {
                 return Optional.empty();
             }
-            return Optional.of(ownedWorkflowIds(em, indexName, segment));
+            return Optional.of(ownedEntries(em, indexName, segment));
         }));
     }
 
-    private Set<String> ownedWorkflowIds(EntityManager em, String indexName, Segment segment) {
+    private Set<Entry> ownedEntries(EntityManager em, String indexName, Segment segment) {
         SegmentKeyRange range = WorkflowIndexEntry.rangeOf(segment);
-        return Set.copyOf(
-                em.createQuery("select e.workflowId from WorkflowIndexEntry e "
-                                       + "where e.indexName = :indexName "
-                                       + "and e.segmentKey between :lowest and :highest",
-                               String.class)
-                  .setHint(QUERY_TIMEOUT_HINT, queryTimeoutMillis)
-                  .setParameter("indexName", indexName)
-                  .setParameter("lowest", range.lowest())
-                  .setParameter("highest", range.highest())
-                  .getResultList()
-        );
+        List<Object[]> rows = em.createQuery("select e.workflowId, e.wakeAt, e.hibernationWaits "
+                                                     + "from WorkflowIndexEntry e "
+                                                     + "where e.indexName = :indexName "
+                                                     + "and e.segmentKey between :lowest and :highest",
+                                             Object[].class)
+                                .setHint(QUERY_TIMEOUT_HINT, queryTimeoutMillis)
+                                .setParameter("indexName", indexName)
+                                .setParameter("lowest", range.lowest())
+                                .setParameter("highest", range.highest())
+                                .getResultList();
+        Set<Entry> entries = new HashSet<>();
+        for (Object[] row : rows) {
+            String workflowId = (String) row[0];
+            entries.add(new Entry(workflowId, readHint(workflowId, (Instant) row[1], (String) row[2])));
+        }
+        return Set.copyOf(entries);
+    }
+
+    /**
+     * Reads the hint of an entry, or ignores it, so the claim restores the instance, when its waits cannot be read for
+     * any reason: an unreadable column must not keep the claim from loading the other entries.
+     */
+    private @Nullable HibernationHint readHint(String workflowId,
+                                               @Nullable Instant wakeAt,
+                                               @Nullable String hibernationWaits) {
+        try {
+            return WorkflowIndexEntry.hint(wakeAt, hibernationWaits);
+        } catch (RuntimeException e) {
+            logger.warn("Ignoring the hibernation hint of workflow '{}' in the workflow index: its waits cannot be "
+                                + "read. The workflow is restored instead.",
+                        WorkflowIds.abbreviate(workflowId), e);
+            return null;
+        }
     }
 
     @Override
@@ -254,23 +296,31 @@ public class JpaWorkflowIndex implements WorkflowIndex {
      * {@inheritDoc}
      * <p>
      * Writes within the transaction of the given {@code context}, on the calling thread, when the
-     * {@link TransactionalExecutorProvider} finds a transactional executor bound to it. Otherwise, writes in a
-     * transaction of its own, as {@link #store(String, IndexDelta)} does.
+     * {@link TransactionalExecutorProvider} finds a transactional executor bound to it. Otherwise, writes nothing and
+     * returns an empty {@link Optional}.
      */
     @Override
-    public CompletableFuture<Void> store(String indexName, IndexDelta delta, ProcessingContext context) {
+    public Optional<CompletableFuture<Void>> storeWithin(String indexName,
+                                                         IndexDelta delta,
+                                                         ProcessingContext context) {
         requireNonNull(indexName, "The index name must not be null.");
         requireNonNull(delta, "The delta must not be null.");
         requireNonNull(context, "The processing context must not be null.");
         TransactionalExecutor<EntityManager> joined;
         try {
             joined = transactionalExecutorProvider.findTransactionalExecutor(context);
-            if (joined == null) {
-                return store(indexName, delta);
-            }
-            return joined.accept(em -> apply(em, indexName, delta));
         } catch (RuntimeException e) {
-            return CompletableFuture.failedFuture(e);
+            // Whether the index could have joined is unknown, but nothing was written.
+            logger.debug("Could not find the transaction of the processing context; not writing within it.", e);
+            return Optional.empty();
+        }
+        if (joined == null) {
+            return Optional.empty();
+        }
+        try {
+            return Optional.of(joined.accept(em -> apply(em, indexName, delta)));
+        } catch (RuntimeException e) {
+            return Optional.of(CompletableFuture.failedFuture(e));
         }
     }
 
@@ -288,8 +338,8 @@ public class JpaWorkflowIndex implements WorkflowIndex {
 
     private void apply(EntityManager em, String indexName, IndexDelta delta) {
         requireValidWorkflowIds(delta.added());
-        // Deleting the added ids too makes the write idempotent: an id may already be stored by an earlier write that
-        // was reported as failed but committed anyway.
+        // Deleting the written ids too makes the write idempotent, and replaces their hints: an id may already be stored,
+        // by an earlier write, with or without a hint.
         Set<String> touched = new HashSet<>(delta.removed());
         touched.addAll(delta.added());
         for (List<String> ids : partition(touched)) {
@@ -300,7 +350,11 @@ public class JpaWorkflowIndex implements WorkflowIndex {
               .setParameter("workflowIds", ids)
               .executeUpdate();
         }
-        persistDetached(em, delta.added().stream().map(id -> new WorkflowIndexEntry(indexName, id)).toList());
+        persistDetached(em, delta.running()
+                                 .entrySet()
+                                 .stream()
+                                 .map(entry -> new WorkflowIndexEntry(indexName, entry.getKey(), entry.getValue()))
+                                 .toList());
     }
 
     /**
@@ -390,6 +444,10 @@ public class JpaWorkflowIndex implements WorkflowIndex {
                         });
                 } catch (RuntimeException e) {
                     result.completeExceptionally(e);
+                } catch (Error e) {
+                    // Fails the future rather than leaving it pending forever, then lets the error end the thread.
+                    result.completeExceptionally(e);
+                    throw e;
                 }
             });
         } catch (RuntimeException e) {

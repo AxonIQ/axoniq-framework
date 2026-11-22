@@ -7,11 +7,17 @@
  */
 package io.axoniq.framework.workflow.index.api;
 
+import io.axoniq.framework.workflow.index.api.WorkflowIndex.Entry;
+import io.axoniq.framework.workflow.index.api.WorkflowIndex.HibernationHint;
 import io.axoniq.framework.workflow.index.api.WorkflowIndex.IndexDelta;
+import io.axoniq.framework.workflow.index.api.WorkflowIndex.OpenWait;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 import org.junit.jupiter.api.*;
 
+import java.time.Instant;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
@@ -50,6 +56,12 @@ public abstract class WorkflowIndexContractTest {
     }
 
     private Optional<Set<String>> load(String indexName, Segment segment) {
+        return loadEntries(indexName, segment).map(entries -> entries.stream()
+                                                                    .map(Entry::workflowId)
+                                                                    .collect(Collectors.toSet()));
+    }
+
+    private Optional<Set<Entry>> loadEntries(String indexName, Segment segment) {
         return workflowIndex.load(indexName, segment).orTimeout(5, TimeUnit.SECONDS).join();
     }
 
@@ -63,6 +75,23 @@ public abstract class WorkflowIndexContractTest {
 
     private void initialize(String indexName, Set<String> runningWorkflowIds) {
         workflowIndex.initialize(indexName, runningWorkflowIds).orTimeout(5, TimeUnit.SECONDS).join();
+    }
+
+    private static IndexDelta withHints(Map<String, HibernationHint> hints) {
+        return new IndexDelta(new HashMap<>(hints), Set.of());
+    }
+
+    /**
+     * A hint whose texts need escaping or are not ASCII, with a wait without event name and one without associations.
+     */
+    private static HibernationHint trickyHint() {
+        return new HibernationHint(
+                Instant.parse("2026-11-21T10:15:30.123456Z"),
+                List.of(new OpenWait("await \"payment\"",
+                                     "com.acme.Payment\\Received",
+                                     Set.of("payload:orderId=42", "metadata:note=caf\u00e9 \u4e2d\u6587\n\ttab")),
+                        new OpenWait("anyEvent", null, Set.of()))
+        );
     }
 
     private static Segment anotherSegmentThan(Segment segment) {
@@ -219,6 +248,62 @@ public abstract class WorkflowIndexContractTest {
             // then
             assertThat(loadInitialized(INDEX, Segment.ROOT_SEGMENT)).containsExactlyInAnyOrder(longest, edgeCharacters);
         }
+
+        @Test
+        void storesTheHintOfAnEntryAndReturnsItUnchanged() {
+            // given
+            var hint = trickyHint();
+
+            // when
+            store(INDEX, withHints(Map.of("order-1", hint)));
+            store(INDEX, new IndexDelta(Set.of("order-2"), Set.of()));
+
+            // then
+            assertThat(loadEntries(INDEX, Segment.ROOT_SEGMENT).orElseThrow())
+                    .containsExactlyInAnyOrder(new Entry("order-1", hint), Entry.running("order-2"));
+        }
+
+        @Test
+        void writingAnEntryWithoutAHintClearsItsStoredHint() {
+            // given
+            store(INDEX, withHints(Map.of("order-1", trickyHint())));
+
+            // when
+            store(INDEX, new IndexDelta(Set.of("order-1"), Set.of()));
+
+            // then
+            assertThat(loadEntries(INDEX, Segment.ROOT_SEGMENT).orElseThrow())
+                    .containsExactly(Entry.running("order-1"));
+        }
+
+        @Test
+        void writingAnEntryWithAnotherHintReplacesItsStoredHint() {
+            // given
+            store(INDEX, withHints(Map.of("order-1", trickyHint())));
+            var later = new HibernationHint(Instant.parse("2027-01-01T00:00:00Z"),
+                                            List.of(new OpenWait("awaitShipment", "com.acme.Shipped", Set.of())));
+
+            // when
+            store(INDEX, withHints(Map.of("order-1", later)));
+
+            // then
+            assertThat(loadEntries(INDEX, Segment.ROOT_SEGMENT).orElseThrow())
+                    .containsExactly(new Entry("order-1", later));
+        }
+
+        @Test
+        void removingAnEntryRemovesItsHint() {
+            // given
+            store(INDEX, withHints(Map.of("order-1", trickyHint())));
+
+            // when
+            store(INDEX, new IndexDelta(Set.of(), Set.of("order-1")));
+            store(INDEX, new IndexDelta(Set.of("order-1"), Set.of()));
+
+            // then
+            assertThat(loadEntries(INDEX, Segment.ROOT_SEGMENT).orElseThrow())
+                    .containsExactly(Entry.running("order-1"));
+        }
     }
 
     @Nested
@@ -243,6 +328,18 @@ public abstract class WorkflowIndexContractTest {
 
             // then
             assertThat(loadInitialized(INDEX, Segment.ROOT_SEGMENT)).containsExactlyInAnyOrder("order-1", "order-3");
+        }
+
+        @Test
+        void writesTheRunningWorkflowsWithoutHints() {
+            // given - a hint written by a claim of an index that was not initialized
+            store(INDEX, withHints(Map.of("order-1", trickyHint())));
+
+            // when
+            initialize(INDEX, Set.of("order-1"));
+
+            // then
+            assertThat(loadEntries(INDEX, Segment.ROOT_SEGMENT)).hasValue(Set.of(Entry.running("order-1")));
         }
 
         @Test

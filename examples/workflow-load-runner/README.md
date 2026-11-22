@@ -30,9 +30,14 @@ share of the start events (`--complete`, 10% by default) with `complete=true`. O
   index again from the event store.
 - **Database**: an embedded HSQLDB file database in `--data-dir` (default `./target/load-runner-data`), holding the
   token store and the workflow index.
+- **Transactions**: the workflow processor runs every unit of work in a JPA transaction of that database
+  (`ProcessorTransactionManager`), opened when the token store or the index first uses it. The token store and the JPA
+  index both join it, so a checkpoint commits the index changes, including the hibernation hints, together with the
+  token. Everything else, such as loading the index on a claim, runs in a transaction of its own.
 - **Workflow processor**: `--segments` segments (default 16) on first start, with as many threads, a batch size of 100,
-  a checkpoint interval of one second, and a token claim interval of 500 milliseconds (see below). Workflow history is disabled: its projector replays every workflow event
-  at each start, which would dominate the startup this runner measures.
+  a checkpoint interval of one second, and a token claim interval of 500 milliseconds (see below). Workflow history is
+  disabled: its projector replays every workflow event at each start, which would dominate the startup this runner
+  measures.
 
 `LoadRunnerSetup` holds all of this configuration.
 
@@ -121,9 +126,11 @@ Compare the `main -> workflow processor ready` lines of steps 2 and 3. Both rest
 
 With `--hibernate`, a waiting instance leaves memory once it made no progress for the idle delay (`--idle-delay`,
 ten seconds by default in this runner), and is restored from the event store when its approval arrives. The runner
-then only approves instances that are hibernated, so the approval latency includes waking them. Hibernation is a
-decision of a single node: it writes nothing, so a restart's segment claims restore every running instance into
-memory, after which they hibernate again once idle.
+then only approves instances that are hibernated, so the approval latency includes waking them. With the JPA index
+(the default), the index stores a hibernation hint for every hibernated instance with the next checkpoint of its
+segment, and a restart's segment claims leave those instances out of memory. Without it (`--index=memory` or
+`--index=none`), hibernation is a decision of a single node: a restart's segment claims restore every running instance
+into memory, after which they hibernate again once idle.
 
 ```shell
 JAR=examples/workflow-load-runner/target/workflow-load-runner.jar
@@ -132,12 +139,15 @@ JAR=examples/workflow-load-runner/target/workflow-load-runner.jar
 #    the approved ones are woken, then stop it with Ctrl+C.
 java -jar $JAR 10000 --hibernate --data-dir=target/hibernation
 
-# 2. Restart with hibernation. Watch the executions in memory right after the claims, and the line that reports when
-#    99% of the instances in progress hibernated again. Stop it with Ctrl+C after a minute.
+# 2. Restart with hibernation. Watch the executions in memory right after the claims: with the hints in the JPA
+#    index, the claims leave the hibernated instances out of memory. Stop it with Ctrl+C after a minute.
 java -jar $JAR 0 --hibernate --data-dir=target/hibernation
 ```
 
-Compare with the same steps without `--hibernate`, on a fresh Axon Server and data directory.
+Compare with the same steps without `--hibernate`, or with `--index=none`, on a fresh Axon Server and data directory.
+A checkpoint writes the hints, and the workflow processor only checkpoints a segment when it handles an event of it.
+Hibernating an instance requests no checkpoint, so the hint of an instance that hibernates in an idle segment is only
+written once a later event of that segment arrives. Releasing a segment, as stopping the runner does, writes no hints.
 
 ## What the numbers mean
 
@@ -193,9 +203,10 @@ The progress line, every five seconds, shows the start events published, the ins
 instances in progress on this node, the approvals published, the instances that completed or failed since this
 process started, how many segments the processor holds and how many of those are caught up, the memory figures
 described above, the peak number of executions in memory, sampled every second, and the time from publishing an
-approval until the approved instance completed (median, 95th percentile and maximum). Stopping prints the same memory
-figures once more. With `--hibernate`, the runner also reports once when, after the processor was ready, at least 99%
-of the instances in progress hibernated.
+approval until the approved instance completed (median, 95th percentile and maximum). With `--hibernate` and the JPA
+index, it also shows the hibernation hints in the index: the hibernated instances a restart's claims leave out of
+memory. Stopping prints the same memory figures once more. With `--hibernate`, the runner also reports once when,
+after the processor was ready, at least 99% of the instances in progress hibernated.
 
 ## Without Axon Server
 

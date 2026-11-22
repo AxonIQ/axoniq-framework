@@ -357,7 +357,9 @@ include::example$workflows/configuration/ConfigurationExamples.java[tag=jpa-work
 When the processor of the workflow module runs its batches in a JPA transaction, as it does in Spring Boot with JPA, or with an `EntityManagerTransactionManager`, the `JpaWorkflowIndex` writes the changes of a checkpoint within that transaction.
 The changes and the token are then committed together, and a checkpoint needs no database connection besides the one the processor already holds.
 Like the JPA token store, the index then assumes that it lives in the database of that transaction.
-To keep the index in another database, pass a `transactionalExecutorProvider(...)` that ignores the processing context, such as `context -> provider.getTransactionalExecutor(null)`.
+To keep the index in another database, pass a `transactionalExecutorProvider(...)` that finds no transaction for the processing context of a checkpoint, such as `context -> context == null ? provider.getTransactionalExecutor(null) : null`.
+The index then writes every change in a transaction of its own, and stores no hints of <<hibernation,hibernated workflows>>, which are only safe within the transaction of the token: see <<workflow-index-hints,Hibernation hints>>.
+Do not pass a provider that ignores the processing context, such as `context -> provider.getTransactionalExecutor(null)`: the index cannot tell that its writes no longer commit together with the token, and would write hints without that protection.
 
 Without such a transaction, for loading and initializing the index, and for the changes it writes when the processor releases a segment, the index runs every operation in a transaction of its own.
 The builder accepts an `executor(...)` that runs that database work, by default four daemon threads, and a `timeout(...)`, by default ten seconds.
@@ -379,7 +381,7 @@ Table and column names follow the naming strategy of your JPA provider:
 |Entity |Columns
 
 |`WorkflowIndexEntry`
-|`indexName VARCHAR(255)` and `workflowId VARCHAR(255)` as primary key, `segmentKey BIGINT NOT NULL`, and an index on (`indexName`, `segmentKey`).
+|`indexName VARCHAR(255)` and `workflowId VARCHAR(255)` as primary key, `segmentKey BIGINT NOT NULL`, the nullable hibernation hint columns `wakeAt` (a timestamp, such as `TIMESTAMP(6) WITH TIME ZONE`) and `hibernationWaits` (unbounded text, such as `TEXT` on PostgreSQL or `CLOB` on H2), and an index on (`indexName`, `segmentKey`).
 
 |`WorkflowIndexInitialization`
 |`indexName VARCHAR(255)` as primary key.
@@ -387,6 +389,37 @@ Table and column names follow the naming strategy of your JPA provider:
 
 The `workflowId` column holds the workflow ID itself, so you can look up the entry of a workflow by its ID.
 It fits every <<workflow-id-rules,valid workflow ID>>: the engine never starts a workflow with an invalid one.
+
+[[workflow-index-hints]]
+==== Hibernation hints
+
+With <<hibernation,hibernation>> enabled, the entry of a workflow that hibernated also holds a hint: `wakeAt` holds the nearest deadline of its waits, and `hibernationWaits` holds its open waits as readable JSON, for example:
+
+[source,json]
+----
+[{"step":"awaitPayment","event":"com.acme.PaymentReceived","associations":["payload:orderId=42"]}]
+----
+
+A wait that accepts events of any name has `"event":null`.
+Characters outside printable ASCII are written as JSON `\uXXXX` escapes, so the text is stored unchanged whatever the character set of the column.
+Both columns are empty for a workflow that is not hibernated, so you can query which workflows are hibernated, until when, and for which events.
+
+A node that claims a segment leaves a workflow with a hint out of memory, as long as no event of that workflow follows the token the segment resumes from.
+It restores every other running workflow, and clears the hints it does not use.
+The engine clears a hint again when the workflow wakes, or when any of its events is handled.
+
+A hint is not derived from the events, so a hint written late, after another node already cleared it, could route events away from the workflow.
+The engine therefore only writes a hint with a checkpoint that commits together with the token of the segment.
+With the `JpaWorkflowIndex`, that is a checkpoint whose write joins the JPA transaction of the processor, with a JPA token store in the same database: the token store refuses the token of a node that lost the segment, which rolls back the hint as well.
+A checkpoint that does not advance the token stores no token; the processor then extends its claim of the segment in the same transaction instead, which fails for a node that lost the segment and rolls back the hint the same way.
+Both checks need the token store to keep its claims in the transaction of the index: with a token store that keeps no claims, such as the `InMemoryTokenStore`, nothing holds back a hint of a node that lost the segment.
+Every other write, such as the release of a segment, writes the workflow without a hint.
+Without such a transaction, the index holds no hints, and every claim restores every running workflow, as without the hints.
+The `InMemoryWorkflowIndex` writes hints with every checkpoint, as its writes take effect at once and on one node only.
+
+Do not edit the hint columns.
+To make a claim restore a hibernated workflow, clear both columns of its entry while no node runs the workflow module.
+An entry whose `hibernationWaits` cannot be read is restored as if it had no hint.
 
 [[workflow-index-collation]]
 The `workflowId` column must compare IDs exactly: case-sensitively, and without ignoring trailing spaces, as a binary collation does.
@@ -465,9 +498,12 @@ The segment then stores no position past that event, and the engine asks the pro
 The next claim restores the workflow and handles the event again.
 A failed wake by a deadline or a cancellation is tried again after the idle delay.
 
-Hibernation is a decision of each node, and writes nothing.
-When a node claims a segment, it restores every running workflow of that segment, including those another node had hibernated, and they hibernate again after the idle delay.
-The <<workflow-index,workflow index>> keeps listing a hibernated workflow as running.
+Hibernation appends no events.
+Without a <<workflow-index,workflow index>> that holds <<workflow-index-hints,hibernation hints>>, when a node claims a segment, it restores every running workflow of that segment, including those another node had hibernated, and they hibernate again after the idle delay.
+With such an index, the claim leaves the workflows that hibernated, and had no event since, out of memory.
+They wake for their events as any hibernated workflow, but for their deadline or a cancellation only once the segment caught up with the events that were published while no node held it.
+Deadlines that passed meanwhile wake their workflows at most 16 at a time.
+The workflow index keeps listing a hibernated workflow as running.
 A release of a segment, a split or merge of segments, and a shutdown forget the hibernated workflows of that segment on that node.
 A workflow that hibernates, or whose segment is released, appends no more events from the execution it leaves: the execution that restores it continues from its events.
 Every wait of the body in the execution it leaves ends with an `Error`, which is no failure of a step or of the workflow, so a body that catches `Exception`, for example to wait again in a loop, still unwinds.

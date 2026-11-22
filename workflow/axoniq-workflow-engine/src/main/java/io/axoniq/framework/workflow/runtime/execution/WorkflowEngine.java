@@ -9,6 +9,7 @@ package io.axoniq.framework.workflow.runtime.execution;
 
 import io.axoniq.framework.workflow.dsl.api.WorkflowState;
 import io.axoniq.framework.workflow.index.api.WorkflowIndex;
+import io.axoniq.framework.workflow.index.api.WorkflowIndex.HibernationHint;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.framework.workflow.runtime.util.MetadataUtils;
@@ -210,6 +211,17 @@ public class WorkflowEngine implements
     }
 
     /**
+     * Returns the checkpointing support of this engine, so a test can request a checkpoint of a segment at a given
+     * token.
+     *
+     * @return the checkpointing support set through
+     * {@link #setCheckpointingSupport(WorkflowEngineCheckpointingSupport)}
+     */
+    WorkflowEngineCheckpointingSupport checkpointingSupport() {
+        return checkpointingSupport;
+    }
+
+    /**
      * Sets the source of the position each claimed segment has consumed up to, including events the processor skipped
      * because they belong to other segments.
      * <p>
@@ -248,8 +260,11 @@ public class WorkflowEngine implements
      * <p>
      * Set outside the constructor, like {@link #setCheckpointingSupport(WorkflowEngineCheckpointingSupport)}, by the
      * workflow module when hibernation is enabled for it, before this engine {@link #start(TrackingToken) starts}.
-     * Hibernation is a decision of this node only: it writes nothing, and a claim of a segment restores every running
-     * workflow of that segment, hibernated here or not.
+     * Hibernation writes no event. A hibernating workflow records its open waits and nearest deadline as a hint in the
+     * workflow index, with a checkpoint whose write joins the transaction of the event processor, see
+     * {@link WorkflowIndex#storeWithin(String, WorkflowIndex.IndexDelta, ProcessingContext)}. A claim of its segment,
+     * here or on another node, leaves a workflow with such a hint out of memory as long as no event of that workflow
+     * followed the token the claim resumes from, and restores every other running workflow.
      *
      * @param scheduler    schedules the passes and the deadlines of hibernated workflows
      * @param clock        the clock the scheduler measures deadlines and idle time with
@@ -266,7 +281,7 @@ public class WorkflowEngine implements
         this.wakeTimeout = requireNonNull(wakeTimeout, "The wake timeout must not be null.");
         this.hibernation = new WorkflowEngineHibernationSupport(
                 scheduler, clock, workflowExecutionRepository, workflowCancellationService, checkpointWorkIndex,
-                catchUpSupport, this::wakeWorkflow, idleDelay, wakeExecutor
+                catchUpSupport, runningWorkflows, this::wakeWorkflow, idleDelay, wakeExecutor
         );
     }
 
@@ -612,7 +627,9 @@ public class WorkflowEngine implements
      * so a segment migrating between nodes carries its instances with it. When another node dies, the coordinator hands
      * its segments to a surviving node and this callback rebuilds their instances there, without restarting anything.
      * <p>
-     * The instances are materialized from their current durable state and started immediately.
+     * The instances are materialized from their current durable state and started immediately. With hibernation, the
+     * instances whose hibernation hint the claim accepted stay out of memory instead, as hibernated instances of the
+     * claim.
      *
      * @param segment          the segment that was claimed
      * @param claimedFrom      the stored position the segment resumes from, or {@code null} when it has consumed
@@ -650,6 +667,8 @@ public class WorkflowEngine implements
                 // Half the restore timeout for streaming the index tail, so a stalled stream still leaves time to
                 // fall back to the full running-workflow list and restore the instances within the restore timeout.
                 .load(segment, claimedFrom, sourcingContext, restoreTimeout.dividedBy(2))
+                // Without hibernation, a hibernated instance is restored like any other, and its hint cleared.
+                .thenApply(claimed -> hibernation == null ? claimed.restoringHibernated() : claimed)
                 .thenCompose(claimed -> restoreRunningWorkflows(claim,
                                                                 claimed.runningWorkflowIds(),
                                                                 sourcingContext,
@@ -658,18 +677,49 @@ public class WorkflowEngine implements
                 .orTimeout(restoreTimeout.toMillis(), TimeUnit.MILLISECONDS)
                 // Only a claim that loaded in time tracks the segment: a late load must not replace the state of
                 // events handled meanwhile. A segment that is not tracked writes nothing, and its checkpoints fail.
-                .thenAccept(claimed -> runningWorkflows.initialize(segment, claimed))
+                // Tracked before the hibernated instances are adopted, so it records their wakes.
+                .thenAccept(claimed -> {
+                    runningWorkflows.initialize(segment, claimed);
+                    adoptHibernatedWorkflows(claim, claimed.hibernated());
+                })
                 .whenComplete((restored, failure) -> {
                     if (failure != null) {
                         // Before the release: instances still restoring are dropped, and every event of the segment
                         // fails until the processor released it. The instances it did restore never start, and are
                         // dropped as well, also when the segment is never released here.
                         catchUpSupport.fail(claim, () -> stopExecutionsOf(segment));
+                        // Outside the lock of the claim, as dropping takes the locks of the workflows.
+                        var support = hibernation;
+                        if (support != null) {
+                            support.drop(claim);
+                        }
                         onFailedRestore(segment, failure);
                     } else {
                         startRestoredWorkflowsWhenCaughtUp(claim, claimedFrom);
                     }
                 });
+    }
+
+    /**
+     * Leaves the given instances, whose hibernation hints the claim accepted, out of memory as hibernated instances of
+     * the claim. An instance that is not adopted, as the claim ended meanwhile, gets its hint cleared.
+     */
+    private void adoptHibernatedWorkflows(WorkflowEngineCatchUpSupport.Claim claim,
+                                          Map<String, HibernationHint> hibernated) {
+        var support = hibernation;
+        if (support == null || hibernated.isEmpty()) {
+            return;
+        }
+        var segment = claim.segment();
+        int adopted = 0;
+        for (var entry : hibernated.entrySet()) {
+            if (support.adopt(claim, entry.getKey(), entry.getValue())) {
+                adopted++;
+            } else {
+                runningWorkflows.recordWoken(segment, entry.getKey());
+            }
+        }
+        logger.debug("Left {} hibernated workflow(s) of segment {} out of memory.", adopted, segment.getSegmentId());
     }
 
     /**
@@ -878,6 +928,7 @@ public class WorkflowEngine implements
      *
      * @param claim            the claim restoring the instance
      * @param workflowId       id of the instance to restore
+     * @param claimContext     the context of the claim, whose resources the instance is sourced with
      * @param executionContext the context the restored execution runs on
      * @return a future completing with {@code true} once the instance is restored, or with {@code false} when its
      * sourced state is terminal, so there is nothing to restore
@@ -994,6 +1045,8 @@ public class WorkflowEngine implements
                 .orTimeout(wakeTimeout.toMillis(), TimeUnit.MILLISECONDS)
                 .join();
         if (sourced.state().workflowStatus().isTerminal()) {
+            // It ended elsewhere, so its entry in the index, if any, is stale.
+            runningWorkflows.recordRemoved(segment, workflowId);
             return false;
         }
         var restored = restoreWorkflow(claim, workflowId, sourced.state(), executionContext, sourced.position());
@@ -1044,6 +1097,11 @@ public class WorkflowEngine implements
      * @param phase   startup phase in which the executions are started
      */
     private void removeTerminalAndStartRestoredWorkflowExecutions(@Nullable Segment segment, String phase) {
+        var support = hibernation;
+        if (support != null && segment != null) {
+            // The hibernated workflows the claim adopted may now wake for their deadline or a cancellation.
+            support.arm(segment);
+        }
         var terminalExecutions = workflowExecutionRepository.findAllOwnedBy(segment)
                                                            .stream()
                                                            .filter(execution -> execution.state()

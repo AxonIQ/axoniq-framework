@@ -73,6 +73,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -508,7 +509,10 @@ class JpaWorkflowIndexRestartTest {
         return reader.load(MODULE, Segment.ROOT_SEGMENT)
                      .orTimeout(5, TimeUnit.SECONDS)
                      .join()
-                     .orElse(Set.of());
+                     .orElse(Set.of())
+                     .stream()
+                     .map(WorkflowIndex.Entry::workflowId)
+                     .collect(Collectors.toSet());
     }
 
     private TrackingToken storedToken(Segment segment) {
@@ -695,7 +699,7 @@ class JpaWorkflowIndexRestartTest {
         }
 
         @Override
-        public CompletableFuture<Optional<Set<String>>> load(String indexName, Segment segment) {
+        public CompletableFuture<Optional<Set<WorkflowIndex.Entry>>> load(String indexName, Segment segment) {
             if (failIndexLoads.get()) {
                 return CompletableFuture.failedFuture(new IllegalStateException("database down"));
             }
@@ -713,6 +717,14 @@ class JpaWorkflowIndexRestartTest {
                 return CompletableFuture.failedFuture(new IllegalStateException("database down"));
             }
             return delegate.store(indexName, delta);
+        }
+
+        @Override
+        public Optional<CompletableFuture<Void>> storeWithin(String indexName,
+                                                             IndexDelta delta,
+                                                             ProcessingContext context) {
+            // A failing write is written through store instead, which fails and counts it.
+            return failIndexWrites.get() ? Optional.empty() : delegate.storeWithin(indexName, delta, context);
         }
 
         @Override

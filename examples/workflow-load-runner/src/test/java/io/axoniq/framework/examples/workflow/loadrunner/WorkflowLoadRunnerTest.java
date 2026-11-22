@@ -53,4 +53,20 @@ class WorkflowLoadRunnerTest {
         assertThat(runner.statistics().failed()).isZero();
         assertThat(runner.inProgress()).isZero();
     }
+
+    @Test
+    void writesTheHibernationHintsToTheJpaIndexWithinTheProcessorTransaction() throws InterruptedException {
+        // given - instances that hibernate after a second, half of which the runner approves, so events of their
+        // segments keep taking checkpoints
+        runner = new WorkflowLoadRunner(LoadRunnerOptions.parse(
+                "40", "--in-memory-events", "--hibernate", "--idle-delay=PT1S", "--complete=0.5", "--segments=2"
+        ));
+        runner.startUp();
+
+        // when
+        runner.startInstances();
+
+        // then - the checkpoints store the hints of the hibernated instances
+        await().atMost(Duration.ofSeconds(60)).until(() -> runner.hibernationHintsInIndex() > 0);
+    }
 }

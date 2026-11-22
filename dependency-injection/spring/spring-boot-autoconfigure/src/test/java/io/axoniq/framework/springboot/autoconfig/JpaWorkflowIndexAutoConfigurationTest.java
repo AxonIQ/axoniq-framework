@@ -144,7 +144,8 @@ class JpaWorkflowIndexAutoConfigurationTest {
                 var index = workflowIndex.load("orders", Segment.ROOT_SEGMENT)
                                          .orTimeout(5, TimeUnit.SECONDS)
                                          .join();
-                assertThat(index).hasValue(Set.of("order-1", "order-2"));
+                assertThat(index).hasValue(Set.of(WorkflowIndex.Entry.running("order-1"),
+                                                  WorkflowIndex.Entry.running("order-2")));
             });
         }
 
@@ -240,7 +241,8 @@ class JpaWorkflowIndexAutoConfigurationTest {
                 var index = workflowIndex.load("orders", Segment.ROOT_SEGMENT)
                                          .orTimeout(5, TimeUnit.SECONDS)
                                          .join();
-                assertThat(index).hasValue(Set.of("order-1", "order-2"));
+                assertThat(index).hasValue(Set.of(WorkflowIndex.Entry.running("order-1"),
+                                                  WorkflowIndex.Entry.running("order-2")));
             });
         }
 

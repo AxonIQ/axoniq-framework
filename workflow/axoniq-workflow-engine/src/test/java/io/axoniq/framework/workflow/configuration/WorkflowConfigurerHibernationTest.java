@@ -20,6 +20,7 @@ import io.axoniq.framework.workflow.dsl.api.WorkflowState;
 import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
 import io.axoniq.framework.workflow.dsl.api.retry.BackoffStrategy;
 import io.axoniq.framework.workflow.dsl.api.retry.RetryPolicy;
+import io.axoniq.framework.workflow.index.api.WorkflowIndex;
 import io.axoniq.framework.workflow.index.inmemory.InMemoryWorkflowIndex;
 import io.axoniq.framework.workflow.query.api.WorkflowStateQuery;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowConfiguration;
@@ -1285,16 +1286,56 @@ class WorkflowConfigurerHibernationTest {
             await().atMost(5, TimeUnit.SECONDS).until(() -> !indexedWorkflowIds().contains(workflowId));
         }
 
+        @Test
+        void leavesAHibernatedWorkflowOutOfMemoryWhenItsSegmentIsClaimedAgain() {
+            // given - a hibernated workflow whose hint a checkpoint wrote to the index
+            workflowIndex = new InMemoryWorkflowIndex();
+            var configuration = start(true);
+            var workflowId = startWorkflow(configuration, "wait", "order-1", WAIT_STEP);
+            awaitHibernated(configuration, workflowId);
+            await().atMost(5, TimeUnit.SECONDS).until(() -> {
+                publish(configuration, "unrelated", "order-3", "");
+                return hintedWorkflowIds().contains(workflowId);
+            });
+            storageEngine.resetSourcings();
+
+            // when
+            releaseAllSegments(configuration);
+
+            // then - the claim adopts it as hibernated, without sourcing it
+            await().atMost(5, TimeUnit.SECONDS).until(
+                    () -> WorkflowEngineHibernation.isCaughtUp(engine(configuration), segmentOf(workflowId))
+                            && WorkflowEngineHibernation.isHibernated(engine(configuration), workflowId)
+            );
+            assertThat(inMemory(configuration, workflowId)).isFalse();
+            assertThat(storageEngine.sourcings()).isZero();
+
+            // and it wakes and ends on its event
+            publish(configuration, "paid", "order-1", "");
+            awaitWorkflowStatus(configuration, workflowId, WorkflowStatus.COMPLETED);
+        }
+
         private Set<String> indexedWorkflowIds() {
+            return entries().stream().map(WorkflowIndex.Entry::workflowId).collect(Collectors.toSet());
+        }
+
+        private Set<String> hintedWorkflowIds() {
+            return entries().stream()
+                            .filter(entry -> entry.hint() != null)
+                            .map(WorkflowIndex.Entry::workflowId)
+                            .collect(Collectors.toSet());
+        }
+
+        private Set<WorkflowIndex.Entry> entries() {
             var index = Objects.requireNonNull(workflowIndex);
-            var ids = new HashSet<String>();
+            var entries = new HashSet<WorkflowIndex.Entry>();
             for (int segmentId = 0; segmentId < SEGMENT_COUNT; segmentId++) {
                 index.load(MODULE, new Segment(segmentId, SEGMENT_COUNT - 1))
                      .orTimeout(5, TimeUnit.SECONDS)
                      .join()
-                     .ifPresent(ids::addAll);
+                     .ifPresent(entries::addAll);
             }
-            return ids;
+            return entries;
         }
     }
 

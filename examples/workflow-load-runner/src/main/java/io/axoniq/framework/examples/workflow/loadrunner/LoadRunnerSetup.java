@@ -26,6 +26,7 @@ import jakarta.persistence.EntityManagerFactory;
 import org.axonframework.conversion.GeneralConverter;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
 import org.axonframework.eventsourcing.eventstore.inmemory.InMemoryEventStorageEngine;
+import org.axonframework.messaging.core.unitofwork.TransactionalUnitOfWorkFactory;
 import org.axonframework.messaging.core.unitofwork.transaction.TransactionalExecutorProvider;
 import org.axonframework.messaging.core.unitofwork.transaction.jpa.JpaTransactionalExecutorProvider;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.store.TokenStore;
@@ -46,7 +47,9 @@ import java.util.concurrent.atomic.AtomicInteger;
  * durable token store, and the workflow index.
  * <p>
  * The token store and, unless disabled, the workflow index live in an embedded HSQLDB file database, so they survive a
- * restart of the application just like the events in Axon Server do.
+ * restart of the application just like the events in Axon Server do. The workflow processor runs its units of work in
+ * a JPA transaction of that database, see {@link ProcessorTransactionManager}, so the JPA workflow index writes a
+ * checkpoint, including the hibernation hints, within the transaction the token is stored in.
  *
  * @author Allard Buijze
  */
@@ -101,7 +104,14 @@ final class LoadRunnerSetup {
                         // Without new events, the processor only marks its segments caught up when it checks
                         // again, at most this interval (5 seconds by default) later. A short interval keeps that
                         // delay out of the measured startup time.
-                        .tokenClaimInterval(500))
+                        .tokenClaimInterval(500)
+                        // Binds a JPA transaction to the processor's units of work, which the token store and the
+                        // JPA workflow index both join, so a checkpoint commits the index changes and hibernation
+                        // hints together with the token.
+                        .unitOfWorkFactory(new TransactionalUnitOfWorkFactory(
+                                new ProcessorTransactionManager(entityManagerFactory),
+                                processor.unitOfWorkFactory()
+                        )))
                 .checkpointInterval(1000)
                 // The history projector replays every workflow event at each start, which would dominate the
                 // startup this runner measures.
@@ -140,22 +150,36 @@ final class LoadRunnerSetup {
     /**
      * Registers a {@link JpaTokenStore}, so the workflow processor resumes where it stopped after a restart.
      * <p>
-     * The events live in Axon Server, so there is no database transaction to share with event processing: every token
-     * store operation runs in a transaction of its own. Without a transaction manager that binds an entity manager to
-     * the processing context, the {@link JpaTransactionalExecutorProvider} only provides such transactions when it is
-     * asked without a processing context, hence the lambda.
+     * Within a unit of work of the workflow processor, the token store joins the transaction the
+     * {@link ProcessorTransactionManager} binds to it, which the JPA workflow index joins as well. Any other operation,
+     * such as the runner reading the segments, runs in a transaction of its own.
      */
     private static void configureTokenStore(WorkflowConfigurer configurer,
                                             EntityManagerFactory entityManagerFactory) {
-        var ownTransactions = new JpaTransactionalExecutorProvider(entityManagerFactory);
-        TransactionalExecutorProvider<EntityManager> transactions =
-                processingContext -> ownTransactions.findTransactionalExecutor(null);
+        var provider = new JpaTransactionalExecutorProvider(entityManagerFactory);
+        TransactionalExecutorProvider<EntityManager> transactions = processingContext -> {
+            var joined = processingContext == null ? null : provider.findTransactionalExecutor(processingContext);
+            return joined != null ? joined : provider.findTransactionalExecutor(null);
+        };
         configurer.componentRegistry(cr -> cr.registerComponent(
                 TokenStore.class,
                 c -> new JpaTokenStore(transactions,
                                        c.getComponent(GeneralConverter.class),
                                        JpaTokenStoreConfiguration.DEFAULT)
         ));
+    }
+
+    /**
+     * Counts the entries of the {@link JpaWorkflowIndex} that hold a hibernation hint: the workflows a claim of their
+     * segment leaves out of memory.
+     *
+     * @param entityManagerFactory the entity manager factory of the database holding the index
+     * @return the number of entries with a hibernation hint
+     */
+    static long hibernationHints(EntityManagerFactory entityManagerFactory) {
+        return entityManagerFactory.callInTransaction(entityManager -> entityManager.createQuery(
+                "SELECT COUNT(e) FROM WorkflowIndexEntry e WHERE e.hibernationWaits IS NOT NULL", Long.class
+        ).getSingleResult());
     }
 
     /**

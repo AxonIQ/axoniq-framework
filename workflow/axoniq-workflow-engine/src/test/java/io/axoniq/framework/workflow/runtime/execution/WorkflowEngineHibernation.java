@@ -9,6 +9,7 @@ package io.axoniq.framework.workflow.runtime.execution;
 
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
+import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 
 import java.time.Duration;
 import java.util.Objects;
@@ -43,6 +44,20 @@ public final class WorkflowEngineHibernation {
      */
     public static boolean isHibernated(WorkflowEngine engine, String workflowId) {
         return engine.hibernatedWorkflowIds().contains(workflowId);
+    }
+
+    /**
+     * Returns whether the current claim of the given segment in the given engine caught up with the startup head, so
+     * the bodies of its workflows may run.
+     *
+     * @param engine  the engine to inspect
+     * @param segment the segment whose claim to inspect
+     * @return {@code true} when the engine holds a current claim of the segment that caught up
+     */
+    public static boolean isCaughtUp(WorkflowEngine engine, Segment segment) {
+        return engine.catchUpSupport.claimOf(segment)
+                                    .map(claim -> !engine.catchUpSupport.isWaiting(claim))
+                                    .orElse(false);
     }
 
     /**
@@ -124,5 +139,18 @@ public final class WorkflowEngineHibernation {
      */
     public static void registerCancellationOf(WorkflowEngine engine, WorkflowExecution execution) {
         engine.registerCancellation(execution);
+    }
+
+    /**
+     * Requests a checkpoint of the given segment in the given engine at the given token, as the engine does when an
+     * event was handled or a workflow finished.
+     *
+     * @param engine  the engine holding the segment
+     * @param segment the segment to checkpoint
+     * @param token   the token to checkpoint at, where {@link TrackingToken#LATEST} stands for the last token the
+     *                processor handed to the segment
+     */
+    public static void requestCheckpoint(WorkflowEngine engine, Segment segment, TrackingToken token) {
+        engine.checkpointingSupport().requestCheckpoint(segment, token);
     }
 }

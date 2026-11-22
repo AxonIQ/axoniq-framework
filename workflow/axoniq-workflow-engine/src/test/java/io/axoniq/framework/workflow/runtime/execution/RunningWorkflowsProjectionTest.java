@@ -9,7 +9,10 @@ package io.axoniq.framework.workflow.runtime.execution;
 
 import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
 import io.axoniq.framework.workflow.index.api.WorkflowIndex;
+import io.axoniq.framework.workflow.index.api.WorkflowIndex.Entry;
+import io.axoniq.framework.workflow.index.api.WorkflowIndex.HibernationHint;
 import io.axoniq.framework.workflow.index.api.WorkflowIndex.IndexDelta;
+import io.axoniq.framework.workflow.index.api.WorkflowIndex.OpenWait;
 import io.axoniq.framework.workflow.runtime.execution.RunningWorkflowsClaimLoader.ClaimedIndex;
 import org.axonframework.messaging.core.EmptyApplicationContext;
 import org.axonframework.messaging.core.unitofwork.SimpleUnitOfWorkFactory;
@@ -21,6 +24,9 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 
 import java.time.Duration;
+import java.time.Instant;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
@@ -28,6 +34,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 
 import static io.axoniq.framework.workflow.runtime.execution.LifecycleEventFixtures.*;
 import static io.axoniq.framework.workflow.runtime.execution.SegmentTestFixtures.*;
@@ -60,7 +67,10 @@ class RunningWorkflowsProjectionTest {
     }
 
     private Set<String> stored(Segment segment) {
-        return await(workflowIndex.load(INDEX, segment)).orElseThrow();
+        return await(workflowIndex.load(INDEX, segment)).orElseThrow()
+                                                        .stream()
+                                                        .map(WorkflowIndex.Entry::workflowId)
+                                                        .collect(Collectors.toSet());
     }
 
     private static <T> T await(CompletableFuture<T> future) {
@@ -657,6 +667,252 @@ class RunningWorkflowsProjectionTest {
 
             // then
             assertThat(stored(Segment.ROOT_SEGMENT)).isEmpty();
+        }
+    }
+
+    @Nested
+    class HibernationHints {
+
+        private final Segment segment = Segment.ROOT_SEGMENT;
+        private final HibernationHint hint = new HibernationHint(
+                Instant.parse("2026-11-21T10:00:00Z"),
+                List.of(new OpenWait("awaitPayment", "com.acme.PaymentReceived", Set.of("payload:orderId=42")))
+        );
+
+        @BeforeEach
+        void setUp() {
+            workflowIndex.initialized(INDEX, "order-1").completeWritesImmediately();
+            claim(segment);
+        }
+
+        private Set<Entry> entries() {
+            return workflowIndex.durableEntries(INDEX, segment);
+        }
+
+        private static IndexDelta hinted(String workflowId, HibernationHint hint) {
+            var running = new HashMap<String, HibernationHint>();
+            running.put(workflowId, hint);
+            return new IndexDelta(running, Set.of());
+        }
+
+        /**
+         * Takes a checkpoint whose write may join the transaction of its context, as the processor's checkpoints do.
+         */
+        private void checkpointWithinAContext() {
+            var checkpoint = unitOfWork();
+            checkpoint.onPrepareCommit(context -> projection.flushForCheckpoint(segment, context));
+            await(checkpoint.execute());
+        }
+
+        @Test
+        void writesAHintWithACheckpointWhoseWriteJoinsItsContext() {
+            // when
+            projection.recordHibernated(segment, "order-1", hint);
+            checkpointWithinAContext();
+
+            // then
+            assertThat(workflowIndex.issuedWrites()).singleElement().satisfies(write -> {
+                assertThat(write.context()).isNotNull();
+                assertThat(write.delta()).isEqualTo(hinted("order-1", hint));
+            });
+            assertThat(entries()).containsExactly(new Entry("order-1", hint));
+        }
+
+        @Test
+        void keepsAHintPendingWhenTheWriteCannotJoinTheContextAndWritesItOnceAWriteJoins() {
+            // given
+            workflowIndex.refuseToJoin(true);
+            projection.recordHibernated(segment, "order-1", hint);
+            projection.apply(segment, lifecycleEvent("order-2", WorkflowStatus.STARTED));
+
+            // when - the index writes in a transaction of its own
+            checkpointWithinAContext();
+
+            // then - the workflow is written as running, without its hint
+            assertThat(workflowIndex.issuedWrites()).singleElement().satisfies(write -> {
+                assertThat(write.context()).isNull();
+                assertThat(write.delta()).isEqualTo(new IndexDelta(Set.of("order-1", "order-2"), Set.of()));
+            });
+            assertThat(entries()).containsExactlyInAnyOrder(Entry.running("order-1"), Entry.running("order-2"));
+
+            // when - later checkpoints of their own have nothing to write
+            checkpointWithinAContext();
+            await(projection.flushForCheckpoint(segment, null));
+
+            // then
+            assertThat(workflowIndex.issuedWrites()).hasSize(1);
+
+            // when - a later write joins
+            workflowIndex.refuseToJoin(false);
+            checkpointWithinAContext();
+
+            // then - the pending hint is written
+            assertThat(workflowIndex.issuedWrites()).hasSize(2).last().satisfies(
+                    write -> assertThat(write.delta()).isEqualTo(hinted("order-1", hint))
+            );
+            assertThat(entries()).contains(new Entry("order-1", hint));
+        }
+
+        @Test
+        void neverWritesAHintWithoutAContext() {
+            // given
+            projection.recordHibernated(segment, "order-1", hint);
+
+            // when
+            await(projection.flushForCheckpoint(segment, null));
+
+            // then
+            assertThat(workflowIndex.issuedWrites()).singleElement().satisfies(
+                    write -> assertThat(write.delta()).isEqualTo(new IndexDelta(Set.of("order-1"), Set.of()))
+            );
+            assertThat(entries()).containsExactly(Entry.running("order-1"));
+        }
+
+        @Test
+        void releaseWritesTheWorkflowWithoutItsHint() {
+            // given
+            projection.recordHibernated(segment, "order-1", hint);
+
+            // when
+            await(projection.flushForRelease(segment));
+
+            // then - a release writes in a transaction of the index's own, which could land late
+            assertThat(workflowIndex.issuedWrites()).singleElement().satisfies(write -> {
+                assertThat(write.context()).isNull();
+                assertThat(write.delta()).isEqualTo(new IndexDelta(Set.of("order-1"), Set.of()));
+            });
+            assertThat(entries()).containsExactly(Entry.running("order-1"));
+        }
+
+        @Test
+        void keepsAHintPendingWhenTheContextOfItsWriteRollsBack() {
+            // given
+            projection.recordHibernated(segment, "order-1", hint);
+            var failing = unitOfWork();
+            failing.onPrepareCommit(context -> projection.flushForCheckpoint(segment, context));
+            failing.runOnCommit(context -> {
+                throw new IllegalStateException("commit failed");
+            });
+            assertThat(failing.execute()).failsWithin(TIMEOUT);
+
+            // when
+            checkpointWithinAContext();
+
+            // then - the hint is written again
+            assertThat(workflowIndex.issuedWrites()).hasSize(2).allSatisfy(
+                    write -> assertThat(write.delta()).isEqualTo(hinted("order-1", hint))
+            );
+        }
+
+        @Test
+        void clearsTheHintOfAWorkflowThatWoke() {
+            // given
+            projection.recordHibernated(segment, "order-1", hint);
+            checkpointWithinAContext();
+
+            // when
+            projection.recordWoken(segment, "order-1");
+            await(projection.flushForCheckpoint(segment, null));
+
+            // then
+            assertThat(workflowIndex.issuedWrites()).last().satisfies(
+                    write -> assertThat(write.delta()).isEqualTo(new IndexDelta(Set.of("order-1"), Set.of()))
+            );
+            assertThat(entries()).containsExactly(Entry.running("order-1"));
+        }
+
+        @Test
+        void aWakeBeforeTheHintWasWrittenReplacesThePendingHint() {
+            // given
+            projection.recordHibernated(segment, "order-1", hint);
+
+            // when
+            projection.recordWoken(segment, "order-1");
+            checkpointWithinAContext();
+
+            // then
+            assertThat(workflowIndex.issuedWrites()).singleElement().satisfies(
+                    write -> assertThat(write.delta()).isEqualTo(new IndexDelta(Set.of("order-1"), Set.of()))
+            );
+        }
+
+        @Test
+        void writesNothingForAWakeOfAWorkflowWithoutAHint() {
+            // when
+            projection.recordWoken(segment, "order-1");
+            checkpointWithinAContext();
+
+            // then
+            assertThat(workflowIndex.issuedWrites()).isEmpty();
+        }
+
+        @Test
+        void anyEventOfAHintedWorkflowClearsItsHint() {
+            // given
+            projection.recordHibernated(segment, "order-1", hint);
+            checkpointWithinAContext();
+
+            // when - an event of the workflow that does not change whether it runs
+            projection.apply(segment, stepEvent("order-1"));
+            checkpointWithinAContext();
+
+            // then
+            assertThat(entries()).containsExactly(Entry.running("order-1"));
+        }
+
+        @Test
+        void anEventPublishedByAHintedWorkflowKeepsItsHint() {
+            // given
+            projection.recordHibernated(segment, "order-1", hint);
+            checkpointWithinAContext();
+
+            // when - a business event the workflow published, which carries its id
+            projection.apply(segment, publishedEvent("order-1", WorkflowStatus.STARTED));
+            checkpointWithinAContext();
+
+            // then
+            assertThat(workflowIndex.issuedWrites()).hasSize(1);
+            assertThat(entries()).containsExactly(new Entry("order-1", hint));
+        }
+
+        @Test
+        void anEventOfAWorkflowWhoseHintTheClaimAdoptedClearsTheHint() {
+            // given - a claim that left order-2 hibernated
+            workflowIndex.stored(INDEX, new Entry("order-2", hint));
+            projection.initialize(segment, new ClaimedIndex(Set.of(), Map.of("order-2", hint), Map.of()));
+
+            // when
+            projection.apply(segment, stepEvent("order-2"));
+            checkpointWithinAContext();
+
+            // then
+            assertThat(workflowIndex.issuedWrites()).singleElement().satisfies(
+                    write -> assertThat(write.delta()).isEqualTo(new IndexDelta(Set.of("order-2"), Set.of()))
+            );
+            assertThat(entries()).contains(Entry.running("order-2"));
+        }
+
+        @Test
+        void removesAWorkflowThatTurnedOutTerminalOnWake() {
+            // when
+            projection.recordRemoved(segment, "order-1");
+            await(projection.flushForCheckpoint(segment, null));
+
+            // then
+            assertThat(entries()).isEmpty();
+        }
+
+        @Test
+        void ignoresHintsOfASegmentThatIsNotTracked() {
+            // given
+            var untracked = FOUR_SEGMENTS.getFirst();
+
+            // when
+            projection.recordHibernated(untracked, anyIdOn(untracked), hint);
+            checkpointWithinAContext();
+
+            // then
+            assertThat(workflowIndex.issuedWrites()).isEmpty();
         }
     }
 }

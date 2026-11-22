@@ -325,6 +325,30 @@ public final class WorkflowLoadRunner implements AutoCloseable {
     }
 
     /**
+     * Returns the number of hibernation hints in the JPA workflow index: the hibernated workflows a claim of their
+     * segment leaves out of memory. The index only writes a hint within the transaction the processor stores its token
+     * in, so this shows that the index joins that transaction.
+     *
+     * @return the number of entries of the JPA workflow index with a hibernation hint, or {@code 0} when the runner
+     * keeps no JPA index
+     */
+    public long hibernationHintsInIndex() {
+        if (options.index() != LoadRunnerOptions.Index.JPA || entityManagerFactory == null) {
+            return 0;
+        }
+        return LoadRunnerSetup.hibernationHints(entityManagerFactory);
+    }
+
+    /**
+     * Describes the hibernation hints in the JPA workflow index for the progress line, when there can be any.
+     */
+    private String hintsInIndex() {
+        return options.hibernate() && options.index() == LoadRunnerOptions.Index.JPA
+                ? ", hibernation hints in index " + hibernationHintsInIndex()
+                : "";
+    }
+
+    /**
      * Returns the ids of the workflow executions in memory whose state matches the given query.
      */
     private Set<String> residentMatching(WorkflowStateQuery query) {
@@ -482,12 +506,12 @@ public final class WorkflowLoadRunner implements AutoCloseable {
             var processor = configuration.getComponents(StreamingEventProcessor.class).get(LoadRunnerSetup.MODULE);
             var status = processor.processingStatus().values();
             report.info("Progress: published {}, started {}, in progress {}, approvals {}, completed {}, failed {}"
-                                + " | processor: {} segments, {} caught up | {}, peak executions in memory {}"
+                                + " | processor: {} segments, {} caught up | {}, peak executions in memory {}{}"
                                 + " | approval -> completed: {}",
                         statistics.published(), statistics.startedThisRun(), inProgress(),
                         statistics.approvalsPublished(), statistics.completed(), statistics.failed(),
                         status.size(), status.stream().filter(EventTrackerStatus::isCaughtUp).count(),
-                        memory(), peakResident.get(), statistics.approvalLatencies());
+                        memory(), peakResident.get(), hintsInIndex(), statistics.approvalLatencies());
         } catch (RuntimeException e) {
             logger.warn("Reporting the progress failed", e);
         }

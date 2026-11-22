@@ -10,9 +10,11 @@ package io.axoniq.framework.workflow.index.inmemory;
 import io.axoniq.framework.workflow.index.api.WorkflowIndex;
 import org.axonframework.common.FutureUtils;
 import org.axonframework.common.annotation.Internal;
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
+import org.jspecify.annotations.Nullable;
 
-import java.util.HashSet;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -36,7 +38,10 @@ import static java.util.Objects.requireNonNull;
  * {@link WorkflowIndex#none() no index} at all, which is the default. A restart is safe: the index starts out not
  * initialized again.
  * <p>
- * Operations complete immediately, and a load never observes a write half applied.
+ * Operations complete immediately, and a load never observes a write half applied. As a write takes effect at once
+ * and only on this node, it can never land after a later claim of its segment, so every write
+ * {@link #storeWithin(String, IndexDelta, ProcessingContext) within a checkpoint} counts as joined, and stores the
+ * {@link HibernationHint hibernation hints} it sets.
  * <p>
  * To configure it, register it with the {@link io.axoniq.framework.workflow.configuration.WorkflowConfigurer}:
  * <pre>{@code
@@ -64,7 +69,7 @@ public class InMemoryWorkflowIndex implements WorkflowIndex {
     }
 
     @Override
-    public CompletableFuture<Optional<Set<String>>> load(String indexName, Segment segment) {
+    public CompletableFuture<Optional<Set<Entry>>> load(String indexName, Segment segment) {
         requireNonNull(segment, "The segment must not be null.");
         return CompletableFuture.completedFuture(index(indexName).load(segment));
     }
@@ -74,6 +79,20 @@ public class InMemoryWorkflowIndex implements WorkflowIndex {
         requireNonNull(delta, "The delta must not be null.");
         index(indexName).store(delta);
         return FutureUtils.emptyCompletedFuture();
+    }
+
+    /**
+     * {@inheritDoc}
+     * <p>
+     * Always writes the delta, as {@link #store(String, IndexDelta)} does: a write in memory takes effect at once, so
+     * it cannot land after a later claim of the segment.
+     */
+    @Override
+    public Optional<CompletableFuture<Void>> storeWithin(String indexName,
+                                                         IndexDelta delta,
+                                                         ProcessingContext context) {
+        requireNonNull(context, "The processing context must not be null.");
+        return Optional.of(store(indexName, delta));
     }
 
     @Override
@@ -94,25 +113,28 @@ public class InMemoryWorkflowIndex implements WorkflowIndex {
      */
     private static final class Index {
 
-        private final Set<String> runningWorkflowIds = new HashSet<>();
+        // The running workflow ids, with their hint, or null for none.
+        private final Map<String, @Nullable HibernationHint> entries = new HashMap<>();
         private boolean initialized;
 
-        synchronized Optional<Set<String>> load(Segment segment) {
+        synchronized Optional<Set<Entry>> load(Segment segment) {
             if (!initialized) {
                 return Optional.empty();
             }
-            return Optional.of(runningWorkflowIds.stream()
-                                                 .filter(segment::matches)
-                                                 .collect(Collectors.toUnmodifiableSet()));
+            return Optional.of(entries.entrySet()
+                                      .stream()
+                                      .filter(entry -> segment.matches(entry.getKey()))
+                                      .map(entry -> new Entry(entry.getKey(), entry.getValue()))
+                                      .collect(Collectors.toUnmodifiableSet()));
         }
 
         synchronized void store(IndexDelta delta) {
-            runningWorkflowIds.removeAll(delta.removed());
-            runningWorkflowIds.addAll(delta.added());
+            delta.removed().forEach(entries::remove);
+            entries.putAll(delta.running());
         }
 
         synchronized void initialize(Set<String> ids) {
-            runningWorkflowIds.addAll(ids);
+            ids.forEach(id -> entries.put(id, null));
             initialized = true;
         }
     }

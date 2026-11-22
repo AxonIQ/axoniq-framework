@@ -9,6 +9,9 @@ package io.axoniq.framework.workflow.runtime.execution;
 
 import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
 import io.axoniq.framework.workflow.index.api.WorkflowIndex;
+import io.axoniq.framework.workflow.index.api.WorkflowIndex.Entry;
+import io.axoniq.framework.workflow.index.api.WorkflowIndex.HibernationHint;
+import io.axoniq.framework.workflow.index.api.WorkflowIndex.OpenWait;
 import io.axoniq.framework.workflow.runtime.execution.RunningWorkflowsClaimLoader.ClaimedIndex;
 import io.axoniq.framework.workflow.runtime.util.MetadataUtils;
 import org.axonframework.common.infra.ComponentDescriptor;
@@ -40,6 +43,7 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 
 import static io.axoniq.framework.workflow.runtime.execution.LifecycleEventFixtures.*;
 import static io.axoniq.framework.workflow.runtime.execution.SegmentTestFixtures.*;
@@ -63,7 +67,10 @@ class RunningWorkflowsClaimLoaderTest {
     );
 
     private Set<String> stored(Segment segment) {
-        return await(workflowIndex.load(INDEX, segment)).orElseThrow();
+        return await(workflowIndex.load(INDEX, segment)).orElseThrow()
+                                                        .stream()
+                                                        .map(WorkflowIndex.Entry::workflowId)
+                                                        .collect(Collectors.toSet());
     }
 
     private static <T> T await(CompletableFuture<T> future) {
@@ -368,6 +375,136 @@ class RunningWorkflowsClaimLoaderTest {
          * Appends the given event, initializes the index holding its instance, and returns the latest token of the
          * given event store, as the token a segment resumes from after handling the event.
          */
+        @Nested
+        class HibernationHints {
+
+            private final HibernationHint hint = new HibernationHint(
+                    Instant.parse("2026-11-21T10:00:00Z"),
+                    List.of(new OpenWait("awaitPayment", "com.acme.PaymentReceived", Set.of("payload:orderId=1")))
+            );
+
+            @Test
+            void leavesAWorkflowWithoutEventsAfterTheTokenHibernatedAndRestoresTheOthers() {
+                // given - order-1 hibernated, order-2 runs in memory, both before the token
+                append(storageEngine,
+                       lifecycleEvent("order-1", WorkflowStatus.STARTED),
+                       lifecycleEvent("order-2", WorkflowStatus.STARTED));
+                TrackingToken claimedFrom = await(eventStore.latestToken(context));
+                workflowIndex.initialized(INDEX, "order-2").stored(INDEX, new Entry("order-1", hint));
+                // and - events of other workflows after the token
+                append(storageEngine, lifecycleEvent("order-3", WorkflowStatus.STARTED), stepEvent("order-2"));
+
+                // when
+                var claimed = await(loader.load(Segment.ROOT_SEGMENT, claimedFrom, context, TIMEOUT));
+
+                // then - the hint is accepted and stays as it is stored
+                assertThat(claimed.hibernated()).containsOnly(Map.entry("order-1", hint));
+                assertThat(claimed.runningWorkflowIds()).containsExactlyInAnyOrder("order-2", "order-3");
+                assertThat(claimed.changes()).containsOnly(Map.entry("order-3", true));
+            }
+
+            @Test
+            void restoresAndClearsTheHintOfAWorkflowWithAnyEventOfItsOwnAfterTheToken() {
+                // given
+                var claimedFrom = hibernatedBeforeTheToken("order-1");
+                // and - a step event of order-1, which does not change whether it runs
+                append(storageEngine, stepEvent("order-1"));
+
+                // when
+                var claimed = await(loader.load(Segment.ROOT_SEGMENT, claimedFrom, context, TIMEOUT));
+
+                // then
+                assertThat(claimed.hibernated()).isEmpty();
+                assertThat(claimed.runningWorkflowIds()).containsExactly("order-1");
+                assertThat(claimed.changes()).containsOnly(Map.entry("order-1", true));
+            }
+
+            @Test
+            void keepsTheHintOfAWorkflowThatOnlyPublishedAnEventAfterTheToken() {
+                // given
+                var claimedFrom = hibernatedBeforeTheToken("order-1");
+                append(storageEngine, publishedEvent("order-1", WorkflowStatus.STARTED));
+
+                // when
+                var claimed = await(loader.load(Segment.ROOT_SEGMENT, claimedFrom, context, TIMEOUT));
+
+                // then - a published event is a business event, which the hibernated workflow did not handle yet
+                assertThat(claimed.hibernated()).containsOnly(Map.entry("order-1", hint));
+            }
+
+            @Test
+            void removesAHintedWorkflowThatEndedAfterTheToken() {
+                // given
+                var claimedFrom = hibernatedBeforeTheToken("order-1");
+                append(storageEngine, lifecycleEvent("order-1", WorkflowStatus.COMPLETED));
+
+                // when
+                var claimed = await(loader.load(Segment.ROOT_SEGMENT, claimedFrom, context, TIMEOUT));
+
+                // then
+                assertThat(claimed.hibernated()).isEmpty();
+                assertThat(claimed.runningWorkflowIds()).isEmpty();
+                assertThat(claimed.changes()).containsOnly(Map.entry("order-1", false));
+            }
+
+            @Test
+            void restoresAHintedEntryAheadOfTheToken() {
+                // given - the hint was written after the token was last stored, so its events follow the token
+                TrackingToken claimedFrom = await(eventStore.latestToken(context));
+                append(storageEngine, lifecycleEvent("order-1", WorkflowStatus.STARTED), stepEvent("order-1"));
+                workflowIndex.initialized(INDEX).stored(INDEX, new Entry("order-1", hint));
+
+                // when
+                var claimed = await(loader.load(Segment.ROOT_SEGMENT, claimedFrom, context, TIMEOUT));
+
+                // then - re-applying the tail converges: the workflow is restored, and its hint cleared
+                assertThat(claimed.hibernated()).isEmpty();
+                assertThat(claimed.runningWorkflowIds()).containsExactly("order-1");
+                assertThat(claimed.changes()).containsOnly(Map.entry("order-1", true));
+            }
+
+            @Test
+            void restoresAndClearsEveryHintWhenTheTailFails() {
+                // given
+                var failingStore = eventStore(new RemoteLikeStorageEngine(storageEngine, StreamBehaviour.FAILING));
+                var failingContext = StubProcessingContext.withComponent(EventStore.class, failingStore);
+                var claimedFrom = hibernatedBeforeTheToken("order-1");
+                append(storageEngine, lifecycleEvent("order-3", WorkflowStatus.STARTED));
+                workflowStore.running("order-1", "order-3");
+
+                // when
+                var claimed = await(loader.load(Segment.ROOT_SEGMENT, claimedFrom, failingContext, TIMEOUT));
+
+                // then
+                assertThat(workflowStore.runningWorkflowLoads()).isEqualTo(1);
+                assertThat(claimed.hibernated()).isEmpty();
+                assertThat(claimed.runningWorkflowIds()).containsExactlyInAnyOrder("order-1", "order-3");
+                assertThat(claimed.changes()).containsOnly(Map.entry("order-1", true), Map.entry("order-3", true));
+            }
+
+            @Test
+            void restoresAndClearsEveryHintWithoutATokenToStreamFrom() {
+                // given
+                hibernatedBeforeTheToken("order-1");
+                workflowStore.running("order-1");
+
+                // when
+                var claimed = await(loader.load(Segment.ROOT_SEGMENT, null, context, TIMEOUT));
+
+                // then
+                assertThat(claimed.hibernated()).isEmpty();
+                assertThat(claimed.runningWorkflowIds()).containsExactly("order-1");
+                assertThat(claimed.changes()).containsOnly(Map.entry("order-1", true));
+            }
+
+            private TrackingToken hibernatedBeforeTheToken(String workflowId) {
+                append(storageEngine, lifecycleEvent(workflowId, WorkflowStatus.STARTED));
+                TrackingToken claimedFrom = await(eventStore.latestToken(context));
+                workflowIndex.initialized(INDEX).stored(INDEX, new Entry(workflowId, hint));
+                return claimedFrom;
+            }
+        }
+
         private TrackingToken indexAfter(EventMessage started, EventStore tokenSource) {
             append(storageEngine, started);
             TrackingToken claimedFrom = await(tokenSource.latestToken(context));
@@ -395,6 +532,25 @@ class RunningWorkflowsClaimLoaderTest {
             // then
             assertThat(claimed.runningWorkflowIds()).containsExactlyInAnyOrder("order-1", LONG_ID);
             assertThat(claimed.changes()).isEmpty();
+        }
+    }
+
+    @Nested
+    class RestoringHibernated {
+
+        @Test
+        void restoresTheHibernatedWorkflowsAndClearsTheirHints() {
+            // given
+            var hint = new HibernationHint(Instant.parse("2026-11-21T10:00:00Z"), List.of());
+            var claimed = new ClaimedIndex(Set.of("order-1"), Map.of("order-2", hint), Map.of("order-3", false));
+
+            // when
+            var restoring = claimed.restoringHibernated();
+
+            // then
+            assertThat(restoring.hibernated()).isEmpty();
+            assertThat(restoring.runningWorkflowIds()).containsExactlyInAnyOrder("order-1", "order-2");
+            assertThat(restoring.changes()).containsOnly(Map.entry("order-2", true), Map.entry("order-3", false));
         }
     }
 
