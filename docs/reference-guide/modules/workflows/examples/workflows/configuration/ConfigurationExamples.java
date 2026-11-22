@@ -227,6 +227,13 @@ public class ConfigurationExamples {
         // end::snapshots[]
     }
 
+    public void disableSnapshots() {
+        // tag::disable-snapshots[]
+        WorkflowConfigurer.create()
+                          .snapshots(snapshots -> snapshots.enabled(false));
+        // end::disable-snapshots[]
+    }
+
     public void jpaWorkflowIndex(EntityManagerFactory entityManagerFactory) {
         // tag::jpa-workflow-index[]
         WorkflowConfigurer.create()

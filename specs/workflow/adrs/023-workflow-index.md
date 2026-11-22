@@ -46,6 +46,8 @@ A claim reads the index entries of its segment, then streams the event tail from
 lifecycle events (`RunningWorkflowsClaimLoader`). Entries plus tail are the running instances of the segment; each is
 restored in its own sourcing unit of work, as ADR-015 requires. Entries whose sourced state is terminal are removed.
 When the index is unavailable, not initialized, or the claim has no token, the claim falls back to `RunningWorkflows`.
+It falls back the same way when streaming the tail fails, or does not reach the head of the stream within the claim
+timeout: the claim then logs a warning and restores the running instances of the full list.
 The first claim of an uninitialized index initializes it from `RunningWorkflows`, once per index name.
 
 ### JPA index

@@ -7,6 +7,7 @@
  */
 package io.axoniq.framework.springboot;
 
+import org.jspecify.annotations.Nullable;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
@@ -307,30 +308,63 @@ public class WorkflowProperties {
     /**
      * The snapshot properties of the workflow engine.
      * <p>
-     * Snapshots are disabled by default. Enabling them requires a {@code SnapshotStore} bean.
+     * When {@code enabled} is not set, the state of each workflow instance is snapshotted whenever the application can
+     * take snapshots: it has a {@code SnapshotStore} bean, a {@code GeneralConverter}, and a
+     * {@code MessageTypeResolver} that resolves the type of the workflow state. The running-workflow list is then not
+     * snapshotted. Setting {@code enabled} to {@code true} snapshots both, and requires a {@code SnapshotStore} bean;
+     * setting it to {@code false} takes no snapshot at all.
      */
     public static class SnapshotProperties {
 
-        private boolean enabled = false;
+        @Nullable
+        private Boolean enabled;
         private final SnapshotPolicyProperties runningWorkflows = new SnapshotPolicyProperties();
         private final SnapshotPolicyProperties workflowState = new SnapshotPolicyProperties();
 
         /**
-         * Returns whether snapshots are taken.
+         * Returns whether snapshots are explicitly enabled or disabled.
          *
-         * @return whether snapshots are taken
+         * @return {@code true} when snapshots are enabled, {@code false} when they are disabled, or {@code null} when
+         * the state of each workflow instance is snapshotted whenever the application can take snapshots
          */
-        public boolean isEnabled() {
+        @Nullable
+        public Boolean getEnabled() {
             return enabled;
         }
 
         /**
-         * Sets whether snapshots are taken.
+         * Sets whether snapshots are explicitly enabled or disabled.
          *
-         * @param enabled whether snapshots are taken
+         * @param enabled {@code true} to enable snapshots, {@code false} to disable them, or {@code null} to snapshot
+         *                the state of each workflow instance whenever the application can take snapshots
+         */
+        public void setEnabled(@Nullable Boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        /**
+         * Sets whether snapshots are explicitly enabled or disabled, like {@link #setEnabled(Boolean)} does with the
+         * same value.
+         *
+         * @param enabled {@code true} to enable snapshots, {@code false} to disable them
          */
         public void setEnabled(boolean enabled) {
             this.enabled = enabled;
+        }
+
+        /**
+         * Returns whether snapshots are explicitly enabled.
+         * <p>
+         * Up to 5.4, snapshots were taken only when enabled, so this method told whether snapshots were taken. Since
+         * 5.5.0, a {@code false} result no longer means that no snapshot is taken: unless snapshots are explicitly
+         * disabled, the state of each workflow instance is snapshotted whenever the application can take snapshots.
+         *
+         * @return {@code true} when snapshots are explicitly enabled, {@code false} otherwise
+         * @deprecated use {@link #getEnabled()}, which also tells whether snapshots are explicitly disabled
+         */
+        @Deprecated(since = "5.5.0")
+        public boolean isEnabled() {
+            return Boolean.TRUE.equals(enabled);
         }
 
         /**

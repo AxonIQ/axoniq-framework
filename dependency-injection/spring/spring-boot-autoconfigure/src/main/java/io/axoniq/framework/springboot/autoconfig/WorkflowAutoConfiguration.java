@@ -9,12 +9,13 @@ package io.axoniq.framework.springboot.autoconfig;
 
 import io.axoniq.framework.springboot.WorkflowProperties;
 import io.axoniq.framework.springboot.workflow.WorkflowDefinitionLookup;
-import io.axoniq.framework.workflow.configuration.WorkflowConfigurationDefaults;
+import io.axoniq.framework.workflow.configuration.WorkflowSnapshotConfiguration;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowEngine;
 import org.axonframework.eventsourcing.snapshot.api.SnapshotPolicy;
 import org.springframework.beans.factory.config.BeanDefinition;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -44,26 +45,29 @@ public class WorkflowAutoConfiguration {
     }
 
     /**
-     * Provides the {@link SnapshotPolicy} of the running-workflow list when snapshots are enabled.
+     * Provides the {@link WorkflowSnapshotConfiguration} of the {@code axon.workflow.snapshots} properties, which
+     * decides whether, and how, the workflow engine snapshots its entities.
+     * <p>
+     * Unless {@code axon.workflow.snapshots.enabled} is set, the workflow engine snapshots the state of each workflow
+     * instance, with the {@code axon.workflow.snapshots.workflow-state} policy, whenever the application can take
+     * snapshots, such as when it has a {@code SnapshotStore} bean. Setting it to {@code true} also snapshots the
+     * running-workflow list, and requires a {@code SnapshotStore} bean. Setting it to {@code false} takes no snapshot
+     * at all. Only while it is not set, a {@code SnapshotPolicy} bean under one of the deprecated names of
+     * {@link io.axoniq.framework.workflow.configuration.WorkflowConfigurationDefaults} still snapshots its entity,
+     * with its own policy instead of the one of the {@code after-events} property of that entity. An application
+     * defining its own {@code WorkflowSnapshotConfiguration} bean replaces this one, and the properties with it.
      *
      * @param workflowProperties the {@link WorkflowProperties} holding the snapshot settings
-     * @return the {@link SnapshotPolicy} of the running-workflow list
+     * @return the {@link WorkflowSnapshotConfiguration} of the {@code axon.workflow.snapshots} properties
      */
-    @Bean(WorkflowConfigurationDefaults.RUNNING_WORKFLOWS_SNAPSHOT_POLICY)
-    @ConditionalOnProperty(prefix = "axon.workflow.snapshots", name = "enabled", havingValue = "true")
-    public SnapshotPolicy runningWorkflowsSnapshotPolicy(WorkflowProperties workflowProperties) {
-        return SnapshotPolicy.afterEvents(workflowProperties.getSnapshots().getRunningWorkflows().getAfterEvents());
-    }
-
-    /**
-     * Provides the {@link SnapshotPolicy} of the state of each workflow instance when snapshots are enabled.
-     *
-     * @param workflowProperties the {@link WorkflowProperties} holding the snapshot settings
-     * @return the {@link SnapshotPolicy} of the state of each workflow instance
-     */
-    @Bean(WorkflowConfigurationDefaults.WORKFLOW_STATE_SNAPSHOT_POLICY)
-    @ConditionalOnProperty(prefix = "axon.workflow.snapshots", name = "enabled", havingValue = "true")
-    public SnapshotPolicy workflowStateSnapshotPolicy(WorkflowProperties workflowProperties) {
-        return SnapshotPolicy.afterEvents(workflowProperties.getSnapshots().getWorkflowState().getAfterEvents());
+    @Bean
+    @ConditionalOnMissingBean
+    public WorkflowSnapshotConfiguration workflowSnapshotConfiguration(WorkflowProperties workflowProperties) {
+        var properties = workflowProperties.getSnapshots();
+        var snapshots = new WorkflowSnapshotConfiguration()
+                .runningWorkflows(SnapshotPolicy.afterEvents(properties.getRunningWorkflows().getAfterEvents()))
+                .workflowState(SnapshotPolicy.afterEvents(properties.getWorkflowState().getAfterEvents()));
+        var enabled = properties.getEnabled();
+        return enabled == null ? snapshots : snapshots.enabled(enabled);
     }
 }

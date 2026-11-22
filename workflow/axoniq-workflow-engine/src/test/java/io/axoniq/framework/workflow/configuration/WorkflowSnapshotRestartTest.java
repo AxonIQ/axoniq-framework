@@ -21,34 +21,46 @@ import io.axoniq.framework.workflow.dsl.api.retry.RetryPolicy;
 import io.axoniq.framework.workflow.runtime.execution.DefaultEventNameCustomizer;
 import io.axoniq.framework.workflow.runtime.execution.EventSourcedRunningWorkflows;
 import io.axoniq.framework.workflow.runtime.execution.EventSourcedWorkflowState;
+import io.axoniq.framework.workflow.runtime.execution.SimpleWorkflowExecution;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowEngine;
+import io.axoniq.framework.workflow.runtime.execution.WorkflowEventTags;
 import io.axoniq.framework.workflow.runtime.execution.payload.CombineGlobalAndLocalPayloadReducer;
 import io.axoniq.framework.workflow.runtime.execution.payload.GlobalOnlyPayloadReducer;
 import io.axoniq.framework.workflow.runtime.execution.payload.LocalOnlyPayloadReducer;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.core.Logger;
+import org.apache.logging.log4j.core.test.appender.ListAppender;
 import org.axonframework.common.FutureUtils;
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.conversion.Converter;
 import org.axonframework.conversion.jackson.JacksonConverter;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
 import org.axonframework.eventsourcing.eventstore.EventStore;
+import org.axonframework.eventsourcing.eventstore.SourcingCondition;
+import org.axonframework.eventsourcing.eventstore.TerminalEventMessage;
 import org.axonframework.eventsourcing.eventstore.inmemory.InMemoryEventStorageEngine;
 import org.axonframework.eventsourcing.snapshot.api.Snapshot;
 import org.axonframework.eventsourcing.snapshot.api.SnapshotPolicy;
 import org.axonframework.eventsourcing.snapshot.inmemory.InMemorySnapshotStore;
 import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
+import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.MessageTypeResolver;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
+import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.store.TokenStore;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.store.inmemory.InMemoryTokenStore;
+import org.axonframework.messaging.eventstreaming.EventCriteria;
+import org.axonframework.messaging.eventstreaming.Tag;
 import org.axonframework.modelling.repository.ManagedEntity;
 import org.axonframework.modelling.repository.Repository;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.*;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -60,6 +72,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.stream.IntStream;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
+import static java.util.Objects.requireNonNull;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
@@ -311,6 +325,151 @@ class WorkflowSnapshotRestartTest {
         }
     }
 
+    private enum Snapshots {
+        NONE, DEFAULT, ENABLED
+    }
+
+    @Nested
+    class DefaultSnapshots {
+
+        // Every step records a started and a completed event, so the state outgrows the default policy of 50 events.
+        private static final int STEPS = 30;
+
+        @Test
+        void workflowContinuesFromItsDefaultSnapshotAfterRestart() {
+            // given - a workflow that ran all its steps and now waits for an event, with only a snapshot store
+            var first = start(workflowWithSteps(STEPS), Snapshots.DEFAULT);
+            var workflowId = startWorkflows(first, 1).getFirst();
+            awaitParked(first, List.of(workflowId));
+            stop(first);
+            // The restore sources more events than the default policy allows, so it stores a snapshot.
+            var second = start(workflowWithSteps(STEPS), Snapshots.DEFAULT);
+            await().atMost(30, TimeUnit.SECONDS).until(() -> engine(second).workflowExecutions().size() == 1);
+            assertThat(snapshotOf(second, EventSourcedWorkflowState.class, workflowId)).isNotNull();
+            stop(second);
+
+            // when - the state continues from that snapshot
+            var restarted = start(workflowWithSteps(STEPS), Snapshots.DEFAULT);
+            await().atMost(30, TimeUnit.SECONDS).until(() -> engine(restarted).workflowExecutions().size() == 1);
+            var replaying = build(workflowWithSteps(STEPS), Snapshots.NONE);
+
+            // then - the state equals the state replayed from every event
+            assertThat(describe(durableState(restarted, workflowId)))
+                    .isEqualTo(describe(durableState(replaying, workflowId)));
+
+            // and - the workflow completes, and no step ran a second time
+            publish(restarted, "paid");
+            await().atMost(30, TimeUnit.SECONDS)
+                   .ignoreExceptions()
+                   .until(() -> durableState(restarted, workflowId).workflowStatus() == WorkflowStatus.COMPLETED);
+            assertThat(stepExecutions).hasSize(STEPS + 1);
+            assertThat(stepExecutions.values()).allSatisfy(executions -> assertThat(executions).hasValue(1));
+            // The running-workflow list stays opt-in, so it is never snapshotted by default.
+            assertThat(snapshotOf(restarted, EventSourcedRunningWorkflows.class,
+                                  EventSourcedRunningWorkflows.ENTITY_ID)).isNull();
+        }
+    }
+
+    @Nested
+    class ConcurrentWriter {
+
+        // Every step records a started and a completed event, so the state outgrows the default policy of 50 events.
+        private static final int STEPS = 30;
+
+        /**
+         * Every node claims segments through a token store of its own, so every node runs every instance, as a node
+         * does after it lost a segment claim without noticing. Only the event store can tell the writers apart.
+         */
+        @Test
+        void nodeContinuingFromASnapshotIsRejectedAfterAStaleNodeRecordedTheSameFacts() {
+            // given - a stale node that runs a workflow up to its wait
+            var stale = start(workflowWithSteps(STEPS), Snapshots.DEFAULT, new InMemoryTokenStore());
+            var workflowId = startWorkflows(stale, 1).getFirst();
+            awaitParked(stale, List.of(workflowId));
+            // and - a node whose restore sources every event, and stores a snapshot of the state
+            var snapshotting = start(workflowWithSteps(STEPS), Snapshots.DEFAULT, new InMemoryTokenStore());
+            await().atMost(30, TimeUnit.SECONDS)
+                   .until(() -> snapshotOf(snapshotting, EventSourcedWorkflowState.class, workflowId) != null);
+            stop(snapshotting);
+            // and - that snapshot replaced by one holding a value that no event of the workflow leads to
+            alterSnapshotOfState(stale, workflowId, "\"step-0\":\"done\"", "\"step-0\":\"from-snapshot\"");
+            // and - a node whose restore continues from that snapshot, and that lags behind the event store
+            var restored = start(workflowWithSteps(STEPS), Snapshots.DEFAULT, new InMemoryTokenStore());
+            await().atMost(30, TimeUnit.SECONDS).until(() -> engine(restored).workflowExecutions().size() == 1);
+            assertThat(engine(stale).workflowExecutions()).hasSize(1);
+            // The value only the snapshot holds shows the restored node continued from the snapshot.
+            assertThat(engine(restored).workflowExecutions().iterator().next().state().payload())
+                    .containsEntry("step-0", "from-snapshot");
+            configurations.get(restored).pauseStreams();
+            // and - the stale node completed the workflow, while the restored node still runs it
+            publish(stale, "paid");
+            await().atMost(30, TimeUnit.SECONDS)
+                   .ignoreExceptions()
+                   .until(() -> durableState(stale, workflowId).workflowStatus() == WorkflowStatus.COMPLETED);
+            await().atMost(10, TimeUnit.SECONDS).until(() -> engine(stale).workflowExecutions().isEmpty());
+            assertThat(engine(restored).workflowExecutions()).hasSize(1);
+            var rejections = new ListAppender("ConcurrentWriterRejections");
+            var executionLogger = (Logger) LogManager.getLogger(SimpleWorkflowExecution.class);
+            rejections.start();
+            executionLogger.addAppender(rejections);
+            try {
+                // when - the restored node continues the workflow
+                configurations.get(restored).resumeStreams();
+
+                // then - its append is rejected, and it stops running the workflow
+                await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> assertThat(rejections.getEvents()).anySatisfy(
+                        event -> assertThat(event.getMessage().getFormattedMessage())
+                                .contains("for workflow '" + workflowId + "' was rejected")
+                ));
+                await().atMost(10, TimeUnit.SECONDS).until(() -> engine(restored).workflowExecutions().isEmpty());
+            } finally {
+                executionLogger.removeAppender(rejections);
+                rejections.stop();
+            }
+            // Every fact of the workflow is recorded once, and every step action ran once.
+            assertThat(durableState(restored, workflowId).workflowStatus()).isEqualTo(WorkflowStatus.COMPLETED);
+            assertThat(eventsOf(workflowId))
+                    .extracting(event -> event.type().qualifiedName().toString())
+                    .doesNotHaveDuplicates();
+            assertThat(stepExecutions).hasSize(STEPS + 1);
+            assertThat(stepExecutions.values()).allSatisfy(executions -> assertThat(executions).hasValue(1));
+        }
+
+        private void alterSnapshotOfState(AxonConfiguration configuration,
+                                          String workflowId,
+                                          String original,
+                                          String replacement) {
+            var snapshot = requireNonNull(snapshotOf(configuration, EventSourcedWorkflowState.class, workflowId));
+            var json = new String(requireNonNull(converter.convert(snapshot.payload(), byte[].class)), UTF_8);
+            assertThat(json).contains(original);
+            var alteredState = requireNonNull(converter.convert(
+                    json.replace(original, replacement).getBytes(UTF_8), EventSourcedWorkflowState.class
+            ));
+            var snapshotName = configuration.getComponent(MessageTypeResolver.class)
+                                            .resolveOrThrow(EventSourcedWorkflowState.class)
+                                            .qualifiedName();
+            FutureUtils.joinAndUnwrap(
+                    snapshotStore.store(snapshotName, workflowId, snapshot.payload(alteredState), null)
+            );
+        }
+
+        private List<EventMessage> eventsOf(String workflowId) {
+            MessageStream<EventMessage> stream = storageEngine.source(SourcingCondition.conditionFor(
+                    EventCriteria.havingTags(Tag.of(WorkflowEventTags.TAG_WORKFLOW_ID, workflowId))
+            ));
+            try {
+                return stream.reduce(new ArrayList<EventMessage>(), (events, entry) -> {
+                    if (!(entry.message() instanceof TerminalEventMessage)) {
+                        events.add(entry.message());
+                    }
+                    return events;
+                }).orTimeout(5, TimeUnit.SECONDS).join();
+            } finally {
+                stream.close();
+            }
+        }
+    }
+
     private Consumer<TestContext> workflowWithSteps(int steps) {
         return ctx -> {
             for (int step = 0; step < steps; step++) {
@@ -340,12 +499,28 @@ class WorkflowSnapshotRestartTest {
     }
 
     private AxonConfiguration start(Consumer<TestContext> body, boolean snapshots) {
-        var configuration = build(body, snapshots);
+        return start(body, snapshots ? Snapshots.ENABLED : Snapshots.NONE);
+    }
+
+    private AxonConfiguration start(Consumer<TestContext> body, Snapshots snapshots) {
+        return start(body, snapshots, tokenStore);
+    }
+
+    private AxonConfiguration start(Consumer<TestContext> body, Snapshots snapshots, TokenStore nodeTokenStore) {
+        var configuration = build(body, snapshots, nodeTokenStore);
         configuration.start();
         return configuration;
     }
 
     private AxonConfiguration build(Consumer<TestContext> body, boolean snapshots) {
+        return build(body, snapshots ? Snapshots.ENABLED : Snapshots.NONE);
+    }
+
+    private AxonConfiguration build(Consumer<TestContext> body, Snapshots snapshots) {
+        return build(body, snapshots, tokenStore);
+    }
+
+    private AxonConfiguration build(Consumer<TestContext> body, Snapshots snapshots, TokenStore nodeTokenStore) {
         var module = WorkflowModule.configure(MODULE, TestContext.class)
                                    .definition(d -> d
                                            .declarative(c -> body::accept)
@@ -359,13 +534,21 @@ class WorkflowSnapshotRestartTest {
         var configurer = WorkflowConfigurer.create();
         configurer.componentRegistry(cr -> cr
                 .registerComponent(EventStorageEngine.class, cfg -> nodeStorageEngine)
-                .registerComponent(TokenStore.class, cfg -> tokenStore)
+                .registerComponent(TokenStore.class, cfg -> nodeTokenStore)
                 .registerModule(module));
-        if (snapshots) {
-            configurer.componentRegistry(cr -> cr.registerComponent(SnapshotStore.class, cfg -> snapshotStore))
-                      .snapshots(s -> s.enabled(true)
-                                       .runningWorkflows(SnapshotPolicy.afterEvents(10))
-                                       .workflowState(SnapshotPolicy.afterEvents(2)));
+        switch (snapshots) {
+            case NONE -> {
+            }
+            // Only a snapshot store: the state of each workflow instance is snapshotted by default.
+            case DEFAULT -> configurer.componentRegistry(
+                    cr -> cr.registerComponent(SnapshotStore.class, cfg -> snapshotStore)
+            );
+            case ENABLED -> configurer.componentRegistry(
+                                              cr -> cr.registerComponent(SnapshotStore.class, cfg -> snapshotStore)
+                                      )
+                                      .snapshots(s -> s.enabled(true)
+                                                       .runningWorkflows(SnapshotPolicy.afterEvents(10))
+                                                       .workflowState(SnapshotPolicy.afterEvents(2)));
         }
         var configuration = configurer.build();
         configurations.put(configuration, nodeStorageEngine);

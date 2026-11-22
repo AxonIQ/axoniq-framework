@@ -248,25 +248,64 @@ A node that lost its claim without noticing has its append rejected, logs a warn
 
 The engine sources two event-sourced entities: the list of running workflows and the state of each workflow instance.
 Without snapshots, a node that takes over replays the full event history of both.
-Snapshots are off by default.
-Enable them on the `WorkflowConfigurer`:
+
+The state of each workflow instance is snapshotted by default, after 50 sourced events, when the application can take snapshots.
+That requires three components:
+
+* A `SnapshotStore`. Axon Server and PostgreSQL each register one.
+* A `GeneralConverter`, which every Axon Framework configuration registers by default.
+* A `MessageTypeResolver` that resolves the type of the workflow state, `EventSourcedWorkflowState`.
+The default resolver does; a resolver that only knows the types you map, such as a `NamespaceMessageTypeResolver` without a fallback, does not.
+
+When one of them is missing, the engine sources the state without snapshots and the application starts as usual.
+This check does not verify that the converter can round-trip the workflow state.
+If it cannot, Axon Framework logs a warning when it loads such a snapshot, and falls back to replaying the full event history.
+The list of running workflows is only snapshotted when you enable snapshots.
+
+Configure snapshots on the `WorkflowConfigurer`:
 
 [source,java]
 ----
 include::example$workflows/configuration/ConfigurationExamples.java[tag=snapshots,indent=0]
 ----
-<.> The policy for the list of running workflows. There is one list, so there is one snapshot of it.
+<.> Enabling snapshots also snapshots the list of running workflows, with this policy. There is one list, so there is one snapshot of it.
 <.> The policy for the workflow state. Each workflow instance has a snapshot of its own, stored under its workflow id.
 
 Both policies default to a snapshot after 50 sourced events.
-The setting applies to every `WorkflowModule` of the application, because all modules share both entities.
-The history projector does not source these entities, so snapshots do not affect it.
+Without `enabled(true)`, the workflow-state policy still applies to the default snapshots.
+An application that enables snapshots but cannot take them fails to start.
+Each call to `snapshots` starts from the defaults and replaces the settings of an earlier call.
 
-Snapshots need a `SnapshotStore` component.
-Axon Server and PostgreSQL each register one.
-An application that enables snapshots without a `SnapshotStore` fails to start.
-A snapshot is taken while an entity is sourced, so the first restore after enabling snapshots still replays the full history.
+To take no snapshot at all, disable snapshots:
+
+[source,java]
+----
+include::example$workflows/configuration/ConfigurationExamples.java[tag=disable-snapshots,indent=0]
+----
+
+The `snapshots` method registers a `WorkflowSnapshotConfiguration` component, and that component decides whether, and how, both entities are snapshotted.
+You can also register a `WorkflowSnapshotConfiguration` component, or bean, of your own.
+The setting applies to every `WorkflowModule` of the application, because all modules share both entities.
+Failing to store a snapshot never fails the restore of an entity: Axon Framework logs a warning and continues without that snapshot.
+The history projector does not source these entities, so snapshots do not affect it.
+A snapshot is taken while an entity is sourced, so the first restore after snapshots are turned on still replays the full history.
 See xref:snapshotting:index.adoc[Snapshotting] for snapshot policies and snapshot stores.
+
+Before 5.5.0, snapshots were enabled by registering a `SnapshotPolicy` component under the name `WorkflowConfigurationDefaults.WORKFLOW_STATE_SNAPSHOT_POLICY` or `WorkflowConfigurationDefaults.RUNNING_WORKFLOWS_SNAPSHOT_POLICY`.
+These names are deprecated.
+As long as `enabled` is not set, a policy registered under either name still snapshots its entity, the workflow state or the list of running workflows, and the application logs a warning that points to `WorkflowConfigurer#snapshots`.
+Such a policy takes precedence over the policy of that entity configured through `WorkflowConfigurer#snapshots` or the `axon.workflow.snapshots.*.after-events` properties.
+As before 5.5.0, such a policy requires the application to be able to take snapshots, or the application fails to start.
+Once you set `enabled`, to `true` or `false`, these components are ignored, and a warning says so.
+
+When upgrading from 5.4.2, check two cases:
+
+* An application that disabled snapshots, with `enabled(false)` or `axon.workflow.snapshots.enabled=false`, but registered a policy under one of these names, was snapshotted with that policy in 5.4.2.
+It no longer is: `enabled(false)` now takes no snapshot.
+Remove the `enabled(false)` setting to keep the snapshots of the named policy, or better, configure them through `WorkflowConfigurer#snapshots`.
+* A Spring Boot application that set `axon.workflow.snapshots.enabled=true` and replaced the auto-configured policy bean under one of these names with a bean of its own was snapshotted with its own policy in 5.4.2.
+Now `enabled=true` ignores that bean and uses the `axon.workflow.snapshots.*.after-events` properties instead.
+Set those properties, or define a `WorkflowSnapshotConfiguration` bean, to keep the policy of your bean.
 
 [[workflow-index]]
 === Workflow index
@@ -443,8 +482,8 @@ The history processor uses the same properties under `axon.workflow.history.*`.
 |Property |Default |Description
 
 |`enabled`
-|`false`
-|Whether snapshots are taken.
+|not set
+|`true` snapshots the list of running workflows and the state of each workflow instance, and fails the start without a `SnapshotStore`. `false` takes no snapshot. When not set, the state of each workflow instance is snapshotted if the application can take snapshots, see <<snapshots,Snapshots>>. A `WorkflowSnapshotConfiguration` bean of your own replaces all `axon.workflow.snapshots.*` properties.
 
 |`running-workflows.after-events`
 |`50`

@@ -8,20 +8,39 @@
 package io.axoniq.framework.workflow.configuration;
 
 import org.axonframework.eventsourcing.snapshot.api.SnapshotPolicy;
+import org.jspecify.annotations.Nullable;
 
 import static java.util.Objects.requireNonNull;
 
 /**
- * The snapshot settings of the workflow engine, customized through {@link WorkflowConfigurer#snapshots}.
+ * The snapshot settings of the workflow engine, customized through {@link WorkflowConfigurer#snapshots}, or registered
+ * as a {@code WorkflowSnapshotConfiguration} component, such as the one Spring Boot creates from the
+ * {@code axon.workflow.snapshots} properties. This component decides whether, and how, the engine snapshots its
+ * entities.
  * <p>
- * Snapshots are disabled by default. Once {@link #enabled(boolean) enabled}, the engine snapshots:
+ * The engine sources two event-sourced entities, and can snapshot both:
  * <ul>
  *     <li>The running-workflow list, as its {@link #runningWorkflows(SnapshotPolicy) snapshot policy} dictates. There
  *     is one list, so there is one snapshot of it.</li>
  *     <li>The state of each workflow instance, as its {@link #workflowState(SnapshotPolicy) snapshot policy} dictates.
  *     Every workflow instance has a snapshot of its own.</li>
  * </ul>
- * A restarting node then sources either from its latest snapshot instead of from every event ever published.
+ * A restarting node, or a node claiming a segment, then sources either from its latest snapshot instead of from every
+ * event ever published.
+ * <p>
+ * Whether snapshots are taken depends on {@link #enabled(boolean)}:
+ * <ul>
+ *     <li>Not set (the default): the state of each workflow instance is snapshotted when the application can take
+ *     snapshots, that is, when it has a {@link org.axonframework.eventsourcing.snapshot.store.SnapshotStore}
+ *     component, a {@link org.axonframework.conversion.GeneralConverter} component, and a
+ *     {@link org.axonframework.messaging.core.MessageTypeResolver} that resolves the type of the workflow state.
+ *     Otherwise no snapshot is taken, and the application starts as usual. The running-workflow list is not
+ *     snapshotted. A {@link SnapshotPolicy} component registered under one of the deprecated names of
+ *     {@link WorkflowConfigurationDefaults} still snapshots its entity with that policy, as it did before 5.5.0, and
+ *     logs a warning.</li>
+ *     <li>{@code true}: both entities are snapshotted. An application that cannot take snapshots fails to start.</li>
+ *     <li>{@code false}: no snapshot is taken.</li>
+ * </ul>
  * <p>
  * Example usage:
  * <pre>{@code
@@ -36,12 +55,14 @@ import static java.util.Objects.requireNonNull;
  */
 public class WorkflowSnapshotConfiguration {
 
-    private boolean enabled = false;
+    @Nullable
+    private Boolean enabled;
     private SnapshotPolicy runningWorkflows = SnapshotPolicy.afterEvents(50);
     private SnapshotPolicy workflowState = SnapshotPolicy.afterEvents(50);
 
     /**
-     * Enables or disables snapshots. Defaults to {@code false}.
+     * Enables or disables snapshots. When not set, the state of each workflow instance is snapshotted whenever the
+     * application can take snapshots, and the running-workflow list is not snapshotted.
      *
      * @param enabled whether snapshots are taken
      * @return this configuration, for a fluent API
@@ -76,12 +97,27 @@ public class WorkflowSnapshotConfiguration {
     }
 
     /**
-     * Returns whether snapshots are taken.
+     * Returns whether snapshots are explicitly enabled through {@link #enabled(boolean)}.
+     * <p>
+     * Up to 5.4, snapshots were taken only when enabled, so this method told whether snapshots were taken. Since
+     * 5.5.0, a {@code false} result no longer means that no snapshot is taken: unless snapshots are
+     * {@link #disabled() disabled}, the state of each workflow instance is snapshotted whenever the application can
+     * take snapshots.
      *
-     * @return {@code true} if snapshots are taken, {@code false} otherwise
+     * @return {@code true} if snapshots are explicitly enabled, {@code false} otherwise
      */
     public boolean enabled() {
-        return enabled;
+        return Boolean.TRUE.equals(enabled);
+    }
+
+    /**
+     * Returns whether snapshots are explicitly disabled through {@link #enabled(boolean)}.
+     *
+     * @return {@code true} if snapshots are explicitly disabled, {@code false} otherwise
+     * @since 5.5.0
+     */
+    public boolean disabled() {
+        return Boolean.FALSE.equals(enabled);
     }
 
     /**

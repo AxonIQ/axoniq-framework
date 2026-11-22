@@ -22,13 +22,18 @@ import org.axonframework.messaging.eventstreaming.StreamingCondition;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * The event store as one configuration sees it: the shared store, which stops notifying that configuration once it
  * stopped, the way a connection to a durable event store ends with its process. The in-memory store itself keeps
  * notifying every stream it ever opened, so a later append would call into the stopped event processor and fail.
+ * <p>
+ * The streams of a running configuration can also be paused, so the configuration sees no event appended after the
+ * pause until they are resumed, the way a slow node lags behind the event store.
  *
  * @author Stefan Dragisic
  */
@@ -36,6 +41,8 @@ final class DisconnectableStorageEngine implements EventStorageEngine {
 
     private final EventStorageEngine delegate;
     private final AtomicBoolean connected = new AtomicBoolean(true);
+    private final AtomicBoolean paused = new AtomicBoolean(false);
+    private final Set<Runnable> callbacks = ConcurrentHashMap.newKeySet();
 
     DisconnectableStorageEngine(EventStorageEngine delegate) {
         this.delegate = delegate;
@@ -43,6 +50,21 @@ final class DisconnectableStorageEngine implements EventStorageEngine {
 
     void disconnect() {
         connected.set(false);
+    }
+
+    /**
+     * Stops delivering events on every stream of this configuration, until {@link #resumeStreams()}.
+     */
+    void pauseStreams() {
+        paused.set(true);
+    }
+
+    /**
+     * Delivers the events on every stream of this configuration again, starting with those appended while paused.
+     */
+    void resumeStreams() {
+        paused.set(false);
+        callbacks.forEach(Runnable::run);
     }
 
     @Override
@@ -62,21 +84,28 @@ final class DisconnectableStorageEngine implements EventStorageEngine {
         return new DelegatingMessageStream<EventMessage, EventMessage>(delegate.stream(condition)) {
             @Override
             public Optional<Entry<EventMessage>> next() {
-                return delegate().next();
+                return paused.get() ? Optional.empty() : delegate().next();
             }
 
             @Override
             public Optional<Entry<EventMessage>> peek() {
-                return delegate().peek();
+                return paused.get() ? Optional.empty() : delegate().peek();
+            }
+
+            @Override
+            public boolean hasNextAvailable() {
+                return !paused.get() && delegate().hasNextAvailable();
             }
 
             @Override
             public void setCallback(Runnable callback) {
-                super.setCallback(() -> {
-                    if (connected.get()) {
+                Runnable connectedCallback = () -> {
+                    if (connected.get() && !paused.get()) {
                         callback.run();
                     }
-                });
+                };
+                callbacks.add(connectedCallback);
+                super.setCallback(connectedCallback);
             }
         };
     }

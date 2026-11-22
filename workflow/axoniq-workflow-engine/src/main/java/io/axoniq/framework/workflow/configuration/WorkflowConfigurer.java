@@ -14,7 +14,7 @@ import org.axonframework.common.configuration.ComponentBuilder;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.LifecycleRegistry;
 import org.axonframework.eventsourcing.configuration.EventSourcingConfigurer;
-import org.axonframework.eventsourcing.snapshot.api.SnapshotPolicy;
+import org.jspecify.annotations.Nullable;
 
 import java.util.Objects;
 import java.util.function.Consumer;
@@ -41,13 +41,15 @@ import static java.util.Objects.requireNonNull;
  *     <li>A decorator wrapping the registered {@link org.axonframework.eventsourcing.eventstore.TagResolver} with a
  *     {@link io.axoniq.framework.workflow.runtime.execution.WorkflowEventTagResolver}</li>
  *     <li>A declarative event-sourced entity module for
- *     {@link io.axoniq.framework.workflow.runtime.execution.EventSourcedWorkflowState}</li>
+ *     {@link io.axoniq.framework.workflow.runtime.execution.EventSourcedWorkflowState}, snapshotted when the
+ *     application can take snapshots, see {@link #snapshots(Function)}</li>
  *     <li>{@link io.axoniq.framework.workflow.runtime.execution.ExecuteStepActionResolver} - defaulting to a
  *     {@link io.axoniq.framework.workflow.runtime.execution.DefaultExecuteStepActionResolver}</li>
  *     <li>{@link io.axoniq.framework.workflow.runtime.execution.WorkflowScheduler} - defaulting to a
  *     {@link io.axoniq.framework.workflow.runtime.execution.DefaultWorkflowScheduler}</li>
  *     <li>A declarative event-sourced entity module for
- *     {@link io.axoniq.framework.workflow.runtime.execution.EventSourcedRunningWorkflows}</li>
+ *     {@link io.axoniq.framework.workflow.runtime.execution.EventSourcedRunningWorkflows}, snapshotted only when
+ *     snapshots are enabled, see {@link #snapshots(Function)}</li>
  *     <li>A named {@link java.util.concurrent.ExecutorService} for workflow-body work and workflow-event
  *     publication (see {@link io.axoniq.framework.workflow.configuration.WorkflowConfigurationDefaults#WORKFLOW_ENGINE_EXECUTOR}),
  *     defaulting to a virtual-thread-per-task executor</li>
@@ -75,6 +77,8 @@ import static java.util.Objects.requireNonNull;
 public class WorkflowConfigurer implements ApplicationConfigurer {
 
     private final EventSourcingConfigurer delegate;
+    @Nullable
+    private WorkflowSnapshotConfiguration snapshotConfiguration;
 
     private WorkflowConfigurer(EventSourcingConfigurer delegate) {
         this.delegate = requireNonNull(delegate, "The Event Sourcing Configurer cannot be null.");
@@ -154,11 +158,23 @@ public class WorkflowConfigurer implements ApplicationConfigurer {
     }
 
     /**
-     * Applies the given {@code snapshotConfiguration} function to the {@link WorkflowSnapshotConfiguration} of the
-     * workflow engine.
+     * Applies the given {@code snapshotConfiguration} function to a new {@link WorkflowSnapshotConfiguration}, and
+     * registers the result as the {@code WorkflowSnapshotConfiguration} component, which decides whether, and how,
+     * the workflow engine snapshots its entities.
      * <p>
-     * Snapshots are disabled by default. Enabling them requires a
-     * {@link org.axonframework.eventsourcing.snapshot.store.SnapshotStore} component.
+     * Unless snapshots are explicitly enabled or disabled, the state of each workflow instance is snapshotted when the
+     * application can take snapshots: when it has a
+     * {@link org.axonframework.eventsourcing.snapshot.store.SnapshotStore} component, a
+     * {@link org.axonframework.conversion.GeneralConverter} component, and a
+     * {@link org.axonframework.messaging.core.MessageTypeResolver} resolving the type of the workflow state. The
+     * running-workflow list is then not snapshotted. Explicitly enabling snapshots snapshots both, and requires all
+     * three, or the application fails to start. To take no snapshot at all, disable them:
+     * <pre>{@code
+     * WorkflowConfigurer.create()
+     *                   .snapshots(snapshots -> snapshots.enabled(false));
+     * }</pre>
+     * Every invocation starts from a new {@code WorkflowSnapshotConfiguration}, and replaces the configuration of an
+     * earlier invocation.
      *
      * @param snapshotConfiguration a function customizing the {@link WorkflowSnapshotConfiguration}
      * @return the current instance of the {@code Configurer} for a fluent API
@@ -166,21 +182,17 @@ public class WorkflowConfigurer implements ApplicationConfigurer {
     public WorkflowConfigurer snapshots(
             Function<WorkflowSnapshotConfiguration, WorkflowSnapshotConfiguration> snapshotConfiguration
     ) {
-        var snapshots = requireNonNull(snapshotConfiguration, "The snapshot configuration function must not be null.")
-                .apply(new WorkflowSnapshotConfiguration());
-        if (snapshots.enabled()) {
-            delegate.componentRegistry(cr -> cr
-                    .registerComponent(
-                            SnapshotPolicy.class,
-                            WorkflowConfigurationDefaults.RUNNING_WORKFLOWS_SNAPSHOT_POLICY,
-                            c -> snapshots.runningWorkflows()
-                    )
-                    .registerComponent(
-                            SnapshotPolicy.class,
-                            WorkflowConfigurationDefaults.WORKFLOW_STATE_SNAPSHOT_POLICY,
-                            c -> snapshots.workflowState()
-                    ));
+        var snapshots = requireNonNull(
+                requireNonNull(snapshotConfiguration, "The snapshot configuration function must not be null.")
+                        .apply(new WorkflowSnapshotConfiguration()),
+                "The snapshot configuration function must not return null."
+        );
+        if (this.snapshotConfiguration == null) {
+            delegate.componentRegistry(cr -> cr.registerComponent(
+                    WorkflowSnapshotConfiguration.class, c -> requireNonNull(this.snapshotConfiguration)
+            ));
         }
+        this.snapshotConfiguration = snapshots;
         return this;
     }
 
