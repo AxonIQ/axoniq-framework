@@ -38,16 +38,20 @@ it could bring back old waits, and events the workflow now awaits would not be r
 is therefore only written by `WorkflowIndex.storeWithin(name, delta, context)`, which writes within the transaction in
 which the processor stores the checkpoint's token and reports, per call, whether it did (an empty result means nothing
 was written). Otherwise the engine writes the delta through `store` with every hint set replaced by a plain running
-entry, and keeps the hint pending for a later checkpoint; a release, which writes in the index's own transaction,
-never writes a hint, and the claim's end drops pending hints. Clears, additions and removals are written by every
-write. With a JPA index and a JPA token store in one database, the token store refuses the token of a node that lost
-the claim, which rolls the hint back with it. A checkpoint that does not advance the token (for example one requested
-at the token the claim resumed from) stores no token, so the `CheckpointingProgressStrategy` then extends the claim in
-the same transaction, which fails the same way for a node that lost the claim; it does so only when it handed the
-transaction to the participants and stored nothing. Both checks fence the hint only when the token store keeps its
-claims in the index's transaction: a token store without claims, such as the in-memory one, gives no fence. The
-in-memory index counts every write as joined: it is node-local and takes effect at once. An index that does not
-implement `storeWithin` never stores hints.
+entry, and keeps the hint pending for a later checkpoint; a release, which writes in the index's own transaction, never
+writes a hint, and the claim's end drops pending hints. Clears, additions and removals are written by every write. A
+checkpoint decides the changes it writes when it is taken and writes them once the workflows of its segment are safe; a
+write within the processor's transaction also writes the hints recorded during that wait. Workflows tend to hibernate
+exactly when they turn safe, and a segment that turns idle takes no later checkpoint, so these hints would otherwise
+often stay unwritten. That is safe: the processor hands the segment no further event while it waits within its
+transaction, so such a hint reflects no more events than one recorded before the decision. With a JPA index and a JPA
+token store in one database, the token store refuses the token of a node that lost the claim, which rolls the hint back
+with it. A checkpoint that does not advance the token (for example one requested at the token the claim resumed from)
+stores no token, so the `CheckpointingProgressStrategy` then extends the claim in the same transaction, which fails the
+same way for a node that lost the claim; it does so only when it handed the transaction to the participants and stored
+nothing. Both checks fence the hint only when the token store keeps its claims in the index's transaction: a token store
+without claims, such as the in-memory one, gives no fence. The in-memory index counts every write as joined: it is
+node-local and takes effect at once. An index that does not implement `storeWithin` never stores hints.
 
 **Adoption.** An adopted workflow gets the same in-memory structures as one that hibernated on this node (wait rows,
 cancellation stand-in, deadline timer), so routing, duplicate starts, the workflow manager and cancellation treat both

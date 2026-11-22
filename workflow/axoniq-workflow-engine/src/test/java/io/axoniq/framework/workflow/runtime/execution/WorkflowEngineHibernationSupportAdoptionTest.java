@@ -242,7 +242,7 @@ class WorkflowEngineHibernationSupportAdoptionTest {
 
             // when
             support.broadcast(SEGMENT, paid("1"), new StubProcessingContext());
-            projection.flushForCheckpoint(SEGMENT, null).orTimeout(5, TimeUnit.SECONDS).join();
+            projection.decideCheckpoint(SEGMENT).write(null).orTimeout(5, TimeUnit.SECONDS).join();
 
             // then
             assertThat(workflowIndex.issuedWrites()).singleElement().satisfies(
@@ -265,7 +265,7 @@ class WorkflowEngineHibernationSupportAdoptionTest {
             } catch (IllegalStateException expected) {
                 // fails the event, so the processor delivers it again
             }
-            projection.flushForCheckpoint(SEGMENT, null).orTimeout(5, TimeUnit.SECONDS).join();
+            projection.decideCheckpoint(SEGMENT).write(null).orTimeout(5, TimeUnit.SECONDS).join();
 
             // then
             assertThat(support.hibernatedWorkflowIds()).containsExactly("wf-1");

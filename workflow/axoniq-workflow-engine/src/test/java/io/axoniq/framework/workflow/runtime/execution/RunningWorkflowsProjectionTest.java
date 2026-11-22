@@ -15,10 +15,12 @@ import io.axoniq.framework.workflow.index.api.WorkflowIndex.IndexDelta;
 import io.axoniq.framework.workflow.index.api.WorkflowIndex.OpenWait;
 import io.axoniq.framework.workflow.runtime.execution.RunningWorkflowsClaimLoader.ClaimedIndex;
 import org.axonframework.messaging.core.EmptyApplicationContext;
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.SimpleUnitOfWorkFactory;
 import org.axonframework.messaging.core.unitofwork.UnitOfWork;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
@@ -73,6 +75,19 @@ class RunningWorkflowsProjectionTest {
                                                         .collect(Collectors.toSet());
     }
 
+    /**
+     * Takes a checkpoint of the given {@code segment} at once: decides its changes and writes them right away.
+     */
+    private static CompletableFuture<Void> checkpointAtOnce(RunningWorkflowsProjection projection,
+                                                            Segment segment,
+                                                            @Nullable ProcessingContext context) {
+        try {
+            return projection.decideCheckpoint(segment).write(context);
+        } catch (IllegalStateException e) {
+            return CompletableFuture.failedFuture(e);
+        }
+    }
+
     private static <T> T await(CompletableFuture<T> future) {
         return future.orTimeout(5, TimeUnit.SECONDS).join();
     }
@@ -100,7 +115,7 @@ class RunningWorkflowsProjectionTest {
         void startedEventAddsTheWorkflow() {
             // when
             projection.apply(segment, lifecycleEvent(workflowId, WorkflowStatus.STARTED));
-            await(projection.flushForCheckpoint(segment, null));
+            await(checkpointAtOnce(projection, segment, null));
 
             // then
             assertThat(workflowIndex.issuedWrites()).singleElement().satisfies(
@@ -116,7 +131,7 @@ class RunningWorkflowsProjectionTest {
 
             // when
             projection.apply(segment, lifecycleEvent(workflowId, terminal));
-            await(projection.flushForCheckpoint(segment, null));
+            await(checkpointAtOnce(projection, segment, null));
 
             // then - only the latest state of the workflow is written
             assertThat(workflowIndex.issuedWrites()).singleElement().satisfies(
@@ -129,7 +144,7 @@ class RunningWorkflowsProjectionTest {
             // when
             projection.apply(segment, lifecycleEvent(workflowId, WorkflowStatus.NONE));
             projection.apply(segment, stepEvent(workflowId));
-            await(projection.flushForCheckpoint(segment, null));
+            await(checkpointAtOnce(projection, segment, null));
 
             // then
             assertThat(workflowIndex.issuedWrites()).isEmpty();
@@ -139,7 +154,7 @@ class RunningWorkflowsProjectionTest {
         void eventPublishedThroughThePublishPrimitiveIsIgnored() {
             // when
             projection.apply(segment, publishedEvent(workflowId, WorkflowStatus.STARTED));
-            await(projection.flushForCheckpoint(segment, null));
+            await(checkpointAtOnce(projection, segment, null));
 
             // then
             assertThat(workflowIndex.issuedWrites()).isEmpty();
@@ -152,7 +167,7 @@ class RunningWorkflowsProjectionTest {
 
             // when
             projection.apply(segment, lifecycleEvent(foreignId, WorkflowStatus.STARTED));
-            await(projection.flushForCheckpoint(segment, null));
+            await(checkpointAtOnce(projection, segment, null));
 
             // then
             assertThat(workflowIndex.issuedWrites()).isEmpty();
@@ -165,7 +180,7 @@ class RunningWorkflowsProjectionTest {
 
             // when
             projection.apply(untracked, lifecycleEvent(anyIdOn(untracked), WorkflowStatus.STARTED));
-            await(projection.flushForCheckpoint(segment, null));
+            await(checkpointAtOnce(projection, segment, null));
 
             // then
             assertThat(workflowIndex.issuedWrites()).isEmpty();
@@ -200,13 +215,13 @@ class RunningWorkflowsProjectionTest {
         private void handle(EventMessage[] stream, int from) {
             for (int i = from; i < stream.length; i++) {
                 projection.apply(Segment.ROOT_SEGMENT, stream[i]);
-                await(projection.flushForCheckpoint(Segment.ROOT_SEGMENT, null));
+                await(checkpointAtOnce(projection, Segment.ROOT_SEGMENT, null));
             }
         }
     }
 
     @Nested
-    class FlushForCheckpoint {
+    class CheckpointAtOnce {
 
         private final Segment segment = Segment.ROOT_SEGMENT;
 
@@ -222,7 +237,7 @@ class RunningWorkflowsProjectionTest {
             projection.apply(segment, stepEvent("order-1"));
 
             // when
-            var checkpoint = projection.flushForCheckpoint(segment, null);
+            var checkpoint = checkpointAtOnce(projection, segment, null);
 
             // then
             assertThat(checkpoint).isCompleted();
@@ -248,7 +263,7 @@ class RunningWorkflowsProjectionTest {
             projection.apply(segment, lifecycleEvent("order-2", WorkflowStatus.STARTED));
 
             // when
-            var checkpoint = projection.flushForCheckpoint(segment, null);
+            var checkpoint = checkpointAtOnce(projection, segment, null);
 
             // then - one write carries every pending change, and the checkpoint waits for it
             assertThat(workflowIndex.pendingWrites()).singleElement().satisfies(
@@ -271,12 +286,12 @@ class RunningWorkflowsProjectionTest {
             claim(segment);
             projection.apply(segment, lifecycleEvent("order-1", WorkflowStatus.STARTED));
             projection.checkpointTimeout = Duration.ofMillis(10);
-            failureOf(projection.flushForCheckpoint(segment, null));
+            failureOf(checkpointAtOnce(projection, segment, null));
             projection.checkpointTimeout = TIMEOUT;
             projection.apply(segment, lifecycleEvent("order-2", WorkflowStatus.STARTED));
 
             // when
-            var checkpoint = projection.flushForCheckpoint(segment, null);
+            var checkpoint = checkpointAtOnce(projection, segment, null);
 
             // then - the index sees one write at a time
             assertThat(workflowIndex.issuedWrites()).hasSize(1);
@@ -300,9 +315,9 @@ class RunningWorkflowsProjectionTest {
             claim(segment);
             projection.apply(segment, lifecycleEvent("order-1", WorkflowStatus.STARTED));
             projection.checkpointTimeout = Duration.ofMillis(10);
-            failureOf(projection.flushForCheckpoint(segment, null));
+            failureOf(checkpointAtOnce(projection, segment, null));
             projection.checkpointTimeout = TIMEOUT;
-            var checkpoint = projection.flushForCheckpoint(segment, null);
+            var checkpoint = checkpointAtOnce(projection, segment, null);
 
             // when - that write fails
             workflowIndex.failNextWrite(new IllegalStateException("database down"));
@@ -316,6 +331,32 @@ class RunningWorkflowsProjectionTest {
         }
 
         @Test
+        void writesNothingAfterAWriteInFlightOnceTheCheckpointWaitingForItTimedOut() {
+            // Guards the explicit check in the projection that a write waiting for a write in flight writes nothing
+            // once its caller timed it out; a write composed on the one in flight behaved the same implicitly.
+            // given - a write of an earlier checkpoint that is still in flight
+            claim(segment);
+            projection.apply(segment, lifecycleEvent("order-1", WorkflowStatus.STARTED));
+            projection.checkpointTimeout = Duration.ofMillis(10);
+            failureOf(checkpointAtOnce(projection, segment, null));
+            // and - a checkpoint of a later change that timed out waiting for that write
+            projection.apply(segment, lifecycleEvent("order-2", WorkflowStatus.STARTED));
+            assertThat(failureOf(checkpointAtOnce(projection, segment, null))).isInstanceOf(TimeoutException.class);
+
+            // when
+            workflowIndex.completeNextWrite();
+
+            // then - the checkpoint that gave up writes nothing after it
+            assertThat(workflowIndex.issuedWrites()).hasSize(1);
+            // and - its change stays pending for the next checkpoint
+            projection.checkpointTimeout = TIMEOUT;
+            var next = checkpointAtOnce(projection, segment, null);
+            workflowIndex.completeNextWrite();
+            await(next);
+            assertThat(stored(segment)).containsExactlyInAnyOrder("order-1", "order-2");
+        }
+
+        @Test
         void failsWhenTheWriteFailsAndWritesTheChangesWithTheNextCheckpoint() {
             // given
             claim(segment);
@@ -323,14 +364,14 @@ class RunningWorkflowsProjectionTest {
             workflowIndex.failWritesImmediately(new IllegalStateException("database down"));
 
             // when
-            var failed = projection.flushForCheckpoint(segment, null);
+            var failed = checkpointAtOnce(projection, segment, null);
 
             // then
             assertThat(failureOf(failed)).hasMessage("database down");
 
             // when - the index is available again
             workflowIndex.completeWritesImmediately();
-            await(projection.flushForCheckpoint(segment, null));
+            await(checkpointAtOnce(projection, segment, null));
 
             // then - no change was lost
             assertThat(stored(segment)).containsExactly("order-1");
@@ -344,7 +385,7 @@ class RunningWorkflowsProjectionTest {
             projection.checkpointTimeout = Duration.ofMillis(10);
 
             // when
-            var checkpoint = projection.flushForCheckpoint(segment, null);
+            var checkpoint = checkpointAtOnce(projection, segment, null);
 
             // then
             assertThat(failureOf(checkpoint)).isInstanceOf(TimeoutException.class);
@@ -364,7 +405,7 @@ class RunningWorkflowsProjectionTest {
 
             // when
             projection.apply(segment, lifecycleEvent(LONG_ID, WorkflowStatus.STARTED));
-            await(projection.flushForCheckpoint(segment, null));
+            await(checkpointAtOnce(projection, segment, null));
 
             // then
             assertThat(stored(segment)).containsExactly(LONG_ID);
@@ -379,14 +420,14 @@ class RunningWorkflowsProjectionTest {
 
             // when - the checkpoint writes within a context that fails after the write
             var checkpoint = unitOfWork();
-            checkpoint.onPrepareCommit(context -> projection.flushForCheckpoint(segment, context));
+            checkpoint.onPrepareCommit(context -> checkpointAtOnce(projection, segment, context));
             checkpoint.runOnCommit(context -> {
                 throw new IllegalStateException("commit failed");
             });
             assertThat(checkpoint.execute()).failsWithin(TIMEOUT);
 
             // then - the next checkpoint writes the change again
-            await(projection.flushForCheckpoint(segment, null));
+            await(checkpointAtOnce(projection, segment, null));
             assertThat(workflowIndex.issuedWrites()).hasSize(2).allSatisfy(
                     write -> assertThat(write.delta()).isEqualTo(new IndexDelta(Set.of("order-1"), Set.of()))
             );
@@ -399,7 +440,7 @@ class RunningWorkflowsProjectionTest {
             claim(segment);
             projection.apply(segment, lifecycleEvent("order-1", WorkflowStatus.STARTED));
             var checkpoint = unitOfWork();
-            checkpoint.onPrepareCommit(context -> projection.flushForCheckpoint(segment, context));
+            checkpoint.onPrepareCommit(context -> checkpointAtOnce(projection, segment, context));
             // a later change of the same workflow, applied before the context failed
             checkpoint.runOnCommit(context -> {
                 projection.apply(segment, lifecycleEvent("order-1", WorkflowStatus.COMPLETED));
@@ -408,7 +449,7 @@ class RunningWorkflowsProjectionTest {
 
             // when
             assertThat(checkpoint.execute()).failsWithin(TIMEOUT);
-            await(projection.flushForCheckpoint(segment, null));
+            await(checkpointAtOnce(projection, segment, null));
 
             // then - the later change wins
             assertThat(workflowIndex.issuedWrites()).last().satisfies(
@@ -423,17 +464,17 @@ class RunningWorkflowsProjectionTest {
             claim(segment);
             projection.apply(segment, lifecycleEvent("order-1", WorkflowStatus.STARTED));
             var checkpoint = unitOfWork();
-            checkpoint.onPrepareCommit(context -> projection.flushForCheckpoint(segment, context));
+            checkpoint.onPrepareCommit(context -> checkpointAtOnce(projection, segment, context));
             // a later change of the same workflow, written before the context failed
             checkpoint.runOnCommit(context -> {
                 projection.apply(segment, lifecycleEvent("order-1", WorkflowStatus.COMPLETED));
-                await(projection.flushForCheckpoint(segment, null));
+                await(checkpointAtOnce(projection, segment, null));
                 throw new IllegalStateException("commit failed");
             });
 
             // when
             assertThat(checkpoint.execute()).failsWithin(TIMEOUT);
-            await(projection.flushForCheckpoint(segment, null));
+            await(checkpointAtOnce(projection, segment, null));
 
             // then - the stale start is not written again over the later removal
             assertThat(workflowIndex.issuedWrites()).hasSize(2).last().satisfies(
@@ -442,17 +483,45 @@ class RunningWorkflowsProjectionTest {
         }
 
         @Test
+        void writesADecidedCheckpointOnlyOnceAWriteInFlightSettled() {
+            // given - a checkpoint that decided the start of a workflow
+            claim(segment);
+            projection.apply(segment, lifecycleEvent("order-1", WorkflowStatus.STARTED));
+            var decided = projection.decideCheckpoint(segment);
+            // and - a write of a later checkpoint that is still in flight, writing that start as well
+            projection.apply(segment, lifecycleEvent("order-2", WorkflowStatus.STARTED));
+            projection.checkpointTimeout = Duration.ofMillis(10);
+            failureOf(checkpointAtOnce(projection, segment, null));
+            projection.checkpointTimeout = TIMEOUT;
+
+            // when
+            var flushed = decided.write(null);
+
+            // then - the decided checkpoint waits for the write in flight
+            assertThat(workflowIndex.issuedWrites()).hasSize(1);
+            assertThat(flushed).isNotDone();
+
+            // when
+            workflowIndex.completeNextWrite();
+
+            // then - that write made the decided start durable, so nothing is written again
+            await(flushed);
+            assertThat(workflowIndex.issuedWrites()).hasSize(1);
+            assertThat(stored(segment)).containsExactlyInAnyOrder("order-1", "order-2");
+        }
+
+        @Test
         void waitsForAWriteInFlightAndThenWritesInATransactionOfItsOwn() {
             // given - a write of an earlier checkpoint that is still in flight
             claim(segment);
             projection.apply(segment, lifecycleEvent("order-1", WorkflowStatus.STARTED));
             projection.checkpointTimeout = Duration.ofMillis(10);
-            failureOf(projection.flushForCheckpoint(segment, null));
+            failureOf(checkpointAtOnce(projection, segment, null));
             projection.checkpointTimeout = TIMEOUT;
             projection.apply(segment, lifecycleEvent("order-2", WorkflowStatus.STARTED));
             var checkpoint = unitOfWork();
             var flushed = new AtomicReference<CompletableFuture<Void>>();
-            checkpoint.runOnPrepareCommit(context -> flushed.set(projection.flushForCheckpoint(segment, context)));
+            checkpoint.runOnPrepareCommit(context -> flushed.set(checkpointAtOnce(projection, segment, context)));
             await(checkpoint.execute());
 
             // when
@@ -475,9 +544,9 @@ class RunningWorkflowsProjectionTest {
 
             // when
             var checkpoint = unitOfWork();
-            checkpoint.onPrepareCommit(context -> projection.flushForCheckpoint(segment, context));
+            checkpoint.onPrepareCommit(context -> checkpointAtOnce(projection, segment, context));
             await(checkpoint.execute());
-            await(projection.flushForCheckpoint(segment, null));
+            await(checkpointAtOnce(projection, segment, null));
 
             // then
             assertThat(workflowIndex.issuedWrites()).hasSize(1);
@@ -486,7 +555,7 @@ class RunningWorkflowsProjectionTest {
         @Test
         void failsForASegmentThatIsNotTracked() {
             // when
-            var checkpoint = projection.flushForCheckpoint(anotherSegmentThan(FOUR_SEGMENTS.getFirst()), null);
+            var checkpoint = checkpointAtOnce(projection, anotherSegmentThan(FOUR_SEGMENTS.getFirst()), null);
 
             // then - its claim did not finish loading, so its handled events were never applied
             assertThat(failureOf(checkpoint)).isInstanceOf(IllegalStateException.class);
@@ -502,8 +571,259 @@ class RunningWorkflowsProjectionTest {
             projection.discard(segment);
 
             // then
-            assertThat(failureOf(projection.flushForCheckpoint(segment, null))).isInstanceOf(IllegalStateException.class);
+            assertThat(failureOf(checkpointAtOnce(projection, segment, null)))
+                    .isInstanceOf(IllegalStateException.class);
             assertThat(workflowIndex.issuedWrites()).isEmpty();
+        }
+    }
+
+    @Nested
+    class DecidedCheckpoint {
+
+        private final Segment segment = Segment.ROOT_SEGMENT;
+        private final HibernationHint hint = new HibernationHint(
+                Instant.parse("2026-11-21T10:00:00Z"),
+                List.of(new OpenWait("awaitPayment", "com.acme.PaymentReceived", Set.of("payload:orderId=42")))
+        );
+
+        @BeforeEach
+        void setUp() {
+            workflowIndex.initialized(INDEX).completeWritesImmediately();
+            claim(segment);
+        }
+
+        /**
+         * Writes the given decided checkpoint within a context, as the processor's checkpoints do.
+         */
+        private void writeWithinAContext(WorkflowEngineCheckpointingSupport.CheckpointFlush decided) {
+            var checkpoint = unitOfWork();
+            checkpoint.onPrepareCommit(decided::write);
+            await(checkpoint.execute());
+        }
+
+        @Test
+        void writesOnlyTheChangesPendingWhenTheCheckpointWasDecided() {
+            // given
+            projection.apply(segment, lifecycleEvent("order-1", WorkflowStatus.STARTED));
+            var decided = projection.decideCheckpoint(segment);
+            // and - a change applied while the checkpoint waits for the workflows of the segment
+            projection.apply(segment, lifecycleEvent("order-2", WorkflowStatus.STARTED));
+
+            // when
+            writeWithinAContext(decided);
+
+            // then - the later change is left for the next checkpoint
+            assertThat(workflowIndex.issuedWrites()).singleElement().satisfies(
+                    write -> assertThat(write.delta()).isEqualTo(new IndexDelta(Set.of("order-1"), Set.of()))
+            );
+            await(checkpointAtOnce(projection, segment, null));
+            assertThat(workflowIndex.issuedWrites()).last().satisfies(
+                    write -> assertThat(write.delta()).isEqualTo(new IndexDelta(Set.of("order-2"), Set.of()))
+            );
+            assertThat(stored(segment)).containsExactlyInAnyOrder("order-1", "order-2");
+        }
+
+        @Test
+        void writesADecidedChangeAsDecidedAndKeepsALaterChangeOfTheSameWorkflowPending() {
+            // given
+            projection.apply(segment, lifecycleEvent("order-1", WorkflowStatus.STARTED));
+            var decided = projection.decideCheckpoint(segment);
+            projection.apply(segment, lifecycleEvent("order-1", WorkflowStatus.COMPLETED));
+
+            // when
+            writeWithinAContext(decided);
+
+            // then - the start covered by the checkpoint is written, the later completion by the next checkpoint
+            assertThat(workflowIndex.issuedWrites()).singleElement().satisfies(
+                    write -> assertThat(write.delta()).isEqualTo(new IndexDelta(Set.of("order-1"), Set.of()))
+            );
+            await(checkpointAtOnce(projection, segment, null));
+            assertThat(workflowIndex.issuedWrites()).last().satisfies(
+                    write -> assertThat(write.delta()).isEqualTo(new IndexDelta(Set.of(), Set.of("order-1")))
+            );
+            assertThat(stored(segment)).isEmpty();
+        }
+
+        @Test
+        void writesAHintRecordedAfterTheCheckpointWasDecidedWithinItsContext() {
+            // given
+            projection.apply(segment, lifecycleEvent("order-1", WorkflowStatus.STARTED));
+            var decided = projection.decideCheckpoint(segment);
+            // and - the workflow hibernates once it is safe, while the checkpoint waits for the workflows to be safe
+            projection.recordHibernated(segment, "order-1", hint);
+
+            // when
+            writeWithinAContext(decided);
+
+            // then - the checkpoint writes the hint, as an idle segment may take no later checkpoint to write it
+            assertThat(workflowIndex.durableEntries(INDEX, segment)).containsExactly(new Entry("order-1", hint));
+            // and - nothing of it is left pending
+            await(checkpointAtOnce(projection, segment, null));
+            assertThat(workflowIndex.issuedWrites()).hasSize(1);
+        }
+
+        @Test
+        void writesAHintRecordedAfterTheCheckpointWasDecidedForAWorkflowWithoutAPendingChange() {
+            // given - a running workflow that is durable
+            projection.apply(segment, lifecycleEvent("order-1", WorkflowStatus.STARTED));
+            writeWithinAContext(projection.decideCheckpoint(segment));
+            // and - a checkpoint decided while nothing of that workflow is pending
+            projection.apply(segment, lifecycleEvent("order-2", WorkflowStatus.STARTED));
+            var decided = projection.decideCheckpoint(segment);
+            projection.recordHibernated(segment, "order-1", hint);
+
+            // when
+            writeWithinAContext(decided);
+
+            // then
+            assertThat(workflowIndex.durableEntries(INDEX, segment))
+                    .containsExactlyInAnyOrder(new Entry("order-1", hint), Entry.running("order-2"));
+        }
+
+        @Test
+        void keepsAHintRecordedAfterTheCheckpointWasDecidedPendingWhenTheCheckpointWritesWithoutAContext() {
+            // given
+            projection.apply(segment, lifecycleEvent("order-1", WorkflowStatus.STARTED));
+            var decided = projection.decideCheckpoint(segment);
+            projection.recordHibernated(segment, "order-1", hint);
+
+            // when
+            await(decided.write(null));
+
+            // then - only the decided start is written
+            assertThat(workflowIndex.durableEntries(INDEX, segment)).containsExactly(Entry.running("order-1"));
+            // and - the hint is written by the next checkpoint that writes within its context
+            writeWithinAContext(projection.decideCheckpoint(segment));
+            assertThat(workflowIndex.durableEntries(INDEX, segment)).containsExactly(new Entry("order-1", hint));
+        }
+
+        @Test
+        void keepsTheDecidedChangesPendingWhenTheCheckpointFailsToWriteThem() {
+            // given - a checkpoint that decided its changes, and failed as the index did not accept their write
+            projection.apply(segment, lifecycleEvent("order-1", WorkflowStatus.STARTED));
+            var failed = projection.decideCheckpoint(segment);
+            workflowIndex.failWritesImmediately(new IllegalStateException("database down"));
+            var checkpoint = unitOfWork();
+            checkpoint.onPrepareCommit(failed::write);
+            assertThat(checkpoint.execute()).failsWithin(TIMEOUT);
+            assertThat(stored(segment)).isEmpty();
+
+            // when - the next checkpoint writes once the index is available again
+            workflowIndex.completeWritesImmediately();
+            writeWithinAContext(projection.decideCheckpoint(segment));
+
+            // then
+            assertThat(stored(segment)).containsExactly("order-1");
+        }
+
+        @Test
+        void writesADecidedHintWithinAContextAfterAWriteOfItsOwnWroteTheWorkflowWithoutIt() {
+            // given - a checkpoint that decided the hint of a hibernated workflow
+            projection.recordHibernated(segment, "order-1", hint);
+            var decided = projection.decideCheckpoint(segment);
+            // and - a write in a transaction of its own wrote the workflow without its hint meanwhile
+            await(checkpointAtOnce(projection, segment, null));
+            assertThat(workflowIndex.durableEntries(INDEX, segment)).containsExactly(Entry.running("order-1"));
+
+            // when
+            writeWithinAContext(decided);
+
+            // then - the decided hint is written
+            assertThat(workflowIndex.durableEntries(INDEX, segment)).containsExactly(new Entry("order-1", hint));
+            // and - nothing of it is left pending
+            writeWithinAContext(projection.decideCheckpoint(segment));
+            await(checkpointAtOnce(projection, segment, null));
+            assertThat(workflowIndex.issuedWrites()).hasSize(2);
+        }
+
+        @Test
+        void keepsTheDecidedChangesPendingWhenTheContextOfTheirWriteRollsBack() {
+            // given
+            projection.apply(segment, lifecycleEvent("order-1", WorkflowStatus.STARTED));
+            var decided = projection.decideCheckpoint(segment);
+            projection.apply(segment, lifecycleEvent("order-2", WorkflowStatus.STARTED));
+
+            // when - the write joins a context that fails after it, as when the claim of the segment was lost
+            var checkpoint = unitOfWork();
+            checkpoint.onPrepareCommit(decided::write);
+            checkpoint.runOnCommit(context -> {
+                throw new IllegalStateException("claim lost");
+            });
+            assertThat(checkpoint.execute()).failsWithin(TIMEOUT);
+
+            // then - the next checkpoint writes the decided change again, with the later one
+            await(checkpointAtOnce(projection, segment, null));
+            assertThat(workflowIndex.issuedWrites()).last().satisfies(
+                    write -> assertThat(write.delta()).isEqualTo(new IndexDelta(Set.of("order-1", "order-2"), Set.of()))
+            );
+        }
+
+        @Test
+        void failsTheWriteOfADecidedCheckpointOnceTheSegmentIsDiscarded() {
+            // given
+            projection.apply(segment, lifecycleEvent("order-1", WorkflowStatus.STARTED));
+            var decided = projection.decideCheckpoint(segment);
+
+            // when
+            projection.discard(segment);
+
+            // then
+            assertThat(failureOf(decided.write(null))).isInstanceOf(IllegalStateException.class);
+            assertThat(workflowIndex.issuedWrites()).isEmpty();
+        }
+
+        @Test
+        void doesNotRestoreADecidedChangeALaterDurableChangeReplacedWhenTheContextOfItsWriteRollsBack() {
+            // given - a checkpoint that decided the start of a workflow, which completed while the checkpoint waited
+            projection.apply(segment, lifecycleEvent("order-1", WorkflowStatus.STARTED));
+            var decided = projection.decideCheckpoint(segment);
+            projection.apply(segment, lifecycleEvent("order-1", WorkflowStatus.COMPLETED));
+            // and - the decided start, already replaced when it is written, is written within a context, which fails
+            // after a write of its own made the completion durable
+            var checkpoint = unitOfWork();
+            checkpoint.onPrepareCommit(decided::write);
+            checkpoint.runOnCommit(context -> {
+                await(checkpointAtOnce(projection, segment, null));
+                throw new IllegalStateException("claim lost");
+            });
+            assertThat(checkpoint.execute()).failsWithin(TIMEOUT);
+
+            // when
+            await(checkpointAtOnce(projection, segment, null));
+
+            // then - the stale start is not written again over the durable completion
+            assertThat(workflowIndex.issuedWrites()).hasSize(2).last().satisfies(
+                    write -> assertThat(write.delta()).isEqualTo(new IndexDelta(Set.of(), Set.of("order-1")))
+            );
+        }
+
+        @Test
+        void keepsAHintRecordedAfterTheCheckpointWasDecidedPendingWhenTheContextOfItsWriteRollsBack() {
+            // given - a running workflow that is durable
+            projection.apply(segment, lifecycleEvent("order-1", WorkflowStatus.STARTED));
+            writeWithinAContext(projection.decideCheckpoint(segment));
+            // and - a checkpoint decided while nothing of that workflow is pending, which hibernates meanwhile
+            projection.apply(segment, lifecycleEvent("order-2", WorkflowStatus.STARTED));
+            var decided = projection.decideCheckpoint(segment);
+            projection.recordHibernated(segment, "order-1", hint);
+            // and - the checkpoint writes the hint within a context that fails after the write
+            var checkpoint = unitOfWork();
+            checkpoint.onPrepareCommit(decided::write);
+            checkpoint.runOnCommit(context -> {
+                throw new IllegalStateException("claim lost");
+            });
+            assertThat(checkpoint.execute()).failsWithin(TIMEOUT);
+
+            // when
+            writeWithinAContext(projection.decideCheckpoint(segment));
+
+            // then - the next checkpoint writes the hint, and the decided start, again
+            var expected = new HashMap<String, HibernationHint>();
+            expected.put("order-1", hint);
+            expected.put("order-2", null);
+            assertThat(workflowIndex.issuedWrites()).hasSize(3).last().satisfies(
+                    write -> assertThat(write.delta()).isEqualTo(new IndexDelta(expected, Set.of()))
+            );
         }
     }
 
@@ -536,7 +856,7 @@ class RunningWorkflowsProjectionTest {
             // given - a write of an earlier checkpoint that is still in flight
             projection.apply(segment, lifecycleEvent("order-1", WorkflowStatus.STARTED));
             projection.checkpointTimeout = Duration.ofMillis(10);
-            failureOf(projection.flushForCheckpoint(segment, null));
+            failureOf(checkpointAtOnce(projection, segment, null));
             projection.apply(segment, lifecycleEvent("order-2", WorkflowStatus.STARTED));
 
             // when
@@ -596,7 +916,7 @@ class RunningWorkflowsProjectionTest {
             projection.discard(Segment.ROOT_SEGMENT.split()[1]);
 
             // then
-            assertThat(projection.flushForCheckpoint(Segment.ROOT_SEGMENT, null)).isCompletedExceptionally();
+            assertThat(checkpointAtOnce(projection, Segment.ROOT_SEGMENT, null)).isCompletedExceptionally();
         }
 
         @Test
@@ -610,8 +930,8 @@ class RunningWorkflowsProjectionTest {
             projection.discard(Segment.ROOT_SEGMENT);
 
             // then
-            assertThat(projection.flushForCheckpoint(halves[0], null)).isCompletedExceptionally();
-            assertThat(projection.flushForCheckpoint(halves[1], null)).isCompletedExceptionally();
+            assertThat(checkpointAtOnce(projection, halves[0], null)).isCompletedExceptionally();
+            assertThat(checkpointAtOnce(projection, halves[1], null)).isCompletedExceptionally();
         }
 
         @Test
@@ -625,8 +945,8 @@ class RunningWorkflowsProjectionTest {
             projection.discard(halves[0]);
 
             // then
-            assertThat(projection.flushForCheckpoint(halves[0], null)).isCompletedExceptionally();
-            assertThat(projection.flushForCheckpoint(halves[1], null)).isCompleted();
+            assertThat(checkpointAtOnce(projection, halves[0], null)).isCompletedExceptionally();
+            assertThat(checkpointAtOnce(projection, halves[1], null)).isCompleted();
         }
     }
 
@@ -646,8 +966,9 @@ class RunningWorkflowsProjectionTest {
             withoutIndex.apply(Segment.ROOT_SEGMENT, lifecycleEvent(LONG_ID, WorkflowStatus.STARTED));
 
             // then - also for a segment that is not tracked
-            assertThat(withoutIndex.flushForCheckpoint(Segment.ROOT_SEGMENT, null)).isCompleted();
-            assertThat(withoutIndex.flushForCheckpoint(anotherSegmentThan(FOUR_SEGMENTS.getFirst()), null)).isCompleted();
+            assertThat(checkpointAtOnce(withoutIndex, Segment.ROOT_SEGMENT, null)).isCompleted();
+            assertThat(checkpointAtOnce(withoutIndex, anotherSegmentThan(FOUR_SEGMENTS.getFirst()), null))
+                    .isCompleted();
             assertThat(withoutIndex.flushForRelease(Segment.ROOT_SEGMENT)).isCompleted();
         }
     }
@@ -663,7 +984,7 @@ class RunningWorkflowsProjectionTest {
             projection.initialize(Segment.ROOT_SEGMENT, claimed);
 
             // when
-            await(projection.flushForCheckpoint(Segment.ROOT_SEGMENT, null));
+            await(checkpointAtOnce(projection, Segment.ROOT_SEGMENT, null));
 
             // then
             assertThat(stored(Segment.ROOT_SEGMENT)).isEmpty();
@@ -700,7 +1021,7 @@ class RunningWorkflowsProjectionTest {
          */
         private void checkpointWithinAContext() {
             var checkpoint = unitOfWork();
-            checkpoint.onPrepareCommit(context -> projection.flushForCheckpoint(segment, context));
+            checkpoint.onPrepareCommit(context -> checkpointAtOnce(projection, segment, context));
             await(checkpoint.execute());
         }
 
@@ -737,7 +1058,7 @@ class RunningWorkflowsProjectionTest {
 
             // when - later checkpoints of their own have nothing to write
             checkpointWithinAContext();
-            await(projection.flushForCheckpoint(segment, null));
+            await(checkpointAtOnce(projection, segment, null));
 
             // then
             assertThat(workflowIndex.issuedWrites()).hasSize(1);
@@ -759,7 +1080,7 @@ class RunningWorkflowsProjectionTest {
             projection.recordHibernated(segment, "order-1", hint);
 
             // when
-            await(projection.flushForCheckpoint(segment, null));
+            await(checkpointAtOnce(projection, segment, null));
 
             // then
             assertThat(workflowIndex.issuedWrites()).singleElement().satisfies(
@@ -789,7 +1110,7 @@ class RunningWorkflowsProjectionTest {
             // given
             projection.recordHibernated(segment, "order-1", hint);
             var failing = unitOfWork();
-            failing.onPrepareCommit(context -> projection.flushForCheckpoint(segment, context));
+            failing.onPrepareCommit(context -> checkpointAtOnce(projection, segment, context));
             failing.runOnCommit(context -> {
                 throw new IllegalStateException("commit failed");
             });
@@ -812,7 +1133,7 @@ class RunningWorkflowsProjectionTest {
 
             // when
             projection.recordWoken(segment, "order-1");
-            await(projection.flushForCheckpoint(segment, null));
+            await(checkpointAtOnce(projection, segment, null));
 
             // then
             assertThat(workflowIndex.issuedWrites()).last().satisfies(
@@ -896,7 +1217,7 @@ class RunningWorkflowsProjectionTest {
         void removesAWorkflowThatTurnedOutTerminalOnWake() {
             // when
             projection.recordRemoved(segment, "order-1");
-            await(projection.flushForCheckpoint(segment, null));
+            await(checkpointAtOnce(projection, segment, null));
 
             // then
             assertThat(entries()).isEmpty();

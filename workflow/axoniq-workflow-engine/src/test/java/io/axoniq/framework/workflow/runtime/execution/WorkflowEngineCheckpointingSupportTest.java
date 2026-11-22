@@ -7,8 +7,14 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
+import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
+import io.axoniq.framework.workflow.index.api.WorkflowIndex;
+import io.axoniq.framework.workflow.runtime.execution.RunningWorkflowsClaimLoader.ClaimedIndex;
 import org.axonframework.common.AxonConfigurationException;
+import org.axonframework.messaging.core.EmptyApplicationContext;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.axonframework.messaging.core.unitofwork.SimpleUnitOfWorkFactory;
+import org.axonframework.messaging.core.unitofwork.StubProcessingContext;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.GlobalSequenceTrackingToken;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
@@ -18,8 +24,16 @@ import org.junit.jupiter.api.*;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicReference;
 
+import static io.axoniq.framework.workflow.runtime.execution.LifecycleEventFixtures.lifecycleEvent;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.awaitility.Awaitility.await;
@@ -185,28 +199,107 @@ class WorkflowEngineCheckpointingSupportTest {
         }
 
         @Test
-        void failsTheCheckpointRightAwayWhenTheFlushFailsWhileWorkflowWorkIsUnsafe() {
+        void writesOnlyOnceTheWorkflowWorkIsSafe() {
             // given
             coordinator.pendingWork = true;
-            coordinator.checkpointFlush.completeExceptionally(new IllegalStateException("database down"));
+            coordinator.checkpointFlush.complete(null);
+
+            // when
+            var checkpoint = support.onCheckpointAdvanced(Segment.ROOT_SEGMENT, requested);
+
+            // then
+            assertThat(coordinator.writes).isEmpty();
+
+            // when
+            coordinator.pendingWork = false;
+            coordinator.barrier.run();
+
+            // then
+            assertThat(coordinator.writes).containsExactly(new Write(null, false));
+            assertThat(checkpoint).isCompletedWithValue(requested);
+        }
+
+        @Test
+        void failsTheCheckpointRightAwayWhenDecidingWhatToWriteFails() {
+            // given
+            coordinator.pendingWork = true;
+            coordinator.checkpointFlush = null;
 
             // when
             var checkpoint = support.onCheckpointAdvanced(Segment.ROOT_SEGMENT, requested);
 
             // then - it does not wait for the workflow work first
             assertThat(checkpoint).isCompletedExceptionally();
+            assertThat(coordinator.writes).isEmpty();
         }
 
         @Test
-        void failsTheCheckpointWhenTheFlushThrows() {
+        void writesWithinTheContextOnTheCallingThreadOnlyOnceTheWorkflowWorkIsSafe() {
             // given
-            coordinator.checkpointFlush = null;
+            coordinator.pendingWork = true;
+            coordinator.checkpointFlush.complete(null);
+            var context = new StubProcessingContext();
+            var processorThread = new AtomicReference<Thread>();
+
+            // when - the processor takes the checkpoint on its own thread, which waits for the workflow work
+            var checkpoint = CompletableFuture.supplyAsync(() -> {
+                processorThread.set(Thread.currentThread());
+                return support.onCheckpointAdvanced(Segment.ROOT_SEGMENT, requested, context);
+            }).thenCompose(advanced -> advanced);
+            await().atMost(Duration.ofSeconds(5)).until(() -> support.safePointWaiters.get() == 1);
+
+            // then - nothing is written within the transaction of the processor while the workflows are not safe
+            assertThat(coordinator.writes).isEmpty();
+            assertThat(checkpoint).isNotDone();
 
             // when
-            var checkpoint = support.onCheckpointAdvanced(Segment.ROOT_SEGMENT, requested);
+            coordinator.pendingWork = false;
+            coordinator.barrier.run();
+
+            // then - written within the context, on the thread taking the checkpoint, after the safe point
+            assertThat(checkpoint).succeedsWithin(Duration.ofSeconds(5)).isEqualTo(requested);
+            assertThat(coordinator.writes).containsExactly(new Write(context, false));
+            assertThat(coordinator.writeThreads).containsExactly(processorThread.get());
+        }
+
+        @Test
+        void failsTheCheckpointWithoutWritingWhenTheWorkflowWorkDoesNotTurnSafeInTime() {
+            // given
+            var impatient = new WorkflowEngineCheckpointingSupport(coordinator, 0L, Duration.ofMillis(100));
+            coordinator.pendingWork = true;
+            coordinator.checkpointFlush.complete(null);
+
+            // when
+            var checkpoint = impatient.onCheckpointAdvanced(Segment.ROOT_SEGMENT,
+                                                            requested,
+                                                            new StubProcessingContext());
+
+            // then - the decided state stays to be written by a later checkpoint
+            assertThat(checkpoint).isCompletedExceptionally();
+            assertThat(coordinator.writes).isEmpty();
+        }
+
+        @Test
+        void failsTheCheckpointWithoutAContextWithoutWritingWhenTheWorkflowWorkDoesNotTurnSafeInTime() {
+            // given
+            var impatient = new WorkflowEngineCheckpointingSupport(coordinator, 0L, Duration.ofMillis(100));
+            coordinator.pendingWork = true;
+            coordinator.checkpointFlush.complete(null);
+
+            // when
+            var checkpoint = impatient.onCheckpointAdvanced(Segment.ROOT_SEGMENT, requested);
 
             // then
-            assertThat(checkpoint).isCompletedExceptionally();
+            assertThat(checkpoint).failsWithin(Duration.ofSeconds(5))
+                                  .withThrowableOfType(ExecutionException.class)
+                                  .withCauseInstanceOf(TimeoutException.class);
+
+            // when - the workflow work turns safe after the checkpoint was given up on
+            coordinator.pendingWork = false;
+            coordinator.barrier.run();
+
+            // then - the decided state stays to be written by a later checkpoint
+            assertThat(coordinator.writes).isEmpty();
         }
 
         @Test
@@ -230,6 +323,54 @@ class WorkflowEngineCheckpointingSupportTest {
 
             // then - the release does not advance the stored token
             assertThat(released).isCompletedExceptionally();
+        }
+    }
+
+    @Nested
+    class WithTheRunningWorkflowsProjection {
+
+        private static final String INDEX = "orders";
+
+        private final ControllableWorkflowIndex workflowIndex =
+                new ControllableWorkflowIndex().initialized(INDEX).completeWritesImmediately();
+        private final RunningWorkflowsProjection projection = new RunningWorkflowsProjection(workflowIndex, INDEX);
+        private final ProjectingCoordinator coordinator = new ProjectingCoordinator(projection);
+
+        /**
+         * Takes a checkpoint at the given {@code token} within a context, as the processor does, and returns its
+         * outcome.
+         */
+        private CompletableFuture<TrackingToken> checkpointWithinAContext(WorkflowEngineCheckpointingSupport support,
+                                                                          TrackingToken token) {
+            var checkpoint = new SimpleUnitOfWorkFactory(EmptyApplicationContext.INSTANCE).create();
+            var advanced = new AtomicReference<CompletableFuture<TrackingToken>>();
+            checkpoint.runOnPrepareCommit(
+                    context -> advanced.set(support.onCheckpointAdvanced(Segment.ROOT_SEGMENT, token, context))
+            );
+            checkpoint.execute().orTimeout(5, TimeUnit.SECONDS).join();
+            return advanced.get();
+        }
+
+        @Test
+        void writesWhatACheckpointThatTimedOutDecidedWithTheNextCheckpoint() {
+            // given - a started workflow of the segment
+            projection.initialize(Segment.ROOT_SEGMENT, new ClaimedIndex(Set.of(), Map.of()));
+            projection.apply(Segment.ROOT_SEGMENT, lifecycleEvent("order-1", WorkflowStatus.STARTED));
+            var support = new WorkflowEngineCheckpointingSupport(coordinator, 0L, Duration.ofMillis(100));
+            // and - a checkpoint whose workflow work did not turn safe in time
+            coordinator.pendingWork = true;
+            var timedOut = checkpointWithinAContext(support, new GlobalSequenceTrackingToken(42));
+            assertThat(timedOut).isCompletedExceptionally();
+            assertThat(workflowIndex.issuedWrites()).isEmpty();
+
+            // when - the workflow work is safe for the next checkpoint
+            coordinator.pendingWork = false;
+            var next = checkpointWithinAContext(support, new GlobalSequenceTrackingToken(43));
+
+            // then - it writes what the checkpoint that timed out decided
+            assertThat(next).isCompletedWithValue(new GlobalSequenceTrackingToken(43));
+            assertThat(workflowIndex.durableEntries(INDEX, Segment.ROOT_SEGMENT))
+                    .containsExactly(WorkflowIndex.Entry.running("order-1"));
         }
     }
 
@@ -325,6 +466,22 @@ class WorkflowEngineCheckpointingSupportTest {
 
             // when / then
             assertThatThrownBy(() -> new WorkflowEngineCheckpointingSupport(coordinator, -1L))
+                    .isInstanceOf(AxonConfigurationException.class);
+        }
+    }
+
+    @Nested
+    class WithASafePointTimeout {
+
+        @Test
+        void rejectsATimeoutThatIsNotPositive() {
+            // given
+            var coordinator = new InlineCheckpointLatchCoordinator();
+
+            // when / then
+            assertThatThrownBy(() -> new WorkflowEngineCheckpointingSupport(coordinator, 0L, Duration.ZERO))
+                    .isInstanceOf(AxonConfigurationException.class);
+            assertThatThrownBy(() -> new WorkflowEngineCheckpointingSupport(coordinator, 0L, Duration.ofSeconds(-1)))
                     .isInstanceOf(AxonConfigurationException.class);
         }
     }
@@ -467,16 +624,26 @@ class WorkflowEngineCheckpointingSupportTest {
     }
 
     /**
+     * A checkpoint write of a {@link FlushingCoordinator}: the context it was given, and whether the workflow work was
+     * unsafe when it was written.
+     */
+    private record Write(@Nullable ProcessingContext context, boolean whileUnsafe) {
+
+    }
+
+    /**
      * A coordinator whose flushes complete when the test completes them, and whose unsafe work stays unsafe until the
-     * test clears it and crosses the barrier.
+     * test clears it and crosses the barrier. It records every checkpoint write, and the thread writing it.
      */
     private static final class FlushingCoordinator
             implements WorkflowEngineCheckpointingSupport.CheckpointLatchCoordinator {
 
-        private boolean pendingWork;
-        private Runnable barrier;
-        private CompletableFuture<Void> checkpointFlush = new CompletableFuture<>();
+        private volatile boolean pendingWork;
+        private volatile Runnable barrier;
+        private volatile CompletableFuture<Void> checkpointFlush = new CompletableFuture<>();
         private final CompletableFuture<Void> releaseFlush = new CompletableFuture<>();
+        private final List<Write> writes = new CopyOnWriteArrayList<>();
+        private final List<Thread> writeThreads = new CopyOnWriteArrayList<>();
 
         @Override
         public boolean hasUnsafeCheckpointWork(Segment segment) {
@@ -494,16 +661,56 @@ class WorkflowEngineCheckpointingSupportTest {
         }
 
         @Override
-        public CompletableFuture<Void> flushCheckpoint(Segment segment, @Nullable ProcessingContext context) {
-            if (checkpointFlush == null) {
+        public WorkflowEngineCheckpointingSupport.CheckpointFlush decideCheckpointFlush(Segment segment) {
+            var flush = checkpointFlush;
+            if (flush == null) {
                 throw new IllegalStateException("cannot flush");
             }
-            return checkpointFlush;
+            return context -> {
+                writes.add(new Write(context, pendingWork));
+                writeThreads.add(Thread.currentThread());
+                return flush;
+            };
         }
 
         @Override
         public CompletableFuture<Void> flushRelease(Segment segment) {
             return releaseFlush;
+        }
+    }
+
+    /**
+     * A coordinator deciding its checkpoint writes through a real {@link RunningWorkflowsProjection}, whose workflow
+     * work is unsafe while the test says so.
+     */
+    private static final class ProjectingCoordinator
+            implements WorkflowEngineCheckpointingSupport.CheckpointLatchCoordinator {
+
+        private final RunningWorkflowsProjection projection;
+        private volatile boolean pendingWork;
+
+        private ProjectingCoordinator(RunningWorkflowsProjection projection) {
+            this.projection = projection;
+        }
+
+        @Override
+        public boolean hasUnsafeCheckpointWork(Segment segment) {
+            return pendingWork;
+        }
+
+        @Override
+        public boolean holdsCheckpoint(Segment segment) {
+            return false;
+        }
+
+        @Override
+        public void addCheckpointLatch(Segment segment, Runnable latch) {
+            // The workflow work never reaches this latch: it only turns safe for a later checkpoint.
+        }
+
+        @Override
+        public WorkflowEngineCheckpointingSupport.CheckpointFlush decideCheckpointFlush(Segment segment) {
+            return projection.decideCheckpoint(segment);
         }
     }
 

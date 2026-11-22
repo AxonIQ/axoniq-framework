@@ -17,16 +17,20 @@ import org.axonframework.messaging.eventhandling.processing.streaming.segmenting
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.jspecify.annotations.Nullable;
 
+import java.time.Duration;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 
 import static java.util.Objects.requireNonNull;
 import static org.axonframework.common.BuilderUtils.assertPositive;
+import static org.axonframework.common.BuilderUtils.assertThat;
+import static org.axonframework.common.FutureUtils.joinAndUnwrap;
 
 /**
  * A {@link Checkpointing} implementation dedicated for a {@link WorkflowEngine}, to separate check pointing behavior
@@ -45,10 +49,16 @@ import static org.axonframework.common.BuilderUtils.assertPositive;
  * {@link WorkflowExecution} latches (attached by the {@link CheckpointLatchCoordinator}) have been crossed.
  * <p>
  * A checkpoint also makes the state the coordinator derives from the handled events durable, such as the index of
- * running workflows: {@link #onCheckpointAdvanced(Segment, TrackingToken, ProcessingContext)} first runs
- * {@link CheckpointLatchCoordinator#flushCheckpoint(Segment, ProcessingContext)}, within the context the processor
- * stores the token in when it hands one over. When that flush fails, the checkpoint fails right away, and the processor
- * releases the segment and claims it again after a back-off, restoring its workflows from the event store.
+ * running workflows. {@link #onCheckpointAdvanced(Segment, TrackingToken, ProcessingContext)}
+ * {@link CheckpointLatchCoordinator#decideCheckpointFlush(Segment) decides} what to write when the checkpoint is taken,
+ * waits until the workflow work of the segment is safe, and only then writes it, within the context the processor
+ * stores the token in when it hands one over. Waiting first keeps a write that joins the transaction of the processor
+ * from holding the locks it takes on the index while the workflows reach a safe point. The transaction of the
+ * processor, and the database connection it uses, do stay open during that wait. With a small connection pool,
+ * workflows that need a connection to reach their safe point, for example to append their events, may then wait for a
+ * connection that the waiting checkpoints hold, so that checkpoints time out. When the write fails, or the workflow
+ * work does not turn safe within the safe-point timeout, the checkpoint fails, and the processor releases the segment
+ * and claims it again after a back-off, restoring its workflows from the event store.
  * <p>
  * A positive checkpoint interval forwards at most one checkpoint request per segment within that interval, so the
  * processor waits for safe points less often under load. A request within the interval is dropped, so the stored token
@@ -62,12 +72,27 @@ import static org.axonframework.common.BuilderUtils.assertPositive;
 @Internal
 public class WorkflowEngineCheckpointingSupport implements Checkpointing {
 
+    /**
+     * Default time a checkpoint waits for the workflow work of its segment to be safe before it writes, on the thread
+     * of the processor when it writes within the context of the processor.
+     * <p>
+     * It equals the time the processor waits for the position the participants of a checkpoint agree on, so a
+     * checkpoint whose workflow work does not turn safe in time fails as it would when the processor timed out on it.
+     * The wait takes no lock on the index of running workflows, as nothing is written yet, but the transaction of the
+     * processor, and its database connection, stay open throughout.
+     */
+    public static final Duration DEFAULT_SAFE_POINT_TIMEOUT = Duration.ofSeconds(30);
+
     private final CheckpointLatchCoordinator checkpointLatchCoordinator;
     private final Map<Integer, CheckpointTrigger> segmentIdToTrigger = new ConcurrentHashMap<>();
     private final long checkpointIntervalNanos;
     private final Map<Integer, Long> lastForwardNanos = new ConcurrentHashMap<>();
     // Segments whose release failed, until they are claimed again.
     private final Set<Integer> failedReleases = ConcurrentHashMap.newKeySet();
+    private final Duration safePointTimeout;
+    // The threads taking a checkpoint within a context that wait for the safe point before they write. Package-private
+    // so a test can tell that such a thread waits, instead of waiting a while for a write that must not happen.
+    final AtomicInteger safePointWaiters = new AtomicInteger();
 
     /**
      * Creates checkpointing support for a {@link WorkflowEngine} that forwards at most one checkpoint request per
@@ -87,11 +112,38 @@ public class WorkflowEngineCheckpointingSupport implements Checkpointing {
      */
     public WorkflowEngineCheckpointingSupport(CheckpointLatchCoordinator checkpointLatchCoordinator,
                                               long checkpointInterval) {
+        this(checkpointLatchCoordinator, checkpointInterval, DEFAULT_SAFE_POINT_TIMEOUT);
+    }
+
+    /**
+     * Creates checkpointing support for a {@link WorkflowEngine} that forwards at most one checkpoint request per
+     * segment within the given {@code checkpointInterval}, and fails a checkpoint when the workflow work of its segment
+     * does not turn safe within the given {@code safePointTimeout}.
+     * <p>
+     * See {@link #WorkflowEngineCheckpointingSupport(CheckpointLatchCoordinator, long)}, which uses
+     * {@link #DEFAULT_SAFE_POINT_TIMEOUT}.
+     *
+     * @param checkpointLatchCoordinator adds a latch to coordinated {@link WorkflowExecution WorkflowExecutions} to
+     *                                   ensure all have reached a safe point to advance the checkpoint
+     * @param checkpointInterval         the minimum time, in milliseconds, between two forwarded checkpoint requests
+     *                                   of the same segment, where {@code 0} forwards every request
+     * @param safePointTimeout           the time a checkpoint waits for the workflow work of its segment to be safe,
+     *                                   on the thread of the processor when it writes within the context of the
+     *                                   processor
+     * @throws AxonConfigurationException if {@code checkpointInterval} is negative, or {@code safePointTimeout} is not
+     *                                    positive
+     */
+    public WorkflowEngineCheckpointingSupport(CheckpointLatchCoordinator checkpointLatchCoordinator,
+                                              long checkpointInterval,
+                                              Duration safePointTimeout) {
         this.checkpointLatchCoordinator = requireNonNull(
                 checkpointLatchCoordinator, "The CheckpointLatchCoordinator must not be null."
         );
         assertPositive(checkpointInterval, "The checkpoint interval must not be negative.");
         this.checkpointIntervalNanos = TimeUnit.MILLISECONDS.toNanos(checkpointInterval);
+        requireNonNull(safePointTimeout, "The safe-point timeout must not be null.");
+        assertThat(safePointTimeout, Duration::isPositive, "The safe-point timeout must be positive.");
+        this.safePointTimeout = safePointTimeout;
     }
 
     /**
@@ -110,7 +162,13 @@ public class WorkflowEngineCheckpointingSupport implements Checkpointing {
     /**
      * {@inheritDoc}
      * <p>
-     * As {@link #onCheckpointAdvanced(Segment, TrackingToken, ProcessingContext)}, without a context to write in.
+     * As {@link #onCheckpointAdvanced(Segment, TrackingToken, ProcessingContext)}, without a context to write in, so
+     * without waiting on the calling thread: the decided state is written in a transaction of its own once the workflow
+     * work of the segment is safe. Fails without writing when the workflow work does not turn safe within the
+     * safe-point timeout. Only that wait is bounded by the safe-point timeout: the write after it is bounded by the
+     * flush itself, if at all, so the decided state may still land a while after the processor gave up on the
+     * checkpoint. That is harmless, as the written state converges: the next claim of the segment corrects what such a
+     * late write left behind.
      */
     @Override
     public CompletableFuture<TrackingToken> onCheckpointAdvanced(Segment segment,
@@ -121,9 +179,15 @@ public class WorkflowEngineCheckpointingSupport implements Checkpointing {
     /**
      * {@inheritDoc}
      * <p>
-     * First {@link CheckpointLatchCoordinator#flushCheckpoint(Segment, ProcessingContext) flushes} the coordinator,
-     * right away on the calling thread, so it can write within the transaction of the given {@code context}. Fails as
-     * soon as that flush fails; otherwise completes once the workflow work of the segment is safe as well.
+     * First {@link CheckpointLatchCoordinator#decideCheckpointFlush(Segment) decides} what the coordinator writes for
+     * this checkpoint. Then waits, on the calling thread and for at most the safe-point timeout given at construction,
+     * {@link #DEFAULT_SAFE_POINT_TIMEOUT} by default, until the workflow work of the segment is safe, and only then
+     * writes the decided state, still on the calling thread, so it can write within the transaction of the given
+     * {@code context}. That wait takes no lock on the index, but the transaction of the {@code context} stays open
+     * during it. The processor hands the segment no further event meanwhile, so the decided state may also take in
+     * what the workflows record while they reach their safe point, see
+     * {@link CheckpointLatchCoordinator#decideCheckpointFlush(Segment)}. Fails right away when deciding fails, and
+     * when the wait or the write fails. The decided state then stays to be written.
      */
     @Override
     public CompletableFuture<TrackingToken> onCheckpointAdvanced(Segment segment,
@@ -135,8 +199,28 @@ public class WorkflowEngineCheckpointingSupport implements Checkpointing {
     private CompletableFuture<TrackingToken> advance(Segment segment,
                                                      TrackingToken requested,
                                                      @Nullable ProcessingContext context) {
-        return flush(() -> checkpointLatchCoordinator.flushCheckpoint(segment, context))
-                .thenCompose(flushed -> awaitSafe(segment, requested));
+        CheckpointFlush decided;
+        try {
+            decided = checkpointLatchCoordinator.decideCheckpointFlush(segment);
+        } catch (RuntimeException e) {
+            return CompletableFuture.failedFuture(e);
+        }
+        CompletableFuture<TrackingToken> safe = awaitSafe(segment, requested);
+        if (context == null) {
+            return safe.orTimeout(safePointTimeout.toMillis(), TimeUnit.MILLISECONDS)
+                       .thenCompose(token -> flush(() -> decided.write(null)).thenApply(written -> token));
+        }
+        // A write within the context joins the transaction bound to the calling thread, so the wait happens here.
+        TrackingToken token;
+        safePointWaiters.incrementAndGet();
+        try {
+            token = joinAndUnwrap(safe, safePointTimeout);
+        } catch (Exception e) {
+            return CompletableFuture.failedFuture(e);
+        } finally {
+            safePointWaiters.decrementAndGet();
+        }
+        return flush(() -> decided.write(context)).thenApply(written -> token);
     }
 
     private CompletableFuture<TrackingToken> awaitSafe(Segment segment, TrackingToken requested) {
@@ -318,18 +402,22 @@ public class WorkflowEngineCheckpointingSupport implements Checkpointing {
         void addCheckpointLatch(Segment segment, Runnable latch);
 
         /**
-         * Makes the state the given {@code segment} derived from the events it handled so far durable, ahead of a
-         * checkpoint of the segment, within the given {@code context} where possible.
+         * Decides which state the given {@code segment} derived from the events it handled so far is made durable by
+         * the checkpoint being taken, and returns the flush writing exactly that state.
          * <p>
-         * Defaults to a completed future: no other state needs to be durable before the checkpoint.
+         * The decision is taken when the checkpoint is, so it covers every event up to the checkpoint. The flush runs
+         * only once the workflow work of the segment is safe. State changed meanwhile need not be written by it, but by
+         * a later checkpoint or the release of the segment. A flush given a context may write state the workflows
+         * recorded meanwhile as well: the processor hands the segment no further event while it waits within that
+         * context. Defaults to a flush that writes nothing: no other state needs to be durable before the checkpoint.
          *
          * @param segment the segment whose checkpoint is being advanced
-         * @param context the context the processor stores the checkpoint in, or {@code null} when unknown
-         * @return a future completing once the state is durable, or written within the {@code context}, or failing
-         * when it could not be made durable, which fails the checkpoint
+         * @return the flush writing the decided state
+         * @throws IllegalStateException when the state of the segment cannot be made durable, which fails the
+         *                               checkpoint
          */
-        default CompletableFuture<Void> flushCheckpoint(Segment segment, @Nullable ProcessingContext context) {
-            return CompletableFuture.completedFuture(null);
+        default CheckpointFlush decideCheckpointFlush(Segment segment) {
+            return context -> CompletableFuture.completedFuture(null);
         }
 
         /**
@@ -344,5 +432,23 @@ public class WorkflowEngineCheckpointingSupport implements Checkpointing {
         default CompletableFuture<Void> flushRelease(Segment segment) {
             return CompletableFuture.completedFuture(null);
         }
+    }
+
+    /**
+     * Writes the state a {@link CheckpointLatchCoordinator} decided to make durable for one checkpoint.
+     */
+    @Internal
+    @FunctionalInterface
+    public interface CheckpointFlush {
+
+        /**
+         * Writes the decided state, within the given {@code context} where possible.
+         *
+         * @param context the context the processor stores the checkpoint in, or {@code null} when unknown or when the
+         *                write does not run on the thread of that context
+         * @return a future completing once the state is durable, or written within the {@code context}, or failing
+         * when it could not be made durable, which fails the checkpoint
+         */
+        CompletableFuture<Void> write(@Nullable ProcessingContext context);
     }
 }

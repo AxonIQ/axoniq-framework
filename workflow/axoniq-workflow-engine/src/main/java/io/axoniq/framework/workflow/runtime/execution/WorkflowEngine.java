@@ -537,12 +537,14 @@ public class WorkflowEngine implements
     /**
      * {@inheritDoc}
      * <p>
-     * Writes the pending changes to the index of running workflows. Fails when they cannot be written in time, or when
-     * the claim of the segment did not finish restoring, which fails the checkpoint.
+     * Decides to write the changes to the index of running workflows pending now. A flush within the processor's
+     * context also writes the hibernation hints recorded while the checkpoint waits for its workflows, see
+     * {@link RunningWorkflowsProjection#decideCheckpoint(Segment)}. Fails right away when the claim of the segment did not finish restoring, and the flush fails
+     * when the changes cannot be written in time; either fails the checkpoint.
      */
     @Override
-    public CompletableFuture<Void> flushCheckpoint(Segment segment, @Nullable ProcessingContext context) {
-        return runningWorkflows.flushForCheckpoint(segment, context);
+    public WorkflowEngineCheckpointingSupport.CheckpointFlush decideCheckpointFlush(Segment segment) {
+        return runningWorkflows.decideCheckpoint(segment);
     }
 
     /**

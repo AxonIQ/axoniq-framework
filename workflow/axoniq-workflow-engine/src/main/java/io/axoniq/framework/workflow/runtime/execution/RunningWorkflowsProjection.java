@@ -51,9 +51,9 @@ import static java.util.Objects.requireNonNull;
  *     <li>With hibernation, {@link #recordHibernated(Segment, String, HibernationHint)} and
  *     {@link #recordWoken(Segment, String)} record the {@link HibernationHint hint} of an instance that left memory,
  *     and clear it again when it wakes.</li>
- *     <li>Every checkpoint of the segment first writes every pending change through
- *     {@link #flushForCheckpoint(Segment, ProcessingContext)}, and fails when that write fails or does not complete in
- *     time.</li>
+ *     <li>Every checkpoint of the segment decides to write every pending change through
+ *     {@link #decideCheckpoint(Segment)}, writes them once the workflows of the segment are safe, and fails when that
+ *     write fails or does not complete in time.</li>
  *     <li>On release, {@link #flushForRelease(Segment)} writes the pending changes within the release timeout, in a
  *     transaction of the index's own, and {@link #discard(Segment)} stops tracking the segment.</li>
  * </ul>
@@ -73,9 +73,10 @@ import static java.util.Objects.requireNonNull;
  *
  * <h2>Why a stored token never passes an unwritten change</h2>
  * The processor stores a token of a segment that handled events only after a checkpoint, and every checkpoint writes
- * every change applied so far first. So once a token is stored, every change that an event up to that token caused is
- * durable. A checkpoint whose write fails fails as well: the processor releases the segment and claims it again, and
- * the claim restores the running instances from the stored entries and the lifecycle events after the stored token.
+ * every change applied before it was taken first. So once a token is stored, every change that an event up to that
+ * token caused is durable. A checkpoint whose write fails fails as well: the processor releases the segment and claims
+ * it again, and the claim restores the running instances from the stored entries and the lifecycle events after the
+ * stored token.
  * <p>
  * Without a checkpoint, the processor only advances the stored token past events it skipped, as long as it handed none
  * since the stored token. Skipped events carry no lifecycle event of an instance the segment owns, as those are routed
@@ -188,9 +189,9 @@ final class RunningWorkflowsProjection {
     /**
      * Records that the given workflow instance of the given {@code segment} hibernated with the given {@code hint}.
      * <p>
-     * The hint is written by the next checkpoint of the segment whose write joins the transaction of the processor,
-     * see {@link WorkflowIndex#storeWithin(String, IndexDelta, ProcessingContext)}. Ignored when the segment is not
-     * tracked.
+     * The hint is written by the next checkpoint write of the segment that joins the transaction of the processor, see
+     * {@link WorkflowIndex#storeWithin(String, IndexDelta, ProcessingContext)}, also when that checkpoint was decided
+     * before the hint was recorded, see {@link #decideCheckpoint(Segment)}. Ignored when the segment is not tracked.
      *
      * @param segment    the segment owning the instance
      * @param workflowId the id of the hibernated instance
@@ -259,7 +260,7 @@ final class RunningWorkflowsProjection {
      * Only lifecycle events of instances the segment owns change the projection, and any event of an owned instance
      * whose latest recorded change set a hint, which it clears; events published by a workflow through the publish
      * primitive never do. A segment that is not tracked, because its claim did not finish loading,
-     * is ignored: its checkpoints fail, see {@link #flushForCheckpoint(Segment, ProcessingContext)}.
+     * is ignored: its checkpoints fail, see {@link #decideCheckpoint(Segment)}.
      *
      * @param segment the segment handling the event, or {@code null} outside a segmented processor
      * @param event   the handled event
@@ -275,20 +276,31 @@ final class RunningWorkflowsProjection {
     }
 
     /**
-     * Writes every pending change of the given {@code segment} ahead of its checkpoint, within the given
-     * {@code context} when the index can join its transaction.
+     * Decides the changes of the given {@code segment} its checkpoint writes: every change pending now. Returns the
+     * flush writing exactly those, within the context it is given when the index can join its transaction.
      * <p>
-     * Waits for a write still in flight first, so writes of a segment never overtake each other. The returned future
-     * fails when a write fails, when the writes do not complete within the checkpoint timeout, or when the segment is
-     * not tracked, as its claim did not finish loading: its handled events were then never applied. With
+     * A change applied after this decision is not written by the returned flush, but stays pending for a later
+     * checkpoint or the release, also when it replaces a decided change of the same instance. A decided change that a
+     * write made durable meanwhile is not written again. The flush waits for a write still in flight first, so writes
+     * of a segment never overtake each other. It fails when the write fails, when it does not complete within the
+     * checkpoint timeout, or when the segment is no longer tracked; the decided changes then stay pending. With
      * {@link WorkflowIndex#none()}, which keeps nothing, it completes right away.
+     * <p>
+     * Hints are the exception: a flush given a context also writes every hint recorded after this decision. Workflows
+     * tend to hibernate exactly when they reach the safe point the checkpoint waits for, and a segment that turns idle
+     * takes no later checkpoint to write their hints. That is safe, as the processor hands the segment no further
+     * event while it waits for the checkpoint within that context: such a hint reflects no more events than one
+     * recorded before the decision, and a claim ignores the hint of an instance with an event of its own after the
+     * token, such as one appended by the instance itself.
      *
      * @param segment the segment whose checkpoint is being taken
-     * @param context the context the processor stores the checkpoint in, or {@code null} when unknown
-     * @return a future completing once every change applied so far is durable, or written within the {@code context}
+     * @return the flush writing the decided changes, and completing once they are durable, or written within its
+     * context
+     * @throws IllegalStateException when the segment is not tracked, as its claim did not finish loading: its handled
+     *                               events were then never applied
      */
-    CompletableFuture<Void> flushForCheckpoint(Segment segment, @Nullable ProcessingContext context) {
-        return flushWithin(segment, context, checkpointTimeout);
+    WorkflowEngineCheckpointingSupport.CheckpointFlush decideCheckpoint(Segment segment) {
+        return decideFlush(segment, checkpointTimeout);
     }
 
     /**
@@ -305,7 +317,13 @@ final class RunningWorkflowsProjection {
      * @return a future completing once every change applied so far is durable
      */
     CompletableFuture<Void> flushForRelease(Segment segment) {
-        return flushWithin(segment, null, releaseTimeout).whenComplete((flushed, failure) -> {
+        CompletableFuture<Void> flushed;
+        try {
+            flushed = decideFlush(segment, releaseTimeout).write(null);
+        } catch (IllegalStateException e) {
+            flushed = CompletableFuture.failedFuture(e);
+        }
+        return flushed.whenComplete((ignored, failure) -> {
             if (failure != null) {
                 logger.info("Could not write the running workflows of segment {} on release; its stored token does "
                                     + "not advance.",
@@ -314,19 +332,32 @@ final class RunningWorkflowsProjection {
         });
     }
 
-    private CompletableFuture<Void> flushWithin(Segment segment,
-                                                @Nullable ProcessingContext context,
-                                                Duration timeout) {
+    /**
+     * Decides to write every change of the given {@code segment} pending now, and returns the flush writing exactly
+     * those, failing when it does not complete within the given {@code timeout}.
+     *
+     * @param segment the segment whose changes to write
+     * @param timeout the time the returned flush waits for the write at most
+     * @return the flush writing the decided changes
+     * @throws IllegalStateException when the segment is not tracked
+     */
+    private WorkflowEngineCheckpointingSupport.CheckpointFlush decideFlush(Segment segment, Duration timeout) {
         if (!indexed) {
-            return CompletableFuture.completedFuture(null);
+            return context -> CompletableFuture.completedFuture(null);
         }
+        SegmentProjection projection = trackedProjection(segment);
+        Map<String, Change> decided = projection.decide();
+        return context -> projection.write(decided, context).orTimeout(timeout.toMillis(), TimeUnit.MILLISECONDS);
+    }
+
+    private SegmentProjection trackedProjection(Segment segment) {
         SegmentProjection projection = segments.get(segment.getSegmentId());
         if (projection == null) {
-            return CompletableFuture.failedFuture(new IllegalStateException(
+            throw new IllegalStateException(
                     "The running workflows of segment " + segment.getSegmentId() + " are not tracked."
-            ));
+            );
         }
-        return projection.flush(context).orTimeout(timeout.toMillis(), TimeUnit.MILLISECONDS);
+        return projection;
     }
 
 
@@ -486,40 +517,113 @@ final class RunningWorkflowsProjection {
         }
 
         /**
-         * Writes every pending change once the write in flight settled, within the given {@code context} when the
-         * index can join its transaction, and returns a future completing once they are durable, or written within
-         * that context, or failing when the write fails.
+         * Returns every pending change, as decided for a write.
+         *
+         * @return the pending changes, by workflow id
+         * @throws IllegalStateException when the segment is no longer tracked
+         */
+        Map<String, Change> decide() {
+            return locked(() -> {
+                if (closed) {
+                    throw noLongerTracked();
+                }
+                return Map.copyOf(unwritten);
+            });
+        }
+
+        private IllegalStateException noLongerTracked() {
+            return new IllegalStateException(
+                    "The running workflows of segment " + segment.getSegmentId() + " are no longer tracked."
+            );
+        }
+
+        /**
+         * Writes the given decided changes that are not durable yet once the write in flight settled, within the given
+         * {@code context} when the index can join its transaction, and returns a future completing once they are
+         * durable, or written within that context, or failing when the write fails.
          * <p>
-         * A write within the context runs on the calling thread and has settled when this returns, so a later flush
-         * never waits for it. Only writes in a transaction of their own are ever in flight. A flush that has to wait
+         * A decided change is written as decided, also when a later change of the same instance replaced it: that
+         * later change stays pending. A decided change is skipped only when its instance has no pending change left,
+         * as a write made it durable meanwhile. A write that lands late, after a later write of the same instance, can
+         * thus leave an older entry in the index. That converges: an instance never runs again once it ended, and only
+         * a write within the context of a checkpoint writes hints, so such an entry is at worst one of an instance that
+         * ended, which the next claim removes, see {@link ClaimedIndex#withoutStale(Set)}, or one without the hint the
+         * instance hibernated with, which only makes the next claim restore it into memory.
+         * <p>
+         * A write within a {@code context} also writes every hint that is pending now, also one recorded after the
+         * changes were decided, see {@link RunningWorkflowsProjection#decideCheckpoint(Segment)}.
+         * <p>
+         * A write within the context runs on the calling thread and has settled when this returns, so a later write
+         * never waits for it. Only writes in a transaction of their own are ever in flight. A write that has to wait
          * for one writes in a transaction of its own as well, as it then no longer runs on the calling thread, which
          * the context's transaction is bound to. Changes that set a hint are only written in full within the context;
          * any other write writes their instance as running without a hint, and keeps them pending.
          */
-        CompletableFuture<Void> flush(@Nullable ProcessingContext context) {
+        CompletableFuture<Void> write(Map<String, Change> decided, @Nullable ProcessingContext context) {
             CompletableFuture<Void> inFlight;
-            Map<String, Change> pending;
+            Map<String, Change> pending = new HashMap<>();
             CompletableFuture<Void> settled = new CompletableFuture<>();
             lock.lock();
             try {
                 if (closed) {
-                    return CompletableFuture.failedFuture(new IllegalStateException(
-                            "The running workflows of segment " + segment.getSegmentId() + " are no longer tracked."
-                    ));
+                    return CompletableFuture.failedFuture(noLongerTracked());
                 }
                 inFlight = writeInFlight;
-                pending = inFlight == null && !unwritten.isEmpty() ? Map.copyOf(unwritten) : null;
-                if (pending != null) {
-                    writeInFlight = settled;
+                if (inFlight == null) {
+                    decided.forEach((id, change) -> {
+                        Change current = unwritten.get(id);
+                        if (current != null) {
+                            pending.put(id, current.seq() == change.seq() ? current : change);
+                        }
+                    });
+                    if (context != null) {
+                        unwritten.forEach((id, current) -> {
+                            if (current.setsHint()) {
+                                pending.put(id, current);
+                            }
+                        });
+                    }
+                    if (!pending.isEmpty()) {
+                        writeInFlight = settled;
+                    }
                 }
             } finally {
                 lock.unlock();
             }
             if (inFlight != null) {
-                // Whatever its outcome: the changes of a failed write are pending again, and written next.
-                return inFlight.thenCompose(ignored -> flush(null));
+                return writeAfter(inFlight, decided);
             }
-            return pending == null ? CompletableFuture.completedFuture(null) : issue(pending, settled, context);
+            return pending.isEmpty()
+                    ? CompletableFuture.completedFuture(null)
+                    : issue(Map.copyOf(pending), settled, context);
+        }
+
+        /**
+         * Writes the given decided changes in a transaction of the index's own once the given write in flight settled,
+         * whatever its outcome: the changes of a failed write are pending again, and written by this one.
+         * <p>
+         * Writes nothing when the returned future completed before the write in flight settled, as when its caller
+         * timed it out: the caller gave up on the write, so the decided changes stay pending for a later write instead
+         * of being written long after. A future composed on the write in flight would skip the write in that case as
+         * well, as it does not run a function for a dependent that is already complete; this states it explicitly
+         * instead of relying on that.
+         */
+        private CompletableFuture<Void> writeAfter(CompletableFuture<Void> inFlight, Map<String, Change> decided) {
+            CompletableFuture<Void> chained = new CompletableFuture<>();
+            inFlight.whenComplete((ignored, inFlightFailure) -> {
+                // The caller gave up on this write, for example by timing out the returned future.
+                if (chained.isDone()) {
+                    return;
+                }
+                write(decided, null).whenComplete((written, failure) -> {
+                    if (failure == null) {
+                        chained.complete(null);
+                    } else {
+                        chained.completeExceptionally(failure);
+                    }
+                });
+            });
+            return chained;
         }
 
         /**
@@ -607,12 +711,22 @@ final class RunningWorkflowsProjection {
         }
 
         /**
-         * Starts tracking the given changes of a write within a context, until that context ended.
+         * Starts tracking the given changes of a write within a context, until that context ended. Only the changes
+         * that are still the pending change of their instance are tracked: a rollback must not make a change pending
+         * again that a later change replaced, as that later change may be durable by then.
          */
         private Map<String, Change> trackUncommitted(Map<String, Change> changes) {
-            Map<String, Change> restorable = new HashMap<>(changes);
-            locked(() -> uncommitted.add(restorable));
-            return restorable;
+            return locked(() -> {
+                Map<String, Change> restorable = new HashMap<>();
+                changes.forEach((id, change) -> {
+                    Change current = unwritten.get(id);
+                    if (current != null && current.seq() == change.seq()) {
+                        restorable.put(id, change);
+                    }
+                });
+                uncommitted.add(restorable);
+                return restorable;
+            });
         }
 
         /**
@@ -645,11 +759,15 @@ final class RunningWorkflowsProjection {
             locked(() -> {
                 writeInFlight = null;
                 if (failure == null) {
-                    // A change applied after the write was taken stays pending.
-                    write.changes().forEach((id, written) -> unwritten.remove(id, written));
+                    // A change applied after the write was decided stays pending.
+                    write.changes().forEach((id, written) -> unwritten.computeIfPresent(
+                            id, (ignored, current) -> current.seq() == written.seq() ? null : current
+                    ));
                     // A hint written without its hint stays pending, until a write within a context writes it.
-                    write.withoutHint().forEach((id, written) -> unwritten.replace(id, written,
-                                                                                   written.withBaseWritten()));
+                    write.withoutHint().forEach((id, written) -> unwritten.computeIfPresent(
+                            id,
+                            (ignored, current) -> current.seq() == written.seq() ? current.withBaseWritten() : current
+                    ));
                 }
                 // A failed write keeps its changes pending.
             });

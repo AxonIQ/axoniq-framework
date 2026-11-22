@@ -410,6 +410,7 @@ The engine clears a hint again when the workflow wakes, or when any of its event
 
 A hint is not derived from the events, so a hint written late, after another node already cleared it, could route events away from the workflow.
 The engine therefore only writes a hint with a checkpoint that commits together with the token of the segment.
+Such a checkpoint also writes the hints of workflows that hibernate while it waits for the workflows of the segment to reach a safe point.
 With the `JpaWorkflowIndex`, that is a checkpoint whose write joins the JPA transaction of the processor, with a JPA token store in the same database: the token store refuses the token of a node that lost the segment, which rolls back the hint as well.
 A checkpoint that does not advance the token stores no token; the processor then extends its claim of the segment in the same transaction instead, which fails for a node that lost the segment and rolls back the hint the same way.
 Both checks need the token store to keep its claims in the transaction of the index: with a token store that keeps no claims, such as the `InMemoryTokenStore`, nothing holds back a hint of a node that lost the segment.

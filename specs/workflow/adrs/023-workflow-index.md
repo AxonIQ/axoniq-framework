@@ -30,8 +30,11 @@ The index has no position of its own. Its contents are valid up to the token the
 
 - The engine applies the lifecycle events it handles to in-memory pending changes of the segment, on the handler
   thread (`RunningWorkflowsProjection`).
-- It decides on checkpoints as before (decide-then-flush). In `onCheckpointAdvanced`, it flushes every pending change
-  of the segment and completes only once they are durable, before the processor stores the token.
+- It decides on checkpoints as before (decide-then-flush). In `onCheckpointAdvanced`, it decides which pending changes
+  of the segment the checkpoint writes, waits until the workflows of the segment reach a safe point (bounded by a
+  safe-point timeout), and then writes those changes before the processor stores the token: within the processor's
+  transaction when the index can join it, otherwise durably in a transaction of its own. Changes applied after the
+  decision stay pending for the next checkpoint or the release.
 - A failed or timed-out flush fails the checkpoint. The processor releases the segment and claims it again later, and
   the claim restores the running workflows from the event store, so no change is lost.
 - Entries may be ahead of the stored token (a crash after the flush, before the token was stored). Re-applying the
