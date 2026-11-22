@@ -331,7 +331,7 @@ public class WorkflowEngine implements
             registerCancellation(execution);
             checkpointWorkIndex.register(execution.workflowId(), execution::registerCheckpointWorkStateListener);
             if (isSegmentCaughtUp(segment)) {
-                execute(execution, segment);
+                execute(execution);
             }
         });
     }
@@ -435,13 +435,10 @@ public class WorkflowEngine implements
                                                        @Nullable TrackingToken claimedFrom,
                                                        ProcessingContext sourcingContext,
                                                        ProcessingContext executionContext) {
-        // Tags the restored executions with their segment, so that a completion arriving long after this callback
-        // returned is attributed to the segment that owns the instance instead of being dropped without one. Only
-        // safe because the start pass below is scoped to this segment: every body started here is owned by it.
+        // Gives the restored executions the segment that owns them, which an execution started by an event has from
+        // the context of that event, so a workflow handler resolving the segment, such as through a Segment
+        // parameter, gets it either way. Correct because every execution restored on this context is owned by it.
         executionContext.putResource(Segment.RESOURCE_KEY, segment);
-        if (claimedFrom != null) {
-            executionContext.putResource(TrackingToken.RESOURCE_KEY, claimedFrom);
-        }
         // A new claim handles the events a failed event held the checkpoint of the previous claim for again.
         catchUpSupport.startClaim(segment);
         return loadRunningWorkflows(segment, claimedFrom, sourcingContext, executionContext)
@@ -692,17 +689,16 @@ public class WorkflowEngine implements
         logger.debug("Starting {} restored workflow execution(s) {}.", executionsToStart.size(), phase);
         for (var execution : executionsToStart) {
             registerCancellation(execution);
-            execute(execution, segment);
+            execute(execution);
         }
         logger.debug("Started {} restored workflow execution(s) {}.", executionsToStart.size(), phase);
     }
 
-    private void execute(WorkflowExecution execution, @Nullable Segment segment) {
+    private void execute(WorkflowExecution execution) {
         execution.workflowExecutionOperations()
                  .processingContext()
                  .whenComplete(context -> {
                      try {
-                         var executionToken = TrackingToken.fromContext(context).orElse(null);
                          logger.debug("Executing workflow execution with id: {}", execution.workflowId());
                          execution.execute(
                                  finished -> {
@@ -710,9 +706,6 @@ public class WorkflowEngine implements
                                                   execution.workflowId(),
                                                   finished.state().workflowStatus());
                                      removeExecution(execution.workflowId());
-                                     // The completion is safe for the segment that owns this instance and started its
-                                     // body, at that segment's own position: never at another segment's.
-                                     checkpointingSupport.requestCheckpoint(segment, executionToken);
                                  }
                          ).whenComplete((ignored, failure) -> {
                              if (failure != null) {
@@ -755,8 +748,7 @@ public class WorkflowEngine implements
      * this, a graceful shutdown can hang because the workflow executor (e.g. a virtual-thread-per-task executor) blocks
      * on {@code close()} waiting for those threads to terminate. See issue #125.
      * <p>
-     * A workflow driver that exits after this call skips its termination handler, so it touches no engine state and
-     * requests no checkpoint.
+     * A workflow driver that exits after this call skips its termination handler, so it touches no engine state.
      */
     public void shutdown() {
         shutDown = true;

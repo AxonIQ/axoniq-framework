@@ -78,7 +78,8 @@ class WorkflowEngineCrossSegmentCheckpointTest {
     private static final String PROCESSOR = "Workflow";
 
     /**
-     * Instance whose start event segment A handles, and whose asynchronous completion raises the leaking request.
+     * Instance whose start event segment A handles, and whose body completes asynchronously, once the node holds both
+     * segments.
      */
     private static final String STRAGGLER_ID = "sharded-0";
     private static final QualifiedName START_EVENT = new QualifiedName("StartShardedWorkflow");
@@ -176,8 +177,8 @@ class WorkflowEngineCrossSegmentCheckpointTest {
         //    not in place of it.
         slowWorker.claim();
 
-        // 3. The straggler workflow (owned by the FAST segment) completes asynchronously. The engine's completion
-        //    callback requests a checkpoint at the fast segment's position 100, through the fast segment's trigger.
+        // 3. The straggler workflow (owned by the FAST segment) completes asynchronously, while the node holds both
+        //    segments.
         assertThat(stragglerTermination.get()).as("the straggler workflow body must have been started").isNotNull();
         stragglerTermination.get().accept(straggler);
 
