@@ -439,13 +439,14 @@ Its deadline support works as before: a saga handler's `DeadlineManager` paramet
 then in the saga's `@DeadlineHandler`.
 The `expectScheduledDeadline*`, `expectNoScheduledDeadline*` and `expectTriggeredDeadlines*` assertions and the deadline
 interceptor registrations are available too.
+Scheduled events work the same way: a saga handler's `EventScheduler` parameter resolves to the fixture's
+`StubEventScheduler`, and moving the fixture's time publishes every scheduled event due by then.
+The `expectScheduledEvent*` and `expectNoScheduledEvent*` assertions check the events still scheduled.
 A suite needs the following changes:
 
 * Stop the fixture after each test with `fixture.stop()`, as it runs a started configuration.
 * Write deadline interceptors against the Axon Framework 5 interceptor signatures, which take a `ProcessingContext` and
 an interceptor chain.
-* Leave out the scheduled event assertions, such as `expectNoScheduledEvents()`. The event scheduler is not part of the
-legacy module, so these assertions fail with an `UnsupportedOperationException`.
 
 Write new tests for the process migrated to Axon Framework 5 with `AxonTestFixture`: publish events that drive the
 process and assert on the commands it sends.

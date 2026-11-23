@@ -133,112 +133,164 @@ public interface FixtureExecutionResult {
      */
     FixtureExecutionResult expectSuccessfulHandlerExecution();
 
-    // TODO #3104 - the event scheduler has not been ported into axoniq-legacy. The scheduled event assertions below are
-    // declared so an Axon Framework 4 test suite still compiles, but every call throws an
-    // UnsupportedOperationException instead of passing without exercising the requested behaviour. The Axon
-    // Framework 4 implementation of each is kept as a comment in FixtureExecutionResultImpl.
-
     /**
-     * Asserts that an event matching the given {@code matcher} is scheduled after the given {@code duration}.
+     * Asserts that an event matching the given {@code matcher} has been scheduled to be published after the given
+     * {@code duration}.
      *
+     * @param duration the time to wait before the event should be published
+     * @param matcher  a matcher defining the event expected to be published
      * @return the FixtureExecutionResult for method chaining
-     * @throws UnsupportedOperationException always, as {@code axoniq-legacy} carries no event scheduler
      */
     FixtureExecutionResult expectScheduledEventMatching(Duration duration, Matcher<? super EventMessage> matcher);
 
     /**
-     * Asserts that the given {@code applicationEvent} is scheduled after the given {@code duration}.
+     * Asserts that an event equal to the given {@code applicationEvent} has been scheduled for publication after the
+     * given {@code duration}.
+     * <p>
+     * Note that the source attribute of the application event is ignored when comparing events. Events are compared
+     * using an "equals" check on all fields in the events.
      *
+     * @param duration         the time to wait before the event should be published
+     * @param applicationEvent the event expected to be scheduled for publication
      * @return the FixtureExecutionResult for method chaining
-     * @throws UnsupportedOperationException always, as {@code axoniq-legacy} carries no event scheduler
      */
     FixtureExecutionResult expectScheduledEvent(Duration duration, Object applicationEvent);
 
     /**
-     * Asserts that an event of the given {@code eventType} is scheduled after the given {@code duration}.
+     * Asserts that an event of the given {@code eventType} has been scheduled for publication after the given
+     * {@code duration}.
      *
+     * @param duration  the time to wait before the event should be published
+     * @param eventType the type of the event expected to be scheduled for publication
      * @return the FixtureExecutionResult for method chaining
-     * @throws UnsupportedOperationException always, as {@code axoniq-legacy} carries no event scheduler
      */
     FixtureExecutionResult expectScheduledEventOfType(Duration duration, Class<?> eventType);
 
     /**
-     * Asserts that an event matching the given {@code matcher} is scheduled at the given {@code scheduledTime}.
+     * Asserts that an event matching the given {@code matcher} has been scheduled to be published at the given
+     * {@code scheduledTime}.
+     * <p>
+     * If the {@code scheduledTime} is calculated based on the "current time", use the
+     * {@link FixtureConfiguration#currentTime()} to get the time to use as "current time".
      *
+     * @param scheduledTime the time at which the event should be published
+     * @param matcher       a matcher defining the event expected to be published
      * @return the FixtureExecutionResult for method chaining
-     * @throws UnsupportedOperationException always, as {@code axoniq-legacy} carries no event scheduler
      */
     FixtureExecutionResult expectScheduledEventMatching(Instant scheduledTime, Matcher<? super EventMessage> matcher);
 
     /**
-     * Asserts that the given {@code applicationEvent} is scheduled at the given {@code scheduledTime}.
+     * Asserts that an event equal to the given {@code applicationEvent} has been scheduled for publication at the
+     * given {@code scheduledTime}.
+     * <p>
+     * If the {@code scheduledTime} is calculated based on the "current time", use the
+     * {@link FixtureConfiguration#currentTime()} to get the time to use as "current time".
+     * <p>
+     * Note that the source attribute of the application event is ignored when comparing events. Events are compared
+     * using an "equals" check on all fields in the events.
      *
+     * @param scheduledTime    the time at which the event should be published
+     * @param applicationEvent the event expected to be scheduled for publication
      * @return the FixtureExecutionResult for method chaining
-     * @throws UnsupportedOperationException always, as {@code axoniq-legacy} carries no event scheduler
      */
     FixtureExecutionResult expectScheduledEvent(Instant scheduledTime, Object applicationEvent);
 
     /**
-     * Asserts that an event of the given {@code eventType} is scheduled at the given {@code scheduledTime}.
+     * Asserts that an event of the given {@code eventType} has been scheduled for publication at the given
+     * {@code scheduledTime}.
+     * <p>
+     * If the {@code scheduledTime} is calculated based on the "current time", use the
+     * {@link FixtureConfiguration#currentTime()} to get the time to use as "current time".
      *
+     * @param scheduledTime the time at which the scheduled event is expected to be published
+     * @param eventType     the type of the event expected to be scheduled for publication
      * @return the FixtureExecutionResult for method chaining
-     * @throws UnsupportedOperationException always, as {@code axoniq-legacy} carries no event scheduler
      */
     FixtureExecutionResult expectScheduledEventOfType(Instant scheduledTime, Class<?> eventType);
 
     /**
-     * Asserts that no events are scheduled.
+     * Asserts that no events are scheduled for publication.
      *
      * @return the FixtureExecutionResult for method chaining
-     * @throws UnsupportedOperationException always, as {@code axoniq-legacy} carries no event scheduler
      */
     FixtureExecutionResult expectNoScheduledEvents();
 
     /**
-     * Asserts that no event matching the given {@code matcher} is scheduled after the given duration.
+     * Asserts that <b>no</b> event matching the given {@code matcher} has been scheduled to be published after the
+     * given {@code durationToScheduledTime}.
      *
+     * @param durationToScheduledTime the time to wait until the trigger point of the event which should not be
+     *                                scheduled
+     * @param matcher                 the matcher defining the event which should not be scheduled
      * @return the FixtureExecutionResult for method chaining
-     * @throws UnsupportedOperationException always, as {@code axoniq-legacy} carries no event scheduler
      */
-    FixtureExecutionResult expectNoScheduledEventMatching(Duration durationToScheduledTime, Matcher<? super EventMessage> matcher);
+    FixtureExecutionResult expectNoScheduledEventMatching(Duration durationToScheduledTime,
+                                                          Matcher<? super EventMessage> matcher);
 
     /**
-     * Asserts that the given {@code event} is not scheduled after the given duration.
+     * Asserts that <b>no</b> event equal to the given {@code event} has been scheduled after the given
+     * {@code durationToScheduledTime}.
+     * <p>
+     * Note that the source attribute of the event is ignored when comparing events. Events are compared using an
+     * "equals" check on all fields in the events.
      *
+     * @param durationToScheduledTime the time to wait until the trigger point of the event which should not be
+     *                                scheduled
+     * @param event                   the event which should not be scheduled
      * @return the FixtureExecutionResult for method chaining
-     * @throws UnsupportedOperationException always, as {@code axoniq-legacy} carries no event scheduler
      */
     FixtureExecutionResult expectNoScheduledEvent(Duration durationToScheduledTime, Object event);
 
     /**
-     * Asserts that no event of the given {@code eventType} is scheduled after the given duration.
+     * Asserts that <b>no</b> event of the given {@code eventType} has been scheduled after the given
+     * {@code durationToScheduledTime}.
      *
+     * @param durationToScheduledTime the time to wait until the trigger point of the event which should not be
+     *                                scheduled
+     * @param eventType               the type of the event which should not be scheduled
      * @return the FixtureExecutionResult for method chaining
-     * @throws UnsupportedOperationException always, as {@code axoniq-legacy} carries no event scheduler
      */
     FixtureExecutionResult expectNoScheduledEventOfType(Duration durationToScheduledTime, Class<?> eventType);
 
     /**
-     * Asserts that no event matching the given {@code matcher} is scheduled at the given {@code scheduledTime}.
+     * Asserts that <b>no</b> event matching the given {@code matcher} has been scheduled at the given
+     * {@code scheduledTime}.
+     * <p>
+     * If the {@code scheduledTime} is calculated based on the "current time", use the
+     * {@link FixtureConfiguration#currentTime()} to get the time to use as "current time".
      *
+     * @param scheduledTime the time at which no event matching the given {@code matcher} should be scheduled
+     * @param matcher       the matcher defining the event which should not be scheduled
      * @return the FixtureExecutionResult for method chaining
-     * @throws UnsupportedOperationException always, as {@code axoniq-legacy} carries no event scheduler
      */
     FixtureExecutionResult expectNoScheduledEventMatching(Instant scheduledTime, Matcher<? super EventMessage> matcher);
 
     /**
-     * Asserts that the given {@code event} is not scheduled at the given {@code scheduledTime}.
+     * Asserts that <b>no</b> event equal to the given {@code event} has been scheduled at the given
+     * {@code scheduledTime}.
+     * <p>
+     * If the {@code scheduledTime} is calculated based on the "current time", use the
+     * {@link FixtureConfiguration#currentTime()} to get the time to use as "current time".
+     * <p>
+     * Note that the source attribute of the event is ignored when comparing events. Events are compared using an
+     * "equals" check on all fields in the events.
      *
+     * @param scheduledTime the time at which no event equal to the given {@code event} should be scheduled
+     * @param event         the event which should not be scheduled
      * @return the FixtureExecutionResult for method chaining
-     * @throws UnsupportedOperationException always, as {@code axoniq-legacy} carries no event scheduler
      */
     FixtureExecutionResult expectNoScheduledEvent(Instant scheduledTime, Object event);
 
     /**
-     * Asserts that no event of the given {@code eventType} is scheduled at the given {@code scheduledTime}.
+     * Asserts that <b>no</b> event of the given {@code eventType} has been scheduled at the given
+     * {@code scheduledTime}.
+     * <p>
+     * If the {@code scheduledTime} is calculated based on the "current time", use the
+     * {@link FixtureConfiguration#currentTime()} to get the time to use as "current time".
      *
+     * @param scheduledTime the time at which no event of the given {@code eventType} should be scheduled
+     * @param eventType     the type of the event which should not be scheduled
      * @return the FixtureExecutionResult for method chaining
-     * @throws UnsupportedOperationException always, as {@code axoniq-legacy} carries no event scheduler
      */
     FixtureExecutionResult expectNoScheduledEventOfType(Instant scheduledTime, Class<?> eventType);
 

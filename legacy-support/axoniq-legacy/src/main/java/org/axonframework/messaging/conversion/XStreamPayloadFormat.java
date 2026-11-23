@@ -6,7 +6,7 @@
  * https://www.axoniq.io/legal/terms-of-service
  */
 
-package org.axonframework.deadline;
+package org.axonframework.messaging.conversion;
 
 import com.thoughtworks.xstream.XStream;
 import com.thoughtworks.xstream.XStreamException;
@@ -17,12 +17,12 @@ import org.jspecify.annotations.Nullable;
 import java.io.StringWriter;
 
 /**
- * Writes and reads a {@code String} or {@code byte[]} deadline payload as the XStream {@code <string>} or
+ * Writes and reads a {@code String} or {@code byte[]} payload as the XStream {@code <string>} or
  * {@code <byte-array>} element that Axon Framework 4's {@code XStreamSerializer} stored, through XStream itself, so
  * that the escaping and encoding match what Axon Framework 4 wrote and read.
  * <p>
- * Only {@link StoredDeadlineConverter} uses this class. It is kept apart so that XStream, an optional dependency, is
- * only loaded when a deadline is stored or read in the XStream format. Its {@link XStream} instance allows
+ * Only {@link StoredMessageConverter} uses this class. It is kept apart so that XStream, an optional dependency, is
+ * only loaded when a payload is stored or read in the XStream format. Its {@link XStream} instance allows
  * {@code String} and {@code byte[]} only, so stored XML naming any other type is rejected instead of instantiated.
  *
  * @author Jakob Hatzl
@@ -52,15 +52,17 @@ final class XStreamPayloadFormat {
     /**
      * Reads the given stored {@code xml}, a {@code <string>} or {@code <byte-array>} element.
      *
-     * @param xml the stored XStream element
+     * @param xml   the stored XStream element
+     * @param owner the converter reading the element, whose exception to throw if the element cannot be read
      * @return the {@code String} or {@code byte[]} the element holds, or {@code null} if it holds none
-     * @throws DeadlineException if the given {@code xml} is no {@code <string>} or {@code <byte-array>} element
+     * @throws RuntimeException from the {@code exception} method of the given {@code owner}, if the given {@code xml}
+     *                          is no {@code <string>} or {@code <byte-array>} element
      */
-    static @Nullable Object read(String xml) {
+    static @Nullable Object read(String xml, StoredMessageConverter owner) {
         try {
             return XSTREAM.fromXML(xml);
         } catch (XStreamException e) {
-            throw new DeadlineException("The stored payload is no XStream <string> or <byte-array> element", e);
+            throw owner.exception("The stored payload is no XStream <string> or <byte-array> element", e);
         }
     }
 
