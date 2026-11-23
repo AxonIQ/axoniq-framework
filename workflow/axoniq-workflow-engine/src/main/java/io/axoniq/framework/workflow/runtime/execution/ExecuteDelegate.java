@@ -143,7 +143,10 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
 
         var step = workflowExecution.state().getStep(stepName);
         if (step.status() == StepStatus.STARTED || step.status() == StepStatus.RETRY_STARTED) {
-            var actualStartTime = step.timestamp();
+            // An attempt this execution just started is timed from now, so the time its STARTED event took to come back
+            // through the event processor does not count. An attempt started before a restart or by another node keeps
+            // its recorded start.
+            var actualStartTime = ownStartedSteps.contains(stepName) ? clock.instant() : step.timestamp();
             var timeoutDeadline = actualStartTime.plus(timeout);
             var remainingTimeout = Duration.between(clock.instant(), timeoutDeadline);
 
