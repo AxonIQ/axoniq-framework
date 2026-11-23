@@ -14,6 +14,8 @@ import org.axonframework.conversion.jackson.JacksonConverter;
 import org.axonframework.eventsourcing.eventstore.AggregateSequenceNumberPosition;
 import org.axonframework.eventsourcing.eventstore.GlobalIndexPosition;
 import org.axonframework.eventsourcing.snapshot.api.Snapshot;
+import org.axonframework.eventsourcing.snapshot.api.SnapshotCandidate;
+import org.axonframework.eventsourcing.snapshot.api.SnapshotMatch;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.transaction.jdbc.JdbcTransactionalExecutorProvider;
 import org.junit.jupiter.api.*;
@@ -23,7 +25,9 @@ import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -132,6 +136,105 @@ class PostgresqlSnapshotStoreTest {
     }
 
     @Nested
+    class LoadWithCandidates {
+
+        private static final QualifiedName FORMER_NAME = new QualifiedName("com.example.FormerAggregate");
+
+        @Test
+        void shouldReturnTheSnapshotOfTheFirstCandidateWithAnAcceptableOne() {
+            // given
+            store(QUALIFIED_NAME, snapshot(42, "1.0"));
+            store(FORMER_NAME, snapshot(43, "1.0"));
+
+            // when
+            SnapshotMatch match = load(candidate(QUALIFIED_NAME, "1.0"), candidate(FORMER_NAME, "1.0"));
+
+            // then
+            assertThat(match).isNotNull();
+            assertThat(match.qualifiedName()).isEqualTo(QUALIFIED_NAME);
+            assertThat(match.snapshot().position()).isEqualTo(new GlobalIndexPosition(42));
+        }
+
+        @Test
+        void shouldFallBackToALaterCandidateWhenAnEarlierOneHasNoSnapshot() {
+            // given
+            store(FORMER_NAME, snapshot(43, "1.0"));
+
+            // when
+            SnapshotMatch match = load(candidate(QUALIFIED_NAME, "1.0"), candidate(FORMER_NAME, "1.0"));
+
+            // then
+            assertThat(match).isNotNull();
+            assertThat(match.qualifiedName()).isEqualTo(FORMER_NAME);
+        }
+
+        @Test
+        void shouldPassOverASnapshotOfAVersionThatIsNotAcceptable() {
+            // given a snapshot written by a newer version of the application than the one now loading it
+            store(QUALIFIED_NAME, snapshot(42, "2.0"));
+            store(FORMER_NAME, snapshot(43, "1.0"));
+
+            // when
+            SnapshotMatch match = load(candidate(QUALIFIED_NAME, "1.0"), candidate(FORMER_NAME, "1.0"));
+
+            // then
+            assertThat(match).isNotNull();
+            assertThat(match.qualifiedName()).isEqualTo(FORMER_NAME);
+        }
+
+        @Test
+        void shouldAcceptAnyVersionInTheAcceptableSet() {
+            // given
+            store(QUALIFIED_NAME, snapshot(42, "2.0"));
+
+            // when
+            SnapshotMatch match = load(new SnapshotCandidate(QUALIFIED_NAME, Set.of("1.0", "2.0")));
+
+            // then
+            assertThat(match).isNotNull();
+            assertThat(match.snapshot().version()).isEqualTo("2.0");
+        }
+
+        @Test
+        void shouldReturnNullWhenNoCandidateYieldsAnAcceptableSnapshot() {
+            // given
+            store(QUALIFIED_NAME, snapshot(42, "2.0"));
+
+            // when
+            SnapshotMatch match = load(candidate(QUALIFIED_NAME, "1.0"));
+
+            // then
+            assertThat(match).isNull();
+        }
+
+        // temporary: covers the any-version candidate Axon Framework allows only while its deprecated bridge exists
+        @Test
+        void shouldAcceptAnyVersionForACandidateWithNoVersions() {
+            // given
+            store(QUALIFIED_NAME, snapshot(42, "2.0"));
+
+            // when
+            SnapshotMatch match = load(new SnapshotCandidate(QUALIFIED_NAME, Set.of()));
+
+            // then
+            assertThat(match).isNotNull();
+            assertThat(match.snapshot().version()).isEqualTo("2.0");
+        }
+
+        private static void store(QualifiedName name, Snapshot snapshot) {
+            testSubject.store(name, IDENTIFIER, snapshot, null).orTimeout(5, TimeUnit.SECONDS).join();
+        }
+
+        private static SnapshotMatch load(SnapshotCandidate... candidates) {
+            return testSubject.load(List.of(candidates), IDENTIFIER, null).orTimeout(5, TimeUnit.SECONDS).join();
+        }
+
+        private static SnapshotCandidate candidate(QualifiedName name, String version) {
+            return new SnapshotCandidate(name, Set.of(version));
+        }
+    }
+
+    @Nested
     class Store {
 
         @Test
@@ -195,7 +298,7 @@ class PostgresqlSnapshotStoreTest {
             // given
             Snapshot snapshot = new Snapshot(new AggregateSequenceNumberPosition(5), "1.0", "payload".getBytes(), TIMESTAMP, Map.of());
 
-            // when / then — must throw synchronously, before any async work
+            // when / then -- must throw synchronously, before any async work
             assertThatThrownBy(() -> testSubject.store(QUALIFIED_NAME, IDENTIFIER, snapshot, null))
                     .isInstanceOf(IllegalArgumentException.class)
                     .hasMessageContaining("Unsupported position type");

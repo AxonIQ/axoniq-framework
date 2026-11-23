@@ -10,11 +10,14 @@ package io.axoniq.framework.messaging.multitenancy.util;
 
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.eventsourcing.snapshot.api.Snapshot;
+import org.axonframework.eventsourcing.snapshot.api.SnapshotCandidate;
+import org.axonframework.eventsourcing.snapshot.api.SnapshotMatch;
 import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.jspecify.annotations.Nullable;
 
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -30,6 +33,7 @@ public class RecordingSnapshotStore implements SnapshotStore {
 
     private int loadCount;
     private int storeCount;
+    private @Nullable SnapshotCandidate lastAggregateBasedCandidate;
 
     /**
      * Returns how often a snapshot was read from {@code this} store, so a test can assert which tenant's store served
@@ -39,6 +43,16 @@ public class RecordingSnapshotStore implements SnapshotStore {
      */
     public int loadCount() {
         return loadCount;
+    }
+
+    /**
+     * Returns the aggregate-based candidate given to the most recent candidate load, so a test can assert it reached
+     * {@code this} store.
+     *
+     * @return the aggregate-based candidate of the most recent candidate load, or {@code null} if it had none
+     */
+    public @Nullable SnapshotCandidate lastAggregateBasedCandidate() {
+        return lastAggregateBasedCandidate;
     }
 
     /**
@@ -56,6 +70,15 @@ public class RecordingSnapshotStore implements SnapshotStore {
         storeCount++;
         snapshotsByIdentifier.put(identifier, snapshot);
         return CompletableFuture.completedFuture(null);
+    }
+
+    @Override
+    public CompletableFuture<@Nullable SnapshotMatch> load(List<SnapshotCandidate> candidates,
+                                                           @Nullable SnapshotCandidate aggregateBasedCandidate,
+                                                           Object identifier,
+                                                           @Nullable ProcessingContext context) {
+        lastAggregateBasedCandidate = aggregateBasedCandidate;
+        return load(candidates, identifier, context);
     }
 
     @Override

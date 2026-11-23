@@ -14,6 +14,8 @@ import org.axonframework.conversion.Converter;
 import org.axonframework.eventsourcing.eventstore.GlobalIndexPosition;
 import org.axonframework.eventsourcing.eventstore.Position;
 import org.axonframework.eventsourcing.snapshot.api.Snapshot;
+import org.axonframework.eventsourcing.snapshot.api.SnapshotCandidate;
+import org.axonframework.eventsourcing.snapshot.api.SnapshotMatch;
 import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
@@ -26,6 +28,8 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
@@ -95,6 +99,27 @@ class PostgresqlSnapshotStore implements SnapshotStore {
           LIMIT 1
         """;
 
+    /**
+     * Selects the snapshot for a given entity among the given candidates: the first candidate, by rank, with a
+     * snapshot of an acceptable version wins, and of its acceptable snapshots the one with the highest position
+     * value. The candidates are bound by {@link #bindCandidates}.
+     *
+     * <li>Parameter 1 {@code int[]}: the rank of each candidate entry
+     * <li>Parameter 2 {@code String[]}: the qualified name of each candidate entry
+     * <li>Parameter 3 {@code String[]}: an acceptable version of each candidate entry, or {@code null} for any
+     * <li>Parameter 4 {@code String}: the identifier
+     */
+    private static final String SNAPSHOT_SELECT_CANDIDATES =
+        """
+        SELECT s.qualified_name, s.position_type, s.position_value, s.version, s.payload, s.timestamp, s.metadata
+          FROM snapshots s
+          JOIN unnest(?::int4[], ?::varchar[], ?::varchar[]) AS c (rank, qualified_name, version)
+            ON s.qualified_name = c.qualified_name AND (c.version IS NULL OR s.version = c.version)
+          WHERE s.identifier = ?
+          ORDER BY c.rank, s.position_value DESC
+          LIMIT 1
+        """;
+
     private final DataSource dataSource;
     private final Converter converter;
     private final TransactionalExecutorProvider<Connection> transactionalExecutorProvider;
@@ -156,6 +181,94 @@ class PostgresqlSnapshotStore implements SnapshotStore {
     }
 
     @Override
+    public CompletableFuture<@Nullable SnapshotMatch> load(List<SnapshotCandidate> candidates, Object identifier,
+                                                           @Nullable ProcessingContext context) {
+        List<SnapshotCandidate> candidateList = List.copyOf(Objects.requireNonNull(candidates, "candidates"));
+        Objects.requireNonNull(identifier, "identifier");
+
+        if (candidateList.isEmpty()) {
+            throw new IllegalArgumentException("candidates must not be empty");
+        }
+
+        return transactionalExecutorProvider.getTransactionalExecutorPreferringIndependent(context).apply(connection -> {
+            try (PreparedStatement ps = connection.prepareStatement(SNAPSHOT_SELECT_CANDIDATES)) {
+                int parameterIndex = bindCandidates(connection, ps, 1, candidateList);
+
+                ps.setString(parameterIndex, String.valueOf(identifier));
+
+                try (ResultSet rs = ps.executeQuery()) {
+                    if (!rs.next()) {
+                        return null;
+                    }
+
+                    QualifiedName qualifiedName = new QualifiedName(rs.getString(1));
+                    String positionType = rs.getString(2);
+                    long positionValue = rs.getLong(3);
+                    String version = rs.getString(4);
+                    byte[] payload = rs.getBytes(5);
+                    Instant timestamp = rs.getTimestamp(6).toInstant();
+                    Map<String, String> metadata = MetadataSerializer.fromJson(rs.getString(7));
+
+                    return new SnapshotMatch(
+                        qualifiedName,
+                        new Snapshot(toPosition(positionType, positionValue), version, payload, timestamp, metadata)
+                    );
+                }
+            }
+            catch (SQLException e) {
+                throw new IllegalStateException(
+                        "Failed to load snapshot for " + candidateList + " with identifier " + identifier, e);
+            }
+        });
+    }
+
+    /*
+     * Binds the given candidates to the three array parameters starting at the given index, as one entry per
+     * acceptable version, so that joining against them matches a snapshot of any acceptable version of any
+     * candidate while keeping each entry's rank. Returns the index of the parameter following them.
+     */
+    static int bindCandidates(Connection connection, PreparedStatement statement, int parameterIndex,
+                              List<SnapshotCandidate> candidates) throws SQLException {
+        List<Integer> ranks = new ArrayList<>();
+        List<String> names = new ArrayList<>();
+        List<@Nullable String> versions = new ArrayList<>();
+
+        for (int rank = 0; rank < candidates.size(); rank++) {
+            SnapshotCandidate candidate = candidates.get(rank);
+            String name = candidate.qualifiedName().fullName();
+
+            /*
+             * Temporary: a candidate without versions accepts any version, which Axon Framework allows only while it
+             * still offers its deprecated version-less SourcingStrategy.Snapshot constructor. It is bound as a single
+             * entry with a null version. Remove once Axon Framework rejects an empty version set again.
+             */
+
+            if (candidate.acceptableVersions().isEmpty()) {
+                ranks.add(rank);
+                names.add(name);
+                versions.add(null);
+            }
+
+            for (String version : candidate.acceptableVersions()) {
+                ranks.add(rank);
+                names.add(name);
+                versions.add(version);
+            }
+        }
+
+        statement.setArray(parameterIndex++, connection.createArrayOf("int4", ranks.toArray()));
+        statement.setArray(parameterIndex++, connection.createArrayOf("varchar", names.toArray()));
+        statement.setArray(parameterIndex++, connection.createArrayOf("varchar", versions.toArray()));
+
+        return parameterIndex;
+    }
+
+    /*
+     * Temporary: Axon Framework keeps this single-name load as a deprecated abstract method until Axoniq Framework
+     * has migrated. It deliberately carries no @Override, so Axon Framework can remove the method first without
+     * breaking this class; remove it afterwards.
+     */
+    @Deprecated(since = "5.5.0", forRemoval = true)
     public CompletableFuture<@Nullable Snapshot> load(QualifiedName qualifiedName, Object identifier,
                                                       @Nullable ProcessingContext context) {
         Objects.requireNonNull(qualifiedName, "qualifiedName");

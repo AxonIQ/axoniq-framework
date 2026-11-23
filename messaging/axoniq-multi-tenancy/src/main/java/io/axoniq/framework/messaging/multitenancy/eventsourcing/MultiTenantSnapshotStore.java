@@ -15,18 +15,21 @@ import io.axoniq.license.entitlement.EntitlementManager;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.eventsourcing.snapshot.api.Snapshot;
+import org.axonframework.eventsourcing.snapshot.api.SnapshotCandidate;
+import org.axonframework.eventsourcing.snapshot.api.SnapshotMatch;
 import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.jspecify.annotations.Nullable;
 
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
 import static io.axoniq.framework.messaging.multitenancy.api.TenantNotResolvedException.tenantNotResolved;
 import static java.util.Objects.requireNonNull;
 
 /**
- * Tenant-routing {@link SnapshotStore}. Snapshot {@link #load(QualifiedName, Object, ProcessingContext) load} and
+ * Tenant-routing {@link SnapshotStore}. Snapshot {@link #load(List, Object, ProcessingContext) load} and
  * {@link #store(QualifiedName, Object, Snapshot, ProcessingContext) store} operations are routed to the store of the
  * one tenant resolved from the {@link ProcessingContext}, so each tenant's snapshots live in its own store.
  * <p>
@@ -71,6 +74,30 @@ public class MultiTenantSnapshotStore implements SnapshotStore {
     }
 
     @Override
+    public CompletableFuture<@Nullable SnapshotMatch> load(List<SnapshotCandidate> candidates, Object identifier,
+                                                           @Nullable ProcessingContext context) {
+        return load(candidates, null, identifier, context);
+    }
+
+    @Override
+    public CompletableFuture<@Nullable SnapshotMatch> load(List<SnapshotCandidate> candidates,
+                                                           @Nullable SnapshotCandidate aggregateBasedCandidate,
+                                                           Object identifier,
+                                                           @Nullable ProcessingContext context) {
+        try {
+            TenantDescriptor tenant = tenantFor(context);
+            return snapshotStoreFactory.storeFor(tenant).load(candidates, aggregateBasedCandidate, identifier, context);
+        } catch (RuntimeException failure) {
+            return CompletableFuture.failedFuture(failure);
+        }
+    }
+
+    /*
+     * Temporary: Axon Framework keeps this single-name load as a deprecated abstract method until Axoniq Framework
+     * has migrated. It deliberately carries no @Override, so Axon Framework can remove the method first without
+     * breaking this class; remove it afterwards.
+     */
+    @Deprecated(since = "5.5.0", forRemoval = true)
     public CompletableFuture<@Nullable Snapshot> load(QualifiedName qualifiedName, Object identifier,
                                                       @Nullable ProcessingContext context) {
         try {

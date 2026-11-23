@@ -17,6 +17,7 @@ import io.axoniq.framework.messaging.multitenancy.util.TenantDescriptorMapping;
 import org.axonframework.common.infra.MockComponentDescriptor;
 import org.axonframework.eventsourcing.eventstore.GlobalIndexPosition;
 import org.axonframework.eventsourcing.snapshot.api.Snapshot;
+import org.axonframework.eventsourcing.snapshot.api.SnapshotCandidate;
 import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
@@ -27,7 +28,9 @@ import org.axonframework.messaging.eventhandling.GenericEventMessage;
 import org.junit.jupiter.api.*;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static io.axoniq.framework.messaging.multitenancy.util.TestFixtures.*;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -65,6 +68,25 @@ class MultiTenantSnapshotStoreTest {
             testSubject.load(SNAPSHOT_NAME, IDENTIFIER, context);
 
             assertThat(tenantA.loadCount()).isEqualTo(1);
+            assertThat(tenantB.loadCount()).isZero();
+        }
+
+        @Test
+        void shouldPassTheAggregateBasedCandidateOnToTheTenantsStore() {
+            // given
+            MultiTenantSnapshotStore testSubject =
+                    new MultiTenantSnapshotStore(stores::apply, new TenantRouter(alwaysTenant(TENANT_A), stores));
+            ProcessingContext context = new StubProcessingContext()
+                    .withResource(TenantDescriptor.RESOURCE_KEY, TENANT_A);
+            SnapshotCandidate aggregateBasedCandidate =
+                    new SnapshotCandidate(new QualifiedName("com.example.Aggregate"), Set.of("0.0.0"));
+
+            // when
+            testSubject.load(List.of(new SnapshotCandidate(SNAPSHOT_NAME, Set.of("0"))), aggregateBasedCandidate,
+                             IDENTIFIER, context).join();
+
+            // then
+            assertThat(tenantA.lastAggregateBasedCandidate()).isEqualTo(aggregateBasedCandidate);
             assertThat(tenantB.loadCount()).isZero();
         }
 

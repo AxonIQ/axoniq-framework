@@ -28,6 +28,8 @@ import org.axonframework.eventsourcing.eventstore.StreamSpliterator;
 import org.axonframework.eventsourcing.eventstore.TaggedEventMessage;
 import org.axonframework.eventsourcing.eventstore.TerminalEventMessage;
 import org.axonframework.eventsourcing.snapshot.api.Snapshot;
+import org.axonframework.eventsourcing.snapshot.api.SnapshotCandidate;
+import org.axonframework.eventsourcing.snapshot.api.SnapshotMatch;
 import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
 import org.axonframework.messaging.core.Context;
 import org.axonframework.messaging.core.DelayedMessageStream;
@@ -97,12 +99,12 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
      * An optional snapshot can be contained in the first batch if read with {@link SourcingStrategy.Snapshot}.
      * If the snapshot is present, the events following it are from the position given by the snapshot.
      *
-     * @param snapshot the snapshot found, or {@code null} if none was available (or none was compatible
-     *                 with the requested maximum position)
+     * @param snapshot the snapshot found and the name it was found under, or {@code null} if none was available
+     *                 (or none was compatible with the requested maximum position)
      * @param events   the events returned as part of this batch, cannot be {@code null}, but may be empty
      * @param highestGlobalIndex the highest global index observed in this batch
      */
-    private record Batch(@Nullable Snapshot snapshot, List<FinalizedEvent> events, long highestGlobalIndex) {}
+    private record Batch(@Nullable SnapshotMatch snapshot, List<FinalizedEvent> events, long highestGlobalIndex) {}
 
     /**
      * The parameters needed to bind one criterion's {@link #FILTER_SUB_QUERY} instance, in the
@@ -179,14 +181,18 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
     private static final String RESUME_AT_POSITION =
         """
         WITH snap AS (
-          SELECT NULL::int8 AS snapshot_position, (?::int8) - 1 AS sort_index,
+          SELECT NULL::int8 AS snapshot_position, (?::int8) - 1 AS sort_index, NULL::varchar AS qualified_name,
                  NULL::varchar AS version, NULL::bytea AS payload, NULL::timestamptz AS timestamp, NULL::json AS metadata
         ),
         """;
 
     /**
-     * CTE prefix resolving {@code snap} to the latest snapshot compatible with the given maximum
-     * position, or to a row with no snapshot data if none is found. Exposes the same column shape
+     * CTE prefix resolving {@code snap} to the snapshot found under the given candidates that is
+     * compatible with the given maximum position, or to a row with no snapshot data if none is
+     * found. The first candidate, by rank, with a snapshot of an acceptable version wins, and of its
+     * acceptable snapshots the one with the highest position; its name is exposed as
+     * {@code qualified_name}. The candidates are bound by {@link PostgresqlSnapshotStore#bindCandidates}.
+     * Exposes the same column shape
      * as {@link #RESUME_AT_POSITION}, so both can be used interchangeably as a prefix to {@link
      * #EVENTS_READ_MULTIPLE}.
      * <p>
@@ -200,22 +206,26 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
      * <p>
      * Used for the initial page of a {@link SourcingStrategy.Snapshot} sourcing condition.
      *
-     * <li>Parameter 1 {@code String}: the qualified name of the entity
-     * <li>Parameter 2 {@code String}: the identifier of the entity
-     * <li>Parameter 3 {@code long}: the maximum snapshot position to accept (use {@code Long.MAX_VALUE} for no maximum)
+     * <li>Parameter 1 {@code int[]}: the rank of each candidate entry
+     * <li>Parameter 2 {@code String[]}: the qualified name of each candidate entry
+     * <li>Parameter 3 {@code String[]}: an acceptable version of each candidate entry, or {@code null} for any
+     * <li>Parameter 4 {@code String}: the identifier of the entity
+     * <li>Parameter 5 {@code long}: the maximum snapshot position to accept (use {@code Long.MAX_VALUE} for no maximum)
      */
     private static final String RESUME_AT_SNAPSHOT =
         """
         WITH snap AS (
           SELECT sn.global_index AS snapshot_position,
                  COALESCE(sn.global_index, 1) - 1 AS sort_index,
-                 sn.version, sn.payload, sn.timestamp, sn.metadata
+                 sn.qualified_name, sn.version, sn.payload, sn.timestamp, sn.metadata
             FROM (VALUES (1)) AS d (x)
             LEFT JOIN (
-              SELECT position_value AS global_index, version, payload, timestamp, metadata
-                FROM snapshots
-                WHERE qualified_name = ? AND identifier = ? AND position_value <= ?
-                ORDER BY position_value DESC
+              SELECT s.position_value AS global_index, s.qualified_name, s.version, s.payload, s.timestamp, s.metadata
+                FROM snapshots s
+                JOIN unnest(?::int4[], ?::varchar[], ?::varchar[]) AS c (rank, qualified_name, version)
+                  ON s.qualified_name = c.qualified_name AND (c.version IS NULL OR s.version = c.version)
+                WHERE s.identifier = ? AND s.position_value <= ?
+                ORDER BY c.rank, s.position_value DESC
                 LIMIT 1
             ) sn ON true
         ),
@@ -247,7 +257,7 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
     private static final String EVENTS_READ_MULTIPLE =
         """
         page AS (
-          SELECT s.sort_index AS global_index, s.timestamp, NULL::varchar AS identifier, NULL::varchar AS type, s.payload, s.metadata, s.version, s.snapshot_position, NULL::varchar AS type_version
+          SELECT s.sort_index AS global_index, s.timestamp, NULL::varchar AS identifier, s.qualified_name AS type, s.payload, s.metadata, s.version, s.snapshot_position, NULL::varchar AS type_version
             FROM snap s
           UNION ALL
           SELECT e.global_index, e.timestamp, e.identifier, e.type, e.payload, e.metadata, NULL AS version, NULL::int8 AS snapshot_position, e.type_version
@@ -643,7 +653,7 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
     }
 
     /*
-     * These two methods are the only ones backed by snapshotStore (PostgresqlSnapshotStore).
+     * These methods are the only ones backed by snapshotStore (PostgresqlSnapshotStore).
      * Sourcing with SourcingStrategy.Snapshot instead reads the snapshots table directly via
      * RESUME_AT_SNAPSHOT, as part of the same query as the tail events - see load(Set, int,
      * SourcingStrategy). That duplication is intentional: it is what makes the single-round-trip
@@ -658,6 +668,17 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
     }
 
     @Override
+    public CompletableFuture<@Nullable SnapshotMatch> load(List<SnapshotCandidate> candidates, Object identifier,
+                                                           @Nullable ProcessingContext context) {
+        return snapshotStore.load(candidates, identifier, context);
+    }
+
+    /*
+     * Temporary: Axon Framework keeps this single-name load as a deprecated abstract method until Axoniq Framework
+     * has migrated. It deliberately carries no @Override, so Axon Framework can remove the method first without
+     * breaking this class; remove it afterwards.
+     */
+    @Deprecated(since = "5.5.0", forRemoval = true)
     public CompletableFuture<@Nullable Snapshot> load(QualifiedName qualifiedName, Object identifier,
                                                       @Nullable ProcessingContext context) {
         return snapshotStore.load(qualifiedName, identifier, context);
@@ -830,7 +851,9 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
 
         MessageStream<EventMessage> withSnapshot = initial.snapshot == null
             ? tail
-            : MessageStream.<EventMessage>just(new SnapshotEventMessage(initial.snapshot)).concatWith(tail);
+            : MessageStream.<EventMessage>just(
+                new SnapshotEventMessage(initial.snapshot.qualifiedName(), initial.snapshot.snapshot())
+            ).concatWith(tail);
 
         return withConsistencyMarkerTerminal(withSnapshot, lastGlobalIndex);
     }
@@ -1014,7 +1037,8 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
                 int parameterIndex = 1;
 
                 if (sourcingStrategy instanceof SourcingStrategy.Snapshot s) {
-                    ps.setString(parameterIndex++, s.qualifiedName().fullName());
+                    parameterIndex =
+                        PostgresqlSnapshotStore.bindCandidates(connection, ps, parameterIndex, s.candidates());
                     ps.setString(parameterIndex++, String.valueOf(s.identifier()));
                 }
 
@@ -1041,7 +1065,7 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
                 try (ResultSet resultSet = ps.executeQuery()) {
                     resultSet.next();  // always present, holds no event data in the plain (non-snapshot) case
 
-                    Snapshot snapshot = toSnapshot(resultSet);
+                    SnapshotMatch snapshot = toSnapshot(resultSet);
                     long lastSeen = resultSet.getLong(10);
                     List<FinalizedEvent> list = new ArrayList<>();
 
@@ -1075,27 +1099,32 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
     }
 
     /**
-     * Reconstructs the {@link Snapshot} from the leading row produced by {@link #EVENTS_READ_MULTIPLE}
-     * when prefixed with {@link #RESUME_AT_SNAPSHOT}, or returns {@code null} if that row carries no
-     * snapshot data (a {@code NULL} payload).
+     * Reconstructs the {@link Snapshot}, together with the name it was found under, from the leading
+     * row produced by {@link #EVENTS_READ_MULTIPLE} when prefixed with {@link #RESUME_AT_SNAPSHOT}, or
+     * returns {@code null} if that row carries no snapshot data (a {@code NULL} payload). The leading
+     * row carries the snapshot's name in its {@code type} column.
      *
      * @param resultSet the result set, positioned at the leading {@code snap} row, cannot be {@code null}
-     * @return the snapshot, or {@code null} if none was found
+     * @return the snapshot and the name it was found under, or {@code null} if none was found
      * @throws SQLException when a JDBC error occurred
      */
-    private static @Nullable Snapshot toSnapshot(ResultSet resultSet) throws SQLException {
+    private static @Nullable SnapshotMatch toSnapshot(ResultSet resultSet) throws SQLException {
         byte[] payload = resultSet.getBytes(5);
 
         if (payload == null) {
             return null;
         }
 
+        QualifiedName qualifiedName = new QualifiedName(resultSet.getString(4));
         long position = resultSet.getLong(8);
         String version = resultSet.getString(7);
         Instant timestamp = resultSet.getTimestamp(2).toInstant();
         Map<String, String> metadata = MetadataSerializer.fromJson(resultSet.getString(6));
 
-        return new Snapshot(new GlobalIndexPosition(position), version, payload, timestamp, metadata);
+        return new SnapshotMatch(
+            qualifiedName,
+            new Snapshot(new GlobalIndexPosition(position), version, payload, timestamp, metadata)
+        );
     }
 
     private static Context trackingTokenContext(FinalizedEvent event) {

@@ -23,6 +23,7 @@ import org.axonframework.eventsourcing.eventstore.SourcingCondition;
 import org.axonframework.eventsourcing.eventstore.SourcingStrategy;
 import org.axonframework.eventsourcing.eventstore.StorageEngineBackedEventStoreTestSuite;
 import org.axonframework.eventsourcing.snapshot.api.Snapshot;
+import org.axonframework.eventsourcing.snapshot.api.SnapshotCandidate;
 import org.axonframework.messaging.core.EmptyApplicationContext;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.QualifiedName;
@@ -618,14 +619,62 @@ public class PostgresStorageEngineBackedEventStoreIT extends StorageEngineBacked
                 .containsExactly(events);
         }
 
+        @Test
+        void shouldSourceWithASnapshotStoredUnderALaterCandidate() {
+            // given
+            QualifiedName formerName = new QualifiedName("com.example.FormerName");
+            storeSnapshot(formerName, "0.0.1", currentPosition());
+
+            EventMessage event = message(new SnapshotTestEvent(TAG1.value(), "1"));
+
+            unitOfWork().executeWithResult(pc -> eventStore.publish(pc, event)).join();
+
+            // when
+            SnapshotSourcingResult result = sourceWithSnapshot(List.of(
+                new SnapshotCandidate(qualifiedName, Set.of("0.0.1")),
+                new SnapshotCandidate(formerName, Set.of("0.0.1"))
+            ));
+
+            // then the snapshot is reported under the name it was found under, not the current one
+            assertThat(result.snapshot()).isNotNull();
+            assertThat(result.foundUnder()).isEqualTo(formerName);
+            assertThat(result.events())
+                .usingComparatorForType(EVENT_COMPARATOR, GenericEventMessage.class)
+                .containsExactly(event);
+        }
+
+        @Test
+        void shouldSourceWithoutASnapshotOfAnUnacceptableVersion() {
+            // given a snapshot written by a newer version of the application than the one now sourcing it
+            storeSnapshot(qualifiedName, "9.9.9", currentPosition());
+
+            EventMessage event = message(new SnapshotTestEvent(TAG1.value(), "1"));
+
+            unitOfWork().executeWithResult(pc -> eventStore.publish(pc, event)).join();
+
+            // when
+            SnapshotSourcingResult result =
+                sourceWithSnapshot(List.of(new SnapshotCandidate(qualifiedName, Set.of("0.0.1"))));
+
+            // then
+            assertThat(result.snapshot()).isNull();
+            assertThat(result.events())
+                .usingComparatorForType(EVENT_COMPARATOR, GenericEventMessage.class)
+                .containsExactly(event);
+        }
+
         private long currentPosition() {
             return unitOfWork().executeWithResult(eventStore::latestToken).join().position().orElse(0);
         }
 
         private Snapshot storeSnapshot(long position) {
-            Snapshot snapshot = new Snapshot(new GlobalIndexPosition(position), "0.0.1", "snapshot-payload", Instant.now(), Map.of());
+            return storeSnapshot(qualifiedName, "0.0.1", position);
+        }
 
-            engine.store(qualifiedName, identifier, snapshot, null).join();
+        private Snapshot storeSnapshot(QualifiedName name, String version, long position) {
+            Snapshot snapshot = new Snapshot(new GlobalIndexPosition(position), version, "snapshot-payload", Instant.now(), Map.of());
+
+            engine.store(name, identifier, snapshot, null).join();
 
             return snapshot;
         }
@@ -654,8 +703,12 @@ public class PostgresStorageEngineBackedEventStoreIT extends StorageEngineBacked
          * leading {@link SnapshotEventMessage} does not.
          */
         private SnapshotSourcingResult sourceWithSnapshot() {
+            return sourceWithSnapshot(List.of(new SnapshotCandidate(qualifiedName, Set.of("0.0.1"))));
+        }
+
+        private SnapshotSourcingResult sourceWithSnapshot(List<SnapshotCandidate> candidates) {
             SourcingCondition condition = SourcingCondition.conditionFor(
-                new SourcingStrategy.Snapshot(qualifiedName, identifier, null),
+                new SourcingStrategy.Snapshot(candidates, identifier, null),
                 EventCriteria.havingTags(TAG1)
             );
 
@@ -663,23 +716,26 @@ public class PostgresStorageEngineBackedEventStoreIT extends StorageEngineBacked
                 EventStoreTransaction tx = eventStore.transaction(pc);
                 MessageStream<? extends EventMessage> stream = tx.source(condition);
                 AtomicReference<Snapshot> snapshotRef = new AtomicReference<>();
+                AtomicReference<QualifiedName> foundUnderRef = new AtomicReference<>();
 
                 return stream.reduce(new ArrayList<EventMessage>(), (list, entry) -> {
                     EventMessage message = entry.message();
 
                     if (message instanceof SnapshotEventMessage snapshotEventMessage) {
                         snapshotRef.set(snapshotEventMessage.payload());
+                        foundUnderRef.set(snapshotEventMessage.snapshotType().qualifiedName());
                     }
                     else {
                         list.add(message.withConvertedPayload(SnapshotTestEvent.class, eventConverter));
                     }
 
                     return list;
-                }).thenApply(events -> new SnapshotSourcingResult(snapshotRef.get(), events));
+                }).thenApply(events -> new SnapshotSourcingResult(snapshotRef.get(), foundUnderRef.get(), events));
             }).join();
         }
 
-        private record SnapshotSourcingResult(@Nullable Snapshot snapshot, List<EventMessage> events) {}
+        private record SnapshotSourcingResult(@Nullable Snapshot snapshot, @Nullable QualifiedName foundUnder,
+                                              List<EventMessage> events) {}
 
         @Event
         record SnapshotTestEvent(@EventTag(key = "Course") String id, String data) {}
