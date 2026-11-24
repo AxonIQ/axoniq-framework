@@ -15,6 +15,7 @@ import org.axonframework.common.AxonConfigurationException;
 import org.axonframework.common.BuilderUtils;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.common.infra.DescribableComponent;
+import org.axonframework.eventsourcing.eventstore.SnapshotEventMessage;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.MessageTypeResolver;
@@ -84,7 +85,8 @@ public final class EventTransformerChain implements DescribableComponent {
     }
 
     /**
-     * Applies the chain to every event in the given stream at read time.
+     * Applies the chain to every event in the given stream at read time. A
+     * {@link SnapshotEventMessage snapshot} in the stream is passed on untouched.
      *
      * @param stream              the input stream of events
      * @param context             the active processing context, or {@code null} when the read path supplies none
@@ -101,6 +103,12 @@ public final class EventTransformerChain implements DescribableComponent {
         // One input entry maps to zero or more output entries (drop, 1:1, or split). Each output reuses the input
         // entry's Context via entry.map, so a split's outputs keep the input's tracking token and stream position.
         return stream.mapMulti((entry, downstream) -> {
+            // a snapshot carries entity state rather than an event, and is lifted by snapshot transformation instead
+            if (entry.message() instanceof SnapshotEventMessage) {
+                downstream.accept(entry.map(snapshot -> snapshot));
+                return;
+            }
+
             TransformationContext transformationContext =
                     new TransformationContext(entry, context, converter, messageTypeResolver);
             List<EventMessage> eventMessages = applyChainToOneEvent(entry.message(), transformationContext, 0);

@@ -6,3 +6,4 @@
 # https://www.axoniq.io/legal/terms-of-service
 #
 io.axoniq.framework.messaging.transformation.events.configuration.EventTransformationConfigurationEnhancer
+io.axoniq.framework.messaging.transformation.snapshots.configuration.SnapshotTransformationConfigurationEnhancer
