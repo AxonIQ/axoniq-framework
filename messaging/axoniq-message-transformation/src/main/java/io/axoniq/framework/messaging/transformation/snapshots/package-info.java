@@ -1,0 +1,16 @@
+/*
+ * Copyright (c) 2010-2026. Axoniq B.V.
+ *
+ * Licensed under the Axoniq Terms of Service (the "Terms"). You may not
+ * use this file except in compliance with the Terms, available at
+ * https://www.axoniq.io/legal/terms-of-service
+ */
+
+/**
+ * Transformation of stored snapshots, lifting a snapshot taken under a name or version an entity is no longer declared
+ * with into its current type, including aggregate-based snapshots such as those taken by Axon Framework 4.
+ */
+@NullMarked
+package io.axoniq.framework.messaging.transformation.snapshots;
+
+import org.jspecify.annotations.NullMarked;
