@@ -6,40 +6,34 @@
  * https://www.axoniq.io/legal/terms-of-service
  */
 
-package io.axoniq.framework.springboot.autoconfig;
+package io.axoniq.framework.axonserver.connector.event;
 
 import io.axoniq.axonserver.connector.event.PersistentStreamProperties;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration;
-import io.axoniq.framework.axonserver.connector.event.PersistentStreamEventSource;
-import io.axoniq.framework.axonserver.connector.event.PersistentStreamEventSourceFactory;
-import io.axoniq.framework.axonserver.connector.event.PersistentStreamScheduledExecutorBuilder;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.annotation.RegistrationScope;
 import org.axonframework.common.configuration.ComponentDefinition;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.axonframework.common.configuration.DecoratorDefinition;
+import org.axonframework.common.lifecycle.Phase;
 import org.axonframework.messaging.core.SubscribableEventSource;
 import org.axonframework.messaging.eventhandling.processing.subscribing.SubscribingEventProcessorConfiguration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.DisposableBean;
-import org.springframework.beans.factory.ObjectProvider;
 
-import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
 /**
  * A {@link ConfigurationEnhancer} that registers a {@link SubscribableEventSource} component consuming a persistent
  * stream for each entry in {@link AxonServerConfiguration#getPersistentStreams()}.
  * <p>
  * Each map key of the {@link AxonServerConfiguration.PersistentStreamSettings} becomes the component name (and thus the
- * Spring bean name after being exposed by the
- * {@link org.axonframework.extension.spring.config.SpringComponentRegistry}).
+ * Spring bean name after being exposed by the {@code SpringComponentRegistry}).
  * <p>
  * The resolved Axon Server stream name defaults to the map key but can be overridden via
  * {@link AxonServerConfiguration.PersistentStreamSettings#getName()}.
@@ -69,55 +63,61 @@ import java.util.function.Function;
  * Actual construction of each source is delegated to a {@link PersistentStreamEventSourceFactory} to allow
  * customization if needed. The default factory builds a {@link PersistentStreamEventSource}.
  * <p>
- * The {@link PersistentStreamConfigurationEnhancer} also implements {@link DisposableBean} and keeps a reference of every
- * {@link ScheduledExecutorService} a source asked it for, to shut them down again when the Spring application context
- * closes.
+ * Every {@link ScheduledExecutorService} a source asks for is tracked in a {@link PersistentStreamExecutorRegistry}.
+ * This enhancer registers that registry as a component when none is present yet, and its shutdown handler shuts all
+ * tracked executors down again when the Axon Framework lifecycle shuts down.
  * <p>
- * Marked {@link Internal} because instances are created by {@link PersistentStreamAutoConfiguration} and should not be
+ * Marked {@link Internal} because instances are created by the Spring Boot autoconfiguration and should not be
  * constructed directly in application code.
  *
  * @author Jakob Hatzl
- * @see PersistentStreamAutoConfiguration
  * @see PersistentStreamEventSourceFactory
  * @since 5.2.0
  */
 @Internal
 @RegistrationScope(scope = RegistrationScope.Scope.CURRENT)
-public class PersistentStreamConfigurationEnhancer implements ConfigurationEnhancer, DisposableBean {
+public class PersistentStreamConfigurationEnhancer implements ConfigurationEnhancer {
 
     private static final Logger logger = LoggerFactory.getLogger(PersistentStreamConfigurationEnhancer.class);
 
-    private final ObjectProvider<AxonServerConfiguration> axonServerConfigProvider;
+    private final Supplier<AxonServerConfiguration> serverConfigSupplier;
     private final PersistentStreamScheduledExecutorBuilder schedulerBuilder;
     private final PersistentStreamEventSourceFactory factory;
-    // Pools are added whenever a source is built, which is not necessarily the thread that ran the enhancement.
-    private final List<ScheduledExecutorService> schedulers = new CopyOnWriteArrayList<>();
 
     /**
      * Instantiates a {@code PersistentStreamConfigurationEnhancer}.
      *
-     * @param axonServerConfigProvider provider for the Axon Server configuration containing persistent stream settings;
-     *                                 resolved lazily to avoid Spring lifecycle ordering issues with
-     *                                 {@link org.axonframework.extension.spring.config.SpringComponentRegistry}
-     * @param schedulerBuilder         the builder used to create a per-stream {@link ScheduledExecutorService}
-     * @param eventSourceFactory       the eventSourceFactory used to construct each event source
+     * @param serverConfigSupplier supplier of the Axon Server configuration containing persistent stream settings;
+     *                             resolved lazily to avoid Spring lifecycle ordering issues with
+     *                             the {@code SpringComponentRegistry}
+     * @param schedulerBuilder     the builder used to create a per-stream {@link ScheduledExecutorService}
+     * @param eventSourceFactory   the eventSourceFactory used to construct each event source
      */
     public PersistentStreamConfigurationEnhancer(
-            ObjectProvider<AxonServerConfiguration> axonServerConfigProvider,
+            Supplier<AxonServerConfiguration> serverConfigSupplier,
             PersistentStreamScheduledExecutorBuilder schedulerBuilder,
             PersistentStreamEventSourceFactory eventSourceFactory
     ) {
-        this.axonServerConfigProvider = Objects.requireNonNull(axonServerConfigProvider,
-                                                               "axonServerConfigProvider must not be null");
+        this.serverConfigSupplier = Objects.requireNonNull(
+                serverConfigSupplier, "axonServerConfigSupplier must not be null"
+        );
         this.schedulerBuilder = Objects.requireNonNull(schedulerBuilder, "schedulerBuilder must not be null");
         this.factory = Objects.requireNonNull(eventSourceFactory, "eventSourceFactory must not be null");
     }
 
     @Override
     public void enhance(ComponentRegistry registry) {
-        AxonServerConfiguration axonServerConfig = axonServerConfigProvider.getObject();
+        AxonServerConfiguration axonServerConfig = serverConfigSupplier.get();
+        registry.registerIfNotPresent(executorRegistryDefinition());
         registerConfiguredEventSources(registry, axonServerConfig);
         configureAutoPersistentStreams(registry, axonServerConfig);
+    }
+
+    private static ComponentDefinition<PersistentStreamExecutorRegistry> executorRegistryDefinition() {
+        return ComponentDefinition.ofType(PersistentStreamExecutorRegistry.class)
+                                  .withBuilder(config -> new PersistentStreamExecutorRegistry())
+                                  .onShutdown(Phase.OUTBOUND_EVENT_CONNECTORS,
+                                              PersistentStreamExecutorRegistry::shutdownAll);
     }
 
     private void configureAutoPersistentStreams(ComponentRegistry registry, AxonServerConfiguration axonServerConfig) {
@@ -136,7 +136,9 @@ public class PersistentStreamConfigurationEnhancer implements ConfigurationEnhan
                                             desiredStreamName,
                                             properties,
                                             trackedSchedulerFactory(
-                                                    autoPersistentStreamsSettings.getThreadCount()),
+                                                    autoPersistentStreamsSettings.getThreadCount(),
+                                                    axonConfig.getComponent(PersistentStreamExecutorRegistry.class)
+                                            ),
                                             autoPersistentStreamsSettings.getBatchSize(),
                                             axonConfig
                                     );
@@ -175,7 +177,10 @@ public class PersistentStreamConfigurationEnhancer implements ConfigurationEnhan
                                        .withBuilder(config -> factory.build(
                                                streamName,
                                                properties,
-                                               trackedSchedulerFactory(settings.getThreadCount()),
+                                               trackedSchedulerFactory(
+                                                       settings.getThreadCount(),
+                                                       config.getComponent(PersistentStreamExecutorRegistry.class)
+                                               ),
                                                settings.getBatchSize(),
                                                config
                                        ))
@@ -184,27 +189,23 @@ public class PersistentStreamConfigurationEnhancer implements ConfigurationEnhan
     }
 
     /**
-     * Returns a scheduler factory creating pools of the given {@code threadCount}, keeping a reference to every pool it
-     * hands out so {@link #destroy()} can shut them all down again.
+     * Returns a scheduler factory creating pools of the given {@code threadCount}, tracking every pool it hands out in
+     * the {@code registry} so they can all be shut down again.
      * <p>
      * A factory rather than a ready-made pool, because a {@link PersistentStreamEventSourceFactory} building more than
      * one stream from a single declaration, as the multi-tenant one does per tenant, needs a pool per stream. Creating
      * them on request also means no pool exists for a source that was never built.
      *
      * @param threadCount the number of threads each pool this factory creates holds
-     * @return a scheduler factory whose pools are shut down when the application context closes
+     * @param registry    the persistent stream {@link ScheduledExecutorService} registry, in charge of shutting down
+     *                    all executors on application shutdown
+     * @return a scheduler factory whose pools are shut down when the framework lifecycle shuts down
      */
-    private Function<String, ScheduledExecutorService> trackedSchedulerFactory(int threadCount) {
-        return poolName -> {
-            ScheduledExecutorService scheduler = schedulerBuilder.build(threadCount, poolName);
-            schedulers.add(scheduler);
-            return scheduler;
-        };
-    }
-
-    @Override
-    public void destroy() {
-        schedulers.forEach(ScheduledExecutorService::shutdown);
+    private Function<String, ScheduledExecutorService> trackedSchedulerFactory(
+            int threadCount,
+            PersistentStreamExecutorRegistry registry
+    ) {
+        return poolName -> registry.track(schedulerBuilder.build(threadCount, poolName));
     }
 
     private static PersistentStreamProperties toPersistentStreamProperties(
