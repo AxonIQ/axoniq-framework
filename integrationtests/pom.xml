@@ -32,6 +32,7 @@
         <module>support</module>
         <module>connector</module>
         <module>conformance</module>
+        <module>connection-pool</module>
         <module>tracing</module>
         <module>dead-letter</module>
         <module>legacy</module>
