@@ -20,6 +20,7 @@ import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.concurrent.atomic.AtomicInteger;
 import javax.sql.DataSource;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -98,6 +99,45 @@ class PostgresqlConfigurationEnhancerTest {
 
         // then
         assertThat(snapshotStore).isSameAs(engine);
+    }
+
+    @Test
+    void enhanceHonorsAPreRegisteredSnapshotWriterExecutorFactory() throws SQLException {
+        // given
+        Statement mockedStatement = mock(Statement.class);
+        Connection mockedConnection = mock(Connection.class);
+        DataSource mockedDataSource = mock(DataSource.class);
+        ResultSet mockedResultSet = mock(ResultSet.class);
+        when(mockedDataSource.getConnection()).thenReturn(mockedConnection);
+        when(mockedConnection.createStatement()).thenReturn(mockedStatement);
+        when(mockedStatement.executeQuery(anyString())).thenReturn(mockedResultSet);
+
+        AtomicInteger created = new AtomicInteger();
+        SnapshotWriterExecutorFactory factory = queue -> {
+            created.incrementAndGet();
+
+            return SnapshotWriterExecutorFactory.defaultFactory().create(queue);
+        };
+
+        // when
+        Configuration result = EventSourcingConfigurer.create()
+                                                      .componentRegistry(ComponentRegistry::disableEnhancerScanning)
+                                                      .componentRegistry(cr -> cr.registerComponent(
+                                                              DataSource.class, c -> mockedDataSource
+                                                      ))
+                                                      .componentRegistry(cr -> cr.registerComponent(
+                                                              EntitlementManager.class, c -> mock(EntitlementManager.class)
+                                                      ))
+                                                      .componentRegistry(cr -> cr.registerComponent(
+                                                              SnapshotWriterExecutorFactory.class, c -> factory
+                                                      ))
+                                                      .componentRegistry(cr -> testSubject.enhance(cr))
+                                                      .build();
+
+        result.getComponent(EventStorageEngine.class);
+
+        // then
+        assertThat(created).hasValue(1);
     }
 
     @Test

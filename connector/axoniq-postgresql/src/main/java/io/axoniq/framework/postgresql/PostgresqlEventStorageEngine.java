@@ -601,15 +601,33 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
      */
     public PostgresqlEventStorageEngine(DataSource dataSource, EventConverter converter,
                                         SchemaInitialization schemaInitialization) {
-        this(dataSource, converter, schemaInitialization, EntitlementManager.INSTANCE);
+        this(dataSource, converter, schemaInitialization, SnapshotWriterExecutorFactory.defaultFactory());
+    }
+
+    /**
+     * Constructs a new instance, writing snapshots with the executor service that the given {@code writerFactory}
+     * creates.
+     *
+     * @param dataSource           a data source to connect to PostgreSQL, cannot be {@code null}
+     * @param converter            an event converter for converting the payload to bytes, cannot be {@code null}
+     * @param schemaInitialization how to handle a missing or incomplete schema, cannot be {@code null}
+     * @param writerFactory        creates the executor service that writes the snapshots, cannot be {@code null}
+     * @throws NullPointerException     if any argument is {@code null}
+     * @throws IllegalArgumentException if the executor service runs a task on the thread that submits it
+     */
+    public PostgresqlEventStorageEngine(DataSource dataSource, EventConverter converter,
+                                        SchemaInitialization schemaInitialization,
+                                        SnapshotWriterExecutorFactory writerFactory) {
+        this(dataSource, converter, schemaInitialization, EntitlementManager.INSTANCE, writerFactory);
         EntitlementManager.INSTANCE.registerAddon(PostgresAxoniqAddon.class);
     }
 
     /**
      * Package-private constructor for testing, allowing injection of an alternative {@link EntitlementManager}.
-     * Production code must use {@link #PostgresqlEventStorageEngine(DataSource, EventConverter)} or
-     * {@link #PostgresqlEventStorageEngine(DataSource, EventConverter, SchemaInitialization)}, which use
-     * {@link EntitlementManager#INSTANCE} directly.
+     * Production code must use {@link #PostgresqlEventStorageEngine(DataSource, EventConverter)},
+     * {@link #PostgresqlEventStorageEngine(DataSource, EventConverter, SchemaInitialization)} or
+     * {@link #PostgresqlEventStorageEngine(DataSource, EventConverter, SchemaInitialization,
+     * SnapshotWriterExecutorFactory)}, which use {@link EntitlementManager#INSTANCE} directly.
      *
      * @param dataSource           a data source to connect to PostgreSQL, cannot be {@code null}
      * @param converter            an event converter for converting the payload to bytes, cannot be {@code null}
@@ -619,12 +637,31 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
     @Internal
     PostgresqlEventStorageEngine(DataSource dataSource, EventConverter converter,
                                  SchemaInitialization schemaInitialization, EntitlementManager entitlementManager) {
+        this(dataSource, converter, schemaInitialization, entitlementManager,
+             SnapshotWriterExecutorFactory.defaultFactory());
+    }
+
+    /**
+     * Package-private constructor for testing, allowing injection of an alternative {@link EntitlementManager} and
+     * of the factory for the executor service that writes snapshots.
+     *
+     * @param dataSource           a data source to connect to PostgreSQL, cannot be {@code null}
+     * @param converter            an event converter for converting the payload to bytes, cannot be {@code null}
+     * @param schemaInitialization how to handle a missing or incomplete schema, cannot be {@code null}
+     * @param entitlementManager   the entitlement manager to use, cannot be {@code null}
+     * @param writerFactory        creates the executor service that writes the snapshots, cannot be {@code null}
+     */
+    @Internal
+    PostgresqlEventStorageEngine(DataSource dataSource, EventConverter converter,
+                                 SchemaInitialization schemaInitialization, EntitlementManager entitlementManager,
+                                 SnapshotWriterExecutorFactory writerFactory) {
         this.dataSource = Objects.requireNonNull(dataSource, "dataSource");
         this.converter = Objects.requireNonNull(converter, "converter");
         this.schemaInitialization = Objects.requireNonNull(schemaInitialization, "schemaInitialization");
         this.entitlementManager = Objects.requireNonNull(entitlementManager, "entitlementManager");
         this.transactionalExecutorProvider = new JdbcTransactionalExecutorProvider(dataSource);
-        this.snapshotStore = new PostgresqlSnapshotStore(dataSource, converter, transactionalExecutorProvider);
+        this.snapshotStore = new PostgresqlSnapshotStore(dataSource, converter, transactionalExecutorProvider,
+                                                         writerFactory);
 
         try {
             PostgresqlSchemaInitializer.initialize(dataSource, schemaInitialization);
@@ -640,6 +677,7 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
     void close() {  // for testing purposes, to avoid junk exceptions
         eventMonitor.close();
         finalizer.close();
+        snapshotStore.close();
     }
 
     /*
@@ -651,6 +689,25 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
      * mean a separate round trip before the events could be read.
      */
 
+    /**
+     * {@inheritDoc}
+     * <p>
+     * The snapshot is written in the background, on a connection of its own, so this method does not wait for a
+     * connection and the {@code context} is not used.
+     * <p>
+     * Callers should not wait for the returned future, for example by chaining it into a phase of a unit of work. That
+     * would make the unit of work wait until the snapshot is written, which the background writing is there to avoid.
+     * A snapshot is a cache of state that is already committed, so there is nothing to wait for. Use the future to
+     * report a failure at most.
+     * <p>
+     * A snapshot with an unsupported position type is refused by this method. Anything else that goes wrong is
+     * reported through the returned future: it completes exceptionally when writing failed, or with a
+     * {@link java.util.concurrent.RejectedExecutionException} when too many snapshots are waiting to be written. A
+     * snapshot that was rejected or failed is not written, and a snapshot that was stored before is kept, as it is only
+     * replaced when the new one is written.
+     *
+     * @throws IllegalArgumentException if the position of the snapshot is not supported
+     */
     @Override
     public CompletableFuture<Void> store(QualifiedName qualifiedName, Object identifier, Snapshot snapshot,
                                          @Nullable ProcessingContext context) {

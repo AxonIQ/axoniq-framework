@@ -25,6 +25,9 @@ import javax.sql.DataSource;
  * {@link PostgresqlEventStorageEngine} as the {@link EventStorageEngine} to use when no other is present. The engine is
  * also made available as a {@link SnapshotStore}.
  * <p>
+ * The engine uses a registered {@link SchemaInitialization} and a registered {@link SnapshotWriterExecutorFactory}, when
+ * there are any, and otherwise the defaults.
+ * <p>
  * The {@link #ENHANCER_ORDER} is set such that this {@code ConfigurationEnhancer} will follow after the
  * {@code AxonServerConfigurationEnhancer}, thus giving precedence over to the Axon Server {@code EventStorageEngine}.
  *
@@ -65,7 +68,9 @@ public class PostgresqlConfigurationEnhancer implements ConfigurationEnhancer {
                         config.getComponent(DataSource.class),
                         config.getComponent(EventConverter.class),
                         config.getOptionalComponent(SchemaInitialization.class)
-                              .orElse(SchemaInitialization.CREATE_IF_MISSING)
+                              .orElse(SchemaInitialization.CREATE_IF_MISSING),
+                        config.getOptionalComponent(SnapshotWriterExecutorFactory.class)
+                              .orElseGet(SnapshotWriterExecutorFactory::defaultFactory)
                 )
         );
     }
