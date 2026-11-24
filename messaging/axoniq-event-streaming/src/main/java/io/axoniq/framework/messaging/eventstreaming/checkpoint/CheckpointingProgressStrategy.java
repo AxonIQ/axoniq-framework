@@ -77,6 +77,14 @@ public final class CheckpointingProgressStrategy implements SegmentProgressStrat
      * checkpoint request is a no-op (a late async-write acknowledgement has no safe point left to record).
      */
     private final AtomicBoolean checkpointsReleased = new AtomicBoolean();
+    /**
+     * Fully-deferred mode only: the agreement the participants did not reach at once. While it is not done, requests
+     * wait in {@link #requestedCheckpoint}; completes after its outcome is recorded.
+     */
+    private final AtomicReference<CompletableFuture<?>> awaitedAgreement =
+            new AtomicReference<>(emptyCompletedFuture());
+    /** Fully-deferred mode only: a position agreed off the worker thread, stored by the next cycle. */
+    private final AtomicReference<@Nullable TrackingToken> agreedCheckpoint = new AtomicReference<>();
     private final CheckpointTrigger trigger = this::onCheckpointRequested;
 
     /**
@@ -120,6 +128,13 @@ public final class CheckpointingProgressStrategy implements SegmentProgressStrat
      */
     @Override
     public CompletableFuture<Void> onBatchCommit(ProcessingContext processingContext) {
+        TrackingToken agreedEarlier = agreedCheckpoint.getAndSet(null);
+        if (agreedEarlier != null) {
+            return context.persistProgress(agreedEarlier, processingContext);
+        }
+        if (!awaitedAgreement.get().isDone()) {
+            return emptyCompletedFuture();
+        }
         TrackingToken pending = requestedCheckpoint.getAndSet(null);
         if (!autoCheckpointing && pending == null) {
             return context.persistProgress(skippedEventsPosition(), processingContext);
@@ -132,9 +147,24 @@ public final class CheckpointingProgressStrategy implements SegmentProgressStrat
         if (requested == null) {
             return emptyCompletedFuture();
         }
-        return persistOnCallingThread(requestEach(participant -> requestAdvance(participant, requested))
-                                              .thenCompose(this::reconcile),
-                                      processingContext);
+        var agreement = requestEach(participant -> requestAdvance(participant, requested)).thenCompose(this::reconcile);
+        if (autoCheckpointing || agreement.isDone()) {
+            return persistOnCallingThread(agreement, processingContext);
+        }
+        var awaited = agreement.whenComplete((agreed, error) -> {
+            if (error != null) {
+                logger.warn("Could not agree on checkpoint {} for {}; nothing is stored for it.",
+                            requested, context.segment(), error);
+            } else if (agreed != null && !checkpointsReleased.get()) {
+                agreedCheckpoint.accumulateAndGet(agreed, (current, next) -> current == null
+                        ? agreed
+                        : current.upperBound(agreed));
+            }
+        });
+        awaitedAgreement.set(awaited);
+        // Wake the worker only once the agreement counts as done, so the requests that waited for it are seen.
+        awaited.whenComplete((ignored, error) -> context.scheduleWorker());
+        return emptyCompletedFuture();
     }
 
     /**
@@ -153,7 +183,8 @@ public final class CheckpointingProgressStrategy implements SegmentProgressStrat
     @Override
     public boolean hasPendingWork() {
         // Out-of-band request signal only: a checkpoint requested between worker cycles needs a cycle to be stored.
-        return requestedCheckpoint.get() != null;
+        return agreedCheckpoint.get() != null
+                || (requestedCheckpoint.get() != null && awaitedAgreement.get().isDone());
     }
 
     @Override
