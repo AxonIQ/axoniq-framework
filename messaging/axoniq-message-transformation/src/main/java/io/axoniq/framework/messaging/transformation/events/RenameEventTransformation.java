@@ -9,7 +9,6 @@
 package io.axoniq.framework.messaging.transformation.events;
 
 import io.axoniq.framework.messaging.transformation.FromMatcher;
-import io.axoniq.framework.messaging.transformation.TransformationContext;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
@@ -53,13 +52,9 @@ final class RenameEventTransformation implements EventTransformation {
      * untouched.
      *
      * @param message the matched input message
-     * @param context the per-message {@link TransformationContext}; required by the contract but otherwise unused,
-     *                as a rename consults neither the converter nor the resolver
      * @return a single-element stream carrying the re-labeled message
      */
-    @Override
-    public MessageStream<EventMessage> transform(EventMessage message, TransformationContext context) {
-        requireNonNull(context, "context may not be null");
+    MessageStream<EventMessage> transform(EventMessage message) {
         EventMessage output = new GenericEventMessage(
                 message.identifier(),
                 target,
@@ -70,8 +65,7 @@ final class RenameEventTransformation implements EventTransformation {
         return MessageStream.just(output);
     }
 
-    @Override
-    public FromMatcher matcher() {
+    FromMatcher matcher() {
         return matcher;
     }
 

@@ -162,7 +162,7 @@ public final class EventTransformerChain implements DescribableComponent {
             case DropEventTransformation ignored -> List.of();
             case SplitEventTransformation<?> split -> collectEvents(split.transform(event, context));
             case RenameEventTransformation rename ->
-                    List.of(singleResult(rename.transform(event, context), event, context));
+                    List.of(singleResult(rename.transform(event), event, context));
             case MappingEventTransformation<?, ?> mapping -> {
                 // A mapping may change only the version, never the name. Use a rename to change the name.
                 assertMappingVersionChangeOnly(event.type(), mapping.toType());
