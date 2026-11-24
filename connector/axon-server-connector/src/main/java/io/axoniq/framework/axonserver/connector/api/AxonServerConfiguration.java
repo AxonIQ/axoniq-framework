@@ -14,7 +14,6 @@ import io.axoniq.framework.axonserver.connector.event.PersistentStreamSequencing
 import org.axonframework.messaging.eventhandling.processing.EventProcessor;
 import org.axonframework.messaging.eventhandling.processing.streaming.StreamingEventProcessor;
 import org.jspecify.annotations.Nullable;
-import org.springframework.boot.context.properties.ConfigurationProperties;
 
 import java.lang.management.ManagementFactory;
 import java.util.ArrayList;
@@ -29,7 +28,6 @@ import java.util.Map;
  * @author Steven van Beelen
  * @since 4.0
  */
-@ConfigurationProperties(prefix = "axon.axonserver")
 public class AxonServerConfiguration {
 
     private static final String DEFAULT_SERVERS = "localhost";
