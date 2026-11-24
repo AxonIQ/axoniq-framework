@@ -95,9 +95,13 @@ class AxonServerConnectionManagerTest {
                 .hasSize(1);
         assertThat(expectedTags).containsEntry("key", "value");
 
+        /*
+         * The connector follows a redirect by asking the node it is sent to for its own platform info, so the
+         * second node is asked at least once, and again if the stub's answer does not name the address that was dialed.
+         */
         assertWithin(
                 1, TimeUnit.SECONDS,
-                () -> assertThat(secondNode.getPlatformService().getClientIdentificationRequests()).hasSize(1)
+                () -> assertThat(secondNode.getPlatformService().getClientIdentificationRequests()).isNotEmpty()
         );
 
         List<ClientIdentification> clients = secondNode.getPlatformService().getClientIdentificationRequests();

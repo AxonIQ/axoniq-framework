@@ -8,23 +8,33 @@
 
 package io.axoniq.framework.axonserver.connector.event;
 
+import com.google.protobuf.ByteString;
+import io.axoniq.axonserver.connector.AxonServerConnection;
 import io.axoniq.axonserver.connector.ResultStream;
 import io.axoniq.axonserver.grpc.event.dcb.Event;
 import io.axoniq.axonserver.grpc.event.dcb.SequencedEvent;
+import io.axoniq.axonserver.grpc.event.dcb.SequencedSnapshot;
 import io.axoniq.axonserver.grpc.event.dcb.Snapshot;
-import io.axoniq.axonserver.grpc.event.dcb.SnapshottedSourceEventsResponse;
+import io.axoniq.axonserver.grpc.event.dcb.SourceWithSnapshotResponse;
+import io.axoniq.framework.axonserver.connector.snapshot.AxonServerSnapshotLookup;
+import io.axoniq.framework.axonserver.connector.snapshot.AxonServerSnapshotStore;
 import org.axonframework.conversion.jackson.JacksonConverter;
 import org.axonframework.eventsourcing.eventstore.EventTypeResolver;
 import org.axonframework.eventsourcing.eventstore.GlobalIndexPosition;
 import org.axonframework.eventsourcing.eventstore.SnapshotEventMessage;
 import org.axonframework.eventsourcing.eventstore.TerminalEventMessage;
+import org.axonframework.eventsourcing.snapshot.api.SnapshotCandidate;
 import org.axonframework.messaging.core.MessageStream;
+import org.axonframework.messaging.core.QualifiedName;
+import org.axonframework.messaging.core.VersionedType;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.conversion.DelegatingEventConverter;
 import org.junit.jupiter.api.*;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -37,7 +47,18 @@ import static org.mockito.Mockito.*;
  */
 class SnapshottedSourcingEventMessageStreamTest {
 
-    private ResultStream<SnapshottedSourceEventsResponse> stream;
+    private static final ByteString SNAPSHOT_KEY = ByteString.copyFromUtf8("snapshot-key");
+    private static final QualifiedName ACCOUNT = new QualifiedName("account");
+    private static final QualifiedName AGGREGATE_PAYLOAD_TYPE = new QualifiedName("com.example.Account");
+
+    private final AxonServerSnapshotLookup lookup =
+            new AxonServerSnapshotStore(mock(AxonServerConnection.class), new JacksonConverter()).lookupFor(
+                    List.of(new SnapshotCandidate(ACCOUNT, Set.of("0.0.1"))),
+                    new SnapshotCandidate(AGGREGATE_PAYLOAD_TYPE, Set.of("0.0.0")),
+                    "account-1"
+            );
+
+    private ResultStream<SourceWithSnapshotResponse> stream;
     private SnapshottedSourcingEventMessageStream testSubject;
 
     @SuppressWarnings("unchecked")
@@ -48,20 +69,21 @@ class SnapshottedSourcingEventMessageStreamTest {
 
         TaggedEventConverter converter =
                 new TaggedEventConverter(new DelegatingEventConverter(new JacksonConverter()), EventTypeResolver.DEFAULT);
-        testSubject = new SnapshottedSourcingEventMessageStream(stream, converter);
+        testSubject = new SnapshottedSourcingEventMessageStream(stream, converter, lookup);
     }
 
     @Test
-    void snapshotFollowedByAnEventIsPositionedFromTheFollowingEventsSequenceMinusOne() {
-        // given
+    void snapshotIsPositionedFromItsOwnSequenceRegardlessOfWhatFollowsIt() {
+        // given a snapshot taken at sequence 4, followed by an event and the terminal marker - neither of which
+        // the snapshot's position should depend on
         Snapshot snapshot = snapshot();
         SequencedEvent event = sequencedEvent(5L);
         when(stream.nextIfAvailable()).thenReturn(
-                snapshotResponse(snapshot), eventResponse(event), markerResponse(10L), null
+                sequencedSnapshotResponse(4L, snapshot), eventResponse(event), markerResponse(10L), null
         );
         when(stream.isClosed()).thenReturn(true);
 
-        // when / then the snapshot entry is emitted first, positioned one before the following event's sequence
+        // when / then the snapshot entry is emitted first, positioned at its own sequence
         MessageStream.Entry<EventMessage> snapshotEntry = testSubject.next().orElseThrow();
         assertThat(snapshotEntry.message()).isInstanceOf(SnapshotEventMessage.class);
         org.axonframework.eventsourcing.snapshot.api.Snapshot payload =
@@ -80,14 +102,14 @@ class SnapshottedSourcingEventMessageStreamTest {
     }
 
     @Test
-    void snapshotWithNoFollowingEventIsPositionedFromTheConsistencyMarker() {
-        // given a snapshot immediately followed by the terminal marker - no events in between
+    void snapshotWithNoFollowingEventStillUsesItsOwnSequence() {
+        // given a snapshot taken at sequence 7, immediately followed by an unrelated terminal marker - no events
+        // in between, and no event following it at all
         Snapshot snapshot = snapshot();
-        when(stream.nextIfAvailable()).thenReturn(snapshotResponse(snapshot), markerResponse(7L), null);
+        when(stream.nextIfAvailable()).thenReturn(sequencedSnapshotResponse(7L, snapshot), markerResponse(99L), null);
         when(stream.isClosed()).thenReturn(true);
 
-        // when / then the snapshot's position equals the marker, since no matching event with a greater
-        // sequence exists
+        // when / then the snapshot's position is its own sequence, not derived from the unrelated marker
         MessageStream.Entry<EventMessage> snapshotEntry = testSubject.next().orElseThrow();
         org.axonframework.eventsourcing.snapshot.api.Snapshot payload =
                 (org.axonframework.eventsourcing.snapshot.api.Snapshot) snapshotEntry.message().payload();
@@ -113,19 +135,18 @@ class SnapshottedSourcingEventMessageStreamTest {
     }
 
     @Test
-    void peekDoesNotConsumeTheResolvedEntry() {
+    void peekDoesNotConsumeTheUnderlyingStream() {
         // given
-        Snapshot snapshot = snapshot();
-        when(stream.nextIfAvailable()).thenReturn(snapshotResponse(snapshot), markerResponse(3L), null);
-        when(stream.isClosed()).thenReturn(true);
+        when(stream.peek()).thenReturn(markerResponse(3L));
 
         // when peeking repeatedly
         MessageStream.Entry<EventMessage> firstPeek = testSubject.peek().orElseThrow();
         MessageStream.Entry<EventMessage> secondPeek = testSubject.peek().orElseThrow();
 
-        // then it returns the same entry both times, and next() then returns that same entry too
-        assertThat(firstPeek).isSameAs(secondPeek);
-        assertThat(testSubject.next().orElseThrow()).isSameAs(firstPeek);
+        // then the underlying stream is only ever peeked, never advanced
+        assertThat(firstPeek.message()).isInstanceOf(TerminalEventMessage.class);
+        assertThat(secondPeek.message()).isInstanceOf(TerminalEventMessage.class);
+        verify(stream, never()).nextIfAvailable();
     }
 
     @Nested
@@ -156,6 +177,46 @@ class SnapshottedSourcingEventMessageStreamTest {
         }
     }
 
+    @Test
+    void shouldReportASnapshotUnderTheCandidateWhoseKeyItWasFoundUnder() {
+        // given
+        when(stream.nextIfAvailable()).thenReturn(SourceWithSnapshotResponse.newBuilder().setSnapshot(
+                SequencedSnapshot.newBuilder()
+                                 .setKey(lookup.requestCandidates().getFirst().getKey())
+                                 .setSequence(4L)
+                                 .setSnapshot(snapshot())
+        ).build());
+
+        // when
+        MessageStream.Entry<EventMessage> snapshotEntry = testSubject.next().orElseThrow();
+
+        // then
+        assertThat(((SnapshotEventMessage) snapshotEntry.message()).snapshotType())
+                .isEqualTo(VersionedType.of(ACCOUNT, "0.0.1"));
+    }
+
+    @Test
+    void shouldReportAnAggregateBasedSnapshotUnderItsPayloadTypeAndRevision() {
+        // given an aggregate-based snapshot without a revision, found through the aggregate identifier
+        when(stream.nextIfAvailable()).thenReturn(SourceWithSnapshotResponse.newBuilder().setSnapshot(
+                SequencedSnapshot.newBuilder()
+                                 .setKey(ByteString.copyFromUtf8("sn-account-1"))
+                                 .setSequence(7L)
+                                 .setFromLegacyIdentifier(true)
+                                 .setSnapshot(Snapshot.newBuilder()
+                                                      .setName(AGGREGATE_PAYLOAD_TYPE.fullName())
+                                                      .setTimestamp(Instant.now().toEpochMilli()))
+        ).build());
+
+        // when
+        MessageStream.Entry<EventMessage> snapshotEntry = testSubject.next().orElseThrow();
+
+        // then
+        SnapshotEventMessage message = (SnapshotEventMessage) snapshotEntry.message();
+        assertThat(message.snapshotType()).isEqualTo(VersionedType.of(AGGREGATE_PAYLOAD_TYPE, "0.0.0"));
+        assertThat(message.payload().position()).isEqualTo(new GlobalIndexPosition(7L));
+    }
+
     private static Snapshot snapshot() {
         return Snapshot.newBuilder()
                        .setName("snapshot-name")
@@ -174,15 +235,20 @@ class SnapshottedSourcingEventMessageStreamTest {
         return SequencedEvent.newBuilder().setEvent(event).setSequence(sequence).build();
     }
 
-    private static SnapshottedSourceEventsResponse snapshotResponse(Snapshot snapshot) {
-        return SnapshottedSourceEventsResponse.newBuilder().setSnapshot(snapshot).build();
+    private static SourceWithSnapshotResponse sequencedSnapshotResponse(long sequence, Snapshot snapshot) {
+        return SourceWithSnapshotResponse.newBuilder()
+                                              .setSnapshot(SequencedSnapshot.newBuilder()
+                                                                                      .setKey(SNAPSHOT_KEY)
+                                                                                      .setSequence(sequence)
+                                                                                      .setSnapshot(snapshot))
+                                              .build();
     }
 
-    private static SnapshottedSourceEventsResponse eventResponse(SequencedEvent event) {
-        return SnapshottedSourceEventsResponse.newBuilder().setEvent(event).build();
+    private static SourceWithSnapshotResponse eventResponse(SequencedEvent event) {
+        return SourceWithSnapshotResponse.newBuilder().setEvent(event).build();
     }
 
-    private static SnapshottedSourceEventsResponse markerResponse(long marker) {
-        return SnapshottedSourceEventsResponse.newBuilder().setConsistencyMarker(marker).build();
+    private static SourceWithSnapshotResponse markerResponse(long marker) {
+        return SourceWithSnapshotResponse.newBuilder().setConsistencyMarker(marker).build();
     }
 }

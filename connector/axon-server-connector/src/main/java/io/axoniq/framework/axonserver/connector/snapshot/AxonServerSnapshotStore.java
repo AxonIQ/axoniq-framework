@@ -11,24 +11,28 @@ package io.axoniq.framework.axonserver.connector.snapshot;
 import com.google.protobuf.ByteString;
 import io.axoniq.axonserver.connector.AxonServerConnection;
 import io.axoniq.axonserver.grpc.event.dcb.AddSnapshotRequest;
+import io.axoniq.axonserver.grpc.event.dcb.FindLastSnapshotRequest;
 import io.axoniq.axonserver.grpc.event.dcb.GetLastSnapshotRequest;
+import io.axoniq.axonserver.grpc.event.dcb.LegacySnapshotCandidate;
+import io.axoniq.axonserver.grpc.event.dcb.SequencedSnapshot;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.conversion.Converter;
 import org.axonframework.eventsourcing.eventstore.AggregateSequenceNumberPosition;
 import org.axonframework.eventsourcing.eventstore.GlobalIndexPosition;
-import org.axonframework.eventsourcing.eventstore.Position;
 import org.axonframework.eventsourcing.snapshot.api.Snapshot;
+import org.axonframework.eventsourcing.snapshot.api.SnapshotCandidate;
+import org.axonframework.eventsourcing.snapshot.api.SnapshotMatch;
 import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.jspecify.annotations.Nullable;
 
-import java.time.Instant;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 
@@ -44,7 +48,13 @@ import static java.util.Objects.requireNonNull;
  */
 public class AxonServerSnapshotStore implements SnapshotStore {
 
-    private static final String POSITION_TYPE_KEY = "__AxonFramework__:Position-Type";  // reserved key in metadata
+    /**
+     * The Axon Server capability advertising {@code FindLast} and {@code SourceWithSnapshot}, which take ordered
+     * {@code SnapshotCandidate}s. A node without it only offers {@code GetLast}, which takes a single key.
+     */
+    public static final String SNAPSHOT_AWARE_SOURCING_CAPABILITY = "dcb:snapshot-aware-sourcing";
+
+    static final String POSITION_TYPE_KEY = "__AxonFramework__:Position-Type";  // reserved key in metadata
     private static final ByteString SNAPSHOT_KEY_SEPARATOR = ByteString.copyFrom(new byte[]{0});
 
     private final AxonServerConnection connection;
@@ -98,54 +108,166 @@ public class AxonServerSnapshotStore implements SnapshotStore {
     }
 
     @Override
+    public CompletableFuture<@Nullable SnapshotMatch> load(List<SnapshotCandidate> candidates, Object identifier,
+                                                           @Nullable ProcessingContext context) {
+        return load(candidates, null, identifier, context);
+    }
+
+    /**
+     * {@inheritDoc}
+     * <p>
+     * The {@code aggregateBasedCandidate} is only looked up when the connected Axon Server node supports looking
+     * snapshots up by several candidates at once; an older node is asked for each candidate in turn instead, which
+     * cannot reach an aggregate-based snapshot.
+     */
+    @Override
+    public CompletableFuture<@Nullable SnapshotMatch> load(List<SnapshotCandidate> candidates,
+                                                           @Nullable SnapshotCandidate aggregateBasedCandidate,
+                                                           Object identifier,
+                                                           @Nullable ProcessingContext context) {
+        AxonServerSnapshotLookup lookup = lookupFor(candidates, aggregateBasedCandidate, identifier);
+        CompletableFuture<@Nullable SnapshotMatch> found = connection.supports(SNAPSHOT_AWARE_SOURCING_CAPABILITY)
+                ? findLast(lookup)
+                : getLastOfEach(lookup, 0);
+
+        /*
+         * Even though Axon Server is documented to not return a snapshot when none is available, it actually answers
+         * with an error, which is handled here.
+         */
+
+        return found.exceptionally(e -> {
+            if (isNotFound(e)) {
+                return null;
+            }
+
+            throw new CompletionException(
+                    "Snapshot loading failed for %s with identifier %s".formatted(candidates, identifier), unwrap(e)
+            );
+        });
+    }
+
+    /*
+     * Temporary: Axon Framework keeps this single-name load as a deprecated abstract method until Axoniq Framework
+     * has migrated. It deliberately carries no @Override, so Axon Framework can remove the method first without
+     * breaking this class; remove it afterwards.
+     */
+    @Deprecated(since = "5.5.0", forRemoval = true)
     public CompletableFuture<@Nullable Snapshot> load(QualifiedName qualifiedName, Object identifier,
                                                       @Nullable ProcessingContext context) {
         Objects.requireNonNull(qualifiedName, "The qualifiedName parameter must not be null.");
+
+        return load(List.of(new SnapshotCandidate(qualifiedName, Set.of())), identifier, context)
+                .thenApply(match -> match == null ? null : match.snapshot());
+    }
+
+    /**
+     * Creates the lookup of a snapshot of the entity with the given {@code identifier} under the given candidates,
+     * which translates them into the candidates of a request to Axon Server, and the snapshot it returns back.
+     *
+     * @param candidates              the candidates to look the snapshot up under, in order of preference, cannot be
+     *                                {@code null} or empty
+     * @param aggregateBasedCandidate the aggregate-based snapshot to look up when no candidate yields one, or
+     *                                {@code null} when there is none to look up
+     * @param identifier              the identifier of the snapshotted entity, cannot be {@code null}
+     * @return the lookup, never {@code null}
+     * @throws NullPointerException     if {@code candidates} or {@code identifier} is {@code null}, or
+     *                                  {@code candidates} contains {@code null}
+     * @throws IllegalArgumentException if {@code candidates} is empty
+     */
+    public AxonServerSnapshotLookup lookupFor(List<SnapshotCandidate> candidates,
+                                              @Nullable SnapshotCandidate aggregateBasedCandidate,
+                                              Object identifier) {
+        List<SnapshotCandidate> candidateList =
+                List.copyOf(Objects.requireNonNull(candidates, "The candidates parameter must not be null."));
         Objects.requireNonNull(identifier, "The identifier parameter must not be null.");
 
-        ByteString key = snapshotKey(qualifiedName, identifier);
+        if (candidateList.isEmpty()) {
+            throw new IllegalArgumentException("The candidates parameter must not be empty.");
+        }
 
-        /*
-         * Note, even though getLastSnapshot is documented to not return a snapshot when none is available,
-         * it actually throws an exception, which is handled in the exceptionally block.
-         */
+        List<ByteString> keys = new ArrayList<>();
+
+        for (SnapshotCandidate candidate : candidateList) {
+            keys.add(snapshotKey(candidate.qualifiedName(), identifier));
+        }
+
+        return new AxonServerSnapshotLookup(candidateList, keys, aggregateBasedCandidate, identifier);
+    }
+
+    /*
+     * Falls back to asking for each candidate in turn when a node that advertised the capability still answers
+     * UNIMPLEMENTED, which can happen when the connection moved to a less capable node in between.
+     */
+    private CompletableFuture<@Nullable SnapshotMatch> findLast(AxonServerSnapshotLookup lookup) {
+        FindLastSnapshotRequest.Builder request =
+                FindLastSnapshotRequest.newBuilder().addAllCandidate(lookup.requestCandidates());
+        LegacySnapshotCandidate legacyCandidate = lookup.legacyCandidate();
+
+        if (legacyCandidate != null) {
+            request.setLegacyCandidate(legacyCandidate);
+        }
 
         return connection.snapshotChannel()
-            .getLastSnapshot(GetLastSnapshotRequest.newBuilder().setKey(key).build())
-            .thenApply(sr -> {
-                io.axoniq.axonserver.grpc.event.dcb.Snapshot snapshot = sr.getSnapshot();
+                         .findLastSnapshot(request.build())
+                         .<@Nullable SnapshotMatch>thenApply(response -> lookup.acceptedMatch(response.getSnapshot()))
+                         .exceptionallyCompose(e -> isUnimplemented(e)
+                                 ? getLastOfEach(lookup, 0)
+                                 : CompletableFuture.failedFuture(e));
+    }
 
-                if (snapshot == null) {  // this probably never happens, but just in case the behavior changes
-                    return null;
-                }
+    /*
+     * Asks for the latest snapshot under each candidate's key in turn, until one has an acceptable version.
+     */
+    private CompletableFuture<@Nullable SnapshotMatch> getLastOfEach(AxonServerSnapshotLookup lookup, int index) {
+        if (index == lookup.candidates().size()) {
+            return CompletableFuture.completedFuture(null);
+        }
 
-                Map<String, String> metadata = new HashMap<>(snapshot.getMetadataMap());
-                String positionType = metadata.remove(POSITION_TYPE_KEY);  // remove this key, so user doesn't notice
-                Position position = switch(positionType) {
-                    case "GIP" -> new GlobalIndexPosition(sr.getSequence());
-                    case "ASNP" -> new AggregateSequenceNumberPosition(sr.getSequence());
-                    case null, default -> throw new IllegalArgumentException("Unexpected position type: " + positionType);
-                };
+        ByteString key = lookup.keys().get(index);
 
-                return new Snapshot(
-                    position,
-                    snapshot.getVersion(),
-                    snapshot.getPayload().toByteArray(),
-                    Instant.ofEpochMilli(snapshot.getTimestamp()),
-                    metadata
-                );
-            })
-            .exceptionally(e -> {
-                while (e instanceof CompletionException) {
-                    e = e.getCause();
-                }
+        return connection.snapshotChannel()
+                         .getLastSnapshot(GetLastSnapshotRequest.newBuilder().setKey(key).build())
+                         .<@Nullable SnapshotMatch>thenApply(response -> lookup.acceptedMatch(
+                                 SequencedSnapshot.newBuilder()
+                                                  .setKey(key)
+                                                  .setSequence(response.getSequence())
+                                                  .setSnapshot(response.getSnapshot())
+                                                  .build()
+                         ))
+                         .exceptionally(e -> {
+                             if (isNotFound(e)) {
+                                 return null;
+                             }
 
-                if (e instanceof StatusRuntimeException sre && (sre.getStatus().getCode() == Status.Code.CANCELLED || sre.getStatus().getCode()  == Status.Code.NOT_FOUND)) {
-                    return null;  // Although CANCELLED is a bit odd, this is the current behavior when snapshot is not found.
-                }
+                             throw e instanceof CompletionException ce ? ce : new CompletionException(e);
+                         })
+                         .thenCompose(match -> match == null
+                                 ? getLastOfEach(lookup, index + 1)
+                                 : CompletableFuture.completedFuture(match));
+    }
 
-                throw new CompletionException("Snapshot loading failed for %s with identifier %s".formatted(qualifiedName.toString(), identifier.toString()), e);
-            });
+    /*
+     * Although CANCELLED is a bit odd, it is what Axon Server answers when no snapshot is found, besides NOT_FOUND.
+     */
+    private static boolean isNotFound(Throwable e) {
+        return unwrap(e) instanceof StatusRuntimeException sre
+                && (sre.getStatus().getCode() == Status.Code.CANCELLED
+                || sre.getStatus().getCode() == Status.Code.NOT_FOUND);
+    }
+
+    private static boolean isUnimplemented(Throwable e) {
+        return unwrap(e) instanceof StatusRuntimeException sre
+                && sre.getStatus().getCode() == Status.Code.UNIMPLEMENTED;
+    }
+
+    private static Throwable unwrap(Throwable e) {
+        Throwable cause = e;
+
+        while (cause instanceof CompletionException && cause.getCause() != null) {
+            cause = cause.getCause();
+        }
+
+        return cause;
     }
 
     /**
