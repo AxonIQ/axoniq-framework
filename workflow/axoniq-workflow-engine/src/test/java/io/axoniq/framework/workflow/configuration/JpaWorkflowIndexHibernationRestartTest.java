@@ -101,6 +101,8 @@ class JpaWorkflowIndexHibernationRestartTest {
     private static final int SEGMENTS = 2;
     private static final Duration AWAIT = Duration.ofSeconds(30);
     private static final Duration IDLE_DELAY = Duration.ofMillis(200);
+    // Longer than any test, so no hibernation pass asks a workflow to hibernate: the test hibernates it itself.
+    private static final Duration IDLE_DELAY_BEYOND_THE_TEST = Duration.ofHours(1);
     // Marks the reads of the test itself, which the counting store does not count.
     private static final Context.ResourceKey<Boolean> TEST_READ = Context.ResourceKey.withLabel("test-read");
 
@@ -291,19 +293,26 @@ class JpaWorkflowIndexHibernationRestartTest {
     @Test
     void neverWritesAHintWithACheckpointOfANodeThatLostTheClaimOfItsSegment() {
         // given - a running workflow in the index, without a hint
-        var first = start(true, true);
+        // A workflow that hibernated before the index listed it as running would get a hint right away, so this node
+        // hibernates it only when the test asks it to.
+        var first = start(true, true, IDLE_DELAY_BEYOND_THE_TEST);
         var waiting = startWorkflows(first, "pay", 1);
         var orderId = waiting.iterator().next();
         await().atMost(AWAIT).until(() -> {
             tick(first, 1);
             return entries().equals(Set.of(Entry.running(orderId)));
         });
+        // and - no checkpoint of those ticks is still in flight, which would notice the stolen claims below
+        awaitCheckpointsAtTheHead(first);
         // and - another node took over every segment, without this node noticing yet
         var releasesBefore = releasesOf(segmentOf(orderId));
         stealClaims();
 
         // when - the workflow hibernates, and the node tries to checkpoint its hint
-        awaitHibernated(first, waiting);
+        hibernateNow(first, waiting);
+        assertThat(releasesOf(segmentOf(orderId)))
+                .as("the node must not have noticed the stolen claim before it checkpoints the hint")
+                .isEqualTo(releasesBefore);
         await().atMost(AWAIT).until(() -> {
             tick(first, 1);
             return hintsWrittenWithinTheProcessorTransaction.get() > 0;
@@ -320,20 +329,27 @@ class JpaWorkflowIndexHibernationRestartTest {
     @Test
     void neverWritesAHintWithACheckpointAtTheStoredTokenOfANodeThatLostTheClaimOfItsSegment() {
         // given - a running workflow in the index, without a hint
-        var first = start(true, true);
+        // A workflow that hibernated before the index listed it as running would get a hint right away, so this node
+        // hibernates it only when the test asks it to.
+        var first = start(true, true, IDLE_DELAY_BEYOND_THE_TEST);
         var waiting = startWorkflows(first, "pay", 1);
         var orderId = waiting.iterator().next();
         await().atMost(AWAIT).until(() -> {
             tick(first, 1);
             return entries().equals(Set.of(Entry.running(orderId)));
         });
+        // and - no checkpoint of those ticks is still in flight, which would notice the stolen claims below
+        awaitCheckpointsAtTheHead(first);
         // and - another node took over every segment, without this node noticing yet
         var releasesBefore = releasesOf(segmentOf(orderId));
         stealClaims();
 
         // when - the workflow hibernates, and the node checkpoints its hint at the token it already stored: no token
         // is stored
-        awaitHibernated(first, waiting);
+        hibernateNow(first, waiting);
+        assertThat(releasesOf(segmentOf(orderId)))
+                .as("the node must not have noticed the stolen claim before it checkpoints the hint")
+                .isEqualTo(releasesBefore);
         await().atMost(AWAIT).until(() -> {
             WorkflowEngineHibernation.requestCheckpoint(engine(first), segmentOf(orderId), TrackingToken.LATEST);
             return hintsWrittenWithinTheProcessorTransaction.get() > 0;
@@ -484,6 +500,10 @@ class JpaWorkflowIndexHibernationRestartTest {
      *                    otherwise the token store runs every operation in a transaction of its own
      */
     private AxonConfiguration start(boolean hibernation, boolean joined) {
+        return start(hibernation, joined, IDLE_DELAY);
+    }
+
+    private AxonConfiguration start(boolean hibernation, boolean joined, Duration idleDelay) {
         var module = WorkflowModule.configure(MODULE, TestContext.class)
                                    .definition(d -> d
                                            .declarative(c -> this::body)
@@ -508,7 +528,7 @@ class JpaWorkflowIndexHibernationRestartTest {
         // Its own connection to the shared event store, so a stopped node no longer hears of appended events.
         var nodeStorageEngine = new DisconnectableStorageEngine(storageEngine);
         var configuration = WorkflowConfigurer.create()
-                .hibernation(h -> h.enabled(hibernation).idleDelay(IDLE_DELAY).wakeTimeout(Duration.ofSeconds(10)))
+                .hibernation(h -> h.enabled(hibernation).idleDelay(idleDelay).wakeTimeout(Duration.ofSeconds(10)))
                 .registerWorkflowIndex(cfg -> new ObservedWorkflowIndex(JpaWorkflowIndex.builder()
                                                                                          .entityManagerFactory(
                                                                                                  entityManagerFactory
@@ -630,13 +650,27 @@ class JpaWorkflowIndexHibernationRestartTest {
     }
 
     private void awaitHibernated(AxonConfiguration configuration, Set<String> orderIds) {
+        await().atMost(AWAIT).until(() -> isHibernated(configuration, orderIds));
+    }
+
+    /**
+     * Asks the given workflows to hibernate at their next safe point, as a hibernation pass asks a workflow that made
+     * no progress for the idle delay, until they hibernated. A request made while the workflow is not at a safe point
+     * keeps it in memory, so the request is made again until it hibernates.
+     */
+    private void hibernateNow(AxonConfiguration configuration, Set<String> orderIds) {
         await().atMost(AWAIT).until(() -> {
-            var engine = engine(configuration);
-            var inMemory = engine.workflowExecutions().stream().map(WorkflowExecution::workflowId)
-                                 .collect(Collectors.toSet());
-            return engine.hibernatedWorkflowIds().containsAll(orderIds)
-                    && orderIds.stream().noneMatch(inMemory::contains);
+            orderIds.forEach(orderId -> WorkflowEngineHibernation.requestHibernation(engine(configuration), orderId));
+            return isHibernated(configuration, orderIds);
         });
+    }
+
+    private static boolean isHibernated(AxonConfiguration configuration, Set<String> orderIds) {
+        var engine = engine(configuration);
+        var inMemory = engine.workflowExecutions().stream().map(WorkflowExecution::workflowId)
+                             .collect(Collectors.toSet());
+        return engine.hibernatedWorkflowIds().containsAll(orderIds)
+                && orderIds.stream().noneMatch(inMemory::contains);
     }
 
     /**
@@ -658,6 +692,32 @@ class JpaWorkflowIndexHibernationRestartTest {
                      .orTimeout(5, TimeUnit.SECONDS)
                      .join()
                      .orElse(Set.of());
+    }
+
+    /**
+     * Waits until every segment stored a token at the head of the event store, so no checkpoint of the events published
+     * so far is still in flight. A checkpoint that commits after {@link #stealClaims()} fails its claim check and
+     * releases its segment, which the node claims again once the stolen claim expired.
+     */
+    private void awaitCheckpointsAtTheHead(AxonConfiguration configuration) {
+        var head = storageEngine.latestToken().orTimeout(5, TimeUnit.SECONDS).join();
+        var converter = configuration.getComponent(GeneralConverter.class);
+        await().atMost(AWAIT).until(() -> {
+            var stored = storedTokens(converter);
+            return stored.size() == SEGMENTS && stored.stream().allMatch(token -> token != null && token.covers(head));
+        });
+    }
+
+    private List<@Nullable TrackingToken> storedTokens(GeneralConverter converter) {
+        try (var entityManager = entityManagerFactory.createEntityManager()) {
+            return entityManager.createQuery("select t from TokenEntry t where t.processorName = :processor",
+                                             TokenEntry.class)
+                                .setParameter("processor", MODULE)
+                                .getResultList()
+                                .stream()
+                                .<@Nullable TrackingToken>map(entry -> entry.getToken(converter))
+                                .toList();
+        }
     }
 
     /**
