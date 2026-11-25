@@ -326,7 +326,7 @@ class WorkflowIndexFaultCampaignTest {
                     () -> "not ended: " + casesIn(c -> c.stage != Stage.DONE));
 
         // and: an index that every node kept loses the row of each case once the end of its workflow is handled
-        boolean rowsChecked = finalMode() != IndexMode.NONE && !ARM.equals("toggled");
+        boolean rowsChecked = finalMode() != IndexMode.NONE;
         if (rowsChecked) {
             // The last effect of a case runs before its workflow ends, so the rows empty a moment after the cases.
             awaitOrFail("the index holds no row once every workflow ended",
@@ -869,11 +869,6 @@ class WorkflowIndexFaultCampaignTest {
 
         private FailingReadsIndex(WorkflowIndex delegate) {
             this.delegate = delegate;
-        }
-
-        @Override
-        public CompletableFuture<Boolean> isComplete(String module, @Nullable ProcessingContext context) {
-            return delegate.isComplete(module, context);
         }
 
         @Override

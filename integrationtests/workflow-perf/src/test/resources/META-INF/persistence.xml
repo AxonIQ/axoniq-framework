@@ -16,7 +16,7 @@
     <persistence-unit name="workflow-perf" transaction-type="RESOURCE_LOCAL">
         <class>io.axoniq.framework.workflow.index.jpa.WorkflowIndexEntry</class>
         <class>io.axoniq.framework.workflow.index.jpa.WorkflowIndexWaitEntry</class>
-        <class>io.axoniq.framework.workflow.index.jpa.WorkflowIndexModuleEntry</class>
+        <class>io.axoniq.framework.workflow.index.jpa.WorkflowIndexSegmentEntry</class>
         <class>org.axonframework.messaging.eventhandling.processing.streaming.token.store.jpa.TokenEntry</class>
         <exclude-unlisted-classes>true</exclude-unlisted-classes>
         <properties>

@@ -125,15 +125,17 @@ class WorkflowIndexUpgradeTest {
         // then: every case 5.4.1 left open is known by exactly 1 node, and the case that ended on 5.4.1 by none
         awaitKnownExactlyOnce("after the upgrade");
 
-        // and: the index holds the rows of exactly the open cases
-        if (INDEX) await("the index holds a row for every open case",
-              () -> indexRows("workflowindexentry") == openCases().size() && indexRows("workflowindexmoduleentry") == 1,
-              () -> "workflow rows " + indexRows("workflowindexentry") + ", marker rows "
-                      + indexRows("workflowindexmoduleentry") + ", open cases " + openCases().size());
-
-        // when: every node stops, and 1 node claims every segment from the rows
+        // when: every node stops, which stores the rows with the last tokens of their segments
         nodes.forEach(Node::close);
         nodes.clear();
+
+        // then: the index holds the rows of exactly the open cases, and a position for every segment
+        if (INDEX) {
+            assertThat(indexRows("workflowindexentry")).as("workflow rows").isEqualTo(openCases().size());
+            assertThat(indexRows("workflowindexsegmententry")).as("positions").isEqualTo(UpgradeCase.SEGMENTS);
+        }
+
+        // when: 1 node claims every segment from the rows
         nodes.add(new Node(rig, "new-3"));
 
         // then: it knows every open case

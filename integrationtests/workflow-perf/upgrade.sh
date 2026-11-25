@@ -21,21 +21,21 @@ mkdir -p "$RESULTS/logs"
 export JAVA_HOME="${JAVA_HOME:-$HOME/Library/Java/JavaVirtualMachines/jbr-25.0.1/Contents/Home}"
 # Never pull: a missing image hangs in the credential helper. The images must already be local.
 export DOCKER_CONFIG="$(mktemp -d)"
-PG_PORT=55450
-AS_HTTP=8025
-AS_GRPC=8125
+PG_PORT=${PG_PORT:-55450}
+AS_HTTP=${AS_HTTP:-8025}
+AS_GRPC=${AS_GRPC:-8125}
 PROPS=(-Dperf.pg.url="jdbc:postgresql://localhost:$PG_PORT/perf" -Dperf.axonserver="localhost:$AS_GRPC"
        -Dupgrade.state="$RESULTS/logs/upgrade-$TAG.cases" -Dupgrade.stop="$STOP")
 
-docker rm -f wf-campaign-pg wf-campaign-axonserver >/dev/null 2>&1 || true
-docker run -d --name wf-campaign-pg -p $PG_PORT:5432 \
+docker rm -f ${CONTAINER_PREFIX:-wf-campaign}-pg ${CONTAINER_PREFIX:-wf-campaign}-axonserver >/dev/null 2>&1 || true
+docker run -d --name ${CONTAINER_PREFIX:-wf-campaign}-pg -p $PG_PORT:5432 \
   -e POSTGRES_USER=perf -e POSTGRES_PASSWORD=perf -e POSTGRES_DB=perf postgres:17 -c max_connections=300 >/dev/null
-until docker exec wf-campaign-pg pg_isready -U perf -d perf >/dev/null 2>&1; do sleep 1; done
-docker run -d --name wf-campaign-axonserver -p $AS_HTTP:8024 -p $AS_GRPC:8124 \
+until docker exec ${CONTAINER_PREFIX:-wf-campaign}-pg pg_isready -U perf -d perf >/dev/null 2>&1; do sleep 1; done
+docker run -d --name ${CONTAINER_PREFIX:-wf-campaign}-axonserver -p $AS_HTTP:8024 -p $AS_GRPC:8124 \
   -e AXONIQ_AXONSERVER_HOSTNAME=localhost -e AXONIQ_AXONSERVER_DEVMODE_ENABLED=true \
   -e AXONIQ_AXONSERVER_PLUGINS_ENABLED=false docker.axoniq.io/axoniq/axonserver:latest >/dev/null
 until curl -sf -X POST "http://localhost:$AS_HTTP/v2/cluster/init?dcb=true" >/dev/null 2>&1; do sleep 1; done
-until docker logs wf-campaign-axonserver 2>&1 | grep -q "Creating DCB context: default"; do sleep 1; done
+until docker logs ${CONTAINER_PREFIX:-wf-campaign}-axonserver 2>&1 | grep -q "Creating DCB context: default"; do sleep 1; done
 sleep 5
 
 echo "=== phase 1 on 5.4.1 ($STOP)"
@@ -54,7 +54,7 @@ if [ "$OLD" = 0 ]; then
   echo "    exit=$NEW"
 fi
 echo "$TAG,$STOP,$OLD,$NEW" >> "$RESULTS/upgrade.csv"
-docker exec wf-campaign-pg psql -U perf -d perf -c \
+docker exec ${CONTAINER_PREFIX:-wf-campaign}-pg psql -U perf -d perf -c \
   "select version, effect, count(*) from upgrade_effect group by version, effect order by version, effect" \
   > "$RESULTS/logs/upgrade-$TAG.effects.txt" 2>&1 || true
-docker rm -f wf-campaign-pg wf-campaign-axonserver >/dev/null 2>&1 || true
+docker rm -f ${CONTAINER_PREFIX:-wf-campaign}-pg ${CONTAINER_PREFIX:-wf-campaign}-axonserver >/dev/null 2>&1 || true

@@ -97,4 +97,6 @@ integrationtests/workflow-perf/upgrade.sh graceful
 ```
 
 Both scripts start a fresh PostgreSQL on port 55450 and a fresh Axon Server on port 8125, and write to `results/`.
+`PG_PORT`, `AS_HTTP`, `AS_GRPC` and `CONTAINER_PREFIX` give a run ports and container names of its own, so two runs
+can share the machine.
 

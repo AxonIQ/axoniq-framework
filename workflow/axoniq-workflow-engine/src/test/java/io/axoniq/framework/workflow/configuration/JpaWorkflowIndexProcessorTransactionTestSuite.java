@@ -62,6 +62,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.OptionalLong;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
@@ -184,7 +185,7 @@ abstract class JpaWorkflowIndexProcessorTransactionTestSuite {
             var workflowIds = IntStream.range(0, 200).mapToObj(i -> "order-" + i).toList();
             List<WorkflowIndexChange> changes = new ArrayList<>();
             workflowIds.forEach(workflowId -> changes.add(new WorkflowStarted(workflowId)));
-            index.store(MODULE, new WorkflowIndexChanges(changes, false), null).orTimeout(20, TimeUnit.SECONDS).join();
+            index.store(MODULE, new WorkflowIndexChanges(changes, null), null).orTimeout(20, TimeUnit.SECONDS).join();
 
             for (Segment segment : Segment.splitBalanced(Segment.ROOT_SEGMENT, SEGMENT_COUNT - 1)) {
                 // when
@@ -310,7 +311,7 @@ abstract class JpaWorkflowIndexProcessorTransactionTestSuite {
             wakesAt.putAll(rows.wakesAt());
             waits.addAll(rows.waits());
         }
-        return new WorkflowIndexRows(running, wakesAt, waits);
+        return new WorkflowIndexRows(running, wakesAt, waits, OptionalLong.empty());
     }
 
     /**

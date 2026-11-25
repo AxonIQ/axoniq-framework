@@ -368,9 +368,9 @@ Add the three entities to the persistence unit that the `JpaWorkflowIndex` uses.
 |Open wait
 |The name of the workflow module, the workflow id, the step name, the segment key, the event name, and the associations of the wait.
 
-|`WorkflowIndexModuleEntry`
-|Workflow module
-|A marker that the rows of the workflow module are complete.
+|`WorkflowIndexSegmentEntry`
+|Segment
+|The name of the workflow module, the range of segment keys of the segment, and the position in the event store its rows are correct at.
 |===
 
 A row holds a module name and a workflow id of at most 255 characters, a step name of at most 1024 characters, and at most 10,000 bytes of associations per wait.
@@ -400,8 +400,8 @@ The engine then records the hibernated workflows of a segment when it releases t
 === First segment claim
 
 A workflow index starts empty, while workflows may be running already.
-The first segment claim with an empty workflow index sources both lists once, as without a workflow index.
-It stores the running workflows and the open waits of all segments as rows, and marks the rows of the workflow module as complete.
+A segment without a stored position is claimed as without a workflow index: the segment claim sources both lists.
+The running workflows and the open waits of the segment then become its rows, and the engine stores them, and the position of the segment, with the next token.
 From then on, a segment claim reads the rows of its segment.
 
 The rows of that first segment claim hold no wake times.
@@ -410,13 +410,12 @@ Those workflows hibernate again, and the engine then stores their wake times.
 
 === Rollout
 
-A node without the workflow index writes no rows.
-A workflow that starts on such a node has no row, so a later segment claim does not find it.
-Follow these rules:
+The workflow index can be turned on during a rolling restart, and nodes with and without it can run together.
+A node without the workflow index writes no rows, and moves the token of a segment past events the rows do not hold.
+A segment claim with the workflow index reads the events from the position the rows are correct at, not from the token.
+So it also applies what a node without the workflow index handled, and the rows catch up with the next stored token.
 
-. Turn the workflow index on with all nodes stopped, and start every node with it.
-. Do not run nodes with and without the workflow index at the same time.
-. Empty the three tables before you turn the workflow index on again after a period without it. The rows are out of date by then, and the marker still says they are complete.
+Turning the workflow index off and on again needs no step of its own either.
 
 See xref:workflow-internals.adoc#segment-claims[Segment claims] for how a segment claim reads the rows, and how the engine writes them.
 
@@ -506,7 +505,7 @@ The <<workflow-index,workflow index>> is configured with `axon.workflow.index.*`
 
 The `JpaWorkflowIndex` bean uses the `EntityManagerFactory` of the application.
 An application that defines its own `WorkflowIndex` bean replaces the default.
-The rollout rules of the <<workflow-index,workflow index>> apply to these properties too.
+The rollout of the <<workflow-index,workflow index>> needs no step of its own, also when it is turned on through these properties.
 
 See <<running-on-several-nodes,Running on several nodes>> for the token store, failover and snapshots, and <<performance-tuning,Performance tuning>> for choosing the processor values.
 

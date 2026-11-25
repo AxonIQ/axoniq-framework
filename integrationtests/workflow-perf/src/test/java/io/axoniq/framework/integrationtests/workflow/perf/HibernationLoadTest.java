@@ -1028,11 +1028,6 @@ class HibernationLoadTest {
     private record CountingIndex(WorkflowIndex delegate, Counters counters) implements WorkflowIndex {
 
         @Override
-        public CompletableFuture<Boolean> isComplete(String module, @Nullable ProcessingContext context) {
-            return delegate.isComplete(module, context);
-        }
-
-        @Override
         public CompletableFuture<WorkflowIndexRows> load(String module, Segment segment,
                                                          @Nullable ProcessingContext context) {
             counters.indexLoads.increment();

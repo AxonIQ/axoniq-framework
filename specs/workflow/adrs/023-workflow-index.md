@@ -39,7 +39,7 @@ module.
 
 - one row per running workflow: module, workflow id, segment key, and a nullable `wakesAt`
 - one row per open wait: module, workflow id, step name, segment key, event name, associations
-- one marker per module: its rows are complete, so a segment claim may read them
+- one position per segment: the position in the event store the rows of that segment are correct at
 
 Every change to a row has the same outcome when it is stored twice. A workflow starts once and ends once, and a wait
 opens once and closes once, so a change that arrives late or again never hides a workflow or a wait.
@@ -68,15 +68,20 @@ Only the node that owns a segment commits rows:
 
 ```
 claim of segment S, stored token T
-  -> read the rows of S          one range query per table on the segment key
-  -> read the events after T     only those tagged workflowEvent=waitForStep or workflowEvent=lifecycle
-  -> apply the events to the rows
+  -> read the rows of S and its position P    one range query per table on the segment key
+  -> read the events after min(P, T)         only those tagged workflowEvent=waitForStep or workflowEvent=lifecycle
+  -> apply the events to the rows, and note what they change
   => the running workflows and the open waits of S, as of the claim
 ```
 
-A segment claim sources the two lists instead when the rows of the module are not complete, or when the segment has no
-stored token. A segment claim that finds the rows not complete stores what it sourced as rows, for all segments, and
-marks the module complete.
+The engine moves the position of a segment with every stored token that changes a row, with the first token after a
+claim, and at least every 10 seconds otherwise. A node without the workflow index moves the token and writes no row, so
+the claim reads from the position and applies what that node handled. The claim notes those changes, and they are
+stored with the next token.
+
+A segment claim sources the two lists instead when no position is stored for the segment, or when the segment has no
+stored token. The sourced workflows and waits of the segment then become its rows, and are stored with the next token,
+under its owner check.
 
 ### Hibernation
 
@@ -111,14 +116,14 @@ record, as it does without a workflow index.
 - A hibernated workflow stays out of memory across a segment claim on any node, also after a crash, and after a split
   or a merge.
 - The workflow index must be in the database of the token store to keep hibernated workflows out of memory.
-- `JpaWorkflowIndex` adds three tables. Each stored token also writes the rows that changed.
+- `JpaWorkflowIndex` adds three tables. Each stored token also writes the rows that changed, and the position of the
+  segment when a row changed or 10 seconds passed.
 - A row holds a workflow id of at most 255 characters, a step name of at most 1024 characters, and at most 10,000 bytes
   of associations per wait.
-- The first segment claim with an empty workflow index sources the two lists once. Its rows carry no `wakesAt`, so the
-  segment claims of that start load every running workflow.
-- A node without the workflow index writes no rows. So the workflow index is turned on with all nodes stopped, and
-  nodes with and without it never run together. Its tables are emptied before it is turned on again after a period
-  without it.
+- The first claim of each segment with an empty workflow index sources the two lists, as does the first claim after a
+  split or a merge. Its rows carry no `wakesAt`, so the segment claims of that start load every running workflow.
+- Nodes with and without the workflow index can run together, so it can be turned on in a rolling restart, and turned
+  off and on again without a step of its own.
 - `Checkpointing` has one more default method. It does nothing unless a component overrides it.
 - An application chooses `JpaWorkflowIndex` or `InMemoryWorkflowIndex`. `WorkflowIndex` and the types of its methods
   are `@Internal`: they are a storage detail of the engine and may change with it.

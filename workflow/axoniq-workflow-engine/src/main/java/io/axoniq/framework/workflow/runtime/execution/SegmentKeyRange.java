@@ -68,4 +68,15 @@ public record SegmentKeyRange(long from, long to) {
     public boolean contains(long segmentKey) {
         return from <= segmentKey && segmentKey <= to;
     }
+
+    /**
+     * Returns whether this range and the given range share a segment key, as a segment and the segments it was split
+     * into or merged from do.
+     *
+     * @param other the range to compare with
+     * @return {@code true} when at least one segment key lies in both ranges
+     */
+    public boolean overlaps(SegmentKeyRange other) {
+        return from <= other.to && other.from <= to;
+    }
 }

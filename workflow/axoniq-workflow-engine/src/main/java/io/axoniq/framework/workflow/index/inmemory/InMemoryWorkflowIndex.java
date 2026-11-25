@@ -28,6 +28,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.OptionalLong;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -66,14 +67,6 @@ public class InMemoryWorkflowIndex implements WorkflowIndex {
     }
 
     @Override
-    public CompletableFuture<Boolean> isComplete(String module, @Nullable ProcessingContext context) {
-        var rows = rowsOf(module);
-        synchronized (rows) {
-            return CompletableFuture.completedFuture(rows.complete);
-        }
-    }
-
-    @Override
     public CompletableFuture<WorkflowIndexRows> load(String module,
                                                      Segment segment,
                                                      @Nullable ProcessingContext context) {
@@ -94,7 +87,10 @@ public class InMemoryWorkflowIndex implements WorkflowIndex {
                                   .stream()
                                   .filter(wait -> range.contains(SegmentKeyRange.keyOf(wait.workflowId())))
                                   .toList();
-            return CompletableFuture.completedFuture(new WorkflowIndexRows(running, wakesAt, waits));
+            var position = rows.positions.get(range);
+            return CompletableFuture.completedFuture(new WorkflowIndexRows(
+                    running, wakesAt, waits, position == null ? OptionalLong.empty() : OptionalLong.of(position)
+            ));
         }
     }
 
@@ -115,8 +111,11 @@ public class InMemoryWorkflowIndex implements WorkflowIndex {
         var rows = rowsOf(module);
         synchronized (rows) {
             changes.changes().forEach(rows::apply);
-            if (changes.complete()) {
-                rows.complete = true;
+            var position = changes.position();
+            if (position != null) {
+                // A split or a merge replaced the segments whose range overlaps this one.
+                rows.positions.keySet().removeIf(range -> range.overlaps(position.range()));
+                rows.positions.put(position.range(), position.position());
             }
         }
     }
@@ -138,7 +137,8 @@ public class InMemoryWorkflowIndex implements WorkflowIndex {
         // The running workflows, each with the time it wakes at, or null when it is not hibernated.
         private final Map<String, @Nullable Instant> workflows = new HashMap<>();
         private final Map<WaitKey, WaitAssociation> waits = new LinkedHashMap<>();
-        private boolean complete;
+        // The position the rows of each segment are correct at, by the key range of the segment.
+        private final Map<SegmentKeyRange, Long> positions = new HashMap<>();
 
         private void apply(WorkflowIndexChange change) {
             switch (change) {

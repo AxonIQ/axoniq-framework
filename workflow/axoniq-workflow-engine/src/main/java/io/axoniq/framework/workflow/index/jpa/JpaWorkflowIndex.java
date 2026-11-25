@@ -34,6 +34,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.OptionalLong;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 
@@ -41,7 +42,7 @@ import static java.util.Objects.requireNonNull;
 
 /**
  * JPA implementation of {@link WorkflowIndex}, keeping the rows in the tables of {@link WorkflowIndexEntry},
- * {@link WorkflowIndexWaitEntry} and {@link WorkflowIndexModuleEntry}.
+ * {@link WorkflowIndexWaitEntry} and {@link WorkflowIndexSegmentEntry}.
  * <p>
  * Give it the {@link TransactionalExecutorProvider} the token store of the workflow processors uses. A store in the
  * context of a token store write then joins the transaction of that write, so the rows and the token are committed
@@ -94,11 +95,6 @@ public class JpaWorkflowIndex implements WorkflowIndex {
     }
 
     @Override
-    public CompletableFuture<Boolean> isComplete(String module, @Nullable ProcessingContext context) {
-        return executor(context).apply(entityManager -> isComplete(entityManager, module));
-    }
-
-    @Override
     public CompletableFuture<WorkflowIndexRows> load(String module,
                                                      Segment segment,
                                                      @Nullable ProcessingContext context) {
@@ -134,7 +130,20 @@ public class JpaWorkflowIndex implements WorkflowIndex {
                          .setParameter("to", range.to())
                          .getResultList()
                          .forEach(entry -> waits.add(waitOf(entry)));
-            return new WorkflowIndexRows(running, wakesAt, waits);
+            var position = entityManager.createQuery(
+                                                "select e.segmentPosition from WorkflowIndexSegmentEntry e "
+                                                        + "where e.workflowModule = :workflowModule "
+                                                        + "and e.segmentFrom = :from and e.segmentTo = :to",
+                                                Long.class
+                                        )
+                                        .setParameter(MODULE_PARAM, module)
+                                        .setParameter("from", range.from())
+                                        .setParameter("to", range.to())
+                                        .getResultList();
+            return new WorkflowIndexRows(
+                    running, wakesAt, waits,
+                    position.isEmpty() ? OptionalLong.empty() : OptionalLong.of(position.getFirst())
+            );
         });
     }
 
@@ -149,10 +158,9 @@ public class JpaWorkflowIndex implements WorkflowIndex {
             for (WorkflowIndexChange change : changes.changes()) {
                 apply(entityManager, module, change, added);
             }
-            if (changes.complete() && !isComplete(entityManager, module)) {
-                var complete = new WorkflowIndexModuleEntry(module);
-                entityManager.persist(complete);
-                added.add(complete);
+            var position = changes.position();
+            if (position != null) {
+                movePosition(entityManager, module, position, added);
             }
             entityManager.flush();
             added.forEach(entityManager::detach);
@@ -220,11 +228,37 @@ public class JpaWorkflowIndex implements WorkflowIndex {
         added.add(entry);
     }
 
-    private static boolean isComplete(EntityManager entityManager, String module) {
-        return entityManager.createQuery("select count(e) from WorkflowIndexModuleEntry e "
-                                                 + "where e.workflowModule = :workflowModule", Long.class)
-                            .setParameter(MODULE_PARAM, module)
-                            .getSingleResult() > 0;
+    /**
+     * Sets the position of the given segment, and removes the positions of the segments a split or a merge replaced:
+     * those whose range overlaps it.
+     */
+    private static void movePosition(EntityManager entityManager,
+                                     String module,
+                                     WorkflowIndexChanges.SegmentPosition position,
+                                     List<Object> added) {
+        var range = position.range();
+        entityManager.createQuery("delete from WorkflowIndexSegmentEntry e "
+                                          + "where e.workflowModule = :workflowModule "
+                                          + "and e.segmentFrom <= :to and e.segmentTo >= :from "
+                                          + "and (e.segmentFrom <> :from or e.segmentTo <> :to)")
+                     .setParameter(MODULE_PARAM, module)
+                     .setParameter("from", range.from())
+                     .setParameter("to", range.to())
+                     .executeUpdate();
+        int updated = entityManager.createQuery("update WorkflowIndexSegmentEntry e "
+                                                        + "set e.segmentPosition = :position "
+                                                        + "where e.workflowModule = :workflowModule "
+                                                        + "and e.segmentFrom = :from and e.segmentTo = :to")
+                                   .setParameter("position", position.position())
+                                   .setParameter(MODULE_PARAM, module)
+                                   .setParameter("from", range.from())
+                                   .setParameter("to", range.to())
+                                   .executeUpdate();
+        if (updated == 0) {
+            add(entityManager, added, new WorkflowIndexSegmentEntry(
+                    module, range.from(), range.to(), position.position()
+            ));
+        }
     }
 
     private static boolean hasWorkflow(EntityManager entityManager, String module, String workflowId) {

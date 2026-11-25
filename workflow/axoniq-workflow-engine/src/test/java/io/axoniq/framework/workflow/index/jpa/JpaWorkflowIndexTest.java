@@ -8,6 +8,7 @@
 package io.axoniq.framework.workflow.index.jpa;
 
 import io.axoniq.framework.workflow.runtime.execution.WaitAssociation;
+import io.axoniq.framework.workflow.runtime.execution.SegmentKeyRange;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowIndexChange;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowIndexChange.WaitClosed;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowIndexChange.WaitOpened;
@@ -223,23 +224,56 @@ class JpaWorkflowIndexTest {
     }
 
     @Nested
-    class Module {
+    class StoredPosition {
 
         @Test
-        void isCompleteOnlyOnceChangesThatCompleteItAreStored() {
+        void isLoadedForExactlyItsSegmentAndModule() {
             // given
-            store(startedAndWaiting("order-1").toList());
-            assertThat(isComplete(MODULE)).isFalse();
+            var halves = Segment.ROOT_SEGMENT.split();
 
             // when
-            testSubject.store(MODULE, new WorkflowIndexChanges(List.of(new WorkflowStarted("order-2")), true), null)
-                       .orTimeout(5, TimeUnit.SECONDS)
-                       .join();
+            storePosition(halves[0], 42L);
 
             // then
-            assertThat(isComplete(MODULE)).isTrue();
-            assertThat(isComplete("payments")).isFalse();
-            assertThat(load(Segment.ROOT_SEGMENT).runningWorkflowIds()).containsExactlyInAnyOrder("order-1", "order-2");
+            assertThat(load(halves[0]).position()).hasValue(42L);
+            assertThat(load(halves[1]).position()).isEmpty();
+            assertThat(load(Segment.ROOT_SEGMENT).position()).isEmpty();
+            assertThat(testSubject.load("payments", halves[0], null).orTimeout(5, TimeUnit.SECONDS).join().position())
+                    .isEmpty();
+        }
+
+        @Test
+        void replacesThePositionsOfTheSegmentsAMergeOrASplitReplaced() {
+            // given
+            var halves = Segment.ROOT_SEGMENT.split();
+            storePosition(halves[0], 42L);
+            storePosition(halves[1], 43L);
+
+            // when: the halves are merged
+            storePosition(Segment.ROOT_SEGMENT, 44L);
+
+            // then
+            assertThat(load(Segment.ROOT_SEGMENT).position()).hasValue(44L);
+            assertThat(load(halves[0]).position()).isEmpty();
+            assertThat(load(halves[1]).position()).isEmpty();
+
+            // when: the root is split again, and the same half moves on
+            storePosition(halves[0], 45L);
+            storePosition(halves[0], 46L);
+
+            // then
+            assertThat(load(halves[0]).position()).hasValue(46L);
+            assertThat(load(Segment.ROOT_SEGMENT).position()).isEmpty();
+        }
+
+        private void storePosition(Segment segment, long position) {
+            testSubject.store(MODULE,
+                              new WorkflowIndexChanges(List.of(), new WorkflowIndexChanges.SegmentPosition(
+                                      SegmentKeyRange.of(segment), position
+                              )),
+                              null)
+                       .orTimeout(5, TimeUnit.SECONDS)
+                       .join();
         }
     }
 
@@ -252,16 +286,12 @@ class JpaWorkflowIndexTest {
     }
 
     private void store(List<? extends WorkflowIndexChange> changes) {
-        testSubject.store(MODULE, new WorkflowIndexChanges(new ArrayList<>(changes), false), null)
+        testSubject.store(MODULE, new WorkflowIndexChanges(new ArrayList<>(changes), null), null)
                    .orTimeout(5, TimeUnit.SECONDS)
                    .join();
     }
 
     private WorkflowIndexRows load(Segment segment) {
         return testSubject.load(MODULE, segment, null).orTimeout(5, TimeUnit.SECONDS).join();
-    }
-
-    private boolean isComplete(String module) {
-        return testSubject.isComplete(module, null).orTimeout(5, TimeUnit.SECONDS).join();
     }
 }

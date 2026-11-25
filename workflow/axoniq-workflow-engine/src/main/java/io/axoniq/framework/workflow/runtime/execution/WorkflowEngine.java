@@ -538,8 +538,8 @@ public class WorkflowEngine implements
      * Sources what the claim of the given segment restores from. The waits are loaded first, as a recorded hibernated
      * workflow is adopted only while its waits are unchanged.
      * <p>
-     * With a {@link WorkflowIndex}, the sourced workflows and waits of every segment also complete its rows. When its
-     * rows keep the hibernated workflows, none are read: the index could not answer this claim.
+     * With a {@link WorkflowIndex}, the sourced workflows and waits of the segment become its rows. When its rows keep
+     * the hibernated workflows, none are read: the index could not answer this claim.
      */
     private CompletableFuture<ClaimedWorkflows> sourceClaimedWorkflows(Segment segment,
                                                                        ProcessingContext sourcingContext) {
@@ -557,17 +557,10 @@ public class WorkflowEngine implements
                                  .toList(),
                             recorded
                     );
-                    if (support == null) {
-                        return CompletableFuture.completedFuture(claimed);
+                    if (support != null) {
+                        support.sourced(segment, running.workflowIds(), waits.waitAssociations());
                     }
-                    return support.seed(running.workflowIds(), waits.waitAssociations())
-                                  .exceptionally(failure -> {
-                                      logger.warn("Could not complete the workflow index while claiming segment {}; "
-                                                          + "the next claim tries again.",
-                                                  segment.getSegmentId(), failure);
-                                      return null;
-                                  })
-                                  .thenApply(seeded -> claimed);
+                    return CompletableFuture.completedFuture(claimed);
                 }))
         );
     }

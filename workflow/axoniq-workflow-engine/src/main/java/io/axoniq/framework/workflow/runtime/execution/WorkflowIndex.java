@@ -20,17 +20,20 @@ import java.util.concurrent.CompletableFuture;
  * Without an index, the {@link WorkflowEngine} learns both from the {@link WorkflowStore} each time its processor
  * claims a segment: it sources the {@link RunningWorkflows} and the {@link WaitAssociations} of every segment, and
  * keeps what the claimed segment owns. With an index, the engine reads only the rows in the
- * {@link SegmentKeyRange} of the claimed segment, and then the events after the token the segment resumes from.
+ * {@link SegmentKeyRange} of the claimed segment, and then the events after the position those rows are correct at.
  * <p>
- * The index has no position of its own. The engine writes the rows that changed each time the processor stores its
- * token, through
+ * The engine writes the rows that changed each time the processor stores its token, through
  * {@link io.axoniq.framework.messaging.eventstreaming.checkpoint.Checkpointing#onCheckpointStore(Segment,
- * org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken, ProcessingContext)}. An
- * implementation that {@link #storesWithToken() stores with the token} writes them in the transaction of that token, so
- * the rows and the token are committed together and the token is the position of the rows.
+ * org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken, ProcessingContext)}, and moves
+ * the position of the segment to that token. An implementation that {@link #storesWithToken() stores with the token}
+ * writes both in the transaction of that token, so the rows, their position and the token are committed together.
+ * <p>
+ * The position is kept apart from the token, because a node without the index moves the token and writes no row. A
+ * claim reads the events from the position, so it applies what such a node handled, and a segment without a position
+ * is sourced.
  * <p>
  * The rows are derived from events, which stay the source of truth. Every {@link WorkflowIndexChange} has the same
- * outcome when it is stored twice, so rows that are ahead of the token are corrected by the events a claim reads.
+ * outcome when it is stored twice, so rows that are ahead of their position are corrected by the events a claim reads.
  * <p>
  * The index is optional and one component serves every workflow module, as each row carries the name of its module.
  * Register it through {@code WorkflowConfigurer.registerWorkflowIndex(...)}; the workflow module hands it to its
@@ -55,30 +58,20 @@ import java.util.concurrent.CompletableFuture;
 public interface WorkflowIndex {
 
     /**
-     * Returns whether the rows of the given module hold every running workflow and every open wait, so a claim may read
-     * them instead of sourcing the {@link RunningWorkflows} and the {@link WaitAssociations}.
-     * <p>
-     * A module is complete once {@link #store(String, WorkflowIndexChanges, ProcessingContext)} was given changes that
-     * {@link WorkflowIndexChanges#complete() complete} it.
-     *
-     * @param module  the name of the workflow module
-     * @param context the context to read in, or {@code null} to read in a transaction of its own
-     * @return a future with {@code true} when the rows of the module are complete
-     */
-    CompletableFuture<Boolean> isComplete(String module, @Nullable ProcessingContext context);
-
-    /**
-     * Loads the rows of the given module whose workflow id the given segment owns.
+     * Loads the rows of the given module whose workflow id the given segment owns, and the position stored for exactly
+     * that segment.
      *
      * @param module  the name of the workflow module
      * @param segment the segment to load the rows of
      * @param context the context to read in, or {@code null} to read in a transaction of its own
-     * @return a future with the running workflows and the open waits of the segment
+     * @return a future with the running workflows, the open waits and the position of the segment
      */
     CompletableFuture<WorkflowIndexRows> load(String module, Segment segment, @Nullable ProcessingContext context);
 
     /**
-     * Stores the given changes to the rows of the given module, in their order.
+     * Stores the given changes to the rows of the given module, in their order, and then their
+     * {@link WorkflowIndexChanges#position() position}. A position replaces the position of every segment whose range
+     * overlaps it, as a split or a merge replaces those segments.
      *
      * @param module  the name of the workflow module
      * @param changes the changes to store
