@@ -182,7 +182,8 @@ class LiveWorkflowsTest {
     }
 
     /**
-     * Returns whether the given thread waits for the swap lock of the registry, the only {@link StampedLock} it uses.
+     * Returns whether the given thread waits for the swap lock of the registry, which its {@link BroadcastAddressees}
+     * keeps: the only {@link StampedLock} it uses.
      */
     private static boolean isParkedOnTheSwapLock(Thread thread) {
         return LockSupport.getBlocker(thread) instanceof StampedLock;

@@ -15,13 +15,11 @@ import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.lock.Lock;
 import org.axonframework.common.lock.LockFactory;
 import org.axonframework.common.lock.PessimisticLockFactory;
-import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 import org.jspecify.annotations.Nullable;
 
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
@@ -34,7 +32,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.concurrent.locks.StampedLock;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
@@ -67,57 +64,16 @@ import java.util.stream.Stream;
  * other workflows of that bin waiting, and keeps the carrier of a virtual thread that leaves memory.
  * <p>
  * <b>Hibernated workflows.</b> A hibernated workflow has no execution in memory. The open waits it hibernated with are
- * kept as rows of a {@link WaitAssociationIndex}, so a broadcast event wakes only the hibernated workflows that may
- * wait for it, without visiting the others. Hibernating moves a workflow from the repository to the rows, and waking or
- * a restore that takes over a hibernation moves it back, each in one swap. The rows of a hibernation are parsed when it
- * is created, see {@link #rowsOf(String, HibernationHint)}, so a swap only updates the entries, the rows and the
- * repository. The {@link WorkflowEngineHibernationSupport} decides when a workflow hibernates and wakes, and owns the
- * timers of the hibernated workflows; this registry applies the transitions, and never calls the support: a delivery
- * takes the wake of the engine's {@link Hibernation} as a parameter, see
+ * kept as rows by the {@link BroadcastAddressees} this registry owns, so a broadcast event wakes only the hibernated
+ * workflows that may wait for it. Hibernating moves a workflow from the repository to the rows, and waking or a restore
+ * that takes over a hibernation moves it back, each in one {@link BroadcastAddressees#swap(Supplier) swap}, so the
+ * lookup of the addressees of a broadcast event never misses a workflow that hibernates or wakes while it runs. The
+ * {@link WorkflowEngineHibernationSupport} decides when a workflow hibernates and wakes, and owns the timers of the
+ * hibernated workflows; this registry applies the transitions, and never calls the support: a delivery takes the wake
+ * of the engine's {@link Hibernation} as a parameter, see
  * {@link #deliver(String, EventMessage, ProcessingContext, WakeForEvent)}, and a cancellation request reports a
  * hibernated workflow back to the {@link WorkflowCancellationService}, see
  * {@link #request(String, Function, Supplier)}.
- * <p>
- * <b>Finding the addressees of a broadcast event.</b> A
- * {@link #broadcast(Segment, EventMessage, ProcessingContext, WakeForEvent) broadcast} event goes to every workflow of
- * the segment that is in memory, and to every hibernated workflow of the segment with an open wait that may match the
- * event. Its lookup lists the executions of the segment in the repository and matches the event against the rows.
- * Listing and matching at two moments could miss a workflow: one that is listed before it hibernates and matched once
- * it woke again is in neither result, and as its wake restores it from its own events, it would never see the broadcast
- * event. Every swap between memory and hibernation therefore runs under the write lock of a {@link StampedLock}, the
- * swap lock, and the lookup runs on an optimistic stamp of that lock. When a swap happened while it ran, the lookup
- * runs once more under the read lock of the swap lock, which no swap interleaves. The result is the state of the
- * repository and the rows at one instant between swaps, within the lookup.
- * <p>
- * The lookup relies on this: a swap moves a workflow between the repository and the rows only under the write lock,
- * and in one step. So at an instant between swaps, a workflow that stays live is found where it is: in the repository
- * while its execution is in memory, and by the rows of its open waits while it is hibernated. One that hibernated
- * without a wait for an event has no rows, and only an event of its own wakes it, which is delivered by its identifier,
- * not broadcast. The transitions that run without the swap lock only add a workflow to one side or remove it from one,
- * so a lookup may see them half done: inside {@link #leave(WorkflowExecution) leave}, the workflow is in neither while
- * its entry still stands, and an {@link #adopt(Hibernated) adoption} that finds the workflow entered meanwhile has its
- * rows for a moment while it is in memory, in which case the event still reaches it once. For these transitions,
- * "not live yet" or "no longer live" is a correct answer, as they are no moves of a workflow that stays live: a
- * workflow enters or leaves memory this way as it starts or ends, or as a claim of its segment starts or ends and
- * restores, adopts, stops or drops it, and a claim handles the events of its segment from the position it resumes from,
- * so an event routed while the claim changes is handled again by the next claim. So the lookup never misses a workflow
- * that hibernates, wakes, or hibernates and wakes while it runs: each such swap invalidates the stamp, and the repeated
- * lookup finds the workflow where it is. After the lookup, each addressee gets the event under the lock of its
- * workflow, see {@link #deliver(String, EventMessage, ProcessingContext, WakeForEvent)}: one that hibernated since is
- * woken only when its rows match the event, one that woke gets it in memory, and one that left gets nothing.
- * <p>
- * The cost of the lookup is one listing of the executions of the segment in memory, and one match of the rows, which
- * finds the keyed rows by the values the event carries and checks only those, the rows of the event's name without
- * key, and the rows without a name: hibernated workflows whose waits do not match the event are not visited. The swap
- * lock adds a volatile read and a validation of the stamp. Without hibernation, no swap ever runs, so the stamp never
- * fails. Swaps of all workflows of the module are serialized, which costs little, as a swap only updates the entries,
- * the rows and the repository.
- * <p>
- * A lookup never makes its first attempt under the read lock: a repository may, while it lists, wait for a workflow
- * to hibernate or wake on another thread, as the tests of this behavior do, and a read lock held by the listing
- * thread would keep that swap from ever finishing. When a swap holds the write lock as the lookup starts, the lookup
- * first waits for that swap to finish, and then makes its attempt on an optimistic stamp. Only a repeated attempt
- * holds the read lock.
  * <p>
  * <b>Finding the live workflows a query matches.</b> The {@link SimpleWorkflowManager} needs no swap lock: it reads the
  * entry of each workflow it looks for, or visits every entry once, and never matches the rows. As the key of a live
@@ -130,11 +86,9 @@ import java.util.stream.Stream;
  * starting, adopting, hibernating, waking and dropping it, retrying its wake, delivering an event to it when it may
  * hibernate or is hibernated, and requesting its cancellation. Every writer of the rows of a workflow holds it, as the
  * rows are keyed by the workflow's identifier. Where the engine takes several locks, it takes the lock of a workflow,
- * then the lock of a {@link SegmentClaim claim}, then the write lock of the swap lock, then the lock of a bin of the
- * entries. The write lock of the swap lock is a leaf: under it, only the entries, the rows and the repository are
- * touched; nothing takes the lock of a workflow, of a claim or of the
- * {@link RunningWorkflowsProjection projection}, and nothing runs or loads a workflow. The read lock is held only by a
- * repeated lookup, which takes no other lock of this registry.
+ * then the lock of a {@link SegmentClaim claim}, then the write lock of the swap lock of the
+ * {@link BroadcastAddressees}, then the lock of a bin of the entries. Under the swap lock, only the entries, the rows
+ * and the repository are touched.
  * <p>
  * Leaving memory takes no lock. It runs on threads that hold the lock of a claim, such as the cleanup of a failed claim
  * and the activation of a claim that removes the executions whose restored state is terminal, while the engine takes
@@ -170,9 +124,8 @@ public final class LiveWorkflows {
     private final WorkflowExecutionRepository repository;
     private final SegmentBucketedMap<LiveWorkflow> live = new SegmentBucketedMap<>();
     private final SafePoints safePoints = new SafePoints(entry -> live.get(entry.workflowId()) == entry);
-    private final WaitAssociationIndex waits = new WaitAssociationIndex();
+    private final BroadcastAddressees addressees;
     private final LockFactory locks = PessimisticLockFactory.usingDefaults();
-    private final StampedLock swaps = new StampedLock();
 
     /**
      * Creates the registry of the live workflows of a workflow module, keeping the executions in memory in the given
@@ -183,6 +136,7 @@ public final class LiveWorkflows {
     @Internal
     public LiveWorkflows(WorkflowExecutionRepository repository) {
         this.repository = Objects.requireNonNull(repository, "The WorkflowExecutionRepository must not be null.");
+        this.addressees = new BroadcastAddressees(repository);
     }
 
     /**
@@ -300,9 +254,9 @@ public final class LiveWorkflows {
         // Rows first, so a hibernated entry always has its rows. The caller checked under the lock of the workflow that
         // it is not live, and every transition that adds an entry holds that lock, so no entry can be there now; one
         // in memory would have no rows to lose here anyway.
-        addWaits(hibernated);
+        addressees.add(hibernated);
         if (live.putIfAbsent(workflowId, hibernated) != null) {
-            waits.removeWorkflow(workflowId);
+            addressees.remove(workflowId);
             return false;
         }
         return true;
@@ -310,8 +264,8 @@ public final class LiveWorkflows {
 
     /**
      * Swaps the given execution in memory for the given hibernation: removes the execution from the repository and adds
-     * the open waits of the hibernation to the rows, under the write lock of the swap lock, and marks the execution
-     * safe. The workflow hibernates, or an execution that {@link #wake(Hibernated, WorkflowExecution) woke} from the
+     * the open waits of the hibernation to the rows, in one {@link BroadcastAddressees#swap(Supplier) swap}, and marks
+     * the execution safe. The workflow hibernates, or an execution that {@link #wake(Hibernated, WorkflowExecution) woke} from the
      * hibernation and failed to start swaps back for it. The caller holds the lock of the workflow, and the lock of
      * the claim of the hibernation while that claim is current, so a workflow never hibernates under a claim that
      * ended.
@@ -330,17 +284,18 @@ public final class LiveWorkflows {
         if (!(live.get(workflowId) instanceof InMemory entry) || entry.execution() != execution) {
             return false;
         }
-        long stamp = swaps.writeLock();
-        try {
+        boolean hibernatedNow = addressees.swap(() -> {
             // Rows first, so the hibernated entry has them once it replaced the entry in memory.
-            addWaits(hibernated);
+            addressees.add(hibernated);
             if (!live.replace(workflowId, entry, hibernated)) {
-                waits.removeWorkflow(workflowId);
+                addressees.remove(workflowId);
                 return false;
             }
             repository.remove(workflowId, execution);
-        } finally {
-            swaps.unlockWrite(stamp);
+            return true;
+        });
+        if (!hibernatedNow) {
+            return false;
         }
         safePoints.forget(entry);
         entry.leave(Departure.HIBERNATED, null);
@@ -387,7 +342,7 @@ public final class LiveWorkflows {
 
     /**
      * Replaces the given hibernation with the given entry in memory, in place: saves its execution in the repository
-     * and removes the rows of the workflow, under the write lock of the swap lock. From then on, the execution reports
+     * and removes the rows of the workflow, in one {@link BroadcastAddressees#swap(Supplier) swap}. From then on, the execution reports
      * its safe points, see {@link SafePoints}.
      */
     private boolean swapIn(Hibernated hibernated, InMemory entry) {
@@ -395,8 +350,7 @@ public final class LiveWorkflows {
         var execution = entry.execution();
         boolean[] swapped = new boolean[1];
         boolean[] conflict = new boolean[1];
-        long stamp = swaps.writeLock();
-        try {
+        addressees.swap(() -> {
             live.compute(workflowId, (id, current) -> {
                 if (current != hibernated) {
                     return current;
@@ -409,11 +363,10 @@ public final class LiveWorkflows {
                 return entry;
             });
             if (swapped[0]) {
-                waits.removeWorkflow(workflowId);
+                addressees.remove(workflowId);
             }
-        } finally {
-            swaps.unlockWrite(stamp);
-        }
+            return swapped[0];
+        });
         if (conflict[0]) {
             throw new IllegalStateException(
                     "Workflow '%s' already has an execution on this node.".formatted(workflowId)
@@ -438,7 +391,7 @@ public final class LiveWorkflows {
         if (!live.remove(workflowId, hibernated)) {
             return false;
         }
-        waits.removeWorkflow(workflowId);
+        addressees.remove(workflowId);
         return true;
     }
 
@@ -461,7 +414,9 @@ public final class LiveWorkflows {
      * Delivers a broadcast event to the workflows of the given segment: to every execution in memory, and to the
      * hibernated workflows with an open wait that may match the event, which the given {@code wake} wakes, see
      * {@link #deliver(String, EventMessage, ProcessingContext, WakeForEvent)}. The lookup of these workflows misses
-     * none that hibernates or wakes while it runs, see the class documentation. A failed delivery to one workflow does
+     * none that hibernates or wakes while it runs, see {@link BroadcastAddressees}. After the lookup, each addressee
+     * gets the event under the lock of its workflow: one that hibernated since is woken only when its rows match the
+     * event, one that woke gets it in memory, and one that left gets nothing. A failed delivery to one workflow does
      * not keep the event from the others: it is delivered to every workflow, after which the first failure is
      * rethrown.
      *
@@ -473,7 +428,7 @@ public final class LiveWorkflows {
     void broadcast(@Nullable Segment segment, EventMessage event, ProcessingContext context, WakeForEvent wake) {
         Objects.requireNonNull(wake, "The wake must not be null.");
         RuntimeException failure = null;
-        for (var workflowId : addressees(segment, event, context)) {
+        for (var workflowId : addressees.of(segment, event, context)) {
             try {
                 deliver(workflowId, event, context, wake, true);
             } catch (RuntimeException e) {
@@ -534,7 +489,7 @@ public final class LiveWorkflows {
                     yield true;
                 }
                 case Hibernated hibernated -> {
-                    if (!whenAwaited || waits.matches(workflowId, event, context)) {
+                    if (!whenAwaited || addressees.awaits(workflowId, event, context)) {
                         wake.wake(hibernated, event, context);
                     }
                     yield true;
@@ -544,55 +499,15 @@ public final class LiveWorkflows {
     }
 
     /**
-     * Returns the workflows of the given segment a broadcast event goes to: every execution in memory, and every
-     * hibernated workflow with an open wait that may match the event, as at one instant between swaps.
-     */
-    private Set<String> addressees(@Nullable Segment segment, EventMessage event, ProcessingContext context) {
-        long stamp;
-        while ((stamp = swaps.tryOptimisticRead()) == 0L) {
-            // A swap is in progress: wait for it, but attempt the lookup without holding the read lock.
-            swaps.unlockRead(swaps.readLock());
-        }
-        var addressees = lookUp(segment, event, context);
-        if (swaps.validate(stamp)) {
-            return addressees;
-        }
-        // A swap ran meanwhile: look up once more, while no swap runs.
-        long readStamp = swaps.readLock();
-        try {
-            return lookUp(segment, event, context);
-        } finally {
-            swaps.unlockRead(readStamp);
-        }
-    }
-
-    private Set<String> lookUp(@Nullable Segment segment, EventMessage event, ProcessingContext context) {
-        var workflowIds = new LinkedHashSet<String>();
-        repository.findAllOwnedBy(segment).forEach(execution -> workflowIds.add(execution.workflowId()));
-        waits.match(event, context)
-             .stream()
-             .filter(workflowId -> WorkflowSegmentOwnership.ownedBy(segment, workflowId))
-             .forEach(workflowIds::add);
-        return workflowIds;
-    }
-
-    /**
      * Parses the open waits of the given hint into the rows of a hibernation of the given workflow, so a swap adds them
-     * without parsing them under the swap lock.
+     * without parsing them under the swap lock, see {@link BroadcastAddressees#rowsOf(String, HibernationHint)}.
      *
      * @param workflowId the identifier of the workflow
      * @param hint       the open waits and nearest deadline the workflow hibernates with
      * @return the rows of the open waits
      */
     List<WaitAssociationIndex.Row> rowsOf(String workflowId, HibernationHint hint) {
-        return hint.waits().stream()
-                   .map(wait -> waits.rowOf(
-                           workflowId,
-                           wait.stepName(),
-                           wait.eventName() == null ? null : new QualifiedName(wait.eventName()),
-                           wait.associations()
-                   ))
-                   .toList();
+        return addressees.rowsOf(workflowId, hint);
     }
 
     /**
@@ -896,12 +811,8 @@ public final class LiveWorkflows {
         repository.clear();
         live.clear();
         safePoints.clear();
-        waits.clear();
+        addressees.clear();
         inMemory.forEach(entry -> entry.leave(Departure.SHUT_DOWN, null));
-    }
-
-    private void addWaits(Hibernated hibernated) {
-        hibernated.rows().forEach(waits::add);
     }
 
     /**
