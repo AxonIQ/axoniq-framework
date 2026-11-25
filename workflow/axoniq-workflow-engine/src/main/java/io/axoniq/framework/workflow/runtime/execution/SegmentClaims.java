@@ -36,7 +36,7 @@ import java.util.function.Consumer;
  * @since 5.4.0
  */
 @Internal
-final class WorkflowEngineCatchUpSupport {
+final class SegmentClaims {
 
     private final Map<Integer, Claim> claims = new ConcurrentHashMap<>();
     @Nullable

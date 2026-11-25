@@ -55,8 +55,8 @@ public final class WorkflowEngineHibernation {
      * @return {@code true} when the engine holds a current claim of the segment that caught up
      */
     public static boolean isCaughtUp(WorkflowEngine engine, Segment segment) {
-        return engine.catchUpSupport.claimOf(segment)
-                                    .map(claim -> !engine.catchUpSupport.isWaiting(claim))
+        return engine.segmentClaims.claimOf(segment)
+                                    .map(claim -> !engine.segmentClaims.isWaiting(claim))
                                     .orElse(false);
     }
 
@@ -69,8 +69,8 @@ public final class WorkflowEngineHibernation {
      * @param segment the segment the engine currently holds a claim of
      */
     public static void startNewClaimOf(WorkflowEngine engine, Segment segment) {
-        var current = engine.catchUpSupport.claimOf(segment).orElseThrow();
-        engine.catchUpSupport.startClaim(segment, Objects.requireNonNull(current.executionContext()));
+        var current = engine.segmentClaims.claimOf(segment).orElseThrow();
+        engine.segmentClaims.startClaim(segment, Objects.requireNonNull(current.executionContext()));
     }
 
     /**

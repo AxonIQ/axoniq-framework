@@ -465,10 +465,10 @@ class WorkflowEngineClaimActivationTest {
             when(execution.workflowCancellation()).thenAnswer(invocation -> {
                 if (createdInstance.compareAndSet(false, true)) {
                     segmentPosition.set(STARTUP_HEAD);
-                    var claim = engine.catchUpSupport.claimOf(SEGMENT).orElseThrow();
+                    var claim = engine.segmentClaims.claimOf(SEGMENT).orElseThrow();
                     poller.start();
                     await().atMost(Duration.ofSeconds(5)).until(
-                            () -> !bodyStarts.isEmpty() || engine.catchUpSupport.isWaitingForLock(claim, poller)
+                            () -> !bodyStarts.isEmpty() || engine.segmentClaims.isWaitingForLock(claim, poller)
                     );
                 }
                 return cancellation;

@@ -96,7 +96,7 @@ public class WorkflowEngine implements
     private final WorkflowStore workflowStore;
     private final UnitOfWorkFactory unitOfWorkFactory;
     // Package-private so a test can start a new claim of a segment without stopping the executions of the current one.
-    final WorkflowEngineCatchUpSupport catchUpSupport = new WorkflowEngineCatchUpSupport();
+    final SegmentClaims segmentClaims = new SegmentClaims();
     private final WorkflowEngineSequencingPolicy segmentedRouting;
     private final RunningWorkflowsProjection runningWorkflows;
     private final RunningWorkflowsClaimLoader claimLoader;
@@ -281,7 +281,7 @@ public class WorkflowEngine implements
         this.wakeTimeout = requireNonNull(wakeTimeout, "The wake timeout must not be null.");
         this.hibernation = new WorkflowEngineHibernationSupport(
                 scheduler, clock, workflowExecutionRepository, workflowCancellationService, checkpointWorkIndex,
-                catchUpSupport, runningWorkflows, this::wakeWorkflow, idleDelay, wakeExecutor
+                segmentClaims, runningWorkflows, this::wakeWorkflow, idleDelay, wakeExecutor
         );
     }
 
@@ -325,7 +325,7 @@ public class WorkflowEngine implements
         checkpointingSupport.getAndSetTriggerFrom(context);
 
         var segment = Segment.fromContext(context).orElse(null);
-        if (catchUpSupport.hasFailed(segment)) {
+        if (segmentClaims.hasFailed(segment)) {
             // Fails the batch, so nothing of it is checkpointed, and makes the processor release the segment.
             return MessageStream.failed(new IllegalStateException(
                     "The workflow executions of segment " + segment.getSegmentId() + " could not be restored."
@@ -357,7 +357,7 @@ public class WorkflowEngine implements
      * the segment claimed: it would then handle later events, never the failed one, and never store a position again.
      */
     private void holdCheckpointAndRelease(Segment segment, EventMessage event) {
-        catchUpSupport.holdCheckpoint(segment);
+        segmentClaims.holdCheckpoint(segment);
         logger.warn("Handling event [{}] failed in segment {}; asking the processor to release the segment, so its "
                             + "next claim handles the event again.",
                     event.identifier(), segment.getSegmentId());
@@ -503,13 +503,13 @@ public class WorkflowEngine implements
 
         // Exclusive with the activation of the segment, which starts every execution it finds that does not run
         // yet: either that activation finds this execution and starts it, or this start does, never both.
-        catchUpSupport.runExclusively(segment, caughtUp -> {
+        segmentClaims.runExclusively(segment, caughtUp -> {
             var execution = workflowExecutionRepository.save(workflowId, () -> {
                 logger.debug("Creating a new workflow '{}' with payload '{}'", workflowId, eventMessage.payload());
                 return workflowConfiguration.workflowExecutionFactory().create(workflowContext);
             });
             registerCancellation(execution);
-            registerCheckpointWork(execution, segment == null ? null : catchUpSupport.claimOf(segment).orElse(null));
+            registerCheckpointWork(execution, segment == null ? null : segmentClaims.claimOf(segment).orElse(null));
             if (caughtUp) {
                 execute(execution);
             }
@@ -530,7 +530,7 @@ public class WorkflowEngine implements
      */
     @Override
     public boolean holdsCheckpoint(Segment segment) {
-        return catchUpSupport.holdsCheckpoint(segment)
+        return segmentClaims.holdsCheckpoint(segment)
                 || unsafeExecutionsOf(segment).anyMatch(execution -> !execution.isRunning());
     }
 
@@ -613,7 +613,7 @@ public class WorkflowEngine implements
      * @return a completed future after startup validation
      */
     public CompletableFuture<Void> start(@Nullable TrackingToken latestToken) {
-        catchUpSupport.initialize(latestToken);
+        segmentClaims.initialize(latestToken);
         var support = hibernation;
         if (support != null) {
             support.start();
@@ -661,7 +661,7 @@ public class WorkflowEngine implements
         // catch-up state and executions: every claim catches up on its own, and restores from durable state.
         // The executions are stopped before the hibernations are dropped: an execution of the previous claim that
         // hibernates meanwhile does so under that claim, which ended, so it stays in memory and is stopped here.
-        var claim = catchUpSupport.startClaim(segment, executionContext);
+        var claim = segmentClaims.startClaim(segment, executionContext);
         stopExecutionsOf(segment);
         dropHibernatedWorkflowsOf(segment);
         runningWorkflows.discard(segment);
@@ -689,7 +689,7 @@ public class WorkflowEngine implements
                         // Before the release: instances still restoring are dropped, and every event of the segment
                         // fails until the processor released it. The instances it did restore never start, and are
                         // dropped as well, also when the segment is never released here.
-                        catchUpSupport.fail(claim, () -> stopExecutionsOf(segment));
+                        segmentClaims.fail(claim, () -> stopExecutionsOf(segment));
                         // Outside the lock of the claim, as dropping takes the locks of the workflows.
                         var support = hibernation;
                         if (support != null) {
@@ -706,7 +706,7 @@ public class WorkflowEngine implements
      * Leaves the given instances, whose hibernation hints the claim accepted, out of memory as hibernated instances of
      * the claim. An instance that is not adopted, as the claim ended meanwhile, gets its hint cleared.
      */
-    private void adoptHibernatedWorkflows(WorkflowEngineCatchUpSupport.Claim claim,
+    private void adoptHibernatedWorkflows(SegmentClaims.Claim claim,
                                           Map<String, HibernationHint> hibernated) {
         var support = hibernation;
         if (support == null || hibernated.isEmpty()) {
@@ -740,7 +740,7 @@ public class WorkflowEngine implements
     public CompletableFuture<Void> releaseWorkflowsFor(Segment segment) {
         // Also for a segment without executions: a later claim of it has to catch up again. First, so an instance its
         // claim still restores is either dropped below or not added at all.
-        catchUpSupport.release(segment);
+        segmentClaims.release(segment);
         stopExecutionsOf(segment);
         dropHibernatedWorkflowsOf(segment);
         runningWorkflows.discard(segment);
@@ -795,10 +795,10 @@ public class WorkflowEngine implements
         }
     }
 
-    private void startRestoredWorkflowsWhenCaughtUp(WorkflowEngineCatchUpSupport.Claim claim,
+    private void startRestoredWorkflowsWhenCaughtUp(SegmentClaims.Claim claim,
                                                     @Nullable TrackingToken claimedFrom) {
         var segment = claim.segment();
-        boolean activated = catchUpSupport.activate(
+        boolean activated = segmentClaims.activate(
                 claim,
                 claimedFrom,
                 () -> removeTerminalAndStartRestoredWorkflowExecutions(
@@ -827,9 +827,9 @@ public class WorkflowEngine implements
      * @param claim                the claim waiting to catch up
      * @param pollsWithoutPosition the number of consecutive polls so far that found no position of the segment
      */
-    private void awaitCatchUp(WorkflowEngineCatchUpSupport.Claim claim, int pollsWithoutPosition) {
+    private void awaitCatchUp(SegmentClaims.Claim claim, int pollsWithoutPosition) {
         catchUpPolls.accept(() -> {
-            if (shutDown || !catchUpSupport.isWaiting(claim)) {
+            if (shutDown || !segmentClaims.isWaiting(claim)) {
                 return;
             }
             var segment = claim.segment();
@@ -838,7 +838,7 @@ public class WorkflowEngine implements
                 var position = segmentPositions.apply(segment);
                 if (position.isPresent()) {
                     withoutPosition = 0;
-                    catchUpSupport.activate(
+                    segmentClaims.activate(
                             claim,
                             position.get(),
                             () -> removeTerminalAndStartRestoredWorkflowExecutions(segment, "after catch-up")
@@ -861,7 +861,7 @@ public class WorkflowEngine implements
     }
 
     private void activateSegmentWhenCaughtUp(@Nullable Segment segment, @Nullable TrackingToken currentToken) {
-        catchUpSupport.activateOnDelivery(
+        segmentClaims.activateOnDelivery(
                 segment, currentToken, () -> removeTerminalAndStartRestoredWorkflowExecutions(segment, "after catch-up")
         );
     }
@@ -873,7 +873,7 @@ public class WorkflowEngine implements
      * @return a future completing with the ids of the instances that turned out not to run, as their sourced state is
      * terminal
      */
-    private CompletableFuture<Set<String>> restoreRunningWorkflows(WorkflowEngineCatchUpSupport.Claim claim,
+    private CompletableFuture<Set<String>> restoreRunningWorkflows(SegmentClaims.Claim claim,
                                                                    Set<String> ownedIds,
                                                                    ProcessingContext sourcingContext,
                                                                    ProcessingContext executionContext) {
@@ -935,7 +935,7 @@ public class WorkflowEngine implements
      * @return a future completing with {@code true} once the instance is restored, or with {@code false} when its
      * sourced state is terminal, so there is nothing to restore
      */
-    private CompletableFuture<Boolean> restoreWorkflow(WorkflowEngineCatchUpSupport.Claim claim,
+    private CompletableFuture<Boolean> restoreWorkflow(SegmentClaims.Claim claim,
                                                        String workflowId,
                                                        ProcessingContext claimContext,
                                                        ProcessingContext executionContext) {
@@ -966,7 +966,7 @@ public class WorkflowEngine implements
      *
      * @return the restored execution, or empty when the claim failed or ended meanwhile
      */
-    private Optional<WorkflowExecution> restoreWorkflow(WorkflowEngineCatchUpSupport.Claim claim,
+    private Optional<WorkflowExecution> restoreWorkflow(SegmentClaims.Claim claim,
                                                         String workflowId,
                                                         WorkflowState state,
                                                         ProcessingContext executionContext,
@@ -999,7 +999,7 @@ public class WorkflowEngine implements
         execution.initializeState(state);
         // Only while the claim is current: an instance that finishes restoring after its claim failed or the segment
         // was released would otherwise stay behind, and run from the state it sourced back then.
-        boolean added = catchUpSupport.runWhileCurrent(claim, () -> {
+        boolean added = segmentClaims.runWhileCurrent(claim, () -> {
             var storedExecution = workflowExecutionRepository.save(workflowId, () -> execution);
             if (storedExecution != execution) {
                 // A claim drops what earlier claims of its segment left behind, so only a concurrent restore of the
@@ -1032,7 +1032,7 @@ public class WorkflowEngine implements
      *
      * @return {@code false} when the workflow ended elsewhere, or the claim ended meanwhile
      */
-    private boolean wakeWorkflow(WorkflowEngineCatchUpSupport.Claim claim,
+    private boolean wakeWorkflow(SegmentClaims.Claim claim,
                                  String workflowId,
                                  Consumer<WorkflowExecution> beforeStart) {
         var segment = claim.segment();
@@ -1060,7 +1060,7 @@ public class WorkflowEngine implements
             beforeStart.accept(execution);
             // Started here only once the claim caught up; before that, its activation starts it with the restored
             // ones.
-            catchUpSupport.runWhileCurrent(claim, caughtUp -> {
+            segmentClaims.runWhileCurrent(claim, caughtUp -> {
                 if (caughtUp && !execution.isRunning()) {
                     registerCancellation(execution);
                     execute(execution);
@@ -1192,7 +1192,7 @@ public class WorkflowEngine implements
      *              processor, in which case it never hibernates
      */
     private void registerCheckpointWork(WorkflowExecution execution,
-                                        WorkflowEngineCatchUpSupport.@Nullable Claim claim) {
+                                        SegmentClaims.@Nullable Claim claim) {
         var support = hibernation;
         if (support == null) {
             checkpointWorkIndex.register(execution.workflowId(), execution::registerCheckpointWorkStateListener);

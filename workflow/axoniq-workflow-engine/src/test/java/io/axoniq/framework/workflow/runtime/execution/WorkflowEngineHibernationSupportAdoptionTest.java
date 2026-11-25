@@ -57,7 +57,7 @@ class WorkflowEngineHibernationSupportAdoptionTest {
 
     private final ControllableWorkflowIndex workflowIndex = new ControllableWorkflowIndex();
     private final RunningWorkflowsProjection projection = new RunningWorkflowsProjection(workflowIndex, INDEX);
-    private final WorkflowEngineCatchUpSupport catchUpSupport = new WorkflowEngineCatchUpSupport();
+    private final SegmentClaims segmentClaims = new SegmentClaims();
     private final WorkflowCancellationService cancellationService = new WorkflowCancellationService();
     private final AtomicInteger firedTimers = new AtomicInteger();
     private final ScheduledThreadPoolExecutor timer = new ScheduledThreadPoolExecutor(1) {
@@ -91,20 +91,20 @@ class WorkflowEngineHibernationSupportAdoptionTest {
             new InMemoryWorkflowExecutionRepository(),
             cancellationService,
             new UnsafeCheckpointWorkIndex(),
-            catchUpSupport,
+            segmentClaims,
             projection,
             (claim, workflowId, beforeStart) -> loader.load(claim, workflowId, beforeStart),
             Duration.ofSeconds(30),
             wakeExecutor
     );
-    private WorkflowEngineCatchUpSupport.Claim claim;
+    private SegmentClaims.Claim claim;
 
     @BeforeEach
     void setUp() {
         workflowIndex.initialized(INDEX).completeWritesImmediately();
         // A claim that has the startup backlog to catch up with.
-        catchUpSupport.initialize(token(10));
-        claim = catchUpSupport.startClaim(SEGMENT, new StubProcessingContext());
+        segmentClaims.initialize(token(10));
+        claim = segmentClaims.startClaim(SEGMENT, new StubProcessingContext());
         support.start();
     }
 
@@ -139,7 +139,7 @@ class WorkflowEngineHibernationSupportAdoptionTest {
     }
 
     private void activate() {
-        assertThat(catchUpSupport.activate(claim, token(10), () -> support.arm(SEGMENT))).isTrue();
+        assertThat(segmentClaims.activate(claim, token(10), () -> support.arm(SEGMENT))).isTrue();
     }
 
     private static EventMessage paid(String orderId) {
@@ -310,7 +310,7 @@ class WorkflowEngineHibernationSupportAdoptionTest {
         @Test
         void adoptsNothingOnceTheClaimEnded() {
             // given
-            catchUpSupport.release(SEGMENT);
+            segmentClaims.release(SEGMENT);
 
             // when
             var adopted = support.adopt(claim, "wf-1", futureDeadline("1"));
@@ -324,7 +324,7 @@ class WorkflowEngineHibernationSupportAdoptionTest {
         void dropsOnlyTheAdoptedWorkflowsOfTheGivenClaim() {
             // given - a workflow adopted by a claim whose restore later failed, and one of the claim after it
             adopt(Map.of("wf-1", futureDeadline("1")));
-            var later = catchUpSupport.startClaim(SEGMENT, new StubProcessingContext());
+            var later = segmentClaims.startClaim(SEGMENT, new StubProcessingContext());
             assertThat(support.adopt(later, "wf-2", futureDeadline("2"))).isTrue();
 
             // when

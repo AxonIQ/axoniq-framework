@@ -20,13 +20,13 @@ import static org.assertj.core.api.Assertions.*;
 import static org.awaitility.Awaitility.await;
 
 /**
- * Tests of the {@link WorkflowEngineCatchUpSupport}.
+ * Tests of the {@link SegmentClaims}.
  *
  * @author Allard Buijze
  */
-class WorkflowEngineCatchUpSupportTest {
+class SegmentClaimsTest {
 
-    private final WorkflowEngineCatchUpSupport testSubject = new WorkflowEngineCatchUpSupport();
+    private final SegmentClaims testSubject = new SegmentClaims();
 
     @Nested
     class RunWhileCurrent {
