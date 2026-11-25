@@ -94,7 +94,6 @@ class WorkflowEngineCrossSegmentCheckpointTest {
     private final AtomicReference<Consumer<WorkflowExecution>> stragglerTermination = new AtomicReference<>();
     private InMemoryTokenStore tokenStore;
     private WorkflowConfigurationRegistry<?> configurationRegistry;
-    private WorkflowExecutionRepository repository;
     private WorkflowEngine workflowEngine;
     private WorkflowEngineCheckpointingSupport checkpointingSupport;
 
@@ -132,9 +131,8 @@ class WorkflowEngineCrossSegmentCheckpointTest {
                             .orTimeout(5, TimeUnit.SECONDS)
                             .join();
         configurationRegistry = mock(WorkflowConfigurationRegistry.class);
-        repository = new InMemoryWorkflowExecutionRepository();
         workflowEngine = new WorkflowEngine(configurationRegistry,
-                                            repository,
+                                            new LiveWorkflows(new InMemoryWorkflowExecutionRepository()),
                                             mock(WorkflowCancellationService.class),
                                             new RecordingWorkflowStore(),
                                             WorkflowIndex.none(),

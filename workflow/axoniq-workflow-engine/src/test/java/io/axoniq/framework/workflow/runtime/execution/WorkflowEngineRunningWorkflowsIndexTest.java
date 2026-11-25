@@ -81,7 +81,7 @@ class WorkflowEngineRunningWorkflowsIndexTest {
 
     private void createEngine(WorkflowIndex index) {
         engine = new WorkflowEngine(new SimpleWorkflowConfigurationRegistry(),
-                                    new InMemoryWorkflowExecutionRepository(),
+                                    new LiveWorkflows(new InMemoryWorkflowExecutionRepository()),
                                     new WorkflowCancellationService(),
                                     workflowStore,
                                     index,

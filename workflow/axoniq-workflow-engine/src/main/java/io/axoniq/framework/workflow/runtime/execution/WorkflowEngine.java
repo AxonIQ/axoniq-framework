@@ -82,7 +82,7 @@ public class WorkflowEngine implements
     static final Duration DEFAULT_RESTORE_TIMEOUT = Duration.ofSeconds(30);
     private static final Logger logger = LoggerFactory.getLogger(WorkflowEngine.class);
     private final WorkflowConfigurationRegistry<?> workflowConfigurationRegistry;
-    private final WorkflowExecutionRepository workflowExecutionRepository;
+    private final LiveWorkflows liveWorkflows;
     private final WorkflowCancellationService workflowCancellationService;
     private final WorkflowStore workflowStore;
     private final UnitOfWorkFactory unitOfWorkFactory;
@@ -92,7 +92,6 @@ public class WorkflowEngine implements
     private final WorkflowEngineSequencingPolicy segmentedRouting;
     private final RunningWorkflowsProjection runningWorkflows;
     private final RunningWorkflowsClaimLoader claimLoader;
-    private final UnsafeCheckpointWorkIndex checkpointWorkIndex = new UnsafeCheckpointWorkIndex();
     // The cancellation each execution registered, so only that registration is removed when the execution leaves.
     private final Map<WorkflowExecution, WorkflowCancellation> registeredCancellations = new ConcurrentHashMap<>();
     // Package-private so a test can shrink it instead of waiting out the production timeout.
@@ -119,8 +118,7 @@ public class WorkflowEngine implements
      *                                      {@link
      *                                      io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowConfiguration
      *                                      workflow configuration}
-     * @param workflowExecutionRepository   repository dedicated towards {@link WorkflowExecution} storage and
-     *                                      retrieval
+     * @param liveWorkflows                 the workflows live in memory, whose residency only the engine changes
      * @param workflowCancellationService   workflow cancellation service
      * @param workflowStore                 dedicated store for workflow information, like {@link RunningWorkflows} and
      *                                      {@link WorkflowState}
@@ -133,7 +131,7 @@ public class WorkflowEngine implements
     @Internal
     public WorkflowEngine(
             WorkflowConfigurationRegistry<?> workflowConfigurationRegistry,
-            WorkflowExecutionRepository workflowExecutionRepository,
+            LiveWorkflows liveWorkflows,
             WorkflowCancellationService workflowCancellationService,
             WorkflowStore workflowStore,
             WorkflowIndex workflowIndex,
@@ -143,9 +141,7 @@ public class WorkflowEngine implements
         this.workflowConfigurationRegistry = requireNonNull(
                 workflowConfigurationRegistry, "The WorkflowConfigurationRegistry must not be null."
         );
-        this.workflowExecutionRepository = requireNonNull(
-                workflowExecutionRepository, "The WorkflowExecutionRepository must not be null."
-        );
+        this.liveWorkflows = requireNonNull(liveWorkflows, "The LiveWorkflows must not be null.");
         this.workflowCancellationService = requireNonNull(
                 workflowCancellationService, "The WorkflowCancellationService must not be null."
         );
@@ -181,8 +177,8 @@ public class WorkflowEngine implements
      * Sets the checkpointing support required by this engine.
      * <p>
      * The component is set outside the
-     * {@link #WorkflowEngine(WorkflowConfigurationRegistry, WorkflowExecutionRepository, WorkflowCancellationService,
-     * WorkflowStore, WorkflowIndex, String, UnitOfWorkFactory)}, because they require <b>this</b>
+     * {@link #WorkflowEngine(WorkflowConfigurationRegistry, LiveWorkflows, WorkflowCancellationService, WorkflowStore,
+     * WorkflowIndex, String, UnitOfWorkFactory)}, because they require <b>this</b>
      * {@code WorkflowEngine} itself to function. Hence, a cyclic dependency would exist upon start-up if completion
      * otherwise.
      *
@@ -265,8 +261,8 @@ public class WorkflowEngine implements
                                   Executor wakeExecutor) {
         this.wakeTimeout = requireNonNull(wakeTimeout, "The wake timeout must not be null.");
         this.hibernation = new WorkflowEngineHibernationSupport(
-                scheduler, clock, workflowExecutionRepository, workflowCancellationService, checkpointWorkIndex,
-                runningWorkflows, this::wakeWorkflow, idleDelay, wakeExecutor
+                scheduler, clock, liveWorkflows, workflowCancellationService, runningWorkflows, this::wakeWorkflow,
+                idleDelay, wakeExecutor
         );
     }
 
@@ -390,7 +386,7 @@ public class WorkflowEngine implements
             if (support != null) {
                 support.broadcast(segment, event, context);
             } else {
-                for (var execution : workflowExecutionRepository.findAllOwnedBy(segment)) {
+                for (var execution : liveWorkflows.inMemoryOwnedBy(segment)) {
                     execution.onEvent(event, context);
                 }
             }
@@ -408,7 +404,7 @@ public class WorkflowEngine implements
         if (support != null) {
             return support.deliver(workflowId, event, context);
         }
-        var execution = workflowExecutionRepository.findById(workflowId);
+        var execution = liveWorkflows.find(workflowId);
         execution.ifPresent(found -> found.onEvent(event, context));
         return execution.isPresent();
     }
@@ -473,7 +469,8 @@ public class WorkflowEngine implements
                                   ProcessingContext processingContext,
                                   @Nullable Segment segment) {
         var workflowId = resolveWorkflowIdForNewInstance(
-                workflowExecutionRepository, baseWorkflowId, workflowConfiguration.workflowVersion(), eventMessage
+                liveWorkflows.find(baseWorkflowId), baseWorkflowId, workflowConfiguration.workflowVersion(),
+                eventMessage
         );
 
         if (workflowId == null) {
@@ -489,12 +486,12 @@ public class WorkflowEngine implements
         // Exclusive with the activation of the segment, which starts every execution it finds that does not run
         // yet: either that activation finds this execution and starts it, or this start does, never both.
         segmentClaims.startExclusively(segment, mayStartBodies -> {
-            var execution = workflowExecutionRepository.save(workflowId, () -> {
+            var execution = liveWorkflows.enter(workflowId, () -> {
                 logger.debug("Creating a new workflow '{}' with payload '{}'", workflowId, eventMessage.payload());
                 return workflowConfiguration.workflowExecutionFactory().create(workflowContext);
             });
             registerCancellation(execution);
-            registerCheckpointWork(execution, segment == null ? null : segmentClaims.claimOf(segment).orElse(null));
+            allowHibernation(execution, segment == null ? null : segmentClaims.claimOf(segment).orElse(null));
             if (mayStartBodies) {
                 execute(execution);
             }
@@ -558,19 +555,16 @@ public class WorkflowEngine implements
     @Override
     public void addCheckpointLatch(Segment segment, Runnable latch) {
         Set<WorkflowExecution> executions = new HashSet<>();
-        unsafeWorkflowIdsOf(segment).forEach(
-                workflowId -> workflowExecutionRepository.findById(workflowId).ifPresentOrElse(
-                        execution -> {
-                            if (execution.hasUnsafeCheckpointWork()) {
-                                if (execution.isRunning()) {
-                                    executions.add(execution);
-                                }
-                            } else {
-                                checkpointWorkIndex.markSafe(workflowId);
-                            }
-                        },
-                        () -> checkpointWorkIndex.markSafe(workflowId))
-        );
+        for (var entry : liveWorkflows.unsafeOf(segment)) {
+            var execution = entry.execution();
+            if (execution.hasUnsafeCheckpointWork()) {
+                if (execution.isRunning()) {
+                    executions.add(execution);
+                }
+            } else {
+                liveWorkflows.markSafe(entry);
+            }
+        }
 
         if (executions.isEmpty()) {
             latch.run();
@@ -588,7 +582,7 @@ public class WorkflowEngine implements
      * @return set of currently running workflow executions.
      */
     public Set<WorkflowExecution> workflowExecutions() {
-        return workflowExecutionRepository.findAll();
+        return liveWorkflows.inMemory();
     }
 
     /**
@@ -747,7 +741,7 @@ public class WorkflowEngine implements
      * Stops and drops the workflow executions owned by the given {@code segment}, without emitting any event.
      */
     private void stopExecutionsOf(Segment segment) {
-        var stopped = workflowExecutionRepository.findAllOwnedBy(segment);
+        var stopped = liveWorkflows.inMemoryOwnedBy(segment);
         if (!stopped.isEmpty()) {
             logger.info("Stopping {} workflow execution(s) of segment {}.", stopped.size(), segment.getSegmentId());
             stopped.forEach(WorkflowExecution::stopForShutdown);
@@ -914,7 +908,7 @@ public class WorkflowEngine implements
         // Only while the claim is current: an instance that finishes restoring after its claim failed or the segment
         // was released would otherwise stay behind, and run from the state it sourced back then.
         boolean added = claim.runWhileCurrent(() -> {
-            var storedExecution = workflowExecutionRepository.save(workflowId, () -> execution);
+            var storedExecution = liveWorkflows.enter(workflowId, () -> execution);
             if (storedExecution != execution) {
                 // A claim drops what earlier claims of its segment left behind, so only a concurrent restore of the
                 // instance gets here. Never adopt its execution: moving the append position of that execution to this
@@ -924,7 +918,7 @@ public class WorkflowEngine implements
                 );
             }
             execution.restoreAppendPosition(restoredAt);
-            registerCheckpointWork(execution, claim);
+            allowHibernation(execution, claim);
         });
         if (!added) {
             logger.debug("Not restoring workflow '{}': the claim of segment {} failed or ended meanwhile.",
@@ -986,9 +980,7 @@ public class WorkflowEngine implements
             // replaced it, and fails the requests that waited for this execution.
             execution.stopForShutdown();
             unregisterCancellation(execution);
-            if (workflowExecutionRepository.remove(workflowId, execution)) {
-                checkpointWorkIndex.markSafe(workflowId);
-            }
+            liveWorkflows.leave(execution);
             leftMemory(execution, e);
             throw e;
         }
@@ -1018,23 +1010,20 @@ public class WorkflowEngine implements
             // The hibernated workflows the claim adopted may now wake for their deadline or a cancellation.
             support.arm(segment);
         }
-        var terminalExecutions = workflowExecutionRepository.findAllOwnedBy(segment)
-                                                           .stream()
-                                                           .filter(execution -> execution.state()
-                                                                                         .workflowStatus()
-                                                                                         .isTerminal())
-                                                           .toList();
+        var terminalExecutions = liveWorkflows.inMemoryOwnedBy(segment)
+                                              .stream()
+                                              .filter(execution -> execution.state().workflowStatus().isTerminal())
+                                              .toList();
         terminalExecutions.forEach(execution -> {
-            if (workflowExecutionRepository.remove(execution.workflowId(), execution)) {
+            if (liveWorkflows.leave(execution)) {
                 unregisterCancellation(execution);
-                checkpointWorkIndex.markSafe(execution.workflowId());
                 leftMemory(execution, null);
             }
         });
-        var executionsToStart = workflowExecutionRepository.findAllOwnedBy(segment)
-                                                           .stream()
-                                                           .filter(execution -> !execution.isRunning())
-                                                           .toList();
+        var executionsToStart = liveWorkflows.inMemoryOwnedBy(segment)
+                                             .stream()
+                                             .filter(execution -> !execution.isRunning())
+                                             .toList();
         if (executionsToStart.isEmpty()) {
             logger.debug("No restored workflow executions require startup {}.", phase);
             return;
@@ -1067,8 +1056,7 @@ public class WorkflowEngine implements
                              }
                              // An execution that hibernated left memory without leaving the engine: its cancellation
                              // is no longer registered, but still remembered, which would keep it in memory.
-                             if (workflowExecutionRepository.findById(execution.workflowId()).orElse(null)
-                                     != execution) {
+                             if (!liveWorkflows.isInMemory(execution)) {
                                  unregisterCancellation(execution);
                              }
                          });
@@ -1099,24 +1087,17 @@ public class WorkflowEngine implements
     }
 
     /**
-     * Lets the checkpoint work index follow the given execution, and lets the execution hibernate under the given
-     * claim when hibernation is enabled.
+     * Lets the given execution, which just entered memory, hibernate under the given claim when hibernation is
+     * enabled.
      *
      * @param claim the claim the execution was started or restored under, or {@code null} outside a segmented
      *              processor, in which case it never hibernates
      */
-    private void registerCheckpointWork(WorkflowExecution execution,
-                                        @Nullable SegmentClaim claim) {
+    private void allowHibernation(WorkflowExecution execution, @Nullable SegmentClaim claim) {
         var support = hibernation;
-        if (support == null) {
-            checkpointWorkIndex.register(execution.workflowId(), execution::registerCheckpointWorkStateListener);
-            return;
+        if (support != null) {
+            support.allow(execution, claim);
         }
-        checkpointWorkIndex.register(
-                execution.workflowId(),
-                listener -> execution.registerCheckpointWorkStateListener(support.decorate(execution, listener))
-        );
-        support.allow(execution, claim);
     }
 
     /**
@@ -1143,15 +1124,13 @@ public class WorkflowEngine implements
     }
 
     /**
-     * Removes the given execution when it leaves this engine, and releases its safe point and its cancellation. Leaves
-     * the registrations of another execution of the workflow, or of its hibernation, that replaced this one in place.
+     * Takes the given execution out of memory when it leaves this engine, which releases its safe point, and releases
+     * its cancellation. Leaves the registrations of another execution of the workflow, or of its hibernation, that
+     * replaced this one in place.
      */
     private void removeExecution(WorkflowExecution execution) {
-        var workflowId = execution.workflowId();
         unregisterCancellation(execution);
-        if (workflowExecutionRepository.remove(workflowId, execution)) {
-            checkpointWorkIndex.markSafe(workflowId);
-        }
+        liveWorkflows.leave(execution);
         leftMemory(execution, null);
     }
 
@@ -1173,32 +1152,28 @@ public class WorkflowEngine implements
         if (support != null) {
             support.stop();
         }
-        var executions = workflowExecutionRepository.findAll();
+        var executions = liveWorkflows.inMemory();
         logger.info("Shutting down WorkflowEngine: interrupting running steps of {} workflow instance(s).",
                     executions.size());
         for (var execution : executions) {
             execution.stopForShutdown();
         }
-        workflowExecutionRepository.clear();
-        checkpointWorkIndex.clear();
+        liveWorkflows.clear();
         registeredCancellations.clear();
         workflowCancellationService.clear();
         executions.forEach(execution -> leftMemory(execution, null));
     }
 
     /**
-     * Narrows the unsafe-execution index to the instances owned by the given segment. A segment token only covers the
-     * instances that segment owns, so executions of other segments must not hold it back, and their index entries must
-     * not be marked safe on its behalf either.
+     * Returns the executions in memory owned by the given segment that have work in progress that makes a checkpoint
+     * of the segment unsafe. A segment token only covers the instances that segment owns, so executions of other
+     * segments must not hold it back.
      */
-    private Stream<String> unsafeWorkflowIdsOf(Segment segment) {
-        return checkpointWorkIndex.unsafeWorkflowIdsOf(segment).stream();
-    }
-
     private Stream<WorkflowExecution> unsafeExecutionsOf(Segment segment) {
-        return unsafeWorkflowIdsOf(segment).map(workflowExecutionRepository::findById)
-                                           .flatMap(Optional::stream)
-                                           .filter(WorkflowExecution::hasUnsafeCheckpointWork);
+        return liveWorkflows.unsafeOf(segment)
+                            .stream()
+                            .map(LiveWorkflows.InMemory::execution)
+                            .filter(WorkflowExecution::hasUnsafeCheckpointWork);
     }
 
     /**

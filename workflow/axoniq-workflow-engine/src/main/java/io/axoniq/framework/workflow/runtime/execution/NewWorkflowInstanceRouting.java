@@ -8,17 +8,20 @@
 package io.axoniq.framework.workflow.runtime.execution;
 
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowConfiguration;
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.framework.workflow.runtime.util.WorkflowIds;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Optional;
+
 /**
  * Static helpers that decide whether, and under which workflow id, a new workflow instance starts under a multi-version
  * registry.
  * <p>
- * Lives outside {@link WorkflowEngine} because the decision is pure routing over the repository state.
+ * Lives outside {@link WorkflowEngine} because the decision is pure routing over the workflows in memory.
  *
  * @author Stefan Dragisic
  * @since 5.4.0
@@ -104,21 +107,26 @@ final class NewWorkflowInstanceRouting {
     }
 
     /**
-     * Decides the workflow id to use for a new start given an existing execution repository:
+     * Decides the workflow id to use for a new start given the execution in memory under the base id, if any:
      * <ul>
      *   <li>No existing execution at {@code baseWorkflowId} → return the base id unchanged.</li>
      *   <li>Existing execution at {@code baseWorkflowId}, at any version → reject the start (returns {@code null})
      *       and warn. Workflow ids MUST be unique, so the version never becomes part of the id.</li>
      * </ul>
+     *
+     * @param existing           the execution in memory under {@code baseWorkflowId}, or empty when there is none
+     * @param baseWorkflowId     the id the workflow id provider derived for the new instance
+     * @param newInstanceVersion the version of the definition the new instance would start at
+     * @param eventMessage       the event that would start the new instance
+     * @return the workflow id of the new instance, or {@code null} when the start is rejected as a duplicate
      */
     @Nullable
     public static String resolveWorkflowIdForNewInstance(
-            WorkflowExecutionRepository repository,
+            Optional<WorkflowExecution> existing,
             String baseWorkflowId,
             String newInstanceVersion,
             EventMessage eventMessage
     ) {
-        var existing = repository.findById(baseWorkflowId);
         if (existing.isEmpty()) {
             return baseWorkflowId;
         }

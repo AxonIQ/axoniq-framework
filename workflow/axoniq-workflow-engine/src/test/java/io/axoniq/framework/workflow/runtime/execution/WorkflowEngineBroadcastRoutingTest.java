@@ -37,15 +37,15 @@ class WorkflowEngineBroadcastRoutingTest {
 
     private static final List<Segment> SIXTEEN_SEGMENTS = Segment.splitBalanced(Segment.ROOT_SEGMENT, 15);
 
-    private InMemoryWorkflowExecutionRepository repository;
+    private LiveWorkflows liveWorkflows;
     private WorkflowEngine engine;
     private List<InspectionCountingWorkflowExecution> executions;
 
     @BeforeEach
     void setUp() {
-        repository = new InMemoryWorkflowExecutionRepository();
+        liveWorkflows = new LiveWorkflows(new InMemoryWorkflowExecutionRepository());
         engine = new WorkflowEngine(new SimpleWorkflowConfigurationRegistry(),
-                                    repository,
+                                    liveWorkflows,
                                     new WorkflowCancellationService(),
                                     new RecordingWorkflowStore(),
                                     WorkflowIndex.none(),
@@ -60,7 +60,7 @@ class WorkflowEngineBroadcastRoutingTest {
         executions = IntStream.range(0, 2_000)
                               .mapToObj(i -> new InspectionCountingWorkflowExecution("broadcast-" + i))
                               .toList();
-        executions.forEach(execution -> repository.save(execution.id(), () -> execution));
+        executions.forEach(execution -> liveWorkflows.enter(execution.id(), () -> execution));
     }
 
     private static ProcessingContext contextOf(Segment segment) {

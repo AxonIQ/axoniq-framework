@@ -87,7 +87,7 @@ class WorkflowEngineClaimActivationTest {
     @BeforeEach
     void setUp() {
         engine = new WorkflowEngine(configurationRegistry,
-                                    new InMemoryWorkflowExecutionRepository(),
+                                    new LiveWorkflows(new InMemoryWorkflowExecutionRepository()),
                                     new WorkflowCancellationService(),
                                     workflowStore,
                                     // Without an index, every claim restores the running workflow list of the store.

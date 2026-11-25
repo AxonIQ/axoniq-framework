@@ -27,8 +27,9 @@ import java.util.function.Predicate;
 
 /**
  * A running {@link WorkflowExecution} that only knows its workflow id, counts every time anyone inspects it, and
- * records the events delivered to it. Any other interaction fails, so a test notices when the code under test does
- * more with it than inspecting it or delivering an event.
+ * records the events delivered to it and the checkpoint work state listener registered on it. Any other interaction
+ * fails, so a test notices when the code under test does more with it than inspecting it, delivering an event, or
+ * listening to its safe points.
  *
  * @author Allard Buijze
  */
@@ -37,6 +38,7 @@ final class InspectionCountingWorkflowExecution implements WorkflowExecution {
     private final String workflowId;
     private final AtomicInteger inspections = new AtomicInteger();
     private final List<EventMessage> deliveredEvents = new CopyOnWriteArrayList<>();
+    private volatile @Nullable CheckpointWorkStateListener checkpointWorkStateListener;
 
     InspectionCountingWorkflowExecution(String workflowId) {
         this.workflowId = workflowId;
@@ -58,6 +60,14 @@ final class InspectionCountingWorkflowExecution implements WorkflowExecution {
 
     List<EventMessage> deliveredEvents() {
         return List.copyOf(deliveredEvents);
+    }
+
+    /**
+     * Returns the checkpoint work state listener last registered on this execution, through which a test reports the
+     * safe points of this execution, as a running execution does.
+     */
+    @Nullable CheckpointWorkStateListener checkpointWorkStateListener() {
+        return checkpointWorkStateListener;
     }
 
     @Override
@@ -130,7 +140,7 @@ final class InspectionCountingWorkflowExecution implements WorkflowExecution {
 
     @Override
     public void registerCheckpointWorkStateListener(CheckpointWorkStateListener listener) {
-        throw unexpected();
+        checkpointWorkStateListener = listener;
     }
 
     @Override

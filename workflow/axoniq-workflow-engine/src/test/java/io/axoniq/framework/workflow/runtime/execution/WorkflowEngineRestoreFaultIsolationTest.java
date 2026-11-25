@@ -95,7 +95,7 @@ class WorkflowEngineRestoreFaultIsolationTest {
         workflowStore = mock(WorkflowStore.class);
         workflowEngine = new WorkflowEngine(
                 configurationRegistry,
-                new InMemoryWorkflowExecutionRepository(),
+                new LiveWorkflows(new InMemoryWorkflowExecutionRepository()),
                 mock(WorkflowCancellationService.class),
                 workflowStore,
                 new InMemoryWorkflowIndex(),

@@ -89,7 +89,7 @@ class WorkflowEngineSegmentCheckpointTest {
         var configurationRegistry = mock(WorkflowConfigurationRegistry.class);
         workflowEngine = new WorkflowEngine(
                 configurationRegistry,
-                new InMemoryWorkflowExecutionRepository(),
+                new LiveWorkflows(new InMemoryWorkflowExecutionRepository()),
                 mock(WorkflowCancellationService.class),
                 new RecordingWorkflowStore(),
                 WorkflowIndex.none(),

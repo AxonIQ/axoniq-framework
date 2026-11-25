@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.IntStream;
@@ -80,6 +81,22 @@ final class SegmentBucketedMap<V> {
      */
     V computeIfAbsent(String id, Function<String, V> factory) {
         return bucketOf(requireNotEmpty(id)).computeIfAbsent(id, factory);
+    }
+
+    /**
+     * Stores the value the given function computes from the id and the value stored for it, or removes the entry when
+     * the function returns {@code null}. Behaves as {@link ConcurrentHashMap#compute(Object, BiFunction)}: the function
+     * runs while no other update of the id interleaves.
+     *
+     * @param id       the workflow id, not empty
+     * @param function the function computing the new value from the id and the stored value, or {@code null} when
+     *                 none is stored
+     * @return the stored value, or {@code null} when none is stored afterwards
+     * @throws IllegalArgumentException when the id is empty
+     */
+    @Nullable
+    V compute(String id, BiFunction<String, ? super @Nullable V, ? extends @Nullable V> function) {
+        return bucketOf(requireNotEmpty(id)).compute(id, function);
     }
 
     /**

@@ -447,6 +447,12 @@ public interface WorkflowModule<C extends WorkflowContext> extends Module {
          * <p>
          * The repository is responsible for persisting and retrieving workflow instances, where each instance is
          * identified by a unique workflow identifier and bundles configuration, context, and execution state.
+         * <p>
+         * Only the workflow engine of the module writes the repository. When its
+         * {@link WorkflowExecutionRepository#save(String, java.util.function.Supplier) save} returns another execution
+         * than the one the engine stores, for example one the repository was given otherwise, the engine does not
+         * start or restore that workflow. The engine saves and removes executions while it holds a lock that other
+         * workflows may wait for, so the repository should neither block nor take long to save or remove one.
          *
          * @param workflowExecutionRepository a {@link ComponentBuilder} constructing the
          *                                    {@link WorkflowExecutionRepository}

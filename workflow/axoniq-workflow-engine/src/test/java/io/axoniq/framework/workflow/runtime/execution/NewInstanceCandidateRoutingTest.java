@@ -104,7 +104,7 @@ class NewInstanceCandidateRoutingTest {
     private SimpleWorkflowConfigurationRegistry registry;
     private WorkflowEngineSequencingPolicy routing;
     private WorkflowEngine engine;
-    private InMemoryWorkflowExecutionRepository repository;
+    private LiveWorkflows liveWorkflows;
     private WorkflowEngineCheckpointingSupport checkpointingSupport;
 
     /**
@@ -237,9 +237,9 @@ class NewInstanceCandidateRoutingTest {
     void setUp() {
         registry = new SimpleWorkflowConfigurationRegistry();
         routing = new WorkflowEngineSequencingPolicy(registry);
-        repository = new InMemoryWorkflowExecutionRepository();
+        liveWorkflows = new LiveWorkflows(new InMemoryWorkflowExecutionRepository());
         engine = new WorkflowEngine(registry,
-                                    repository,
+                                    liveWorkflows,
                                     mock(WorkflowCancellationService.class),
                                     mock(WorkflowStore.class),
                                     new InMemoryWorkflowIndex(),
@@ -299,7 +299,7 @@ class NewInstanceCandidateRoutingTest {
         register("Alpha", "1.0.0", always(), event -> "alpha-1");
         var waitingId = "alpha-1";
         var waiting = execution(waitingId);
-        repository.save(waitingId, () -> waiting);
+        liveWorkflows.enter(waitingId, () -> waiting);
 
         assertThat(routing.sequenceIdentifierFor(unregisteredEvent(), context(owningSegment(waitingId))))
                 .as("no definition starts on this event, but an instance on any segment may be waiting for it")
@@ -594,7 +594,7 @@ class NewInstanceCandidateRoutingTest {
         register("Alpha", "1.0.0", always(), event -> "alpha-1");
         var publisherId = idOnAnotherSegmentThan("alpha-1");
         var publisher = execution(publisherId);
-        repository.save(publisherId, () -> publisher);
+        liveWorkflows.enter(publisherId, () -> publisher);
 
         assertThat(routing.sequenceIdentifierFor(publishedEvent(publisherId), context(owningSegment(publisherId))))
                 .as("candidate routing would deliver the event to alpha-1's segment only and leave the publisher on "

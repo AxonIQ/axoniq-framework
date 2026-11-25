@@ -90,9 +90,8 @@ class WorkflowEngineHibernationSupportAdoptionTest {
     private final WorkflowEngineHibernationSupport support = new WorkflowEngineHibernationSupport(
             new DefaultWorkflowScheduler(Clock.systemUTC(), timer),
             Clock.systemUTC(),
-            new InMemoryWorkflowExecutionRepository(),
+            new LiveWorkflows(new InMemoryWorkflowExecutionRepository()),
             cancellationService,
-            new UnsafeCheckpointWorkIndex(),
             projection,
             (claim, workflowId, beforeStart) -> loader.load(claim, workflowId, beforeStart),
             Duration.ofSeconds(30),

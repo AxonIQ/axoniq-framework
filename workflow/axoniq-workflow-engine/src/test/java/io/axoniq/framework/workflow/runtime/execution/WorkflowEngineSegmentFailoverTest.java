@@ -35,6 +35,7 @@ class WorkflowEngineSegmentFailoverTest {
     private static final String OWNED_ID = "sharded-0";
 
     private WorkflowExecutionRepository repository;
+    private LiveWorkflows liveWorkflows;
     private WorkflowStore workflowStore;
     private WorkflowEngine workflowEngine;
 
@@ -60,10 +61,11 @@ class WorkflowEngineSegmentFailoverTest {
     @BeforeEach
     void setUp() {
         repository = new InMemoryWorkflowExecutionRepository();
+        liveWorkflows = new LiveWorkflows(repository);
         workflowStore = mock(WorkflowStore.class);
         workflowEngine = new WorkflowEngine(
                 mock(WorkflowConfigurationRegistry.class),
-                repository,
+                liveWorkflows,
                 mock(WorkflowCancellationService.class),
                 workflowStore,
                 new InMemoryWorkflowIndex(),
@@ -99,8 +101,8 @@ class WorkflowEngineSegmentFailoverTest {
         var foreignId = idOnAnotherSegmentThan(OWNED_ID);
         var owned = execution(OWNED_ID);
         var foreign = execution(foreignId);
-        repository.save(OWNED_ID, () -> owned);
-        repository.save(foreignId, () -> foreign);
+        liveWorkflows.enter(OWNED_ID, () -> owned);
+        liveWorkflows.enter(foreignId, () -> foreign);
 
         workflowEngine.releaseWorkflowsFor(owner);
 

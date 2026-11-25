@@ -21,6 +21,7 @@ import io.axoniq.framework.workflow.runtime.api.manager.WorkflowManager;
 import io.axoniq.framework.workflow.runtime.execution.CheckpointingEventHandlingComponentHandlingAny;
 import io.axoniq.framework.workflow.runtime.execution.EventHandlingComponentHandlingAny;
 import io.axoniq.framework.workflow.runtime.execution.InMemoryWorkflowExecutionRepository;
+import io.axoniq.framework.workflow.runtime.execution.LiveWorkflows;
 import io.axoniq.framework.workflow.runtime.execution.SimpleWorkflowConfigurationRegistry;
 import io.axoniq.framework.workflow.runtime.execution.SimpleWorkflowManager;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowCancellationService;
@@ -271,6 +272,7 @@ class SimpleWorkflowModule<C extends WorkflowContext>
         componentRegistry(cr -> {
             cr.registerComponent(workflowConfigurationRegistry());
             cr.registerComponent(workflowExecutionRepository());
+            cr.registerComponent(liveWorkflows());
             cr.registerComponent(workflowCancellationService());
             cr.registerIfNotPresent(
                     WorkflowEngineCheckpointingSupport.class,
@@ -298,6 +300,17 @@ class SimpleWorkflowModule<C extends WorkflowContext>
         return "WorkflowExecutionRepository[" + name + "]";
     }
 
+    private ComponentDefinition<LiveWorkflows> liveWorkflows() {
+        return ComponentDefinition.ofTypeAndName(LiveWorkflows.class, liveWorkflowsName())
+                                  .withBuilder(c -> new LiveWorkflows(
+                                          c.getComponent(WorkflowExecutionRepository.class, executionRepositoryName())
+                                  ));
+    }
+
+    private String liveWorkflowsName() {
+        return "LiveWorkflows[" + name + "]";
+    }
+
     private ComponentDefinition<WorkflowConfigurationRegistry> workflowConfigurationRegistry() {
         return ComponentDefinition.ofTypeAndName(WorkflowConfigurationRegistry.class, configurationRegistryName())
                                   .withBuilder(configurationRegistry);
@@ -313,7 +326,7 @@ class SimpleWorkflowModule<C extends WorkflowContext>
                                           c.getComponent(
                                                   WorkflowConfigurationRegistry.class, configurationRegistryName()
                                           ),
-                                          c.getComponent(WorkflowExecutionRepository.class, executionRepositoryName()),
+                                          c.getComponent(LiveWorkflows.class, liveWorkflowsName()),
                                           c.getComponent(WorkflowCancellationService.class, cancellationServiceName()),
                                           c.getComponent(WorkflowStore.class),
                                           c.getComponent(WorkflowIndex.class),

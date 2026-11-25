@@ -43,15 +43,15 @@ class WorkflowEngineSegmentCallbackTest {
 
     private static final Duration SHORT_TIMEOUT = Duration.ofMillis(200);
 
-    private static WorkflowEngine engine(WorkflowExecutionRepository repository, WorkflowStore workflowStore) {
-        return engine(repository, workflowStore, mock(WorkflowCancellationService.class));
+    private static WorkflowEngine engine(LiveWorkflows liveWorkflows, WorkflowStore workflowStore) {
+        return engine(liveWorkflows, workflowStore, mock(WorkflowCancellationService.class));
     }
 
-    private static WorkflowEngine engine(WorkflowExecutionRepository repository,
+    private static WorkflowEngine engine(LiveWorkflows liveWorkflows,
                                          WorkflowStore workflowStore,
                                          WorkflowCancellationService cancellationService) {
         var engine = new WorkflowEngine(new SimpleWorkflowConfigurationRegistry(),
-                                        repository,
+                                        liveWorkflows,
                                         cancellationService,
                                         workflowStore,
                                         new InMemoryWorkflowIndex(),
@@ -87,7 +87,7 @@ class WorkflowEngineSegmentCallbackTest {
         var workflowStore = mock(WorkflowStore.class);
         // A load that never completes, which is what a hanging store looks like from here.
         when(workflowStore.loadRunningWorkflows(any())).thenReturn(new CompletableFuture<>());
-        var engine = engine(new InMemoryWorkflowExecutionRepository(), workflowStore);
+        var engine = engine(new LiveWorkflows(new InMemoryWorkflowExecutionRepository()), workflowStore);
 
         var claim = engine.restoreWorkflowsFor(SEGMENT,
                                                null,
@@ -107,10 +107,11 @@ class WorkflowEngineSegmentCallbackTest {
         var owned = execution(OWNED_ID);
         var foreign = execution(FOREIGN_ID);
         var repository = new InMemoryWorkflowExecutionRepository();
-        repository.save(OWNED_ID, () -> owned);
-        repository.save(FOREIGN_ID, () -> foreign);
+        var liveWorkflows = new LiveWorkflows(repository);
+        liveWorkflows.enter(OWNED_ID, () -> owned);
+        liveWorkflows.enter(FOREIGN_ID, () -> foreign);
         var cancellationService = new WorkflowCancellationService();
-        var engine = engine(repository, mock(WorkflowStore.class), cancellationService);
+        var engine = engine(liveWorkflows, mock(WorkflowStore.class), cancellationService);
         engine.registerCancellation(owned);
         engine.registerCancellation(foreign);
 
@@ -128,10 +129,10 @@ class WorkflowEngineSegmentCallbackTest {
     void aReleaseLeavesTheCancellationThatReplacedTheOneOfAReleasedExecutionRegistered() {
         // given: a released execution, whose cancellation was replaced by another registration of its workflow
         var owned = execution(OWNED_ID);
-        var repository = new InMemoryWorkflowExecutionRepository();
-        repository.save(OWNED_ID, () -> owned);
+        var liveWorkflows = new LiveWorkflows(new InMemoryWorkflowExecutionRepository());
+        liveWorkflows.enter(OWNED_ID, () -> owned);
         var cancellationService = new WorkflowCancellationService();
-        var engine = engine(repository, mock(WorkflowStore.class), cancellationService);
+        var engine = engine(liveWorkflows, mock(WorkflowStore.class), cancellationService);
         engine.registerCancellation(owned);
         var replacement = mock(WorkflowCancellation.class);
         cancellationService.register(OWNED_ID, replacement);
@@ -145,7 +146,7 @@ class WorkflowEngineSegmentCallbackTest {
 
     @Test
     void aReleaseOfASegmentWithoutInstancesCompletesRightAway() {
-        var engine = engine(new InMemoryWorkflowExecutionRepository(), mock(WorkflowStore.class));
+        var engine = engine(new LiveWorkflows(new InMemoryWorkflowExecutionRepository()), mock(WorkflowStore.class));
 
         assertThat(engine.releaseWorkflowsFor(SEGMENT))
                 .as("nothing to drain, so nothing to wait for")
@@ -155,7 +156,7 @@ class WorkflowEngineSegmentCallbackTest {
     @Test
     void theProductionTimeoutIsUsedWhenNoneIsSetForATest() {
         var engine = new WorkflowEngine(new SimpleWorkflowConfigurationRegistry(),
-                                        new InMemoryWorkflowExecutionRepository(),
+                                        new LiveWorkflows(new InMemoryWorkflowExecutionRepository()),
                                         mock(WorkflowCancellationService.class),
                                         mock(WorkflowStore.class),
                                         new InMemoryWorkflowIndex(),

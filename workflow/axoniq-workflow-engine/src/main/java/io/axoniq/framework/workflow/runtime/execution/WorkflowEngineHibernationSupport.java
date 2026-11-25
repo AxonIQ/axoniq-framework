@@ -11,7 +11,6 @@ import io.axoniq.framework.workflow.dsl.api.StepWaitInfo;
 import io.axoniq.framework.workflow.index.api.WorkflowIndex.HibernationHint;
 import io.axoniq.framework.workflow.index.api.WorkflowIndex.OpenWait;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution.CheckpointWorkStateListener;
 import org.axonframework.common.Registration;
 import org.axonframework.common.lock.LockFactory;
 import org.axonframework.common.lock.PessimisticLockFactory;
@@ -52,11 +51,12 @@ import java.util.function.Supplier;
  * deadline leaves memory, and is restored from the event store when that event arrives, that deadline expires, or a
  * cancellation is requested for it.
  * <p>
- * Residency follows the execution repository: a workflow is in memory while the {@link WorkflowExecutionRepository}
- * holds its execution. A lock per workflow id, from a {@link PessimisticLockFactory}, keeps hibernation, event
- * delivery, cancellation and wakes of one workflow apart, so an event or a cancellation either reaches the execution
- * in memory or finds the workflow hibernated, never neither. The execution itself only reports whether it is at a safe
- * point, through its {@link WorkflowExecutionHibernationSupport}.
+ * Residency follows the {@link LiveWorkflows} registry: a workflow is in memory while the registry holds its execution,
+ * which leaves memory through the registry when it hibernates, and enters it through the registry when it wakes. A
+ * lock per workflow id, from a {@link PessimisticLockFactory}, keeps hibernation, event delivery, cancellation and
+ * wakes of one workflow apart, so an event or a cancellation either reaches the execution in memory or finds the
+ * workflow hibernated, never neither. The execution itself only reports whether it is at a safe point, through its
+ * {@link WorkflowExecutionHibernationSupport}.
  * <p>
  * Every half idle delay, a pass asks the running executions in memory that made no progress for the idle delay to
  * hibernate. A hibernated workflow keeps a timer for its nearest deadline, a stand-in {@link WorkflowCancellation}, and
@@ -95,9 +95,8 @@ final class WorkflowEngineHibernationSupport {
 
     private final WorkflowScheduler scheduler;
     private final Clock clock;
-    private final WorkflowExecutionRepository repository;
+    private final LiveWorkflows liveWorkflows;
     private final WorkflowCancellationService cancellationService;
-    private final UnsafeCheckpointWorkIndex checkpointWorkIndex;
     private final RunningWorkflowsProjection projection;
     private final WorkflowLoader loader;
     private final Duration idleDelay;
@@ -119,9 +118,8 @@ final class WorkflowEngineHibernationSupport {
      *
      * @param scheduler           schedules the passes and the deadlines of hibernated workflows
      * @param clock               the clock the scheduler measures deadlines with
-     * @param repository          the executions in memory
+     * @param liveWorkflows       the workflows in memory, which a workflow leaves when it hibernates
      * @param cancellationService the cancellation registrations of the live workflows
-     * @param checkpointWorkIndex the workflows with unsafe checkpoint work
      * @param projection          records the hints of hibernated workflows for the workflow index
      * @param loader              loads a hibernated workflow back into the engine and starts it
      * @param idleDelay           the time a workflow must make no progress before it hibernates, and before a failed
@@ -131,20 +129,17 @@ final class WorkflowEngineHibernationSupport {
      */
     WorkflowEngineHibernationSupport(WorkflowScheduler scheduler,
                                      Clock clock,
-                                     WorkflowExecutionRepository repository,
+                                     LiveWorkflows liveWorkflows,
                                      WorkflowCancellationService cancellationService,
-                                     UnsafeCheckpointWorkIndex checkpointWorkIndex,
                                      RunningWorkflowsProjection projection,
                                      WorkflowLoader loader,
                                      Duration idleDelay,
                                      Executor wakeExecutor) {
         this.scheduler = Objects.requireNonNull(scheduler, "The WorkflowScheduler must not be null.");
         this.clock = Objects.requireNonNull(clock, "The Clock must not be null.");
-        this.repository = Objects.requireNonNull(repository, "The WorkflowExecutionRepository must not be null.");
+        this.liveWorkflows = Objects.requireNonNull(liveWorkflows, "The LiveWorkflows must not be null.");
         this.cancellationService = Objects.requireNonNull(cancellationService,
                                                           "The WorkflowCancellationService must not be null.");
-        this.checkpointWorkIndex = Objects.requireNonNull(checkpointWorkIndex,
-                                                          "The UnsafeCheckpointWorkIndex must not be null.");
         this.projection = Objects.requireNonNull(projection, "The RunningWorkflowsProjection must not be null.");
         this.loader = Objects.requireNonNull(loader, "The WorkflowLoader must not be null.");
         this.idleDelay = Objects.requireNonNull(idleDelay, "The idle delay must not be null.");
@@ -176,7 +171,7 @@ final class WorkflowEngineHibernationSupport {
      * point.
      */
     void pass() {
-        for (var execution : repository.findAll()) {
+        for (var execution : liveWorkflows.inMemory()) {
             try {
                 if (execution instanceof WorkflowHibernationProvider provider) {
                     provider.workflowHibernation().request(idleDelay);
@@ -188,9 +183,9 @@ final class WorkflowEngineHibernationSupport {
     }
 
     /**
-     * Enables hibernation for the given execution, which the engine just added to the repository under the given
-     * claim. The execution only hibernates while that claim is current: once a later claim of its segment started, or
-     * the segment was released, it stays in memory until the engine stops it.
+     * Enables hibernation for the given execution, which the engine just brought into memory under the given claim.
+     * The execution only hibernates while that claim is current: once a later claim of its segment started, or the
+     * segment was released, it stays in memory until the engine stops it.
      *
      * @param execution the execution that may hibernate from now on
      * @param claim     the claim the execution was started or restored under, or {@code null} when it has none, in
@@ -254,13 +249,15 @@ final class WorkflowEngineHibernationSupport {
      * hibernated workflow with an open wait that may match the event.
      */
     private Set<String> addressees(@Nullable Segment segment, EventMessage event, ProcessingContext context) {
-        // Matched before the executions are listed: a workflow wakes by entering the repository before its waits are
-        // removed, so a workflow that wakes while the executions are listed is found here.
+        // Matched before the executions are listed: a workflow wakes by entering memory, which stores its execution
+        // in the repository the listing reads, before its waits are removed, so a workflow that wakes while the
+        // executions are listed is found here.
         var awaiting = new LinkedHashSet<>(waitIndex.match(event, context));
         var workflowIds = new LinkedHashSet<String>();
-        repository.findAllOwnedBy(segment).forEach(execution -> workflowIds.add(execution.workflowId()));
-        // Matched after the executions are listed: a workflow hibernates by adding its waits before it leaves the
-        // repository, so a workflow that hibernates while the executions are listed is found here.
+        liveWorkflows.inMemoryOwnedBy(segment).forEach(execution -> workflowIds.add(execution.workflowId()));
+        // Matched after the executions are listed: a workflow hibernates by adding its waits before it leaves memory,
+        // which removes its execution from the repository the listing reads, so a workflow that hibernates while the
+        // executions are listed is found here.
         awaiting.addAll(waitIndex.match(event, context));
         awaiting.stream()
                 .filter(workflowId -> WorkflowSegmentOwnership.ownedBy(segment, workflowId))
@@ -306,7 +303,7 @@ final class WorkflowEngineHibernationSupport {
 
     private boolean deliver(String workflowId, EventMessage event, ProcessingContext context, boolean whenAwaited) {
         try (var ignored = locks.obtainLock(workflowId)) {
-            var execution = repository.findById(workflowId);
+            var execution = liveWorkflows.find(workflowId);
             if (execution.isPresent()) {
                 execution.get().onEvent(event, context);
                 return true;
@@ -381,33 +378,6 @@ final class WorkflowEngineHibernationSupport {
     }
 
     /**
-     * Decorates a checkpoint listener of the given execution, so only the execution in memory reports its checkpoint
-     * work. An execution that hibernated keeps unwinding for a moment, and must not mark the workflow safe or unsafe on
-     * behalf of the restored one.
-     *
-     * @param execution the execution the listener belongs to
-     * @param listener  the listener of the checkpoint work index
-     * @return the listener to register on the execution
-     */
-    CheckpointWorkStateListener decorate(WorkflowExecution execution, CheckpointWorkStateListener listener) {
-        return new CheckpointWorkStateListener() {
-            @Override
-            public void onMarkedUnsafe() {
-                if (isInMemory(execution)) {
-                    listener.onMarkedUnsafe();
-                }
-            }
-
-            @Override
-            public void onMarkedSafe() {
-                if (isInMemory(execution)) {
-                    listener.onMarkedSafe();
-                }
-            }
-        };
-    }
-
-    /**
      * Answers the cancellation requests that wait in the task queue of the given execution, which left memory, so it
      * runs none of them. Without a failure, each request is made again through the
      * {@link WorkflowCancellationService}: it reaches the workflow wherever it runs now, hibernated again, restored by
@@ -452,7 +422,7 @@ final class WorkflowEngineHibernationSupport {
             return requests.isEmpty() ? null : requests;
         }));
         restored.appendTask(ignored -> ready.complete(null));
-        if (!isInMemory(restored)) {
+        if (!liveWorkflows.isInMemory(restored)) {
             // It left before the request was remembered, or dropped the task as it is stopped.
             leftMemory(restored, null);
         }
@@ -474,7 +444,7 @@ final class WorkflowEngineHibernationSupport {
      */
     boolean adopt(SegmentClaim claim, String workflowId, HibernationHint hint) {
         try (var ignored = locks.obtainLock(workflowId)) {
-            if (!running || hibernations.containsKey(workflowId) || repository.findById(workflowId).isPresent()) {
+            if (!running || hibernations.containsKey(workflowId) || liveWorkflows.find(workflowId).isPresent()) {
                 return false;
             }
             return claim.startWhileCurrent(mayStartBodies -> park(
@@ -562,10 +532,6 @@ final class WorkflowEngineHibernationSupport {
         return true;
     }
 
-    private boolean isInMemory(WorkflowExecution execution) {
-        return repository.findById(execution.workflowId()).orElse(null) == execution;
-    }
-
     /**
      * Records the given execution as hibernated and removes it from memory, when it is at a safe point. Runs on the
      * workflow thread, under the lock of the workflow, so no event or cancellation can reach the execution between the
@@ -581,7 +547,7 @@ final class WorkflowEngineHibernationSupport {
                               Supplier<Optional<Set<String>>> safePoint) {
         var workflowId = execution.workflowId();
         try (var ignored = locks.obtainLock(workflowId)) {
-            if (!running || !isInMemory(execution)) {
+            if (!running || !liveWorkflows.isInMemory(execution)) {
                 return false;
             }
             var openWaits = safePoint.get();
@@ -602,8 +568,7 @@ final class WorkflowEngineHibernationSupport {
             boolean parked = claim.runWhileCurrent(() -> {
                 park(workflowId, claim, hint, CompletableFuture.completedFuture(null));
                 projection.recordHibernated(claim.segment(), workflowId, hint);
-                repository.remove(workflowId, execution);
-                checkpointWorkIndex.markSafe(workflowId);
+                liveWorkflows.leave(execution);
             });
             if (parked) {
                 // A request queued on the execution after its safe point was checked goes to the hibernation now.
@@ -886,7 +851,7 @@ final class WorkflowEngineHibernationSupport {
         private <T> CompletableFuture<T> whileInMemory(Function<WorkflowCancellation, CompletableFuture<T>> request) {
             var workflowId = execution.workflowId();
             try (var ignored = locks.obtainLock(workflowId)) {
-                var inMemory = repository.findById(workflowId).orElse(null);
+                var inMemory = liveWorkflows.find(workflowId).orElse(null);
                 var hibernation = hibernations.get(workflowId);
                 if (inMemory == execution || (inMemory == null && hibernation == null)) {
                     return request.apply(delegate);
@@ -958,7 +923,7 @@ final class WorkflowEngineHibernationSupport {
                 } else {
                     // Another wake restored it first, so queue the request there too, or it ended elsewhere and the
                     // cancellation service answers for it.
-                    repository.findById(workflowId).ifPresentOrElse(
+                    liveWorkflows.find(workflowId).ifPresentOrElse(
                             restored -> queueRequest(restored, ready),
                             () -> ready.complete(null)
                     );
