@@ -202,13 +202,6 @@ public class ConfigurationExamples {
         // end::snapshots[]
     }
 
-    public void snapshotsDisabled() {
-        // tag::snapshots-disabled[]
-        WorkflowConfigurer.create()
-                          .snapshots(snapshots -> snapshots.enabled(false));
-        // end::snapshots-disabled[]
-    }
-
     public void workflowIndexJpa(EntityManagerFactory entityManagerFactory) {
         // tag::workflow-index-jpa[]
         var transactions = new JpaTransactionalExecutorProvider(entityManagerFactory);   // <1>

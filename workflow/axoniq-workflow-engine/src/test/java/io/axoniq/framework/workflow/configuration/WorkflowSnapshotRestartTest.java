@@ -114,113 +114,6 @@ class WorkflowSnapshotRestartTest {
     }
 
     @Nested
-    class SnapshotsByDefault {
-
-        // Enough steps to write more than the 50 events after which the default policy snapshots.
-        private static final int STEPS = 30;
-
-        @Test
-        void areTakenOfWorkflowStateWhenTheApplicationHasASnapshotStore() {
-            // given - a snapshot store, and no snapshot setting
-            var configuration = start(workflowWithSteps(STEPS), withSnapshotStore());
-
-            // when
-            var workflowIds = startWorkflows(configuration, 1);
-            awaitParked(configuration, workflowIds);
-
-            // then
-            await().atMost(10, TimeUnit.SECONDS).untilAsserted(() -> assertThat(
-                    snapshotOf(configuration, EventSourcedWorkflowState.class, workflowIds.getFirst())
-            ).isNotNull());
-        }
-
-        @Test
-        void areNotTakenWhenTheyAreDisabled() {
-            // given - a snapshot store, and snapshots turned off
-            var configuration = start(
-                    workflowWithSteps(STEPS),
-                    withSnapshotStore().andThen(configurer -> configurer.snapshots(s -> s.enabled(false)))
-            );
-
-            // when
-            var workflowIds = startWorkflows(configuration, 1);
-            awaitParked(configuration, workflowIds);
-
-            // then
-            assertThat(snapshotOf(configuration, EventSourcedWorkflowState.class, workflowIds.getFirst())).isNull();
-        }
-
-        @Test
-        void followThePolicyOfASettingThatDoesNotEnableThem() {
-            // given - a snapshot store, and a policy that snapshots after 2 events, with snapshots neither on nor off
-            var configuration = start(
-                    workflowWithSteps(3),
-                    withSnapshotStore().andThen(configurer -> configurer.snapshots(
-                            s -> s.workflowState(SnapshotPolicy.afterEvents(2))
-                    ))
-            );
-
-            // when
-            var workflowIds = startWorkflows(configuration, 1);
-            awaitParked(configuration, workflowIds);
-
-            // then
-            await().atMost(10, TimeUnit.SECONDS).untilAsserted(() -> assertThat(
-                    snapshotOf(configuration, EventSourcedWorkflowState.class, workflowIds.getFirst())
-            ).isNotNull());
-        }
-
-        @Test
-        void areNotTakenWhenTheApplicationHasNoSnapshotStore() {
-            // given - no snapshot store, and no snapshot setting
-            var configuration = start(workflowWithSteps(STEPS), configurer -> {
-            });
-
-            // when
-            var workflowIds = startWorkflows(configuration, 1);
-            awaitParked(configuration, workflowIds);
-
-            // then - the application runs as before, and the store this test holds stays empty
-            assertThat(snapshotOf(configuration, EventSourcedWorkflowState.class, workflowIds.getFirst())).isNull();
-        }
-
-        @Test
-        void areNotTakenOfTheRunningWorkflowsAndOpenWaitsUnlessEnabled() {
-            // given - a snapshot store, and list policies that snapshot after 1 event, with snapshots neither on nor off
-            Consumer<WorkflowConfigurer> settings = withSnapshotStore().andThen(configurer -> configurer.snapshots(
-                    s -> s.runningWorkflows(SnapshotPolicy.afterEvents(1))
-                          .waitAssociations(SnapshotPolicy.afterEvents(1))
-            ));
-            var stopped = start(workflowWithSteps(1), settings);
-            var workflowIds = startWorkflows(stopped, 2);
-            awaitParked(stopped, workflowIds);
-            stop(stopped);
-
-            // when - a restart, whose segment claims load both lists, and the workflows complete
-            var restarted = start(workflowWithSteps(1), settings);
-            await().atMost(30, TimeUnit.SECONDS).until(() -> waitSourcings(restarted).size() >= SEGMENTS);
-            publish(restarted, "paid");
-            await().atMost(30, TimeUnit.SECONDS)
-                   .ignoreExceptions()
-                   .until(() -> workflowIds.stream().allMatch(
-                           workflowId -> durableState(restarted, workflowId).workflowStatus()
-                                   == WorkflowStatus.COMPLETED));
-
-            // then
-            assertThat(snapshotOf(restarted, EventSourcedRunningWorkflows.class,
-                                  EventSourcedRunningWorkflows.ENTITY_ID)).isNull();
-            assertThat(snapshotOf(restarted, EventSourcedWaitAssociations.class,
-                                  EventSourcedWaitAssociations.ENTITY_ID)).isNull();
-        }
-
-        private Consumer<WorkflowConfigurer> withSnapshotStore() {
-            return configurer -> configurer.componentRegistry(
-                    cr -> cr.registerComponent(SnapshotStore.class, cfg -> snapshotStore)
-            );
-        }
-    }
-
-    @Nested
     class ManyWorkflows {
 
         private static final int WORKFLOWS = 200;
@@ -484,23 +377,6 @@ class WorkflowSnapshotRestartTest {
     }
 
     private AxonConfiguration build(Consumer<TestContext> body, boolean snapshots) {
-        return build(body, configurer -> {
-            if (snapshots) {
-                configurer.componentRegistry(cr -> cr.registerComponent(SnapshotStore.class, cfg -> snapshotStore))
-                          .snapshots(s -> s.enabled(true)
-                                           .runningWorkflows(SnapshotPolicy.afterEvents(10))
-                                           .workflowState(SnapshotPolicy.afterEvents(2)));
-            }
-        });
-    }
-
-    private AxonConfiguration start(Consumer<TestContext> body, Consumer<WorkflowConfigurer> settings) {
-        var configuration = build(body, settings);
-        configuration.start();
-        return configuration;
-    }
-
-    private AxonConfiguration build(Consumer<TestContext> body, Consumer<WorkflowConfigurer> settings) {
         var module = WorkflowModule.configure(MODULE, TestContext.class)
                                    .definition(d -> d
                                            .declarative(c -> body::accept)
@@ -516,7 +392,12 @@ class WorkflowSnapshotRestartTest {
                 .registerComponent(EventStorageEngine.class, cfg -> nodeStorageEngine)
                 .registerComponent(TokenStore.class, cfg -> tokenStore)
                 .registerModule(module));
-        settings.accept(configurer);
+        if (snapshots) {
+            configurer.componentRegistry(cr -> cr.registerComponent(SnapshotStore.class, cfg -> snapshotStore))
+                      .snapshots(s -> s.enabled(true)
+                                       .runningWorkflows(SnapshotPolicy.afterEvents(10))
+                                       .workflowState(SnapshotPolicy.afterEvents(2)));
+        }
         var configuration = configurer.build();
         configurations.put(configuration, nodeStorageEngine);
         return configuration;

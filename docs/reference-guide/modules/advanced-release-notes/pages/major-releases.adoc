@@ -10,20 +10,11 @@ All the enhancements and features which have been introduced to our major releas
 
 - Workflow index: an optional store of rows per segment for the workflow engine. A segment claim reads only the running workflows, the open waits and the hibernated workflows of its own segment, instead of sourcing them for all segments. With the workflow index in the database of the token store, a hibernated workflow stays out of memory across a segment claim, also after a crash. In a Spring Boot application with JPA, the workflow index is on by default. See xref:workflows:configuration.adoc#workflow-index[Workflow index].
 
-=== Enhancements
-
-- The workflow engine snapshots the state of each workflow instance by default when the application can take snapshots. See xref:workflows:configuration.adoc#snapshots[Snapshots].
-
 === Upgrade notes
-
-An application that has a `SnapshotStore` stores snapshots of the workflow state after the upgrade, without any setting.
-To take no snapshots, call `snapshots(s -> s.enabled(false))` on the `WorkflowConfigurer`, or set `axon.workflow.snapshots.enabled=false` in a Spring Boot application.
 
 A Spring Boot application with JPA gets the workflow index after the upgrade, without any setting.
 The persistence provider creates its three tables, like the token table; with Flyway or Liquibase, add them to a migration.
 To keep it off, set `axon.workflow.index.enabled=false`.
-An application without a `SnapshotStore` starts and runs without snapshots.
-Snapshots are extra data: the events stay the source of truth.
 
 [#release_5_4]
 == Release 5.4
