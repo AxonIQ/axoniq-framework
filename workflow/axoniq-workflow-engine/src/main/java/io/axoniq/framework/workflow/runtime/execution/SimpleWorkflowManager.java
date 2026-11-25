@@ -200,25 +200,30 @@ public class SimpleWorkflowManager implements WorkflowManager {
             // A query for states also gets those of the workflows that are no longer live.
             return found.liveOnly ? CompletableFuture.completedFuture(found) : withHistory(found);
         }
-        var listed = liveWorkflows.listInMemory(query).thenApply(found::listed);
         if (!hibernationEnabled.getAsBoolean()) {
-            // Every live workflow is in memory, so the listing finds them all.
-            return found.liveOnly ? listed : listed.thenCompose(this::withHistory);
+            // Every live workflow is in memory, so the listing finds them all. A query for states also gets those of
+            // the workflows that are no longer live, which the history finds. As no workflow hibernates or wakes,
+            // neither lookup waits for the other: they run at the same time, and the history is read once the listing
+            // is in, as reading skips the workflows the listing found.
+            var listing = liveWorkflows.listInMemory(query);
+            return found.liveOnly
+                    ? listing.thenApply(found::listed)
+                    : listing.thenCombine(historyRepository.findAll(query),
+                                          (executions, matches) -> found.listed(executions).historyFound(matches));
         }
-        // A workflow that was hibernated as the first listing passed it, and that the history does not hold yet, is
-        // found by the second listing once it woke.
-        return listed.thenCompose(this::withHistory)
-                     .thenCompose(lookup -> liveWorkflows.listInMemory(query).thenApply(lookup::listed));
+        // One after the other: a workflow that was hibernated as the first listing passed it, and that the history
+        // does not hold yet, is found by the second listing once it woke.
+        return liveWorkflows.listInMemory(query)
+                            .thenApply(found::listed)
+                            .thenCompose(this::withHistory)
+                            .thenCompose(lookup -> liveWorkflows.listInMemory(query).thenApply(lookup::listed));
     }
 
     /**
      * Reads the entries of the workflows the history finds for the query of the given lookup.
      */
     private CompletableFuture<Found> withHistory(Found found) {
-        return historyRepository.findAll(found.query).thenApply(matches -> {
-            matches.forEach(match -> found.read(match.workflowId()));
-            return found;
-        });
+        return historyRepository.findAll(found.query).thenApply(found::historyFound);
     }
 
     /**
@@ -296,6 +301,14 @@ public class SimpleWorkflowManager implements WorkflowManager {
         private Found(WorkflowStateQuery query, boolean liveOnly) {
             this.query = query;
             this.liveOnly = liveOnly;
+        }
+
+        /**
+         * Reads the entries of the workflows the history found for the query, see {@link #read(String)}.
+         */
+        private Found historyFound(List<WorkflowHistory> matches) {
+            matches.forEach(match -> read(match.workflowId()));
+            return this;
         }
 
         /**
