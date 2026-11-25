@@ -29,7 +29,7 @@ of date after a crash, so a claim then loads every hibernated workflow of the se
 
 The engine has a **workflow index**: a store of rows, cut per segment, written with the token of the
 processor. The events stay the source of truth, and the rows are derived from them. A Spring Boot application with
-JPA has it by default. Without it, a segment claim sources the two lists and reads the hibernation record.
+JPA has it by default. Without it, a segment claim sources the two lists and keeps no workflow hibernated.
 
 ### Rows
 
@@ -88,13 +88,13 @@ under its owner check.
 When a workflow hibernates, its row gets `wakesAt`, the nearest timeout of its open waits. When it wakes, its row loses
 `wakesAt`. A segment claim keeps a workflow out of memory when its row carries `wakesAt` and no event after the token
 belongs to it. A workflow that made progress after it hibernated closed a wait or ended, and the claim reads both
-events. With a workflow index that stores `wakesAt`, the engine stores no `HibernatedWorkflows` record.
+events. The rows replace the `HibernatedWorkflows` snapshot per segment: the engine stores none.
 
 `wakesAt` is a fact of one node, not of an event, so no event corrects it. The engine stores it only when the workflow
 index reports `storesWithToken()`, which puts it under the owner check. A workflow index in another database than the
 token store is configured with `JpaWorkflowIndexConfiguration.storesWithToken(false)`. Its rows are written in a
-transaction of their own, before the token. They hold no `wakesAt`, so the engine keeps the `HibernatedWorkflows`
-record, as it does without a workflow index.
+transaction of their own, before the token. They hold no `wakesAt`, so a segment claim loads the hibernated workflows
+of the segment, as it does without a workflow index.
 
 ### Alternatives considered
 
@@ -103,8 +103,9 @@ record, as it does without a workflow index.
   segment claim sources the full list of open waits.
 - **Reading every event after the token.** Rejected. A segment claim reads only wait and lifecycle events, selected by
   tag. No other event changes a row, and the number of other events grows with the business load.
-- **A hibernation record per segment, written on release, as the only source.** Rejected. That record is missing after
-  a crash. `wakesAt` in the row is stored with the token, so it is there after a crash too.
+- **Keeping the hibernation snapshot per segment next to the rows.** Rejected. It holds the same fact as `wakesAt` in a
+  second place, it needs a `SnapshotStore`, and it is missing after a crash. `wakesAt` in the row is stored with the
+  token, so it is there after a crash too.
 
 ## Consequences
 

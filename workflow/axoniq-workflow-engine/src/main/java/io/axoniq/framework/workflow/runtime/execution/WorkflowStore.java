@@ -16,8 +16,6 @@ import java.util.concurrent.CompletableFuture;
 
 /**
  * Narrow adapter around workflow-state repositories used during startup.
- * <p>
- * It also keeps the {@link HibernatedWorkflows} the engine records for each segment, when the store can keep them.
  *
  * @author Simon Zambrovski
  * @since 5.4.0
@@ -60,32 +58,4 @@ public interface WorkflowStore {
      */
     CompletableFuture<Optional<WorkflowState>> findWorkflow(String workflowId,
                                                             ProcessingContext processingContext);
-
-    /**
-     * Loads the hibernated workflows last recorded under the given identifier. A store that cannot keep them returns
-     * {@link HibernatedWorkflows#NONE}, so every workflow of a claimed segment is restored.
-     *
-     * @param identifier        the identifier the engine recorded them under, one per engine and segment
-     * @param processingContext processing context the load runs in
-     * @return the recorded hibernated workflows, or {@link HibernatedWorkflows#NONE} when none are recorded
-     */
-    default CompletableFuture<HibernatedWorkflows> loadHibernatedWorkflows(String identifier,
-                                                                            ProcessingContext processingContext) {
-        return CompletableFuture.completedFuture(HibernatedWorkflows.NONE);
-    }
-
-    /**
-     * Records the given hibernated workflows under the given identifier, replacing the earlier record. A store that
-     * cannot keep them ignores the call.
-     *
-     * @param identifier        the identifier to record them under, one per engine and segment
-     * @param workflows         the hibernated workflows
-     * @param processingContext processing context the store runs in
-     * @return a future completing once the record is stored
-     */
-    default CompletableFuture<Void> storeHibernatedWorkflows(String identifier,
-                                                             HibernatedWorkflows workflows,
-                                                             ProcessingContext processingContext) {
-        return CompletableFuture.completedFuture(null);
-    }
 }

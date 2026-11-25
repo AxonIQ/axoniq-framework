@@ -7,6 +7,7 @@
  */
 package io.axoniq.framework.workflow.configuration;
 
+import io.axoniq.framework.workflow.dsl.api.StepStatus;
 import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
 import io.axoniq.framework.workflow.index.inmemory.InMemoryWorkflowIndex;
 import io.axoniq.framework.workflow.runtime.execution.SegmentKeyRange;
@@ -37,9 +38,9 @@ import static org.awaitility.Awaitility.await;
 import static org.mockito.Mockito.*;
 
 /**
- * Runs the tests of {@link WorkflowConfigurerHibernationTest} with a {@link WorkflowIndex}, so a hibernated workflow is
- * kept out of memory across a segment claim by the row of the index instead of by a recorded snapshot. Adds the tests
- * of what the engine keeps in the rows, and of how a claim uses them.
+ * Runs the tests of {@link WorkflowConfigurerHibernationTest} with a {@link WorkflowIndex}, whose rows keep a
+ * hibernated workflow out of memory across a segment claim. Adds the tests of what the engine keeps in the rows, and of
+ * how a claim uses them.
  *
  * @author Stefan Dragisic
  */
@@ -158,19 +159,87 @@ class WorkflowConfigurerHibernationWithWorkflowIndexTest extends WorkflowConfigu
         void carryNoWakeTimeWhenTheIndexDoesNotStoreWithTheToken() {
             // given
             index = new InMemoryWorkflowIndex(false);
-            var stopped = startRecordingHibernatedWorkflows();
+            var stopped = start(true);
             var workflowId = startWorkflow(stopped, "wait", "order-1", WAIT_STEP);
             awaitHibernated(stopped, workflowId);
 
             // when
             stopped.shutdown();
 
-            // then: the release stored the rows, and the next node adopts the workflow from the record of the
-            // stopped node, as it does without an index
+            // then: the release stored the rows without a wake time, so the next node loads the workflow into memory
             assertThat(rows().runningWorkflowIds()).containsExactly(workflowId);
             assertThat(rows().wakesAt()).isEmpty();
-            var restarted = startRecordingHibernatedWorkflows();
+            var restarted = start(true);
+            await().atMost(5, TimeUnit.SECONDS).until(() -> inMemory(restarted, workflowId));
+        }
+    }
+
+    @Nested
+    class HibernatedWorkflowOfAClaimedSegment {
+
+        @Test
+        void isAdoptedByTheNextNodeAfterARestart() {
+            // given: a hibernated workflow on a node that stops, which releases its segments
+            var stopped = start(true);
+            var workflowId = startWorkflow(stopped, "wait", "order-1", WAIT_STEP);
+            awaitHibernated(stopped, workflowId);
+            stopped.shutdown();
+
+            // when: a new node starts on the same stores
+            var restarted = start(true);
+
+            // then: it keeps the workflow out of memory, from the row the stopping node stored
             awaitAdopted(restarted, workflowId);
+        }
+
+        @Test
+        void isWokenByTheAwaitedEventAfterTheClaim() {
+            // given: the claim adopted it from its row, instead of loading it
+            var configuration = start(true);
+            var workflowId = startWorkflow(configuration, "wait", "order-1", WAIT_STEP);
+            awaitHibernated(configuration, workflowId);
+            releaseAllSegments(configuration);
+            awaitAdopted(configuration, workflowId);
+
+            // when
+            publish(configuration, "paid", "order-1", "");
+
+            // then
+            awaitWorkflowStatus(configuration, workflowId, WorkflowStatus.COMPLETED);
+        }
+
+        @Test
+        void isWokenByAWorkflowCancellationAfterTheClaim() {
+            // given
+            var configuration = start(true);
+            var workflowId = startWorkflow(configuration, "wait", "order-1", WAIT_STEP);
+            awaitHibernated(configuration, workflowId);
+            releaseAllSegments(configuration);
+            awaitAdopted(configuration, workflowId);
+
+            // when
+            cancellationService(configuration).requestWorkflowCancellation(workflowId, null)
+                                              .orTimeout(10, TimeUnit.SECONDS)
+                                              .join();
+
+            // then
+            awaitWorkflowStatus(configuration, workflowId, WorkflowStatus.CANCELLED);
+        }
+
+        @Test
+        void isWokenAtItsDeadlineAfterTheClaim() {
+            // given: a sleep of 2 seconds
+            var configuration = start(true);
+            var workflowId = startWorkflow(configuration, "sleep", "order-1", SLEEP_STEP);
+            awaitHibernated(configuration, workflowId);
+
+            // when
+            releaseAllSegments(configuration);
+
+            // then
+            awaitWorkflowStatus(configuration, workflowId, WorkflowStatus.COMPLETED);
+            assertThat(durableState(configuration, workflowId).getStep(SLEEP_STEP).status())
+                    .isEqualTo(StepStatus.TIMED_OUT);
         }
     }
 

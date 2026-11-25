@@ -469,7 +469,7 @@ final class WorkflowEngineIndexSupport {
 
     /**
      * What a claim of a segment may use instead of sourcing the {@link RunningWorkflows}, the {@link WaitAssociations}
-     * and the recorded {@link HibernatedWorkflows}.
+     * and loading the hibernated workflows of the segment.
      *
      * @param runningWorkflowIds the identifiers of the running workflows of the segment
      * @param waits              the open waits of the segment
@@ -701,7 +701,7 @@ final class WorkflowEngineIndexSupport {
                 wakesAt.forEach((workflowId, wakes) -> {
                     if (running.contains(workflowId) && !touched.contains(workflowId)) {
                         hibernated.put(workflowId, new HibernatedWorkflows.HibernatedWorkflow(
-                                openWaits.getOrDefault(workflowId, Set.of()), wakes.toString()
+                                openWaits.getOrDefault(workflowId, Set.of()), wakes
                         ));
                     }
                 });

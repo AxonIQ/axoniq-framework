@@ -9,18 +9,18 @@ package io.axoniq.framework.workflow.runtime.execution;
 
 import org.axonframework.common.annotation.Internal;
 
-import java.util.HashMap;
-import java.util.HashSet;
+import java.time.Instant;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 
 /**
- * The workflows of one segment that hibernated, as last recorded by the engine that held the segment.
+ * The workflows of one segment that the rows of a {@link WorkflowIndex} keep hibernated: their row carries the time
+ * they wake at.
  * <p>
- * A recorded workflow counts as hibernated only while its open waits are exactly the ones it hibernated with, so a
- * record that is missing or outdated never hides a workflow that must run.
+ * A workflow counts as hibernated only while its open waits are exactly the ones it hibernated with, so a row that is
+ * outdated never hides a workflow that must run.
  * <p>
  * Internal, because it is part of how the {@link WorkflowEngine} restores the workflows of a claimed segment.
  *
@@ -32,27 +32,25 @@ import java.util.Set;
 public record HibernatedWorkflows(Map<String, HibernatedWorkflow> workflows) {
 
     /**
-     * No hibernated workflows, for a segment without a record.
+     * No hibernated workflows, for a claim that keeps none out of memory.
      */
     public static final HibernatedWorkflows NONE = new HibernatedWorkflows(Map.of());
 
     /**
-     * Creates a record, copying the given workflows.
+     * Creates the hibernated workflows of a segment, copying the given workflows.
      *
      * @param workflows the hibernated workflows by workflow identifier
      */
     public HibernatedWorkflows {
-        // Concrete collection types, so a converter with default typing reads the record back.
-        workflows = new HashMap<>(Objects.requireNonNull(workflows, "The workflows must not be null."));
+        workflows = Map.copyOf(Objects.requireNonNull(workflows, "The workflows must not be null."));
     }
 
     /**
-     * Returns the recorded workflow when it is still hibernated as recorded: its open waits are exactly the recorded
-     * ones.
+     * Returns the given workflow when it is still hibernated: its open waits are exactly the ones it hibernated with.
      *
      * @param workflowId the identifier of the workflow
-     * @param openWaits  the step names of the workflow's open waits in the event store
-     * @return the recorded workflow, or empty when it has no record or its open waits changed since
+     * @param openWaits  the step names of the workflow's open waits
+     * @return the hibernated workflow, or empty when it is not hibernated or its open waits changed since
      */
     public Optional<HibernatedWorkflow> hibernated(String workflowId, Set<String> openWaits) {
         var workflow = workflows.get(workflowId);
@@ -63,20 +61,18 @@ public record HibernatedWorkflows(Map<String, HibernatedWorkflow> workflows) {
      * A workflow that hibernated.
      *
      * @param openWaits the step names of the open waits it hibernated with
-     * @param wakesAt   the nearest timeout of those waits, which wakes it, as an ISO-8601 instant, like the timestamps
-     *                  in a workflow state snapshot, so every {@link org.axonframework.conversion.Converter} reads it
-     *                  back
+     * @param wakesAt   the nearest timeout of those waits, which wakes it
      */
-    public record HibernatedWorkflow(Set<String> openWaits, String wakesAt) {
+    public record HibernatedWorkflow(Set<String> openWaits, Instant wakesAt) {
 
         /**
          * Creates a hibernated workflow, copying the given wait names.
          *
          * @param openWaits the step names of the open waits it hibernated with
-         * @param wakesAt   the nearest timeout of those waits, which wakes it, as an ISO-8601 instant
+         * @param wakesAt   the nearest timeout of those waits, which wakes it
          */
         public HibernatedWorkflow {
-            openWaits = new HashSet<>(Objects.requireNonNull(openWaits, "The open waits must not be null."));
+            openWaits = Set.copyOf(Objects.requireNonNull(openWaits, "The open waits must not be null."));
             Objects.requireNonNull(wakesAt, "The wake time must not be null.");
         }
     }

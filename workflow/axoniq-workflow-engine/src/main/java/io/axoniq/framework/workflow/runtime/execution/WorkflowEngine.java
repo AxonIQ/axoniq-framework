@@ -181,21 +181,17 @@ public class WorkflowEngine implements
      *
      * @param scheduler    schedules the passes and the deadlines of hibernated workflows
      * @param clock        the clock the scheduler measures deadlines with
-     * @param name         the name of the workflow module, which keeps the hibernated workflows this engine records
-     *                     apart from those of other modules
      * @param interval     the time between 2 passes, and before a failed wake is tried again
      * @param wakeExecutor runs the wakes for a deadline or a cancellation, like the workflows of this engine
      */
     @Internal
     public void enableHibernation(WorkflowScheduler scheduler,
                                   Clock clock,
-                                  String name,
                                   Duration interval,
                                   Executor wakeExecutor) {
         this.hibernation = new WorkflowEngineHibernationSupport(
                 scheduler, clock, workflowExecutionRepository, workflowCancellationService, checkpointWorkIndex,
-                unitOfWorkFactory, () -> restoreTimeout, this::loadWorkflow, workflowStore, name, interval,
-                wakeExecutor, () -> index
+                unitOfWorkFactory, () -> restoreTimeout, this::loadWorkflow, interval, wakeExecutor, () -> index
         );
     }
 
@@ -455,8 +451,9 @@ public class WorkflowEngine implements
      * so a segment migrating between nodes carries its instances with it. When another node dies, the coordinator hands
      * its segments to a surviving node and this callback rebuilds their instances there, without restarting anything.
      * <p>
-     * The instances are materialized from their current durable state and started immediately. With hibernation, a
-     * workflow recorded as hibernated whose open waits did not change since stays out of memory instead.
+     * The instances are materialized from their current durable state and started immediately. With hibernation and a
+     * {@link WorkflowIndex} that stores with the token, a workflow whose row carries a wake time and whose open waits
+     * did not change since stays out of memory instead.
      *
      * @param segment          the segment that was claimed
      * @param claimedFrom      the stored position the segment resumes from, or {@code null} when it has consumed
@@ -523,45 +520,39 @@ public class WorkflowEngine implements
             return sourceClaimedWorkflows(segment, sourcingContext);
         }
         return support.claim(segment, claimedFrom, sourcingContext).thenCompose(
-                rows -> rows.map(claimed -> (support.keepsWakeTimes()
-                                    ? CompletableFuture.completedFuture(claimed.hibernated())
-                                    // The rows hold no wake time, so the hibernated workflows are the recorded ones.
-                                    : loadRecordedWorkflows(segment, sourcingContext)
-                            ).thenApply(hibernated -> new ClaimedWorkflows(
-                                    claimed.runningWorkflowIds(), claimed.waits(), hibernated
+                rows -> rows.map(claimed -> CompletableFuture.completedFuture(new ClaimedWorkflows(
+                                    claimed.runningWorkflowIds(),
+                                    claimed.waits(),
+                                    // Rows without wake times keep no workflow hibernated across a claim.
+                                    support.keepsWakeTimes() ? claimed.hibernated() : HibernatedWorkflows.NONE
                             )))
                             .orElseGet(() -> sourceClaimedWorkflows(segment, sourcingContext))
         );
     }
 
     /**
-     * Sources what the claim of the given segment restores from. The waits are loaded first, as a recorded hibernated
-     * workflow is adopted only while its waits are unchanged.
+     * Sources what the claim of the given segment restores from. A sourced claim keeps no workflow hibernated: only the
+     * rows of a {@link WorkflowIndex} know when a hibernated workflow wakes.
      * <p>
-     * With a {@link WorkflowIndex}, the sourced workflows and waits of the segment become its rows. When its rows keep
-     * the hibernated workflows, none are read: the index could not answer this claim.
+     * With a {@link WorkflowIndex}, the sourced workflows and waits of the segment become its rows.
      */
     private CompletableFuture<ClaimedWorkflows> sourceClaimedWorkflows(Segment segment,
                                                                        ProcessingContext sourcingContext) {
         var support = index;
         return workflowStore.loadWaitAssociations(sourcingContext).thenCompose(
-                waits -> (support == null || !support.keepsWakeTimes()
-                        ? loadRecordedWorkflows(segment, sourcingContext)
-                        : CompletableFuture.completedFuture(HibernatedWorkflows.NONE)
-                ).thenCompose(recorded -> workflowStore.loadRunningWorkflows(sourcingContext).thenCompose(running -> {
-                    var claimed = new ClaimedWorkflows(
+                waits -> workflowStore.loadRunningWorkflows(sourcingContext).thenApply(running -> {
+                    if (support != null) {
+                        support.sourced(segment, running.workflowIds(), waits.waitAssociations());
+                    }
+                    return new ClaimedWorkflows(
                             running.workflowIds(),
                             waits.waitAssociations()
                                  .stream()
                                  .filter(wait -> WorkflowSegmentOwnership.ownedBy(segment, wait.workflowId()))
                                  .toList(),
-                            recorded
+                            HibernatedWorkflows.NONE
                     );
-                    if (support != null) {
-                        support.sourced(segment, running.workflowIds(), waits.waitAssociations());
-                    }
-                    return CompletableFuture.completedFuture(claimed);
-                }))
+                })
         );
     }
 
@@ -570,19 +561,12 @@ public class WorkflowEngine implements
         logger.debug("Loaded {} open wait(s) of segment {}.", waits.size(), segment.getSegmentId());
     }
 
-    private CompletableFuture<HibernatedWorkflows> loadRecordedWorkflows(Segment segment,
-                                                                         ProcessingContext sourcingContext) {
-        return hibernation == null
-                ? CompletableFuture.completedFuture(HibernatedWorkflows.NONE)
-                : hibernation.loadRecordedWorkflows(segment, sourcingContext);
-    }
-
     /**
      * What the claim of a segment restores from.
      *
      * @param runningWorkflowIds the identifiers of running workflows, at least those of the segment
      * @param waits              the open waits of the segment
-     * @param hibernated         the workflows recorded as hibernated
+     * @param hibernated         the workflows the rows of the segment keep hibernated
      */
     private record ClaimedWorkflows(Collection<String> runningWorkflowIds,
                                     List<WaitAssociation> waits,
@@ -592,7 +576,7 @@ public class WorkflowEngine implements
 
     /**
      * Returns whether the claim of the given segment adopts a running workflow as hibernated instead of restoring it:
-     * it is recorded as hibernated, and its open waits are exactly the ones it hibernated with.
+     * its row carries a wake time, and its open waits are exactly the ones it hibernated with.
      */
     private Predicate<String> adoptsAsHibernated(Segment segment,
                                                  HibernatedWorkflows recorded,
@@ -626,29 +610,29 @@ public class WorkflowEngine implements
      * <p>
      * In-flight steps are stopped rather than cancelled, exactly as on {@link #shutdown()}: no cancellation events are
      * emitted, so the node claiming the segment next resumes each instance from its persisted state. With hibernation,
-     * the segment's hibernated workflows are recorded once more, so that claim keeps them out of memory.
+     * the segment's hibernated workflows are forgotten here; the rows of a {@link WorkflowIndex} keep them out of memory
+     * on the next claim.
      *
      * @param segment the segment that was released
-     * @return a future completed after this engine has requested every released execution to stop and, with
-     * hibernation, has stored or failed to store the record of the segment's hibernated workflows
+     * @return a future completed after this engine has requested every released execution to stop
      */
     public CompletableFuture<Void> releaseWorkflowsFor(Segment segment) {
         waitIndex.segmentReleased(segment);
-        var recorded = hibernation == null
-                ? CompletableFuture.<Void>completedFuture(null)
-                : hibernation.release(segment);
+        if (hibernation != null) {
+            hibernation.release(segment);
+        }
         // Also without executions in memory: the next claim of the segment must catch up and start its restored ones.
         catchUpSupport.release(segment);
         var released = workflowExecutionRepository.findAll(ownedBy(segment));
         if (released.isEmpty()) {
-            return recorded;
+            return CompletableFuture.completedFuture(null);
         }
         logger.info("Releasing segment {}: stopping {} workflow execution(s).",
                     segment.getSegmentId(), released.size());
         released.forEach(WorkflowExecution::stopForShutdown);
         // An execution stopped for recovery skips the termination handler, so the release does its cleanup.
         released.forEach(execution -> removeExecution(execution.workflowId()));
-        return recorded;
+        return CompletableFuture.completedFuture(null);
     }
 
     /**

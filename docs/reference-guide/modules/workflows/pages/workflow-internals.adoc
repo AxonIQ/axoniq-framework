@@ -75,13 +75,7 @@ The rows are committed with the token, so this also works after a crash.
 For each workflow it keeps out of memory, the segment claim starts the timer for the wake time and keeps the open waits.
 
 The rows of a workflow index in another database than the token store hold no wake time.
-With such a workflow index, or without a workflow index, and with a `SnapshotStore` configured, the engine records the hibernated workflows of a segment when it releases that segment, also when the application stops.
-The next claim of the segment, on any node, keeps a recorded workflow out of memory, as long as its open waits are the ones it hibernated with.
-It replays only the other workflows.
-After a crash, the record is missing or out of date, so the segment claim replays the workflows the record does not cover.
-
-In the one other setup, a segment claim replays every unfinished workflow of the segment, which then hibernates again at the same wait.
-That setup is: no `SnapshotStore`, and no workflow index in the database of the token store.
+With such a workflow index, or without a workflow index, a segment claim replays every unfinished workflow of the segment, which then hibernates again at the same wait.
 
 A segment split or merge replaces segments without releasing them.
 The claim of a new segment first forgets the hibernated workflows it owns that were kept for the old segment, and then restores them or keeps them out of memory again.
@@ -97,7 +91,7 @@ It restores the running workflows that are not hibernated, and keeps the open wa
 
 The engine sources the list of open waits and the list of running workflows from the event store.
 Both lists hold all segments, so the engine keeps only the entries of the workflows that the claimed segment owns.
-With a `SnapshotStore`, it also reads the hibernated workflows recorded for the segment, see <<hibernation-claims,Restarts and segment claims>>.
+It keeps no workflow hibernated, see <<hibernation-claims,Restarts and segment claims>>.
 
 === With a workflow index
 

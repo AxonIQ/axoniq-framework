@@ -304,7 +304,8 @@ public class WorkflowProperties {
         /**
          * Sets whether the workflow index is in the database of the token store. Not set, it is {@code true} when the
          * token store is a {@code JpaTokenStore}. Set it to {@code false} when the token store uses another database.
-         * The workflow index then keeps no wake times, and the engine keeps its record of hibernated workflows.
+         * The workflow index then keeps no wake times, so a segment claim loads the hibernated workflows of its
+         * segment.
          *
          * @param storesWithToken whether the rows of the workflow index are written in the transaction of the token,
          *                        or {@code null} to follow the token store

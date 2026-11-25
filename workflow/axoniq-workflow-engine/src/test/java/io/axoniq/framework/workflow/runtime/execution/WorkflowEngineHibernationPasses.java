@@ -10,7 +10,6 @@ package io.axoniq.framework.workflow.runtime.execution;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 
 import java.util.Objects;
-import java.util.concurrent.TimeUnit;
 
 /**
  * Lets a test outside this package run a hibernation pass of a {@link WorkflowEngine} now, instead of waiting for the
@@ -54,7 +53,7 @@ public final class WorkflowEngineHibernationPasses {
      * @param segment the segment being released
      */
     public static void startReleaseOf(WorkflowEngine engine, Segment segment) {
-        hibernationOf(engine).release(segment).orTimeout(5, TimeUnit.SECONDS).join();
+        hibernationOf(engine).release(segment);
     }
 
     private static WorkflowEngineHibernationSupport hibernationOf(WorkflowEngine engine) {
