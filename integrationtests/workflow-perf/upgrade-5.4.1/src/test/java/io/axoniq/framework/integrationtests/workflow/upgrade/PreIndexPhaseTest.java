@@ -219,7 +219,9 @@ class PreIndexPhaseTest {
                              .processorConfiguration(pc -> {
                                  pc.initialSegmentCount(UpgradeCase.SEGMENTS)
                                    .workerExecutor(() -> Executors.newScheduledThreadPool(UpgradeCase.SEGMENTS))
-                                   .tokenClaimInterval(500);
+                                   .tokenClaimInterval(500)
+                                   // Below the claim timeout of 4 s, so a node extends its claims before they expire.
+                                   .claimExtensionThreshold(1_000);
                                  return pc.unitOfWorkFactory(
                                          new TransactionalUnitOfWorkFactory(transactions, pc.unitOfWorkFactory())
                                  );
