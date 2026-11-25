@@ -26,7 +26,11 @@ Axon Framework's snapshotting entity module fails the start of an application th
 
 ## Decision
 
-The engine snapshots its three entities by default when the application can take snapshots.
+By default, the engine snapshots the state of each workflow instance when the application can take snapshots. It
+snapshots the two lists only when snapshots are enabled.
+
+Each list is 1 entity that holds every segment. A segment claim with a workflow index does not load it, so its snapshot
+would only serve a claim without one.
 
 ### Three states of `enabled`
 
@@ -34,7 +38,7 @@ The engine snapshots its three entities by default when the application can take
 
 | `enabled` | Result |
 |---|---|
-| not set, the default | An entity is snapshotted when the application can take snapshots. Otherwise the entity is sourced without snapshots, and the application starts. |
+| not set, the default | The workflow state is snapshotted when the application can take snapshots. Otherwise it is sourced without snapshots, and the application starts. The two lists are not snapshotted. |
 | `true` | All three entities are snapshotted. An application that cannot take snapshots fails to start. |
 | `false` | No snapshot is taken. |
 
@@ -58,8 +62,9 @@ The first case that fits wins:
 2. `enabled` is `false`: the entity is not snapshotted.
 3. A `SnapshotPolicy` component is registered under the deprecated name of the entity in
    `WorkflowConfigurationDefaults`: the entity is snapshotted with that policy, and a warning is logged.
-4. The application can take snapshots: the entity is snapshotted with its policy.
-5. Otherwise: the entity is not snapshotted.
+4. The entity is one of the two lists: it is not snapshotted.
+5. The application can take snapshots: the workflow state is snapshotted with its policy.
+6. Otherwise: the workflow state is not snapshotted.
 
 ### A failed snapshot never fails a load
 
@@ -75,12 +80,13 @@ never fails the load of the entity.
 - **Snapshots always on.** Rejected. An application without a `SnapshotStore` then fails to start.
 - **Deciding in the configuration enhancer.** Rejected. A `SnapshotStore` that another enhancer or a Spring bean
   registers is not visible to every enhancer, so the result depends on the order of the enhancers.
-- **Only the workflow state by default.** Rejected. One setting covers all three entities, and a segment claim without
-  a workflow index loads both lists.
+- **All three entities by default.** Rejected. A list snapshot holds every segment, so it grows with every running
+  workflow and open wait of the application. With a workflow index, a claim reads the rows of its own segment and
+  does not load the lists.
 
 ## Consequences
 
-- An application that has a `SnapshotStore` stores snapshots of the three entities without any setting. For such an
+- An application that has a `SnapshotStore` stores snapshots of the workflow state without any setting. For such an
   application this is a change of behavior on upgrade. `snapshots(s -> s.enabled(false))` or
   `axon.workflow.snapshots.enabled=false` takes no snapshots.
 - An application without a `SnapshotStore` starts and runs without snapshots.

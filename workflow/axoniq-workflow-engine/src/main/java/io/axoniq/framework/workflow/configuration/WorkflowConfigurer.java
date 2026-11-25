@@ -119,8 +119,8 @@ public class WorkflowConfigurer implements ApplicationConfigurer {
      * registers the result as the {@code WorkflowSnapshotConfiguration} component, which decides whether, and how,
      * the workflow engine snapshots its entities.
      * <p>
-     * Unless snapshots are explicitly enabled or disabled, the workflow engine snapshots its entities when the
-     * application can take snapshots: when it has a
+     * Unless snapshots are explicitly enabled or disabled, the workflow engine snapshots the state of each workflow
+     * instance when the application can take snapshots: when it has a
      * {@link org.axonframework.eventsourcing.snapshot.store.SnapshotStore} component, a
      * {@link org.axonframework.conversion.GeneralConverter} component, and a
      * {@link org.axonframework.messaging.core.MessageTypeResolver} resolving the type of the entity. Explicitly

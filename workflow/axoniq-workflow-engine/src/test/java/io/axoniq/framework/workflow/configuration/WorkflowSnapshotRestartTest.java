@@ -184,6 +184,35 @@ class WorkflowSnapshotRestartTest {
             assertThat(snapshotOf(configuration, EventSourcedWorkflowState.class, workflowIds.getFirst())).isNull();
         }
 
+        @Test
+        void areNotTakenOfTheRunningWorkflowsAndOpenWaitsUnlessEnabled() {
+            // given - a snapshot store, and list policies that snapshot after 1 event, with snapshots neither on nor off
+            Consumer<WorkflowConfigurer> settings = withSnapshotStore().andThen(configurer -> configurer.snapshots(
+                    s -> s.runningWorkflows(SnapshotPolicy.afterEvents(1))
+                          .waitAssociations(SnapshotPolicy.afterEvents(1))
+            ));
+            var stopped = start(workflowWithSteps(1), settings);
+            var workflowIds = startWorkflows(stopped, 2);
+            awaitParked(stopped, workflowIds);
+            stop(stopped);
+
+            // when - a restart, whose segment claims load both lists, and the workflows complete
+            var restarted = start(workflowWithSteps(1), settings);
+            await().atMost(30, TimeUnit.SECONDS).until(() -> waitSourcings(restarted).size() >= SEGMENTS);
+            publish(restarted, "paid");
+            await().atMost(30, TimeUnit.SECONDS)
+                   .ignoreExceptions()
+                   .until(() -> workflowIds.stream().allMatch(
+                           workflowId -> durableState(restarted, workflowId).workflowStatus()
+                                   == WorkflowStatus.COMPLETED));
+
+            // then
+            assertThat(snapshotOf(restarted, EventSourcedRunningWorkflows.class,
+                                  EventSourcedRunningWorkflows.ENTITY_ID)).isNull();
+            assertThat(snapshotOf(restarted, EventSourcedWaitAssociations.class,
+                                  EventSourcedWaitAssociations.ENTITY_ID)).isNull();
+        }
+
         private Consumer<WorkflowConfigurer> withSnapshotStore() {
             return configurer -> configurer.componentRegistry(
                     cr -> cr.registerComponent(SnapshotStore.class, cfg -> snapshotStore)

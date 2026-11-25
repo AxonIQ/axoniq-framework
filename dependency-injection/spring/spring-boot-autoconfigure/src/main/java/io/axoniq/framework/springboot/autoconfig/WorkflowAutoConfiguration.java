@@ -48,9 +48,9 @@ public class WorkflowAutoConfiguration {
      * Provides the {@link WorkflowSnapshotConfiguration} of the {@code axon.workflow.snapshots} properties, which
      * decides whether, and how, the workflow engine snapshots its entities.
      * <p>
-     * Unless {@code axon.workflow.snapshots.enabled} is set, the workflow engine snapshots its entities, each with the
-     * policy of its {@code after-events} property, whenever the application can take snapshots, such as when it has a
-     * {@code SnapshotStore} bean. Setting it to {@code true} requires a {@code SnapshotStore} bean. Setting it to
+     * Unless {@code axon.workflow.snapshots.enabled} is set, the workflow engine snapshots the state of each workflow
+     * instance, with the policy of its {@code after-events} property, whenever the application can take snapshots,
+     * such as when it has a {@code SnapshotStore} bean. Setting it to {@code true} requires a {@code SnapshotStore} bean. Setting it to
      * {@code false} takes no snapshot at all. An application defining its own {@code WorkflowSnapshotConfiguration}
      * bean replaces this one, and the properties with it.
      *

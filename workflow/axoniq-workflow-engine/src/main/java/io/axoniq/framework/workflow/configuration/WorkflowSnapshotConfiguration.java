@@ -32,11 +32,13 @@ import static java.util.Objects.requireNonNull;
  * <p>
  * Whether snapshots are taken depends on {@link #enabled(boolean)}:
  * <ul>
- *     <li>Not set (the default): an entity is snapshotted when the application can take snapshots, that is, when it
- *     has a {@link org.axonframework.eventsourcing.snapshot.store.SnapshotStore} component, a
- *     {@link org.axonframework.conversion.GeneralConverter} component, and a
- *     {@link org.axonframework.messaging.core.MessageTypeResolver} that resolves the type of the entity. Otherwise no
- *     snapshot is taken, and the application starts as usual.</li>
+ *     <li>Not set (the default): the state of each workflow instance is snapshotted when the application can take
+ *     snapshots, that is, when it has a {@link org.axonframework.eventsourcing.snapshot.store.SnapshotStore}
+ *     component, a {@link org.axonframework.conversion.GeneralConverter} component, and a
+ *     {@link org.axonframework.messaging.core.MessageTypeResolver} that resolves the type of the workflow state.
+ *     Otherwise no snapshot is taken, and the application starts as usual. The running-workflow list and the
+ *     open-wait list are not snapshotted: each holds every segment, and a segment claim with a workflow index does
+ *     not load them.</li>
  *     <li>{@code true}: every entity is snapshotted. An application that cannot take snapshots fails to start.</li>
  *     <li>{@code false}: no snapshot is taken.</li>
  * </ul>
@@ -63,10 +65,10 @@ public class WorkflowSnapshotConfiguration {
     /**
      * Enables or disables snapshots.
      * <p>
-     * When this is not set, snapshots are taken if the application has a
-     * {@link org.axonframework.eventsourcing.snapshot.store.SnapshotStore}, and are not taken otherwise. Set to
-     * {@code true}, snapshots are taken and the application needs a {@code SnapshotStore} to start. Set to
-     * {@code false}, no snapshots are taken.
+     * When this is not set, the state of each workflow instance is snapshotted if the application has a
+     * {@link org.axonframework.eventsourcing.snapshot.store.SnapshotStore}, and the running-workflow list and the
+     * open-wait list are not snapshotted. Set to {@code true}, all three are snapshotted and the application needs a
+     * {@code SnapshotStore} to start. Set to {@code false}, no snapshots are taken.
      *
      * @param enabled whether snapshots are taken
      * @return this configuration, for a fluent API

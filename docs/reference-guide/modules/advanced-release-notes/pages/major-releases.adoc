@@ -12,11 +12,11 @@ All the enhancements and features which have been introduced to our major releas
 
 === Enhancements
 
-- The workflow engine snapshots its three entities by default when the application can take snapshots: the workflow state, the list of running workflows and the list of open waits. See xref:workflows:configuration.adoc#snapshots[Snapshots].
+- The workflow engine snapshots the state of each workflow instance by default when the application can take snapshots. See xref:workflows:configuration.adoc#snapshots[Snapshots].
 
 === Upgrade notes
 
-An application that has a `SnapshotStore` stores snapshots of the workflow state, the list of running workflows and the list of open waits after the upgrade, without any setting.
+An application that has a `SnapshotStore` stores snapshots of the workflow state after the upgrade, without any setting.
 To take no snapshots, call `snapshots(s -> s.enabled(false))` on the `WorkflowConfigurer`, or set `axon.workflow.snapshots.enabled=false` in a Spring Boot application.
 
 A Spring Boot application with JPA gets the workflow index after the upgrade, without any setting.

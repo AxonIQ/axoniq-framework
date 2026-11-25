@@ -72,7 +72,7 @@ class WorkflowSnapshotsSpringContextTest {
     class WithASnapshotStoreBean {
 
         @Test
-        void snapshotsWorkflowStateAndTheRunningWorkflowListByDefault() {
+        void snapshotsOnlyWorkflowStateByDefault() {
             try (var context = contextWith(WithSnapshotStore.class, EVERY_RUNNING_WORKFLOWS_EVENT)) {
                 // given
                 var configuration = context.getBean(AxonConfiguration.class);
@@ -84,8 +84,7 @@ class WorkflowSnapshotsSpringContextTest {
                 // then
                 await().atMost(10, TimeUnit.SECONDS)
                        .until(() -> storedSnapshot(configuration, workflowId) != null);
-                await().atMost(10, TimeUnit.SECONDS)
-                       .until(() -> storedRunningWorkflowsSnapshot(configuration) != null);
+                assertThat(storedRunningWorkflowsSnapshot(configuration)).isNull();
             }
         }
 

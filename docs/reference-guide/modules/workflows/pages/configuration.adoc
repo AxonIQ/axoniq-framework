@@ -227,8 +227,10 @@ With snapshots, a node sources an entity from its latest snapshot and the events
 Without snapshots, a node replays the full event history of an entity each time it loads it.
 Without a <<workflow-index,workflow index>>, a node loads both lists on every segment claim, so a node that claims many segments loads them once per segment.
 
-Snapshots are on by default when the application can take snapshots.
+By default, the engine snapshots the state of each workflow instance when the application can take snapshots.
 The application can take snapshots when it has a `SnapshotStore` component and a `GeneralConverter` component, and its `MessageTypeResolver` resolves the entity.
+The engine snapshots the two lists only when snapshots are enabled.
+Each list holds every segment, and a segment claim with a workflow index does not load it.
 Axon Server and PostgreSQL each register a `SnapshotStore`.
 An application that cannot take snapshots starts without them.
 
@@ -239,7 +241,7 @@ The `enabled` setting of the snapshot configuration has three states:
 |`enabled` |Behavior
 
 |Not set
-|The engine snapshots an entity when the application can take snapshots. This is the default.
+|The engine snapshots the state of each workflow instance when the application can take snapshots. This is the default.
 
 |`true`
 |The engine snapshots all three entities. An application that cannot take snapshots fails to start.
@@ -474,11 +476,11 @@ The history processor uses the same properties under `axon.workflow.history.*`.
 
 |`enabled`
 |Not set
-|Not set: snapshots are taken when the application can take snapshots, for example when it has a `SnapshotStore` bean. `true`: snapshots are taken, and a `SnapshotStore` bean is required. `false`: no snapshots are taken.
+|Not set: the state of each workflow instance is snapshotted when the application can take snapshots, for example when it has a `SnapshotStore` bean. `true`: all three entities are snapshotted, and a `SnapshotStore` bean is required. `false`: no snapshots are taken.
 
 |`running-workflows.after-events`
 |`50`
-|Number of sourced events after which the list of running workflows is snapshotted.
+|Number of sourced events after which the list of running workflows is snapshotted, when snapshots are enabled.
 
 |`workflow-state.after-events`
 |`50`
@@ -486,7 +488,7 @@ The history processor uses the same properties under `axon.workflow.history.*`.
 
 |`wait-associations.after-events`
 |`50`
-|Number of sourced events after which the list of open waits is snapshotted.
+|Number of sourced events after which the list of open waits is snapshotted, when snapshots are enabled.
 |===
 
 The <<workflow-index,workflow index>> is configured with `axon.workflow.index.*` properties.

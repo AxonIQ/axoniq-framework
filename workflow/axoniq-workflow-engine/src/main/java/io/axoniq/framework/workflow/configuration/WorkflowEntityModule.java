@@ -50,10 +50,13 @@ import static org.axonframework.eventsourcing.configuration.EventSourcedEntityMo
  *     warning is logged. Such a component takes precedence over the policy of the
  *     {@code WorkflowSnapshotConfiguration}. An explicitly enabled or disabled configuration ignores these
  *     components.</li>
- *     <li>Otherwise the entity is snapshotted with its policy of the {@code WorkflowSnapshotConfiguration}, but only
- *     when the application can take snapshots: it has a {@link SnapshotStore} and a {@link GeneralConverter}, and its
- *     {@link MessageTypeResolver} resolves the entity. Without these, the entity is sourced without snapshots, as Axon
- *     Framework's snapshotting entity module would otherwise fail the start of the application.</li>
+ *     <li>The {@link EventSourcedRunningWorkflows} and the {@link EventSourcedWaitAssociations} are not snapshotted.
+ *     Each is 1 entity for every segment, and a segment claim with a workflow index does not load it.</li>
+ *     <li>Otherwise the {@link EventSourcedWorkflowState} is snapshotted with its policy of the
+ *     {@code WorkflowSnapshotConfiguration}, but only when the application can take snapshots: it has a
+ *     {@link SnapshotStore} and a {@link GeneralConverter}, and its {@link MessageTypeResolver} resolves the entity.
+ *     Without these, the entity is sourced without snapshots, as Axon Framework's snapshotting entity module would
+ *     otherwise fail the start of the application.</li>
  * </ol>
  * The decision is made after every {@link org.axonframework.common.configuration.ConfigurationEnhancer} ran, so a
  * {@code SnapshotStore} registered by any enhancer or Spring bean counts, whatever its order. Checking for the
@@ -78,15 +81,18 @@ final class WorkflowEntityModule<E> implements Module {
     private final Class<E> entityType;
     private final Function<WorkflowSnapshotConfiguration, SnapshotPolicy> policy;
     private final String legacyPolicyName;
+    private final boolean snapshotsByDefault;
 
     private WorkflowEntityModule(EventSourcedEntityModule.OptionalPhase<String, E> entityModule,
                                  Class<E> entityType,
                                  Function<WorkflowSnapshotConfiguration, SnapshotPolicy> policy,
-                                 String legacyPolicyName) {
+                                 String legacyPolicyName,
+                                 boolean snapshotsByDefault) {
         this.entityModule = entityModule;
         this.entityType = entityType;
         this.policy = policy;
         this.legacyPolicyName = legacyPolicyName;
+        this.snapshotsByDefault = snapshotsByDefault;
     }
 
     /**
@@ -116,7 +122,8 @@ final class WorkflowEntityModule<E> implements Module {
         return new WorkflowEntityModule<>(entityModule,
                                           EventSourcedWorkflowState.class,
                                           WorkflowSnapshotConfiguration::workflowState,
-                                          WorkflowConfigurationDefaults.WORKFLOW_STATE_SNAPSHOT_POLICY);
+                                          WorkflowConfigurationDefaults.WORKFLOW_STATE_SNAPSHOT_POLICY,
+                                          true);
     }
 
     /**
@@ -137,7 +144,8 @@ final class WorkflowEntityModule<E> implements Module {
         return new WorkflowEntityModule<>(entityModule,
                                           EventSourcedRunningWorkflows.class,
                                           WorkflowSnapshotConfiguration::runningWorkflows,
-                                          WorkflowConfigurationDefaults.RUNNING_WORKFLOWS_SNAPSHOT_POLICY);
+                                          WorkflowConfigurationDefaults.RUNNING_WORKFLOWS_SNAPSHOT_POLICY,
+                                          false);
     }
 
     /**
@@ -158,7 +166,8 @@ final class WorkflowEntityModule<E> implements Module {
         return new WorkflowEntityModule<>(entityModule,
                                           EventSourcedWaitAssociations.class,
                                           WorkflowSnapshotConfiguration::waitAssociations,
-                                          WorkflowConfigurationDefaults.WAIT_ASSOCIATIONS_SNAPSHOT_POLICY);
+                                          WorkflowConfigurationDefaults.WAIT_ASSOCIATIONS_SNAPSHOT_POLICY,
+                                          false);
     }
 
     @Override
@@ -217,6 +226,11 @@ final class WorkflowEntityModule<E> implements Module {
                                 + "instead.",
                         legacyPolicyName, entityType.getName());
             return config.getComponent(SnapshotPolicy.class, legacyPolicyName);
+        }
+        if (!snapshotsByDefault) {
+            logger.debug("Snapshots of [{}] are off, as they are only taken when snapshots are enabled.",
+                         entityType.getName());
+            return null;
         }
         if (!config.hasComponent(SnapshotStore.class)) {
             logger.debug("Snapshots of [{}] are off, as the application has no SnapshotStore.", entityType.getName());
