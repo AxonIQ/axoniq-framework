@@ -59,14 +59,17 @@ import java.util.function.Supplier;
  * <p>
  * Every half idle delay, a pass asks the running executions in memory that made no progress for the idle delay to
  * hibernate. A hibernated workflow keeps a timer for its nearest deadline, and the registry keeps the rows of its open
- * waits, which route broadcast events to it, and finds it for a cancellation request, which this support wakes it for,
- * see {@link #requestWhileHibernated(String, Function, Supplier)}. No event is written: a hibernating workflow records
- * its {@link HibernationHint hint}, its open waits and nearest deadline, in the {@link RunningWorkflowsProjection},
- * which writes it to the workflow index with a checkpoint that joins the processor's transaction, and clears it again
- * when the workflow wakes. Releasing or claiming a segment forgets the hibernated workflows of that segment. A claim
- * of the segment, here or on another node, restores every running workflow of the segment, except those whose hint it
- * accepts: it {@link #adopt(SegmentClaim, String, HibernationHint) adopts} those as hibernated workflows instead, which
- * wake for an event like any other, but for their deadline or a cancellation only once the claim caught up.
+ * waits, which route broadcast events to it, and finds it for a cancellation request, which the
+ * {@link WorkflowCancellationService} hands to this support to wake it for, see
+ * {@link #requestWhileHibernated(String, Function, Supplier)}. The registry never calls this support: the engine hands
+ * it the {@link #wakeForEvent(Hibernated, EventMessage, ProcessingContext) wake for an event} as it delivers one. No
+ * event is written: a hibernating workflow records its {@link HibernationHint hint}, its open waits and nearest
+ * deadline, in the {@link RunningWorkflowsProjection}, which writes it to the workflow index with a checkpoint that
+ * joins the processor's transaction, and clears it again when the workflow wakes. Releasing or claiming a segment
+ * forgets the hibernated workflows of that segment. A claim of the segment, here or on another node, restores every
+ * running workflow of the segment, except those whose hint it accepts: it
+ * {@link #adopt(SegmentClaim, String, HibernationHint) adopts} those as hibernated workflows instead, which wake for an
+ * event like any other, but for their deadline or a cancellation only once the claim caught up.
  * <p>
  * A wake restores the workflow from the event store in a unit of work of its own, on the execution context of the
  * claim that holds its segment, and hands it what woke it before its body starts. A wake by an event runs on the
@@ -216,15 +219,12 @@ final class WorkflowEngineHibernationSupport implements Hibernation {
     }
 
     /**
-     * Wakes the given hibernated workflow for an event, on the thread handling the event, and hands it the event before
-     * its body starts. A failure fails the event, so the event processor hands it to the workflow again. The
-     * {@link LiveWorkflows} registry calls this as it delivers the event, under the lock of the workflow.
-     *
-     * @param hibernated the hibernation of the workflow the event is for
-     * @param event      the event that wakes the workflow
-     * @param context    the context of the event
+     * {@inheritDoc}
+     * <p>
+     * A failure fails the event, so the event processor hands it to the workflow again.
      */
-    void wakeForEvent(Hibernated hibernated, EventMessage event, ProcessingContext context) {
+    @Override
+    public void wakeForEvent(Hibernated hibernated, EventMessage event, ProcessingContext context) {
         try {
             wake(hibernated, restored -> restored.onEvent(event, context));
         } catch (RuntimeException e) {
@@ -236,12 +236,12 @@ final class WorkflowEngineHibernationSupport implements Hibernation {
     }
 
     /**
-     * Makes a cancellation request of the given hibernated workflow once it woke for it: wakes it on the wake executor,
-     * once the hibernation may wake, and queues the request as a task of the restored execution before its body starts,
-     * the way an event that wakes a workflow is queued, see
-     * {@link LiveWorkflows#queue(WorkflowExecution, QueuedRequest)}. The {@link LiveWorkflows} registry calls this for
-     * a request that finds the workflow hibernated, once it released the lock of the workflow, which a wake takes only
-     * once it has a permit to load.
+     * {@inheritDoc}
+     * <p>
+     * Wakes the workflow on the wake executor, once the hibernation may wake, and queues the request as a task of the
+     * restored execution before its body starts, the way an event that wakes a workflow is queued, see
+     * {@link LiveWorkflows#queue(WorkflowExecution, QueuedRequest)}. The {@link WorkflowCancellationService} calls this
+     * once the registry released the lock of the workflow, which a wake takes only once it has a permit to load.
      * <p>
      * A restored body takes no task before it waits again where it hibernated, because every earlier wait is answered
      * from its recorded state. So the body makes the request once it replayed its steps and they are registered again.
@@ -251,16 +251,11 @@ final class WorkflowEngineHibernationSupport implements Hibernation {
      * registered again yet; when the workflow left this node meanwhile, also as its own wake restored it and it left
      * memory again before the request was queued, it is made again; when it stayed hibernated, as its wake failed
      * before the workflow was in memory, it fails.
-     *
-     * @param workflowId the identifier of the hibernated workflow the request is for
-     * @param request    makes the request against the cancellation of the woken execution
-     * @param again      makes the request again, through the registry, wherever the workflow is then
-     * @param <T>        the type of the outcome of the request
-     * @return the outcome of the request
      */
-    <T> CompletableFuture<T> requestWhileHibernated(String workflowId,
-                                                    Function<WorkflowCancellation, CompletableFuture<T>> request,
-                                                    Supplier<CompletableFuture<T>> again) {
+    @Override
+    public <T> CompletableFuture<T> requestWhileHibernated(String workflowId,
+                                                           Function<WorkflowCancellation, CompletableFuture<T>> request,
+                                                           Supplier<CompletableFuture<T>> again) {
         var queued = new QueuedRequest<>(request, again, wakeExecutor);
         var queuedOnRestored = new AtomicBoolean();
         wakeWhenArmed(workflowId, restored -> {
@@ -279,34 +274,10 @@ final class WorkflowEngineHibernationSupport implements Hibernation {
                         "Workflow '" + workflowId + "' could not be woken from hibernation"
                 ));
             } else if (!liveWorkflows.queueOnWoken(workflowId, queued)) {
-                // It left this node, or a claim restored it, meanwhile: the registry finds where it is now.
+                // It left this node, or a claim restored it, meanwhile: made again, it finds where it is now.
                 queued.makeAgain();
             }
         });
-        return queued.result();
-    }
-
-    /**
-     * Makes a cancellation request of the given execution, which woke from hibernation, once its body took it: queues
-     * the request as a task of the execution, the way {@link #requestWhileHibernated(String, Function, Supplier)} does,
-     * as a woken body registers its running steps again only as it replays them, and its body may not even have
-     * started, when its claim did not catch up. The {@link LiveWorkflows} registry calls this for every request that
-     * finds an execution that woke from hibernation, under the lock of the workflow.
-     *
-     * @param woken   the execution that woke
-     * @param request makes the request against the cancellation of the woken execution
-     * @param again   makes the request again, through the registry, wherever the workflow is then
-     * @param <T>     the type of the outcome of the request
-     * @return the outcome of the request
-     */
-    <T> CompletableFuture<T> requestOnceStarted(WorkflowExecution woken,
-                                                Function<WorkflowCancellation, CompletableFuture<T>> request,
-                                                Supplier<CompletableFuture<T>> again) {
-        var queued = new QueuedRequest<>(request, again, wakeExecutor);
-        if (!liveWorkflows.queue(woken, queued)) {
-            // It left memory meanwhile, which takes no lock: the registry finds where it is now.
-            queued.makeAgain();
-        }
         return queued.result();
     }
 
@@ -586,7 +557,7 @@ final class WorkflowEngineHibernationSupport implements Hibernation {
     Hibernated hibernationOf(SegmentClaim claim, String workflowId, HibernationHint hint,
                              CompletableFuture<Void> armed) {
         return new Hibernated(workflowId, claim, hint, liveWorkflows.rowsOf(workflowId, hint),
-                              scheduler.schedule(hint.wakeAt()), armed, this);
+                              scheduler.schedule(hint.wakeAt()), armed);
     }
 
     /**
@@ -731,11 +702,11 @@ final class WorkflowEngineHibernationSupport implements Hibernation {
 
         /**
          * Loads the workflow of the given hibernation from the event store into memory under the claim it hibernated
-         * under, in its place, see {@link LiveWorkflows#wake(Hibernated, WorkflowExecution)}, and starts it once the
-         * claim caught up, after handing the loaded execution to the given action. Fails when the workflow cannot be
-         * loaded in time. When the action or the start fails, the loaded execution swaps back for the hibernation
-         * while the claim is current, see {@link LiveWorkflows#hibernate(WorkflowExecution, Hibernated)}, and only
-         * leaves memory once the claim ended.
+         * under, in its place, see {@link LiveWorkflows#wake(Hibernated, WorkflowExecution, Executor)}, and starts it
+         * once the claim caught up, after handing the loaded execution to the given action. Fails when the workflow
+         * cannot be loaded in time. When the action or the start fails, the loaded execution swaps back for the
+         * hibernation while the claim is current, see {@link LiveWorkflows#hibernate(WorkflowExecution, Hibernated)},
+         * and only leaves memory once the claim ended.
          *
          * @param hibernated  the hibernation of the workflow
          * @param beforeStart receives the loaded execution before its body starts

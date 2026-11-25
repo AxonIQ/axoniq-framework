@@ -25,6 +25,7 @@ import org.axonframework.messaging.core.VersionedType;
 import org.axonframework.messaging.core.unitofwork.SimpleUnitOfWorkFactory;
 import org.axonframework.messaging.core.unitofwork.StubProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
+import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 import org.junit.jupiter.api.*;
@@ -84,7 +85,8 @@ class WorkflowEngineHibernatedWorkflowClaimTest {
     private final WorkflowStore workflowStore = mock(WorkflowStore.class);
     private final AtomicInteger loads = new AtomicInteger();
     private final ExecutorService wakeThreads = Executors.newVirtualThreadPerTaskExecutor();
-    private final WorkflowCancellationService cancellationService = new WorkflowCancellationService(liveWorkflows);
+    private final WorkflowCancellationService cancellationService =
+            new WorkflowCancellationService(liveWorkflows, () -> this.engine.hibernation());
     private volatile Runnable onEvent = () -> {
     };
     // Runs as the body of an execution starts.
@@ -215,7 +217,7 @@ class WorkflowEngineHibernatedWorkflowClaimTest {
         var event = new GenericEventMessage(new MessageType("paid"), Map.of("id", WORKFLOW_ID));
 
         // when
-        assertThatThrownBy(() -> liveWorkflows.deliver(WORKFLOW_ID, event, new StubProcessingContext()))
+        assertThatThrownBy(() -> deliver(event))
                 .isInstanceOf(IllegalStateException.class);
 
         // then - the ended claim no longer finds it, so it must not stay hibernated here
@@ -285,7 +287,7 @@ class WorkflowEngineHibernatedWorkflowClaimTest {
             var event = new GenericEventMessage(new MessageType("paid"), Map.of("id", WORKFLOW_ID));
 
             // when - an event wakes the workflow, whose start fails
-            assertThatThrownBy(() -> liveWorkflows.deliver(WORKFLOW_ID, event, new StubProcessingContext()))
+            assertThatThrownBy(() -> deliver(event))
                     .isInstanceOf(RuntimeException.class);
 
             // then
@@ -362,8 +364,15 @@ class WorkflowEngineHibernatedWorkflowClaimTest {
      * does.
      */
     private void adoptTheWorkflow(SegmentClaim claim) {
-        engine.hibernation.adopt(claim, Map.of(WORKFLOW_ID, new HibernationHint(DEADLINE, List.of())));
+        engine.hibernation().adopt(claim, Map.of(WORKFLOW_ID, new HibernationHint(DEADLINE, List.of())));
         assertThat(engine.hibernatedWorkflowIds()).contains(WORKFLOW_ID);
+    }
+
+    /**
+     * Delivers the given event of the workflow to it, as the engine routes it.
+     */
+    private boolean deliver(EventMessage event) {
+        return liveWorkflows.deliver(WORKFLOW_ID, event, new StubProcessingContext(), engine.hibernation()::wakeForEvent);
     }
 
     /**

@@ -414,7 +414,8 @@ class SimpleWorkflowModule<C extends WorkflowContext>
     private ComponentDefinition<WorkflowCancellationService> workflowCancellationService() {
         return ComponentDefinition.ofTypeAndName(WorkflowCancellationService.class, cancellationServiceName())
                                   .withBuilder(c -> new WorkflowCancellationService(
-                                          c.getComponent(LiveWorkflows.class, liveWorkflowsName())
+                                          c.getComponent(LiveWorkflows.class, liveWorkflowsName()),
+                                          () -> c.getComponent(WorkflowEngine.class, engineName()).hibernation()
                                   ));
     }
 

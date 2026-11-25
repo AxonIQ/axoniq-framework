@@ -83,7 +83,8 @@ class WorkflowEngineClaimActivationTest {
     private final Queue<Runnable> duePolls = new ConcurrentLinkedQueue<>();
     private final EventStore eventStore = eventStore(new InMemoryEventStorageEngine());
     private final LiveWorkflows liveWorkflows = new LiveWorkflows(new InMemoryWorkflowExecutionRepository());
-    private final WorkflowCancellationService cancellationService = new WorkflowCancellationService(liveWorkflows);
+    private final WorkflowCancellationService cancellationService =
+            new WorkflowCancellationService(liveWorkflows, () -> this.engine.hibernation());
     private WorkflowEngine engine;
     private WorkflowEngineCheckpointingSupport checkpointingSupport;
 

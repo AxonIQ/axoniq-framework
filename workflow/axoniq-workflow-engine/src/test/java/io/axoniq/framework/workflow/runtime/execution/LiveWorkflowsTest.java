@@ -85,7 +85,9 @@ class LiveWorkflowsTest {
                 loads.add(hibernated.workflowId());
                 var execution = new InspectionCountingWorkflowExecution(hibernated.workflowId());
                 var woken = new AtomicBoolean();
-                hibernated.claim().runIfCurrent(() -> woken.set(liveWorkflows.wake(hibernated, execution)));
+                hibernated.claim().runIfCurrent(
+                        () -> woken.set(liveWorkflows.wake(hibernated, execution, Runnable::run))
+                );
                 if (woken.get()) {
                     beforeStart.accept(execution);
                 }
@@ -141,9 +143,25 @@ class LiveWorkflowsTest {
     private boolean wake(Hibernated hibernated, WorkflowExecution execution) {
         var woken = new AtomicBoolean();
         try (var ignored = liveWorkflows.lock(hibernated.workflowId())) {
-            claim.runIfCurrent(() -> woken.set(liveWorkflows.wake(hibernated, execution)));
+            claim.runIfCurrent(() -> woken.set(liveWorkflows.wake(hibernated, execution, Runnable::run)));
         }
         return woken.get();
+    }
+
+    /**
+     * Delivers the given event to the given workflow, as the engine does: a hibernated workflow wakes through the
+     * hibernation support.
+     */
+    private boolean deliver(String workflowId, EventMessage event) {
+        return liveWorkflows.deliver(workflowId, event, new StubProcessingContext(), support::wakeForEvent);
+    }
+
+    /**
+     * Delivers the given broadcast event to the workflows of the given segment, as the engine does: a hibernated
+     * workflow that waits for it wakes through the hibernation support.
+     */
+    private void broadcast(Segment segment, EventMessage event) {
+        liveWorkflows.broadcast(segment, event, new StubProcessingContext(), support::wakeForEvent);
     }
 
     /**
@@ -543,7 +561,7 @@ class LiveWorkflowsTest {
             // then - and it left no waits behind that an event could wake
             assertThat(hibernatedNow).isFalse();
             assertThat(liveWorkflows.get(WORKFLOW_ID)).isNull();
-            liveWorkflows.broadcast(SEGMENT, paid("1"), new StubProcessingContext());
+            broadcast(SEGMENT, paid("1"));
             assertThat(loads).isEmpty();
         }
 
@@ -567,7 +585,7 @@ class LiveWorkflowsTest {
                     .isNotNull();
             // and an awaited event reaches it in memory, without waking it again
             var event = paid("1");
-            liveWorkflows.broadcast(SEGMENT, event, new StubProcessingContext());
+            broadcast(SEGMENT, event);
             assertThat(woken.deliveredEvents()).containsExactly(event);
             assertThat(loads).isEmpty();
         }
@@ -632,7 +650,7 @@ class LiveWorkflowsTest {
                     .isNotNull();
             // and an awaited event reaches it in memory, without waking it
             var event = paid("1");
-            liveWorkflows.broadcast(SEGMENT, event, new StubProcessingContext());
+            broadcast(SEGMENT, event);
             assertThat(restored.deliveredEvents()).containsExactly(event);
             assertThat(loads).isEmpty();
         }
@@ -668,7 +686,7 @@ class LiveWorkflowsTest {
             assertThat(swappedBack).isTrue();
             assertThat(liveWorkflows.get(WORKFLOW_ID)).isSameAs(hibernated);
             assertThat(repository.findById(WORKFLOW_ID)).isEmpty();
-            liveWorkflows.broadcast(SEGMENT, paid("1"), new StubProcessingContext());
+            broadcast(SEGMENT, paid("1"));
             assertThat(loads).containsExactly(WORKFLOW_ID);
         }
 
@@ -688,7 +706,7 @@ class LiveWorkflowsTest {
             assertThat(dropped).isTrue();
             assertThat(liveWorkflows.get(WORKFLOW_ID)).isNull();
             assertThat(liveWorkflows.hibernatedWorkflowIds()).isEmpty();
-            liveWorkflows.broadcast(SEGMENT, paid("1"), new StubProcessingContext());
+            broadcast(SEGMENT, paid("1"));
             assertThat(loads).isEmpty();
         }
 
@@ -738,7 +756,7 @@ class LiveWorkflowsTest {
             adopt(awaitingPayment(OTHER_ID, "2"));
 
             // when
-            liveWorkflows.broadcast(SEGMENT, paid("1"), new StubProcessingContext());
+            broadcast(SEGMENT, paid("1"));
 
             // then - only the workflow awaiting it, on the handling thread
             assertThat(loads).containsExactly(WORKFLOW_ID);
@@ -751,7 +769,7 @@ class LiveWorkflowsTest {
             adopt(awaitingPayment(WORKFLOW_ID, "1"));
 
             // when
-            liveWorkflows.broadcast(anotherSegmentThan(SEGMENT), paid("1"), new StubProcessingContext());
+            broadcast(anotherSegmentThan(SEGMENT), paid("1"));
 
             // then
             assertThat(loads).isEmpty();
@@ -769,7 +787,7 @@ class LiveWorkflowsTest {
             var event = paid("1");
 
             // when
-            liveWorkflows.broadcast(SEGMENT, event, new StubProcessingContext());
+            broadcast(SEGMENT, event);
 
             // then - the lookup ran again, without a swap interleaving, and found it in memory
             assertThat(woken.deliveredEvents()).containsExactly(event);
@@ -791,7 +809,7 @@ class LiveWorkflowsTest {
             var event = paid("1");
 
             // when
-            liveWorkflows.broadcast(SEGMENT, event, new StubProcessingContext());
+            broadcast(SEGMENT, event);
 
             // then
             assertThat(woken.deliveredEvents()).containsExactly(event);
@@ -822,7 +840,7 @@ class LiveWorkflowsTest {
             });
 
             // when
-            liveWorkflows.broadcast(SEGMENT, paid("1"), new StubProcessingContext());
+            broadcast(SEGMENT, paid("1"));
 
             // then - the swap ran only once the second lookup ended
             assertThat(repository.listings()).isEqualTo(2);
@@ -863,7 +881,7 @@ class LiveWorkflowsTest {
             var broadcast = new CompletableFuture<Void>();
             var broadcasting = Thread.ofPlatform().start(() -> {
                 try {
-                    liveWorkflows.broadcast(SEGMENT, event, new StubProcessingContext());
+                    broadcast(SEGMENT, event);
                     broadcast.complete(null);
                 } catch (Throwable e) {
                     broadcast.completeExceptionally(e);
@@ -904,7 +922,7 @@ class LiveWorkflowsTest {
             // when
             var delivered = new CompletableFuture<Boolean>();
             var delivering = Thread.ofPlatform().start(
-                    () -> delivered.complete(liveWorkflows.deliver(WORKFLOW_ID, event, new StubProcessingContext()))
+                    () -> delivered.complete(deliver(WORKFLOW_ID, event))
             );
             await().atMost(TIMEOUT).until(() -> isBlocked(delivering) || delivered.isDone());
 
@@ -934,7 +952,7 @@ class LiveWorkflowsTest {
             // when
             boolean delivered;
             try {
-                delivered = liveWorkflows.deliver(WORKFLOW_ID, event, new StubProcessingContext());
+                delivered = deliver(WORKFLOW_ID, event);
             } finally {
                 unlock.countDown();
             }
@@ -951,7 +969,7 @@ class LiveWorkflowsTest {
             var event = paid("1");
 
             // when
-            boolean delivered = liveWorkflows.deliver(WORKFLOW_ID, event, new StubProcessingContext());
+            boolean delivered = deliver(WORKFLOW_ID, event);
 
             // then
             assertThat(delivered).isTrue();
@@ -965,7 +983,7 @@ class LiveWorkflowsTest {
         @Test
         void deliversNothingToAWorkflowThatIsNotLive() {
             // when
-            boolean delivered = liveWorkflows.deliver(WORKFLOW_ID, paid("1"), new StubProcessingContext());
+            boolean delivered = deliver(WORKFLOW_ID, paid("1"));
 
             // then
             assertThat(delivered).isFalse();
@@ -975,7 +993,8 @@ class LiveWorkflowsTest {
     @Nested
     class CancellationRequests {
 
-        private final WorkflowCancellationService service = new WorkflowCancellationService(liveWorkflows);
+        private final WorkflowCancellationService service =
+                new WorkflowCancellationService(liveWorkflows, () -> support);
 
         @Test
         void failARequestThatAWokenExecutionTakesNoTaskForAndLeaveNothingQueuedOnIt() {

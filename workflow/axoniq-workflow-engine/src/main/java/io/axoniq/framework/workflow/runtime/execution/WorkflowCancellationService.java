@@ -15,15 +15,19 @@ import org.jspecify.annotations.Nullable;
 import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Function;
+import java.util.function.Supplier;
 
 /**
  * Internal entry point for requesting cancellation of running workflows by identifier.
  * <p>
  * The service finds each workflow through the {@link LiveWorkflows} of its workflow module, which hands a request to
- * the per-execution {@link WorkflowCancellation} coordinator of the workflow's execution in memory, or wakes a
- * hibernated workflow for it. It does not implement cancellation policy itself; the coordinator schedules cancellation
- * safely on the workflow control thread. The workflow module creates one per module, from its {@link LiveWorkflows},
- * and the {@link SimpleWorkflowManager} delegates to it without exposing the execution implementation.
+ * the per-execution {@link WorkflowCancellation} coordinator of the workflow's execution in memory, or reports the
+ * workflow hibernated, in which case the service has the {@link Hibernation} of the module's {@link WorkflowEngine}
+ * wake the workflow for the request. It does not implement cancellation policy itself; the
+ * coordinator schedules cancellation safely on the workflow control thread. The workflow module creates one per module,
+ * from its {@link LiveWorkflows} and its {@link WorkflowEngine}, and the {@link SimpleWorkflowManager} delegates to it
+ * without exposing the execution implementation.
  *
  * @author Simon Zambrovski
  * @author Stefan Dragisic
@@ -33,17 +37,26 @@ import java.util.concurrent.CompletableFuture;
 public final class WorkflowCancellationService implements DescribableComponent {
 
     private final LiveWorkflows liveWorkflows;
+    private final Supplier<Hibernation> hibernation;
 
     /**
      * Creates the cancellation service of a workflow module, which finds the workflows to cancel among the given live
-     * workflows. Internal, as the workflow module creates the service from the {@link LiveWorkflows} it shares with its
-     * {@link WorkflowEngine}; a service created from other live workflows reaches none of the module's workflows.
+     * workflows, and wakes a hibernated one through the supplied {@link Hibernation}. Internal, as the workflow module
+     * creates the service from the {@link LiveWorkflows} it shares with its {@link WorkflowEngine}, and supplies the
+     * {@link WorkflowEngine#hibernation() hibernation} of that engine; a service created from other live workflows
+     * reaches none of the module's workflows.
+     * <p>
+     * The hibernation is supplied, and read for each request a hibernated workflow gets, as the engine enables
+     * hibernation only as it starts, after the module created this service.
      *
      * @param liveWorkflows the live workflows of the workflow module
+     * @param hibernation   supplies the hibernation of the engine of the workflow module, which wakes a hibernated
+     *                      workflow for a request
      */
     @Internal
-    public WorkflowCancellationService(LiveWorkflows liveWorkflows) {
+    public WorkflowCancellationService(LiveWorkflows liveWorkflows, Supplier<Hibernation> hibernation) {
         this.liveWorkflows = Objects.requireNonNull(liveWorkflows, "The LiveWorkflows must not be null.");
+        this.hibernation = Objects.requireNonNull(hibernation, "The Hibernation supplier must not be null.");
     }
 
     /**
@@ -63,8 +76,8 @@ public final class WorkflowCancellationService implements DescribableComponent {
     public CompletableFuture<Boolean> requestStepCancellation(String workflowId,
                                                               String stepName,
                                                               @Nullable Throwable cause) {
-        return liveWorkflows.request(requireWorkflowId(workflowId),
-                                     cancellation -> cancellation.requestStepCancellation(stepName, cause));
+        return request(requireWorkflowId(workflowId),
+                       cancellation -> cancellation.requestStepCancellation(stepName, cause));
     }
 
     /**
@@ -81,8 +94,8 @@ public final class WorkflowCancellationService implements DescribableComponent {
      */
     public CompletableFuture<Integer> requestCancellationOfAllSteps(String workflowId,
                                                                     @Nullable Throwable cause) {
-        return liveWorkflows.request(requireWorkflowId(workflowId),
-                                     cancellation -> cancellation.requestCancellationOfAllSteps(cause));
+        return request(requireWorkflowId(workflowId),
+                       cancellation -> cancellation.requestCancellationOfAllSteps(cause));
     }
 
     /**
@@ -98,8 +111,7 @@ public final class WorkflowCancellationService implements DescribableComponent {
      *                                restored by a claim of its segment that did not catch up yet
      */
     public CompletableFuture<Void> requestWorkflowCancellation(String workflowId, @Nullable Throwable cause) {
-        return liveWorkflows.request(requireWorkflowId(workflowId),
-                                     cancellation -> cancellation.requestWorkflowCancellation(cause));
+        return request(requireWorkflowId(workflowId), cancellation -> cancellation.requestWorkflowCancellation(cause));
     }
 
     /**
@@ -110,6 +122,23 @@ public final class WorkflowCancellationService implements DescribableComponent {
     @Override
     public void describeTo(ComponentDescriptor descriptor) {
         descriptor.describeProperty("registeredWorkflowIds", liveWorkflows.cancellableWorkflowIds());
+    }
+
+    /**
+     * Makes the given request of the given workflow: the {@link LiveWorkflows} registry makes it, under the lock of the
+     * workflow, against the execution in memory or queued on it; when the registry finds the workflow hibernated, the
+     * hibernation wakes it for the request, once the registry released that lock. A request queued on an
+     * execution that leaves memory before it took the request is made again through this method, so it finds the
+     * workflow wherever it is then, hibernated included.
+     */
+    private <T> CompletableFuture<T> request(String workflowId,
+                                             Function<WorkflowCancellation, CompletableFuture<T>> request) {
+        Supplier<CompletableFuture<T>> again = () -> request(workflowId, request);
+        return switch (liveWorkflows.request(workflowId, request, again)) {
+            case LiveWorkflows.Requested.Made<T>(var outcome) -> outcome;
+            case LiveWorkflows.Requested.WorkflowHibernated<T>() ->
+                    hibernation.get().requestWhileHibernated(workflowId, request, again);
+        };
     }
 
     private static String requireWorkflowId(String workflowId) {

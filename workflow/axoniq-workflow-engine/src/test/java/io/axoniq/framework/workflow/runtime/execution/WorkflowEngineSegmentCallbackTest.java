@@ -106,8 +106,8 @@ class WorkflowEngineSegmentCallbackTest {
         liveWorkflows.enter(FOREIGN_ID, false, () -> foreign);
         liveWorkflows.markCancellable(owned);
         liveWorkflows.markCancellable(foreign);
-        var cancellationService = new WorkflowCancellationService(liveWorkflows);
         var engine = engine(liveWorkflows, mock(WorkflowStore.class));
+        var cancellationService = new WorkflowCancellationService(liveWorkflows, () -> engine.hibernation());
 
         var release = engine.releaseWorkflowsFor(SEGMENT);
 

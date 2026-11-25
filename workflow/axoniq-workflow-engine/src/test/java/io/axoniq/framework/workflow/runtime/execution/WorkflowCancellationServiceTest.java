@@ -33,7 +33,8 @@ class WorkflowCancellationServiceTest {
     private static final String WORKFLOW_ID = "workflow-id";
 
     private final LiveWorkflows liveWorkflows = new LiveWorkflows(new InMemoryWorkflowExecutionRepository());
-    private final WorkflowCancellationService service = new WorkflowCancellationService(liveWorkflows);
+    private final WorkflowCancellationService service =
+            new WorkflowCancellationService(liveWorkflows, () -> NoHibernation.INSTANCE);
 
     private static WorkflowExecution execution(String workflowId, WorkflowCancellation cancellation) {
         var execution = mock(CancellationCapableExecution.class);

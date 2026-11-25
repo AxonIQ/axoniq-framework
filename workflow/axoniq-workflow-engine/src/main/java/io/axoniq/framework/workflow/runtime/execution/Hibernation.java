@@ -9,13 +9,18 @@ package io.axoniq.framework.workflow.runtime.execution;
 
 import io.axoniq.framework.workflow.index.api.WorkflowIndex.HibernationHint;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
+import io.axoniq.framework.workflow.runtime.execution.LiveWorkflows.Hibernated;
 import io.axoniq.framework.workflow.runtime.execution.RunningWorkflowsClaimLoader.ClaimedIndex;
 import org.axonframework.common.annotation.Internal;
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 import org.jspecify.annotations.Nullable;
 
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 /**
@@ -35,13 +40,21 @@ import java.util.function.Supplier;
  * </ul>
  * <p>
  * The engine starts with {@link NoHibernation}, and replaces it once, before it starts, when its module enables
- * hibernation, see {@link WorkflowEngine#enableHibernation}. Internal, as only the engine creates and uses it.
+ * hibernation, see {@link WorkflowEngine#enableHibernation}. Public, as the workflow module hands the
+ * {@link WorkflowEngine#hibernation() hibernation of its engine} to its {@link WorkflowCancellationService}; internal, as
+ * only the engine creates it.
+ * <p>
+ * The {@link LiveWorkflows} registry never calls the hibernation: a {@link LiveWorkflows.Hibernated hibernated} entry
+ * is data only. The engine hands the {@link #wakeForEvent(Hibernated, EventMessage, ProcessingContext) wake} of its
+ * hibernation to the registry as it delivers an event, which runs it under the lock of the workflow, and the
+ * {@link WorkflowCancellationService} hands a request that finds the workflow hibernated to the hibernation, see
+ * {@link #requestWhileHibernated(String, Function, Supplier)}.
  *
  * @author Allard Buijze
  * @since 5.5.0
  */
 @Internal
-sealed interface Hibernation permits WorkflowEngineHibernationSupport, NoHibernation {
+public sealed interface Hibernation permits WorkflowEngineHibernationSupport, NoHibernation {
 
     /**
      * Returns whether workflows may hibernate. The engine never asks: it exists for the
@@ -143,6 +156,32 @@ sealed interface Hibernation permits WorkflowEngineHibernationSupport, NoHiberna
      * @return the result of the restore
      */
     <T> T restoreGuarded(String workflowId, Supplier<T> restore);
+
+    /**
+     * Wakes the given hibernated workflow for an event, on the thread handling the event, and hands it the event before
+     * its body starts. The {@link LiveWorkflows} registry runs this under the lock of the workflow, as it delivers the
+     * event, see {@link LiveWorkflows#deliver(String, EventMessage, ProcessingContext, LiveWorkflows.WakeForEvent)}.
+     *
+     * @param hibernated the hibernation of the workflow the event is for
+     * @param event      the event that wakes the workflow
+     * @param context    the context of the event
+     */
+    void wakeForEvent(Hibernated hibernated, EventMessage event, ProcessingContext context);
+
+    /**
+     * Makes a cancellation request of the given hibernated workflow once it woke for it. The
+     * {@link WorkflowCancellationService} calls this for a request the {@link LiveWorkflows} registry found the
+     * workflow hibernated for, once the registry released the lock of the workflow.
+     *
+     * @param workflowId the identifier of the hibernated workflow the request is for
+     * @param request    makes the request against the cancellation of the woken execution
+     * @param again      makes the request again, through the cancellation service, wherever the workflow is then
+     * @param <T>        the type of the outcome of the request
+     * @return the outcome of the request
+     */
+    <T> CompletableFuture<T> requestWhileHibernated(String workflowId,
+                                                    Function<WorkflowCancellation, CompletableFuture<T>> request,
+                                                    Supplier<CompletableFuture<T>> again);
 
     /**
      * Brings the given execution, which the given claim restored, into memory in place of a hibernation of its workflow

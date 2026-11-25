@@ -96,10 +96,13 @@ public class WorkflowEngine implements
     private WorkflowEngineCheckpointingSupport checkpointingSupport;
     private volatile Consumer<Segment> segmentReleaser = segment -> {
     };
-    // Set once, by enableHibernation, before the engine starts; volatile, as the manager of the module reads it through
-    // isHibernationEnabled() on the threads of its queries. Package-private so a test can adopt a hibernated workflow
-    // under a claim of its own.
-    volatile Hibernation hibernation = NoHibernation.INSTANCE;
+    // Set once, by enableHibernation, before the engine starts; volatile, as the manager and the cancellation service
+    // of the module read it on the threads of their queries and requests.
+    private volatile Hibernation hibernation = NoHibernation.INSTANCE;
+    // Wakes a hibernated workflow an event is routed to, through the hibernation of this engine. A field, so routing an
+    // event does not create a method reference for it.
+    private final LiveWorkflows.WakeForEvent wakeForEvent =
+            (hibernated, event, context) -> hibernation.wakeForEvent(hibernated, event, context);
     // Set by start, so hibernation cannot be enabled once a claim may have restored workflows without it. Guarded by
     // the monitor of this engine, as start and enableHibernation are synchronized, so the check and the act of each
     // run as one.
@@ -268,7 +271,7 @@ public class WorkflowEngine implements
         }
         this.hibernation = new WorkflowEngineHibernationSupport(
                 scheduler, clock, liveWorkflows, runningWorkflows,
-                (hibernated, beforeStart) -> wakeWorkflow(hibernated, beforeStart, wakeTimeout),
+                (hibernated, beforeStart) -> wakeWorkflow(hibernated, beforeStart, wakeTimeout, wakeExecutor),
                 idleDelay, wakeExecutor
         );
     }
@@ -283,6 +286,19 @@ public class WorkflowEngine implements
     @Internal
     public boolean isHibernationEnabled() {
         return hibernation.isEnabled();
+    }
+
+    /**
+     * Returns the hibernation of this engine: the {@link WorkflowEngineHibernationSupport} once its workflow module
+     * enabled hibernation, see {@link #enableHibernation(WorkflowScheduler, Clock, Duration, Duration, Executor)}, and
+     * {@link NoHibernation} before, or without it. The {@link WorkflowCancellationService} of the module reads it for
+     * each request that finds its workflow hibernated, to wake that workflow.
+     *
+     * @return the hibernation of this engine
+     */
+    @Internal
+    public Hibernation hibernation() {
+        return hibernation;
     }
 
     /**
@@ -367,8 +383,9 @@ public class WorkflowEngine implements
                 return;
             }
             // Skip events whose workflowId isn't owned by this engine (expected in multi-module setups). A hibernated
-            // workflow wakes for an event of its own.
-            if (!liveWorkflows.deliver(workflowId, event, context)) {
+            // workflow wakes for an event of its own, through this engine's hibernation, under the lock of the
+            // workflow.
+            if (!liveWorkflows.deliver(workflowId, event, context, wakeForEvent)) {
                 logger.debug("Ignoring event [{}] for workflowId [{}] - no matching execution in this engine.",
                              event.type(), workflowId);
                 return;
@@ -383,8 +400,9 @@ public class WorkflowEngine implements
             // the wake exactly-once per instance - only the owning segment's delivery reaches an execution.
             // The registry lists this segment's instances only: it is node-wide, and every segment handles a
             // broadcast event, so visiting all of them once per claimed segment would cost quadratic work.
-            // With hibernation, hibernated workflows waiting for the event are woken as well.
-            liveWorkflows.broadcast(segment, event, context);
+            // With hibernation, hibernated workflows waiting for the event are woken as well, through this engine's
+            // hibernation, under the lock of each workflow.
+            liveWorkflows.broadcast(segment, event, context, wakeForEvent);
         }
     }
 
@@ -909,13 +927,15 @@ public class WorkflowEngine implements
      * the place of the hibernation in the live workflows while the claim is current, and runs on the execution context
      * of the claim. The given action runs on the loaded execution before its body starts. When that action or the start
      * fails, the loaded execution swaps back for the hibernation while the claim is current, so the workflow stays only
-     * hibernated, and only leaves memory once the claim ended.
+     * hibernated, and only leaves memory once the claim ended. The cancellation requests queued on the loaded
+     * execution are answered on the given {@code wakeExecutor} when it leaves memory before its body took them.
      *
      * @return {@code false} when the workflow ended elsewhere, or the claim ended meanwhile
      */
     private boolean wakeWorkflow(LiveWorkflows.Hibernated hibernated,
                                  Consumer<WorkflowExecution> beforeStart,
-                                 Duration wakeTimeout) {
+                                 Duration wakeTimeout,
+                                 Executor wakeExecutor) {
         var claim = hibernated.claim();
         var workflowId = hibernated.workflowId();
         var segment = claim.segment();
@@ -938,7 +958,7 @@ public class WorkflowEngine implements
         execution.restoreAppendPosition(sourced.position());
         boolean[] woken = new boolean[1];
         // Only while the claim is current, like a restore.
-        claim.runIfCurrent(() -> woken[0] = liveWorkflows.wake(hibernated, execution));
+        claim.runIfCurrent(() -> woken[0] = liveWorkflows.wake(hibernated, execution, wakeExecutor));
         if (!woken[0]) {
             logger.debug("Not waking workflow '{}': the claim of segment {} failed or ended meanwhile.",
                          workflowId, segment.getSegmentId());

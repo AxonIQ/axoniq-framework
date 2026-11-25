@@ -9,13 +9,18 @@ package io.axoniq.framework.workflow.runtime.execution;
 
 import io.axoniq.framework.workflow.index.api.WorkflowIndex.HibernationHint;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
+import io.axoniq.framework.workflow.runtime.execution.LiveWorkflows.Hibernated;
 import io.axoniq.framework.workflow.runtime.execution.RunningWorkflowsClaimLoader.ClaimedIndex;
 import org.axonframework.common.annotation.Internal;
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 import org.jspecify.annotations.Nullable;
 
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 /**
@@ -32,13 +37,13 @@ import java.util.function.Supplier;
  *     <li>an event reaches an execution without the lock of its workflow, as no execution
  *     {@link #mayHibernate(SegmentClaim) may hibernate}.</li>
  * </ul>
- * Internal, as only the engine uses it.
+ * Internal, as only the engine creates it, see {@link Hibernation}.
  *
  * @author Allard Buijze
  * @since 5.5.0
  */
 @Internal
-enum NoHibernation implements Hibernation {
+public enum NoHibernation implements Hibernation {
 
     /**
      * The single instance.
@@ -122,6 +127,28 @@ enum NoHibernation implements Hibernation {
 
     /**
      * {@inheritDoc}
+     *
+     * @throws IllegalStateException always, as no workflow is hibernated without hibernation
+     */
+    @Override
+    public void wakeForEvent(Hibernated hibernated, EventMessage event, ProcessingContext context) {
+        throw notHibernating(hibernated.workflowId());
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * @throws IllegalStateException always, as no workflow is hibernated without hibernation
+     */
+    @Override
+    public <T> CompletableFuture<T> requestWhileHibernated(String workflowId,
+                                                           Function<WorkflowCancellation, CompletableFuture<T>> request,
+                                                           Supplier<CompletableFuture<T>> again) {
+        throw notHibernating(workflowId);
+    }
+
+    /**
+     * {@inheritDoc}
      * <p>
      * Never restores over a hibernation, as no workflow is hibernated without hibernation.
      */
@@ -131,5 +158,11 @@ enum NoHibernation implements Hibernation {
                                           WorkflowExecution execution,
                                           boolean mayHibernate) {
         return false;
+    }
+
+    private static IllegalStateException notHibernating(String workflowId) {
+        return new IllegalStateException(
+                "Workflow '%s' is hibernated, but hibernation is not enabled.".formatted(workflowId)
+        );
     }
 }

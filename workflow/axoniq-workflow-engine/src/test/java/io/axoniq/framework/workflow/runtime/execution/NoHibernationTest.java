@@ -7,12 +7,17 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
+import io.axoniq.framework.workflow.index.api.WorkflowIndex;
 import io.axoniq.framework.workflow.index.api.WorkflowIndex.HibernationHint;
+import io.axoniq.framework.workflow.runtime.execution.LiveWorkflows.Hibernated;
 import io.axoniq.framework.workflow.runtime.execution.RunningWorkflowsClaimLoader.ClaimedIndex;
+import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.unitofwork.StubProcessingContext;
+import org.axonframework.messaging.eventhandling.GenericEventMessage;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 import org.junit.jupiter.api.*;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -23,10 +28,12 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Tests that {@link NoHibernation} keeps the behavior of an engine without hibernation: no execution may hibernate, a
- * claim restores every running workflow, and a restore takes no lock of its workflow.
+ * claim restores every running workflow, a restore takes no lock of its workflow, and a request to wake a hibernated
+ * workflow, which cannot exist, fails.
  *
  * @author Allard Buijze
  */
@@ -88,6 +95,45 @@ class NoHibernationTest {
 
             // then
             assertThat(hibernation.hibernatedWorkflowIds()).isEmpty();
+        }
+    }
+
+    @Nested
+    class HibernatedWorkflows {
+
+        private Hibernated hibernation() {
+            var liveWorkflows = new LiveWorkflows(new InMemoryWorkflowExecutionRepository());
+            var support = new WorkflowEngineHibernationSupport(new ControllableWorkflowScheduler(),
+                                                               Clock.systemUTC(),
+                                                               liveWorkflows,
+                                                               new RunningWorkflowsProjection(WorkflowIndex.none(),
+                                                                                              "orders"),
+                                                               (hibernated, beforeStart) -> false,
+                                                               Duration.ofMinutes(1),
+                                                               Runnable::run);
+            return support.hibernationOf(claimWithAnExecutionContext(), WORKFLOW_ID, hint(),
+                                         CompletableFuture.completedFuture(null));
+        }
+
+        @Test
+        void cannotBeWokenForAnEventAsNoneExists() {
+            // given
+            var event = new GenericEventMessage(new MessageType("paid"), Map.of());
+
+            // when / then
+            assertThatThrownBy(() -> hibernation.wakeForEvent(hibernation(), event, new StubProcessingContext()))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining(WORKFLOW_ID);
+        }
+
+        @Test
+        void cannotBeWokenForACancellationRequestAsNoneExists() {
+            assertThatThrownBy(() -> hibernation.<Void>requestWhileHibernated(
+                    WORKFLOW_ID,
+                    cancellation -> cancellation.requestWorkflowCancellation(null),
+                    () -> CompletableFuture.completedFuture(null)
+            )).isInstanceOf(IllegalStateException.class)
+              .hasMessageContaining(WORKFLOW_ID);
         }
     }
 

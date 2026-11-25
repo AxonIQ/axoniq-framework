@@ -97,14 +97,15 @@ class WorkflowEngineHibernationSupportAdoptionTest {
     };
     private final List<String> loads = new CopyOnWriteArrayList<>();
     private final LiveWorkflows liveWorkflows = new LiveWorkflows(new InMemoryWorkflowExecutionRepository());
-    private final WorkflowCancellationService cancellationService = new WorkflowCancellationService(liveWorkflows);
     // Records the wake, and brings an execution into memory in place of the hibernation, as the engine does,
     // swapping it back for the hibernation when the action before its start fails.
     private final WorkflowEngineHibernationSupport.WorkflowLoader wakeInMemory = (hibernated, beforeStart) -> {
         loads.add(hibernated.workflowId());
         var execution = new InspectionCountingWorkflowExecution(hibernated.workflowId());
         var woken = new AtomicBoolean();
-        hibernated.claim().runIfCurrent(() -> woken.set(liveWorkflows.wake(hibernated, execution)));
+        hibernated.claim().runIfCurrent(
+                () -> woken.set(liveWorkflows.wake(hibernated, execution, wakeExecutor))
+        );
         if (woken.get()) {
             try {
                 beforeStart.accept(execution);
@@ -125,6 +126,8 @@ class WorkflowEngineHibernationSupportAdoptionTest {
             Duration.ofSeconds(30),
             wakeExecutor
     );
+    private final WorkflowCancellationService cancellationService =
+            new WorkflowCancellationService(liveWorkflows, () -> support);
     private SegmentClaim claim;
 
     @BeforeEach
@@ -258,7 +261,7 @@ class WorkflowEngineHibernationSupportAdoptionTest {
             adopt(Map.of("wf-1", futureDeadline("1")));
 
             // when
-            liveWorkflows.broadcast(SEGMENT, paid("1"), new StubProcessingContext());
+            liveWorkflows.broadcast(SEGMENT, paid("1"), new StubProcessingContext(), support::wakeForEvent);
             projection.decideCheckpoint(SEGMENT).write(null).orTimeout(5, TimeUnit.SECONDS).join();
 
             // then
@@ -278,7 +281,7 @@ class WorkflowEngineHibernationSupportAdoptionTest {
 
             // when
             try {
-                liveWorkflows.broadcast(SEGMENT, paid("1"), new StubProcessingContext());
+                liveWorkflows.broadcast(SEGMENT, paid("1"), new StubProcessingContext(), support::wakeForEvent);
             } catch (IllegalStateException expected) {
                 // fails the event, so the processor delivers it again
             }
@@ -318,7 +321,7 @@ class WorkflowEngineHibernationSupportAdoptionTest {
         void queuesARequestOnAWorkflowThatAnEventWokeWhileItsClaimCatchesUp() {
             // given - an adopted workflow that an event woke while its claim catches up, so its body did not start
             adopt(Map.of("wf-1", futureDeadline("1")));
-            liveWorkflows.deliver("wf-1", paid("1"), new StubProcessingContext());
+            liveWorkflows.deliver("wf-1", paid("1"), new StubProcessingContext(), support::wakeForEvent);
             var woken = (InspectionCountingWorkflowExecution) liveWorkflows.find("wf-1").orElseThrow();
 
             // when
@@ -347,7 +350,7 @@ class WorkflowEngineHibernationSupportAdoptionTest {
             var cancelled = cancellationService.requestCancellationOfAllSteps("wf-1", null);
 
             // when - an event wakes the workflow first, after which the wake of the request runs
-            liveWorkflows.deliver("wf-1", paid("1"), new StubProcessingContext());
+            liveWorkflows.deliver("wf-1", paid("1"), new StubProcessingContext(), support::wakeForEvent);
             wakeGate.countDown();
             await().atMost(5, TimeUnit.SECONDS)
                    .until(WorkflowEngineHibernationSupportAdoptionTest.this::noWakeInProgress);
@@ -362,7 +365,7 @@ class WorkflowEngineHibernationSupportAdoptionTest {
             var woken = new ReplayingExecution("wf-1");
             adopt(Map.of("wf-1", futureDeadline("1")));
             activate();
-            liveWorkflows.deliver("wf-1", paid("1"), new StubProcessingContext());
+            liveWorkflows.deliver("wf-1", paid("1"), new StubProcessingContext(), support::wakeForEvent);
 
             // when
             var cancelled = cancellationService.requestCancellationOfAllSteps("wf-1", null);
@@ -452,7 +455,9 @@ class WorkflowEngineHibernationSupportAdoptionTest {
             execution = mocked;
             loader = (hibernated, beforeStart) -> {
                 var woken = new AtomicBoolean();
-                hibernated.claim().runIfCurrent(() -> woken.set(liveWorkflows.wake(hibernated, execution)));
+                hibernated.claim().runIfCurrent(
+                        () -> woken.set(liveWorkflows.wake(hibernated, execution, wakeExecutor))
+                );
                 if (woken.get()) {
                     beforeStart.accept(execution);
                     liveWorkflows.markCancellable(execution);

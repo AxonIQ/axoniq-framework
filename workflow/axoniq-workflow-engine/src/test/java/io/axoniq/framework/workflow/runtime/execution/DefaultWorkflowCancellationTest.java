@@ -95,7 +95,7 @@ class DefaultWorkflowCancellationTest {
         var liveWorkflows = new LiveWorkflows(new InMemoryWorkflowExecutionRepository());
         liveWorkflows.enter("workflow-id", false, () -> execution);
         liveWorkflows.markCancellable(execution);
-        var service = new WorkflowCancellationService(liveWorkflows);
+        var service = new WorkflowCancellationService(liveWorkflows, () -> NoHibernation.INSTANCE);
         var request = service.requestWorkflowCancellation("workflow-id", null);
 
         liveWorkflows.leave(execution);
@@ -117,16 +117,18 @@ class DefaultWorkflowCancellationTest {
         var liveWorkflows = new LiveWorkflows(new InMemoryWorkflowExecutionRepository());
         var hibernated = hibernationOf(liveWorkflows, "workflow-id");
         assertThat(liveWorkflows.adopt(hibernated)).isTrue();
-        assertThat(liveWorkflows.wake(hibernated, execution)).isTrue();
+        assertThat(liveWorkflows.wake(hibernated, execution, Runnable::run)).isTrue();
         liveWorkflows.markCancellable(execution);
         // and a workflow cancellation queued as its task, during which the start fails: after the failed start marked
         // the execution left, and before the request is pending, so only the check of the request itself can abort it
-        var request = liveWorkflows.request("workflow-id", requested -> {
+        var requested = liveWorkflows.<Void>request("workflow-id", made -> {
             try (var ignored = liveWorkflows.lock("workflow-id")) {
                 liveWorkflows.failStart(execution, new IllegalStateException("The start failed."));
             }
-            return requested.requestWorkflowCancellation(null);
-        });
+            return made.requestWorkflowCancellation(null);
+        }, () -> CompletableFuture.failedFuture(new IllegalStateException("The request is not made again.")));
+        assertThat(requested).isInstanceOf(LiveWorkflows.Requested.Made.class);
+        var request = ((LiveWorkflows.Requested.Made<Void>) requested).outcome();
 
         // when - the body takes the task
         var task = execution.getNextTask();
@@ -151,10 +153,10 @@ class DefaultWorkflowCancellationTest {
         var liveWorkflows = new LiveWorkflows(new InMemoryWorkflowExecutionRepository());
         var hibernated = hibernationOf(liveWorkflows, "workflow-id");
         assertThat(liveWorkflows.adopt(hibernated)).isTrue();
-        assertThat(liveWorkflows.wake(hibernated, execution)).isTrue();
+        assertThat(liveWorkflows.wake(hibernated, execution, Runnable::run)).isTrue();
         liveWorkflows.markCancellable(execution);
         // and a step cancellation queued as its task
-        var service = new WorkflowCancellationService(liveWorkflows);
+        var service = new WorkflowCancellationService(liveWorkflows, () -> NoHibernation.INSTANCE);
         var request = service.requestStepCancellation("workflow-id", "step", null);
         var task = execution.getNextTask();
         assertThat(task).isNotNull();

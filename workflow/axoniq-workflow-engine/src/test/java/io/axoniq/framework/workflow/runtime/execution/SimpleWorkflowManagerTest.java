@@ -448,7 +448,7 @@ class SimpleWorkflowManagerTest {
                                                  boolean projectedHistory) {
         return new SimpleWorkflowManager(history,
                                          liveWorkflows,
-                                         new WorkflowCancellationService(liveWorkflows),
+                                         new WorkflowCancellationService(liveWorkflows, () -> NoHibernation.INSTANCE),
                                          store,
                                          new SimpleUnitOfWorkFactory(EmptyApplicationContext.INSTANCE),
                                          Runnable::run,
