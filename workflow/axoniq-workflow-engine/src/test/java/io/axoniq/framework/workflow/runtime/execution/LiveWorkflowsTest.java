@@ -386,7 +386,7 @@ class LiveWorkflowsTest {
             // then
             assertThat(liveWorkflows.find(WORKFLOW_ID)).isEmpty();
             assertThat(repository.findAll()).isEmpty();
-            assertThat(liveWorkflows.unsafeOf(SEGMENT)).isEmpty();
+            assertThat(liveWorkflows.safePoints().unsafeOf(SEGMENT)).isEmpty();
         }
     }
 
@@ -406,7 +406,7 @@ class LiveWorkflowsTest {
             safePointsOf(foreign).onMarkedUnsafe();
 
             // then
-            assertThat(liveWorkflows.unsafeOf(SEGMENT))
+            assertThat(liveWorkflows.safePoints().unsafeOf(SEGMENT))
                     .extracting(LiveWorkflows.InMemory::execution)
                     .containsExactly(owned);
         }
@@ -422,7 +422,7 @@ class LiveWorkflowsTest {
             safePointsOf(execution).onMarkedSafe();
 
             // then
-            assertThat(liveWorkflows.unsafeOf(SEGMENT)).isEmpty();
+            assertThat(liveWorkflows.safePoints().unsafeOf(SEGMENT)).isEmpty();
         }
 
         @Test
@@ -436,7 +436,7 @@ class LiveWorkflowsTest {
             liveWorkflows.leave(execution);
 
             // then
-            assertThat(liveWorkflows.unsafeOf(SEGMENT)).isEmpty();
+            assertThat(liveWorkflows.safePoints().unsafeOf(SEGMENT)).isEmpty();
         }
 
         @Test
@@ -447,7 +447,7 @@ class LiveWorkflowsTest {
             var unsafeDuringLeave = new AtomicReference<Integer>();
             repository.beforeNextRemoval(() -> {
                 safePointsOf(execution).onMarkedUnsafe();
-                unsafeDuringLeave.set(liveWorkflows.unsafeOf(SEGMENT).size());
+                unsafeDuringLeave.set(liveWorkflows.safePoints().unsafeOf(SEGMENT).size());
             });
 
             // when
@@ -455,7 +455,7 @@ class LiveWorkflowsTest {
 
             // then - the mark was taken while the execution was still in memory, and its leave removed it
             assertThat(unsafeDuringLeave).hasValue(1);
-            assertThat(liveWorkflows.unsafeOf(SEGMENT)).isEmpty();
+            assertThat(liveWorkflows.safePoints().unsafeOf(SEGMENT)).isEmpty();
         }
 
         @Test
@@ -472,7 +472,7 @@ class LiveWorkflowsTest {
             safePointsOf(departed).onMarkedUnsafe();
 
             // then
-            assertThat(liveWorkflows.unsafeOf(SEGMENT))
+            assertThat(liveWorkflows.safePoints().unsafeOf(SEGMENT))
                     .as("an execution that left memory must not mark its successor's workflow unsafe")
                     .isEmpty();
         }
@@ -493,7 +493,7 @@ class LiveWorkflowsTest {
             safePointsOf(departed).onMarkedSafe();
 
             // then
-            assertThat(liveWorkflows.unsafeOf(SEGMENT))
+            assertThat(liveWorkflows.safePoints().unsafeOf(SEGMENT))
                     .as("an execution that left memory must not replace or clear its successor's unsafe mark")
                     .extracting(LiveWorkflows.InMemory::execution)
                     .containsExactly(successor);
@@ -505,17 +505,17 @@ class LiveWorkflowsTest {
             var departed = new InspectionCountingWorkflowExecution(WORKFLOW_ID);
             liveWorkflows.enter(WORKFLOW_ID, false, () -> departed);
             safePointsOf(departed).onMarkedUnsafe();
-            var departedEntry = liveWorkflows.unsafeOf(SEGMENT).getFirst();
+            var departedEntry = liveWorkflows.safePoints().unsafeOf(SEGMENT).getFirst();
             liveWorkflows.leave(departed);
             var successor = new InspectionCountingWorkflowExecution(WORKFLOW_ID);
             liveWorkflows.enter(WORKFLOW_ID, false, () -> successor);
             safePointsOf(successor).onMarkedUnsafe();
 
             // when - a checkpoint that read the entry before it left finds its execution safe
-            liveWorkflows.markSafe(departedEntry);
+            liveWorkflows.safePoints().markSafe(departedEntry);
 
             // then
-            assertThat(liveWorkflows.unsafeOf(SEGMENT))
+            assertThat(liveWorkflows.safePoints().unsafeOf(SEGMENT))
                     .extracting(LiveWorkflows.InMemory::execution)
                     .containsExactly(successor);
         }
@@ -541,7 +541,7 @@ class LiveWorkflowsTest {
             assertThat(liveWorkflows.find(WORKFLOW_ID)).isEmpty();
             assertThat(repository.findById(WORKFLOW_ID)).isEmpty();
             assertThat(liveWorkflows.hibernatedWorkflowIds()).containsExactly(WORKFLOW_ID);
-            assertThat(liveWorkflows.unsafeOf(SEGMENT)).isEmpty();
+            assertThat(liveWorkflows.safePoints().unsafeOf(SEGMENT)).isEmpty();
             assertThat(liveWorkflows.leave(execution))
                     .as("an execution that hibernated never takes its hibernation out of memory")
                     .isFalse();

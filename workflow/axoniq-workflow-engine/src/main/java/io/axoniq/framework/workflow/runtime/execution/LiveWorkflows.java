@@ -141,11 +141,9 @@ import java.util.stream.Stream;
  * the lock of a workflow before the lock of a claim, never the other way. Compare-and-remove on the entry makes such a
  * lock unnecessary.
  * <p>
- * The safe points of the workflows in memory are tracked here as well: the entries of the executions that have work in
- * progress that makes a checkpoint unsafe, see {@link #unsafeOf(Segment)}. An execution reports them through the
- * listener it gets when it enters memory, which only reports while the execution's entry is the workflow's entry: an
- * execution that left memory, for example because it hibernated or its segment was released, keeps unwinding for a
- * moment, and must not mark the workflow safe or unsafe on behalf of the next execution of that workflow.
+ * The safe points of the executions in memory are kept by the {@link SafePoints} this registry owns: each execution
+ * gets its listener as it enters memory, and each transition that takes an entry out of the entries forgets the mark
+ * of that entry afterwards, so an execution that left memory never marks its successor, see {@link #safePoints()}.
  * <p>
  * <b>Cancellation.</b> A cancellation request finds its workflow here, see
  * {@link #request(String, Function, Supplier)}, under the lock of the workflow, so it either reaches the execution
@@ -171,7 +169,7 @@ public final class LiveWorkflows {
 
     private final WorkflowExecutionRepository repository;
     private final SegmentBucketedMap<LiveWorkflow> live = new SegmentBucketedMap<>();
-    private final SegmentBucketedMap<InMemory> unsafe = new SegmentBucketedMap<>();
+    private final SafePoints safePoints = new SafePoints(entry -> live.get(entry.workflowId()) == entry);
     private final WaitAssociationIndex waits = new WaitAssociationIndex();
     private final LockFactory locks = PessimisticLockFactory.usingDefaults();
     private final StampedLock swaps = new StampedLock();
@@ -206,8 +204,7 @@ public final class LiveWorkflows {
      * The execution enters only when the repository stores it: a repository whose
      * {@link WorkflowExecutionRepository#save(String, Supplier) save} returns another execution for the workflow, one
      * it holds without this registry having brought it into memory, fails the transition instead, and the workflow does
-     * not enter memory. From then on, the execution reports its safe points to this registry, see
-     * {@link #unsafeOf(Segment)}.
+     * not enter memory. From then on, the execution reports its safe points, see {@link SafePoints}.
      *
      * @param workflowId   the identifier of the workflow
      * @param mayHibernate whether the execution may hibernate, so an event reaches it under the lock of its workflow,
@@ -249,7 +246,7 @@ public final class LiveWorkflows {
         if (entered == created[0]) {
             // Outside the lock of the bin: the listener reports the current safe point right away, and that report
             // checks that this entry is the workflow's entry.
-            entered.execution().registerCheckpointWorkStateListener(safePointsOf(entered));
+            entered.execution().registerCheckpointWorkStateListener(safePoints.listenerOf(entered));
         }
         return entered.execution();
     }
@@ -284,9 +281,8 @@ public final class LiveWorkflows {
         if (entry == null) {
             return false;
         }
-        // After the entry: a late report of the execution marking it unsafe then either preceded this removal, or
-        // finds the entry gone and is refused, see safePointsOf.
-        unsafe.remove(workflowId, entry);
+        // After the entry, see SafePoints.
+        safePoints.forget(entry);
         entry.leave(Departure.COMPLETED, null);
         return true;
     }
@@ -346,7 +342,7 @@ public final class LiveWorkflows {
         } finally {
             swaps.unlockWrite(stamp);
         }
-        unsafe.remove(workflowId, entry);
+        safePoints.forget(entry);
         entry.leave(Departure.HIBERNATED, null);
         return true;
     }
@@ -392,7 +388,7 @@ public final class LiveWorkflows {
     /**
      * Replaces the given hibernation with the given entry in memory, in place: saves its execution in the repository
      * and removes the rows of the workflow, under the write lock of the swap lock. From then on, the execution reports
-     * its safe points to this registry.
+     * its safe points, see {@link SafePoints}.
      */
     private boolean swapIn(Hibernated hibernated, InMemory entry) {
         var workflowId = hibernated.workflowId();
@@ -426,7 +422,7 @@ public final class LiveWorkflows {
         if (!swapped[0]) {
             return false;
         }
-        execution.registerCheckpointWorkStateListener(safePointsOf(entry));
+        execution.registerCheckpointWorkStateListener(safePoints.listenerOf(entry));
         return true;
     }
 
@@ -709,32 +705,13 @@ public final class LiveWorkflows {
     }
 
     /**
-     * Returns the entries of the workflows of the given segment whose execution in memory last reported work in
-     * progress that makes a checkpoint unsafe, without visiting those of other segments: a segment checks them on every
-     * checkpoint, while this registry holds the workflows of every segment on this node.
-     * <p>
-     * A segment token only covers the workflows that segment owns, so executions of other segments must not hold it
-     * back, and their entries must not be {@link #markSafe(InMemory) marked safe} on its behalf either. An entry that
-     * is leaving memory is left out, as it no longer is the entry of its workflow.
+     * Returns the safe points of the executions in memory: which of them have work in progress that makes a checkpoint
+     * of their segment unsafe. Every execution reports them from the moment it enters memory until it leaves.
      *
-     * @param segment the segment owning the workflows
-     * @return a snapshot of the entries of the segment's unsafe workflows in memory
+     * @return the safe points of the executions in memory
      */
-    List<InMemory> unsafeOf(Segment segment) {
-        return unsafe.entriesOf(segment)
-                     .map(Map.Entry::getValue)
-                     .filter(entry -> live.get(entry.workflowId()) == entry)
-                     .toList();
-    }
-
-    /**
-     * Marks the given entry safe, as its execution turned out to have no work in progress that makes a checkpoint
-     * unsafe, unless another entry of its workflow replaced it meanwhile.
-     *
-     * @param entry the entry to mark safe
-     */
-    void markSafe(InMemory entry) {
-        unsafe.remove(entry.workflowId(), entry);
+    SafePoints safePoints() {
+        return safePoints;
     }
 
     /**
@@ -918,38 +895,13 @@ public final class LiveWorkflows {
                            .toList();
         repository.clear();
         live.clear();
-        unsafe.clear();
+        safePoints.clear();
         waits.clear();
         inMemory.forEach(entry -> entry.leave(Departure.SHUT_DOWN, null));
     }
 
     private void addWaits(Hibernated hibernated) {
         hibernated.rows().forEach(waits::add);
-    }
-
-    /**
-     * Returns the listener through which the execution of the given entry reports its safe points.
-     * <p>
-     * Marking unsafe checks, within the bucket of the unsafe entries, that the entry is still the entry of its
-     * workflow. {@link #leave(WorkflowExecution) Leaving} and {@link #hibernate(WorkflowExecution, Hibernated)
-     * hibernating} remove the entry before they remove the unsafe mark, so a mark either precedes that removal and is
-     * removed by it, or follows the removal of the entry and is refused: an execution that left memory can never mark
-     * its successor's workflow unsafe. Marking safe only removes the entry's own mark, so it never clears the mark of a
-     * successor.
-     */
-    private CheckpointWorkStateListener safePointsOf(InMemory entry) {
-        var workflowId = entry.workflowId();
-        return new CheckpointWorkStateListener() {
-            @Override
-            public void onMarkedUnsafe() {
-                unsafe.compute(workflowId, (id, current) -> live.get(id) == entry ? entry : current);
-            }
-
-            @Override
-            public void onMarkedSafe() {
-                unsafe.remove(workflowId, entry);
-            }
-        };
     }
 
     /**

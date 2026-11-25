@@ -549,14 +549,14 @@ public class WorkflowEngine implements
     @Override
     public void addCheckpointLatch(Segment segment, Runnable latch) {
         Set<WorkflowExecution> executions = new HashSet<>();
-        for (var entry : liveWorkflows.unsafeOf(segment)) {
+        for (var entry : liveWorkflows.safePoints().unsafeOf(segment)) {
             var execution = entry.execution();
             if (execution.hasUnsafeCheckpointWork()) {
                 if (execution.isRunning()) {
                     executions.add(execution);
                 }
             } else {
-                liveWorkflows.markSafe(entry);
+                liveWorkflows.safePoints().markSafe(entry);
             }
         }
 
@@ -1093,7 +1093,7 @@ public class WorkflowEngine implements
      * segments must not hold it back.
      */
     private Stream<WorkflowExecution> unsafeExecutionsOf(Segment segment) {
-        return liveWorkflows.unsafeOf(segment)
+        return liveWorkflows.safePoints().unsafeOf(segment)
                             .stream()
                             .map(LiveWorkflows.InMemory::execution)
                             .filter(WorkflowExecution::hasUnsafeCheckpointWork);
