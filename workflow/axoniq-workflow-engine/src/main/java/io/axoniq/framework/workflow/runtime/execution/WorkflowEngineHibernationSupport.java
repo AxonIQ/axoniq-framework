@@ -65,9 +65,9 @@ import java.util.function.Supplier;
  * {@link RunningWorkflowsProjection}, which writes it to the workflow index with a checkpoint that joins the
  * processor's transaction, and clears it again when the workflow wakes. Releasing or claiming a segment forgets the
  * hibernated workflows of that segment. A claim of the segment, here or on another node, restores every running
- * workflow of the segment, except those whose hint it accepts: it {@link #adopt(SegmentClaims.Claim,
- * String, HibernationHint) adopts} those as hibernated workflows instead, which wake for an event like any other, but
- * for their deadline or a cancellation only once the claim caught up.
+ * workflow of the segment, except those whose hint it accepts: it {@link #adopt(SegmentClaim, String, HibernationHint)
+ * adopts} those as hibernated workflows instead, which wake for an event like any other, but for their deadline or a
+ * cancellation only once the claim caught up.
  * <p>
  * A wake restores the workflow from the event store in a unit of work of its own, on the execution context of the
  * claim that holds its segment, and hands it what woke it before its body starts. A wake by an event runs on the
@@ -98,7 +98,6 @@ final class WorkflowEngineHibernationSupport {
     private final WorkflowExecutionRepository repository;
     private final WorkflowCancellationService cancellationService;
     private final UnsafeCheckpointWorkIndex checkpointWorkIndex;
-    private final SegmentClaims segmentClaims;
     private final RunningWorkflowsProjection projection;
     private final WorkflowLoader loader;
     private final Duration idleDelay;
@@ -123,7 +122,6 @@ final class WorkflowEngineHibernationSupport {
      * @param repository          the executions in memory
      * @param cancellationService the cancellation registrations of the live workflows
      * @param checkpointWorkIndex the workflows with unsafe checkpoint work
-     * @param segmentClaims      the claims of the engine, which a workflow hibernates and wakes under
      * @param projection          records the hints of hibernated workflows for the workflow index
      * @param loader              loads a hibernated workflow back into the engine and starts it
      * @param idleDelay           the time a workflow must make no progress before it hibernates, and before a failed
@@ -136,7 +134,6 @@ final class WorkflowEngineHibernationSupport {
                                      WorkflowExecutionRepository repository,
                                      WorkflowCancellationService cancellationService,
                                      UnsafeCheckpointWorkIndex checkpointWorkIndex,
-                                     SegmentClaims segmentClaims,
                                      RunningWorkflowsProjection projection,
                                      WorkflowLoader loader,
                                      Duration idleDelay,
@@ -148,7 +145,6 @@ final class WorkflowEngineHibernationSupport {
                                                           "The WorkflowCancellationService must not be null.");
         this.checkpointWorkIndex = Objects.requireNonNull(checkpointWorkIndex,
                                                           "The UnsafeCheckpointWorkIndex must not be null.");
-        this.segmentClaims = Objects.requireNonNull(segmentClaims, "The segment claims must not be null.");
         this.projection = Objects.requireNonNull(projection, "The RunningWorkflowsProjection must not be null.");
         this.loader = Objects.requireNonNull(loader, "The WorkflowLoader must not be null.");
         this.idleDelay = Objects.requireNonNull(idleDelay, "The idle delay must not be null.");
@@ -200,7 +196,7 @@ final class WorkflowEngineHibernationSupport {
      * @param claim     the claim the execution was started or restored under, or {@code null} when it has none, in
      *                  which case it never hibernates
      */
-    void allow(WorkflowExecution execution, SegmentClaims.@Nullable Claim claim) {
+    void allow(WorkflowExecution execution, @Nullable SegmentClaim claim) {
         if (claim != null && claim.executionContext() != null
                 && execution instanceof WorkflowHibernationProvider provider) {
             provider.workflowHibernation().enable((hibernating, safePoint) -> hibernate(hibernating, claim, safePoint));
@@ -476,14 +472,14 @@ final class WorkflowEngineHibernationSupport {
      * @return {@code false} when the workflow was not adopted, as hibernation stopped, the claim is no longer current,
      * or the workflow is in memory or hibernated already
      */
-    boolean adopt(SegmentClaims.Claim claim, String workflowId, HibernationHint hint) {
+    boolean adopt(SegmentClaim claim, String workflowId, HibernationHint hint) {
         try (var ignored = locks.obtainLock(workflowId)) {
             if (!running || hibernations.containsKey(workflowId) || repository.findById(workflowId).isPresent()) {
                 return false;
             }
-            return segmentClaims.runWhileCurrent(claim, caughtUp -> park(
+            return claim.startWhileCurrent(mayStartBodies -> park(
                     workflowId, claim, hint,
-                    caughtUp ? CompletableFuture.completedFuture(null) : new CompletableFuture<>()
+                    mayStartBodies ? CompletableFuture.completedFuture(null) : new CompletableFuture<>()
             ));
         }
     }
@@ -508,7 +504,7 @@ final class WorkflowEngineHibernationSupport {
      *
      * @param claim the claim that failed
      */
-    void drop(SegmentClaims.Claim claim) {
+    void drop(SegmentClaim claim) {
         var dropped = new HashMap<String, Hibernation>();
         hibernations.forEach((workflowId, hibernation) -> {
             if (hibernation.claim() == claim) {
@@ -581,7 +577,7 @@ final class WorkflowEngineHibernationSupport {
      * no readable timeout, because nothing could wake that wait again, or when its claim is no longer current
      */
     private boolean hibernate(WorkflowExecution execution,
-                              SegmentClaims.Claim claim,
+                              SegmentClaim claim,
                               Supplier<Optional<Set<String>>> safePoint) {
         var workflowId = execution.workflowId();
         try (var ignored = locks.obtainLock(workflowId)) {
@@ -603,7 +599,7 @@ final class WorkflowEngineHibernationSupport {
                                 .min(Instant::compareTo)
                                 .orElseThrow();
             var hint = hintOf(waits.get(), deadline);
-            boolean parked = segmentClaims.runWhileCurrent(claim, () -> {
+            boolean parked = claim.runWhileCurrent(() -> {
                 park(workflowId, claim, hint, CompletableFuture.completedFuture(null));
                 projection.recordHibernated(claim.segment(), workflowId, hint);
                 repository.remove(workflowId, execution);
@@ -657,7 +653,7 @@ final class WorkflowEngineHibernationSupport {
      * Keeps the given workflow out of memory until an awaited event, its deadline or a cancellation wakes it, the
      * latter two only once the given {@code armed} future completed. The caller holds the lock of the workflow.
      */
-    private void park(String workflowId, SegmentClaims.Claim claim,
+    private void park(String workflowId, SegmentClaim claim,
                       HibernationHint hint, CompletableFuture<Void> armed) {
         var timer = scheduler.schedule(hint.wakeAt());
         var cancellation = new HibernatedWorkflowCancellation(workflowId);
@@ -810,7 +806,7 @@ final class WorkflowEngineHibernationSupport {
          * @param beforeStart receives the loaded execution before its body starts
          * @return {@code false} when there was nothing to load: the workflow ended elsewhere, or the claim ended
          */
-        boolean load(SegmentClaims.Claim claim, String workflowId,
+        boolean load(SegmentClaim claim, String workflowId,
                      Consumer<WorkflowExecution> beforeStart);
     }
 
@@ -822,7 +818,7 @@ final class WorkflowEngineHibernationSupport {
      * @param armed        completes once it may wake for its deadline or a cancellation
      * @param cancellation the stand-in registered for its cancellation
      */
-    private record Hibernation(SegmentClaims.Claim claim,
+    private record Hibernation(SegmentClaim claim,
                                WorkflowScheduler.ScheduledTask wakeTimer,
                                CompletableFuture<Void> armed,
                                WorkflowCancellation cancellation) {

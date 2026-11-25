@@ -12,38 +12,103 @@ import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.jspecify.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+import java.time.Duration;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.locks.ReentrantLock;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 /**
- * Tracks, per claim of a workflow-engine segment, whether that claim has consumed the startup backlog, and runs the
- * activation of a claim, which starts its restored workflow executions, exactly once.
+ * The current {@link SegmentClaim claim} of each workflow-engine segment, and the activation of each claim once it
+ * consumed the startup backlog, which starts its restored workflow executions.
  * <p>
- * Catch-up state belongs to a claim, not to a segment id: every claim starts out behind, so state left by an earlier
- * claim of the same segment, or by a poller of that claim still running, never makes a later claim skip its activation.
- * An activation, and the start of a new instance on the handler thread, run under the lock of their claim, so the
- * start of a new instance and the activation that starts every restored execution never both start the same execution.
+ * A segment has at most one current claim. Starting a claim of a segment, or releasing the segment, ends the claim it
+ * replaces, which waits for an action or activation of that claim in progress, so the previous claim never starts
+ * executions of the next one.
  * <p>
- * A claim whose restore failed is inert: it is never activated, and the executions its restore still adds afterwards
- * are dropped, as are those of a claim that ended. Adding them runs under the claim's lock as well, so ending or
- * failing a claim never interleaves with it.
+ * A claim activates once its segment caught up with the startup head: right away, when there is no startup head, or
+ * when the segment resumes from a position that covers it or has consumed nothing yet, or else once an event the
+ * segment handles, or the position of the segment, covers it. The {@link Activation} the engine hands over then runs,
+ * exactly once per claim.
+ * <p>
+ * A segment that handles an event, or fails to, while it has no current claim gets an <em>implicit</em> claim: one
+ * without an execution context, recorded on first use. That happens when the processor hands events of a segment to the
+ * engine without reporting the claim of that segment through
+ * {@link WorkflowEngine#restoreWorkflowsFor(Segment, TrackingToken, ProcessingContext, ProcessingContext)}. An implicit
+ * claim restores nothing and its executions never hibernate, but it still activates, and still holds its checkpoint
+ * when its segment fails to handle an event.
  *
  * @author Simon Zambrovski
+ * @author Allard Buijze
  * @since 5.4.0
  */
 @Internal
 final class SegmentClaims {
 
-    private final Map<Integer, Claim> claims = new ConcurrentHashMap<>();
+    /**
+     * Time between two reads of the position of a segment that waits to catch up with the startup head.
+     */
+    static final Duration CATCH_UP_POLL_INTERVAL = Duration.ofMillis(200);
+    /**
+     * Number of consecutive polls without a known position after which a segment waiting to catch up is no longer
+     * polled: the processor no longer holds it, so its position will not become known again.
+     */
+    static final int CATCH_UP_POLLS_WITHOUT_POSITION = 10;
+    private static final Logger logger = LoggerFactory.getLogger(SegmentClaims.class);
+
+    private final Activation activation;
+    private final Map<Integer, SegmentClaim> claims = new ConcurrentHashMap<>();
     @Nullable
     private volatile TrackingToken startupHead;
+    private volatile Function<Segment, Optional<TrackingToken>> segmentPositions = segment -> Optional.empty();
+    private volatile boolean stopped;
+    // Runs each catch-up poll once the poll interval passed. Package-private so a test can run the polls itself,
+    // instead of waiting for the interval to pass.
+    Consumer<Runnable> catchUpPolls =
+            poll -> CompletableFuture.delayedExecutor(CATCH_UP_POLL_INTERVAL.toMillis(), TimeUnit.MILLISECONDS)
+                                     .execute(poll);
 
+    /**
+     * Creates the claims of an engine, which run the given {@code activation} for each claim that caught up.
+     *
+     * @param activation starts the restored workflow executions of a segment whose claim caught up
+     */
+    SegmentClaims(Activation activation) {
+        this.activation = Objects.requireNonNull(activation, "The activation must not be null.");
+    }
+
+    /**
+     * Records the position a claim must reach before it activates.
+     *
+     * @param startupHead the latest position observed while starting the processor, or {@code null} when every claim
+     *                    may start the bodies of its workflows right away
+     */
     void initialize(@Nullable TrackingToken startupHead) {
         this.startupHead = startupHead;
+    }
+
+    /**
+     * Sets the source of the position each claimed segment has consumed up to, which a claim behind the startup head
+     * polls to learn that it caught up.
+     *
+     * @param segmentPositions returns the position the given segment consumed up to, or empty when unknown
+     */
+    void setSegmentPositions(Function<Segment, Optional<TrackingToken>> segmentPositions) {
+        this.segmentPositions = Objects.requireNonNull(segmentPositions, "The segment positions must not be null.");
+    }
+
+    /**
+     * Stops polling the positions of the segments waiting to catch up, as the engine shuts down.
+     */
+    void stop() {
+        stopped = true;
     }
 
     /**
@@ -54,8 +119,8 @@ final class SegmentClaims {
      * @param executionContext the context the executions of the claim run on
      * @return the new claim
      */
-    Claim startClaim(Segment segment, ProcessingContext executionContext) {
-        Claim claim = new Claim(segment, executionContext);
+    SegmentClaim startClaim(Segment segment, ProcessingContext executionContext) {
+        var claim = new SegmentClaim(segment, executionContext, this::startupHead);
         end(claims.put(segment.getSegmentId(), claim));
         return claim;
     }
@@ -70,25 +135,21 @@ final class SegmentClaims {
         end(claims.remove(segment.getSegmentId()));
     }
 
-    /**
-     * Marks the given {@code claim} as failed, and runs the given {@code cleanup} under its lock unless the claim
-     * ended already. A failed claim is never activated, and runs no {@link #runWhileCurrent(Claim, Runnable) action}
-     * anymore. Returns once an action or activation of the claim in progress has finished. A next claim of the segment
-     * only starts once the cleanup finished, so the cleanup never touches what that claim restores.
-     *
-     * @param claim   the claim whose restore failed
-     * @param cleanup drops what the claim restored
-     */
-    void fail(Claim claim, Runnable cleanup) {
-        claim.lock.lock();
-        try {
-            claim.failed = true;
-            if (!claim.ended) {
-                cleanup.run();
-            }
-        } finally {
-            claim.lock.unlock();
+    private static void end(@Nullable SegmentClaim claim) {
+        if (claim != null) {
+            claim.end();
         }
+    }
+
+    /**
+     * Returns the current claim of the given {@code segment}, without recording one when there is none.
+     *
+     * @param segment the segment to look up
+     * @return the current claim of the segment, or empty when none is recorded
+     */
+    Optional<SegmentClaim> claimOf(Segment segment) {
+        return Optional.ofNullable(claims.get(segment.getSegmentId()))
+                       .filter(claim -> claim.segment().equals(segment));
     }
 
     /**
@@ -98,36 +159,19 @@ final class SegmentClaims {
      * @return {@code true} when the segment's current claim failed
      */
     boolean hasFailed(@Nullable Segment segment) {
-        if (segment == null) {
-            return false;
-        }
-        Claim claim = claims.get(segment.getSegmentId());
-        if (claim == null) {
-            return false;
-        }
-        claim.lock.lock();
-        try {
-            return claim.failed;
-        } finally {
-            claim.lock.unlock();
-        }
+        var claim = segment == null ? null : claims.get(segment.getSegmentId());
+        return claim != null && claim.hasFailed();
     }
 
     /**
      * Holds the checkpoint of the current claim of the given {@code segment} until that claim ends: the segment failed
      * to handle an event, so neither a checkpoint nor its release may store a position past that event. The next claim
-     * of the segment then handles the event again.
+     * of the segment then handles the event again. A segment without a current claim gets an implicit one.
      *
      * @param segment the segment that failed to handle an event
      */
     void holdCheckpoint(Segment segment) {
-        Claim claim = currentClaim(segment);
-        claim.lock.lock();
-        try {
-            claim.checkpointHeld = true;
-        } finally {
-            claim.lock.unlock();
-        }
+        currentOrImplicitClaim(segment).holdCheckpoint();
     }
 
     /**
@@ -138,224 +182,131 @@ final class SegmentClaims {
      * @return {@code true} when the segment's current claim may store no position
      */
     boolean holdsCheckpoint(@Nullable Segment segment) {
-        if (segment == null) {
-            return false;
-        }
-        Claim claim = claims.get(segment.getSegmentId());
-        if (claim == null) {
-            return false;
-        }
-        claim.lock.lock();
-        try {
-            return claim.failed || claim.checkpointHeld;
-        } finally {
-            claim.lock.unlock();
+        var claim = segment == null ? null : claims.get(segment.getSegmentId());
+        return claim != null && claim.holdsCheckpoint();
+    }
+
+    /**
+     * Activates the given {@code claim} when the position its segment resumes from covers the startup head, or else
+     * polls the position of its segment until it does.
+     *
+     * @param claim       the claim that restored its executions
+     * @param claimedFrom the stored position the segment resumes from, or {@code null} when it has consumed nothing
+     */
+    void activateOrAwaitCatchUp(SegmentClaim claim, @Nullable TrackingToken claimedFrom) {
+        var segment = claim.segment();
+        boolean activated = claim.activate(
+                claimedFrom, () -> activation.start(segment, "on claim of segment " + segment.getSegmentId())
+        );
+        if (!activated) {
+            logger.info("Segment {} is catching up; restored workflow executions start after catch-up.",
+                        segment.getSegmentId());
+            awaitCatchUp(claim, 0);
         }
     }
 
     /**
-     * Runs the given {@code action} under the lock of the given {@code claim}, but only while that claim is current:
-     * neither ended nor failed.
+     * Polls the position of the segment of the given {@code claim} until it covers the startup head.
+     * <p>
+     * A segment normally learns it caught up from an event it handles at or after the startup head. But the processor
+     * skips events of other segments without handing them over, so a segment whose backlog holds no event of its own
+     * would never learn it, and its restored workflows would never start. Its position, which the processor advances
+     * past skipped events as well, tells it instead. Polling ends once the claim caught up, either way, or ended; a
+     * poller of an ended claim can no longer activate anything. It also ends once the position of the segment was
+     * unknown for {@link #CATCH_UP_POLLS_WITHOUT_POSITION} polls in a row: the processor no longer holds the segment,
+     * for example because it was claimed elsewhere. A position that is briefly unknown, right after the claim, does
+     * not end it. An event the segment handles still activates the claim after polling ended.
      *
-     * @param claim  the claim the action belongs to
-     * @param action the action to run
-     * @return {@code true} when the action ran, {@code false} when the claim ended or failed
+     * @param claim                the claim waiting to catch up
+     * @param pollsWithoutPosition the number of consecutive polls so far that found no position of the segment
      */
-    boolean runWhileCurrent(Claim claim, Runnable action) {
-        claim.lock.lock();
-        try {
-            if (claim.ended || claim.failed) {
-                return false;
+    private void awaitCatchUp(SegmentClaim claim, int pollsWithoutPosition) {
+        catchUpPolls.accept(() -> {
+            if (stopped || !claim.isWaiting()) {
+                return;
             }
-            action.run();
-            return true;
-        } finally {
-            claim.lock.unlock();
-        }
-    }
-
-    private static void end(@Nullable Claim claim) {
-        if (claim != null) {
-            // Waits for an activation holding the lock; later ones see the claim is no longer current.
-            claim.lock.lock();
+            var segment = claim.segment();
+            int withoutPosition = pollsWithoutPosition;
             try {
-                claim.ended = true;
-            } finally {
-                claim.lock.unlock();
+                var position = segmentPositions.apply(segment);
+                if (position.isPresent()) {
+                    withoutPosition = 0;
+                    claim.activate(position.get(), () -> activation.start(segment, "after catch-up"));
+                } else {
+                    withoutPosition++;
+                }
+            } catch (RuntimeException e) {
+                logger.warn("Could not read the position of segment {} while it catches up.",
+                            segment.getSegmentId(), e);
             }
-        }
-    }
-
-    /**
-     * Activates the given {@code claim} when the given {@code position} of its segment covers the startup head, unless
-     * it ended, failed or was activated already. The {@code activation} runs at most once per claim, under the claim's
-     * lock.
-     *
-     * @param claim      the claim to activate
-     * @param position   the position the segment consumed up to, or {@code null} when it has consumed nothing
-     * @param activation starts the restored executions of the claim
-     * @return {@code false} when the claim is behind the startup head and waits to catch up, {@code true} otherwise
-     */
-    boolean activate(Claim claim, @Nullable TrackingToken position, Runnable activation) {
-        var head = startupHead;
-        claim.lock.lock();
-        try {
-            if (claim.ended || claim.failed || claim.caughtUp) {
-                return true;
+            if (withoutPosition >= CATCH_UP_POLLS_WITHOUT_POSITION) {
+                logger.info("Segment {} is no longer listed by the processor; no longer polling its position to "
+                                    + "catch up.",
+                            segment.getSegmentId());
+                return;
             }
-            if (head != null && position != null && !position.covers(head)) {
-                return false;
-            }
-            claim.caughtUp = true;
-            activation.run();
-            return true;
-        } finally {
-            claim.lock.unlock();
-        }
+            awaitCatchUp(claim, withoutPosition);
+        });
     }
 
     /**
      * Activates the current claim of the given {@code segment} when the handled {@code deliveredToken} covers the
-     * startup head and the claim was not activated yet. A segment handling events without a recorded claim gets one.
+     * startup head and the claim was not activated yet. A segment without a current claim gets an implicit one.
      *
      * @param segment        the segment handling an event, or {@code null} outside a segmented processor
      * @param deliveredToken the token of the handled event, or {@code null} when unknown
-     * @param activation     starts the restored executions of the segment
      */
-    void activateOnDelivery(@Nullable Segment segment, @Nullable TrackingToken deliveredToken, Runnable activation) {
+    void activateOnDelivery(@Nullable Segment segment, @Nullable TrackingToken deliveredToken) {
         if (segment == null || deliveredToken == null) {
             return;
         }
-        activate(currentClaim(segment), deliveredToken, activation);
+        currentOrImplicitClaim(segment).activate(deliveredToken, () -> activation.start(segment, "after catch-up"));
     }
 
     /**
-     * Returns whether the given {@code claim} still waits to catch up: it is current and not activated yet.
+     * Runs the given {@code start} while no activation of the current claim of the given {@code segment} runs, telling
+     * it whether workflow bodies may start now, see {@link SegmentClaim#startExclusively(Consumer)}. An action that
+     * creates an execution and starts it when it may thereby never races an activation that starts every execution it
+     * finds. A segment without a current claim gets an implicit one.
      *
-     * @param claim the claim to check
-     * @return {@code true} when the claim still waits to catch up
+     * @param segment the segment handling an event, or {@code null} outside a segmented processor, where bodies always
+     *                may start
+     * @param start   receives whether workflow bodies may start now
      */
-    boolean isWaiting(Claim claim) {
-        claim.lock.lock();
-        try {
-            return !claim.ended && !claim.failed && !claim.caughtUp;
-        } finally {
-            claim.lock.unlock();
-        }
-    }
-
-    /**
-     * Runs the given {@code action} under the lock of the given {@code claim}, telling it whether that claim caught
-     * up, but only while the claim is current: neither ended nor failed. An action that starts an execution when caught
-     * up thereby never races the activation of the claim, which starts every execution it finds.
-     *
-     * @param claim  the claim the action belongs to
-     * @param action receives whether the claim caught up
-     * @return {@code true} when the action ran, {@code false} when the claim ended or failed
-     */
-    boolean runWhileCurrent(Claim claim, Consumer<Boolean> action) {
-        var head = startupHead;
-        claim.lock.lock();
-        try {
-            if (claim.ended || claim.failed) {
-                return false;
-            }
-            action.accept(head == null || claim.caughtUp);
-            return true;
-        } finally {
-            claim.lock.unlock();
-        }
-    }
-
-    /**
-     * Returns the current claim of the given {@code segment}, without recording one when there is none.
-     *
-     * @param segment the segment to look up
-     * @return the current claim of the segment, or empty when none is recorded
-     */
-    Optional<Claim> claimOf(Segment segment) {
-        return Optional.ofNullable(claims.get(segment.getSegmentId()))
-                       .filter(claim -> claim.segment().equals(segment));
-    }
-
-    /**
-     * Returns whether the given thread waits for the lock of the given claim, which an activation or another action of
-     * that claim holds. Package-private so a test can tell that a thread is held up by that lock, instead of waiting a
-     * while for what the thread would do without it.
-     *
-     * @param claim  the claim whose lock to inspect
-     * @param thread the thread that may wait for the lock
-     * @return {@code true} when the thread waits to acquire the lock of the claim
-     */
-    boolean isWaitingForLock(Claim claim, Thread thread) {
-        return claim.lock.hasQueuedThread(thread);
-    }
-
-    /**
-     * Runs the given {@code action} while no activation of the current claim of the given {@code segment} runs, telling
-     * it whether that claim caught up. An action that creates an execution and starts it when caught up thereby never
-     * races an activation that starts every execution it finds.
-     *
-     * @param segment the segment handling an event, or {@code null} outside a segmented processor
-     * @param action  receives whether the segment caught up
-     */
-    void runExclusively(@Nullable Segment segment, Consumer<Boolean> action) {
+    void startExclusively(@Nullable Segment segment, Consumer<Boolean> start) {
         if (segment == null) {
-            action.accept(true);
+            start.accept(true);
             return;
         }
-        Claim claim = currentClaim(segment);
-        claim.lock.lock();
-        try {
-            action.accept(startupHead == null || (claim.caughtUp && !claim.ended && !claim.failed));
-        } finally {
-            claim.lock.unlock();
-        }
-    }
-
-    private Claim currentClaim(Segment segment) {
-        return claims.computeIfAbsent(segment.getSegmentId(), id -> new Claim(segment, null));
+        currentOrImplicitClaim(segment).startExclusively(start);
     }
 
     /**
-     * One claim of a segment. Its state is guarded by its own lock, which is no monitor: workflow threads are virtual
-     * threads, which take other locks and wait for timers while they hold it. A virtual thread that blocks while it
-     * holds a monitor, or while it waits to enter one, keeps its carrier thread. Once every carrier is kept that way,
-     * the virtual thread they wait for never runs again.
+     * Returns the current claim of the given {@code segment}, recording an implicit claim, without execution context,
+     * when the segment has none.
      */
-    static final class Claim {
+    private SegmentClaim currentOrImplicitClaim(Segment segment) {
+        return claims.computeIfAbsent(segment.getSegmentId(),
+                                      id -> new SegmentClaim(segment, null, this::startupHead));
+    }
 
-        private final ReentrantLock lock = new ReentrantLock();
+    private @Nullable TrackingToken startupHead() {
+        return startupHead;
+    }
 
-        private final Segment segment;
-        private final @Nullable ProcessingContext executionContext;
-        private boolean caughtUp;
-        private boolean ended;
-        private boolean failed;
-        private boolean checkpointHeld;
-
-        private Claim(Segment segment, @Nullable ProcessingContext executionContext) {
-            this.segment = segment;
-            this.executionContext = executionContext;
-        }
-
-        /**
-         * Returns the context the executions of this claim run on.
-         *
-         * @return the execution context of the claim, or {@code null} for a claim recorded by a segment that handles
-         * events without having been claimed through the engine
-         */
-        @Nullable ProcessingContext executionContext() {
-            return executionContext;
-        }
+    /**
+     * Starts the restored workflow executions of a segment whose claim caught up with the startup head. Runs under the
+     * lock of that claim, at most once per claim.
+     */
+    @FunctionalInterface
+    interface Activation {
 
         /**
-         * Returns the claimed segment.
+         * Starts the restored workflow executions of the given {@code segment}.
          *
-         * @return the claimed segment
+         * @param segment the segment whose claim caught up
+         * @param phase   describes when the claim caught up, for logging
          */
-        Segment segment() {
-            return segment;
-        }
+        void start(Segment segment, String phase);
     }
 }

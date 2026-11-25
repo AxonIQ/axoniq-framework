@@ -99,7 +99,7 @@ class WorkflowEngineClaimActivationTest {
                                             throw new ComponentNotFoundException(type, name);
                                         }
                                     }, this::countUnitsOfWorkInProgress));
-        engine.catchUpPolls = duePolls::add;
+        engine.segmentClaims.catchUpPolls = duePolls::add;
         checkpointingSupport = new WorkflowEngineCheckpointingSupport(engine, 0L);
         engine.setCheckpointingSupport(checkpointingSupport);
         engine.setSegmentPositions(segment -> {
@@ -375,8 +375,8 @@ class WorkflowEngineClaimActivationTest {
             int polls = runCatchUpPolls();
 
             // then - reading its position stops after a few polls, instead of continuing until shutdown
-            assertThat(polls).isEqualTo(WorkflowEngine.CATCH_UP_POLLS_WITHOUT_POSITION);
-            assertThat(segmentPositionReads).hasValue(WorkflowEngine.CATCH_UP_POLLS_WITHOUT_POSITION);
+            assertThat(polls).isEqualTo(SegmentClaims.CATCH_UP_POLLS_WITHOUT_POSITION);
+            assertThat(segmentPositionReads).hasValue(SegmentClaims.CATCH_UP_POLLS_WITHOUT_POSITION);
         }
 
         @Test
@@ -468,7 +468,7 @@ class WorkflowEngineClaimActivationTest {
                     var claim = engine.segmentClaims.claimOf(SEGMENT).orElseThrow();
                     poller.start();
                     await().atMost(Duration.ofSeconds(5)).until(
-                            () -> !bodyStarts.isEmpty() || engine.segmentClaims.isWaitingForLock(claim, poller)
+                            () -> !bodyStarts.isEmpty() || claim.isWaitingForLock(poller)
                     );
                 }
                 return cancellation;

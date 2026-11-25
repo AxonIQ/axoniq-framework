@@ -57,7 +57,9 @@ class WorkflowEngineHibernationSupportAdoptionTest {
 
     private final ControllableWorkflowIndex workflowIndex = new ControllableWorkflowIndex();
     private final RunningWorkflowsProjection projection = new RunningWorkflowsProjection(workflowIndex, INDEX);
-    private final SegmentClaims segmentClaims = new SegmentClaims();
+    // The test activates its claim itself, see activate().
+    private final SegmentClaims segmentClaims = new SegmentClaims((segment, phase) -> {
+    });
     private final WorkflowCancellationService cancellationService = new WorkflowCancellationService();
     private final AtomicInteger firedTimers = new AtomicInteger();
     private final ScheduledThreadPoolExecutor timer = new ScheduledThreadPoolExecutor(1) {
@@ -91,13 +93,12 @@ class WorkflowEngineHibernationSupportAdoptionTest {
             new InMemoryWorkflowExecutionRepository(),
             cancellationService,
             new UnsafeCheckpointWorkIndex(),
-            segmentClaims,
             projection,
             (claim, workflowId, beforeStart) -> loader.load(claim, workflowId, beforeStart),
             Duration.ofSeconds(30),
             wakeExecutor
     );
-    private SegmentClaims.Claim claim;
+    private SegmentClaim claim;
 
     @BeforeEach
     void setUp() {
@@ -139,7 +140,7 @@ class WorkflowEngineHibernationSupportAdoptionTest {
     }
 
     private void activate() {
-        assertThat(segmentClaims.activate(claim, token(10), () -> support.arm(SEGMENT))).isTrue();
+        assertThat(claim.activate(token(10), () -> support.arm(SEGMENT))).isTrue();
     }
 
     private static EventMessage paid(String orderId) {

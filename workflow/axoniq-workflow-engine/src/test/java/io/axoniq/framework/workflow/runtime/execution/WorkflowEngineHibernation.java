@@ -56,8 +56,8 @@ public final class WorkflowEngineHibernation {
      */
     public static boolean isCaughtUp(WorkflowEngine engine, Segment segment) {
         return engine.segmentClaims.claimOf(segment)
-                                    .map(claim -> !engine.segmentClaims.isWaiting(claim))
-                                    .orElse(false);
+                                   .map(claim -> !claim.isWaiting())
+                                   .orElse(false);
     }
 
     /**
