@@ -17,6 +17,7 @@ import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowConfig
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContextFactory;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowDefinition;
 import io.axoniq.framework.workflow.runtime.api.manager.WorkflowManager;
+import io.axoniq.framework.messaging.eventstreaming.checkpoint.CheckpointingProgressStrategyFactory;
 import io.axoniq.framework.workflow.runtime.execution.CheckpointingEventHandlingComponentHandlingAny;
 import io.axoniq.framework.workflow.runtime.execution.EventHandlingComponentHandlingAny;
 import io.axoniq.framework.workflow.runtime.execution.InMemoryWorkflowExecutionRepository;
@@ -27,6 +28,7 @@ import io.axoniq.framework.workflow.runtime.execution.WorkflowConfigurationRegis
 import io.axoniq.framework.workflow.runtime.execution.WorkflowEngine;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowEngineCheckpointingSupport;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowExecutionRepository;
+import io.axoniq.framework.workflow.runtime.execution.WorkflowIndex;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowScheduler;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowStore;
 import org.axonframework.common.AxonConfigurationException;
@@ -321,6 +323,8 @@ class SimpleWorkflowModule<C extends WorkflowContext>
                                       engine.setCheckpointingSupport(
                                               c.getComponent(WorkflowEngineCheckpointingSupport.class)
                                       );
+                                      c.getOptionalComponent(WorkflowIndex.class)
+                                       .ifPresent(index -> engine.enableIndex(index, name));
                                       if (hibernation) {
                                           engine.enableHibernation(
                                                   c.getComponent(WorkflowScheduler.class),
@@ -420,7 +424,17 @@ class SimpleWorkflowModule<C extends WorkflowContext>
             Configuration config,
             PooledStreamingEventProcessorConfiguration psepConfig
     ) {
-        return engineConfigCustomizer.apply(defaultProcessorConfig(config, psepConfig))
+        defaultProcessorConfig(config, psepConfig);
+        if (config.getOptionalComponent(WorkflowIndex.class).isPresent()) {
+            // The engine writes the rows of the index while the processor stores a token. A position that is not
+            // stored checks no owner, so the claim of the segment is checked instead.
+            psepConfig.progressStrategyFactoryBuilder(CheckpointingProgressStrategyFactory.detecting(
+                    psepConfig.processorName(),
+                    // Read once the processor is constructed: a later customization may set the token store.
+                    psepConfig::tokenStore
+            ));
+        }
+        return engineConfigCustomizer.apply(psepConfig)
                                      // Start at the head of the stream. A workflow reacts to events published after
                                      // it was deployed. The pooled streaming default (first token) would start a
                                      // workflow for every historical start event, duplicating work still owned by

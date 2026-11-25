@@ -26,7 +26,6 @@ import org.axonframework.common.ClockUtils;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.annotation.RegistrationScope;
 import org.axonframework.common.configuration.ComponentDefinition;
-import org.axonframework.common.configuration.ComponentBuilder;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.axonframework.common.configuration.DecoratorDefinition;
@@ -37,7 +36,6 @@ import org.axonframework.eventsourcing.eventstore.MultiTagResolver;
 import org.axonframework.eventsourcing.eventstore.TagResolver;
 import org.axonframework.eventsourcing.snapshot.api.SnapshotPolicy;
 import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
-import org.axonframework.messaging.core.Metadata;
 import org.axonframework.modelling.repository.Repository;
 import org.jspecify.annotations.Nullable;
 
@@ -48,9 +46,6 @@ import java.util.ServiceLoader;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
-
-import static io.axoniq.framework.workflow.runtime.util.MetadataUtils.getWorkflowDefinitionId;
-import static org.axonframework.eventsourcing.configuration.EventSourcedEntityModule.declarative;
 
 /**
  * Defaults for workflow configuration.
@@ -71,25 +66,40 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
      */
     public static final String WORKFLOW_ENGINE_EXECUTOR = "WorkflowEngineExecutor";
     /**
-     * Name of the {@link SnapshotPolicy} component of the running-workflow list.
-     * <p>
-     * The list is snapshotted only when a component is registered under this name. Snapshotting then requires a
-     * {@link org.axonframework.eventsourcing.snapshot.store.SnapshotStore} component.
+     * The name under which a {@link SnapshotPolicy} component snapshots the running-workflow list with a policy of its own.
+     *
+     * @deprecated configure snapshots through {@link WorkflowConfigurer#snapshots}, or register a
+     * {@link WorkflowSnapshotConfiguration} component. A component registered under this name still snapshots
+     * the running-workflow list with its policy, and logs a warning, as long as the {@code WorkflowSnapshotConfiguration} neither
+     * enables nor disables snapshots. Its policy then takes precedence over the running-workflow policy of the
+     * {@code WorkflowSnapshotConfiguration}. Once the {@code WorkflowSnapshotConfiguration} enables or disables
+     * snapshots, the component is ignored, and a warning is logged.
      */
+    @Deprecated(since = "5.5.0")
     public static final String RUNNING_WORKFLOWS_SNAPSHOT_POLICY = "RunningWorkflowsSnapshotPolicy";
     /**
-     * Name of the {@link SnapshotPolicy} component of the workflow state.
-     * <p>
-     * The state of each workflow instance is snapshotted only when a component is registered under this name.
-     * Snapshotting then requires a {@link org.axonframework.eventsourcing.snapshot.store.SnapshotStore} component.
+     * The name under which a {@link SnapshotPolicy} component snapshots the workflow state with a policy of its own.
+     *
+     * @deprecated configure snapshots through {@link WorkflowConfigurer#snapshots}, or register a
+     * {@link WorkflowSnapshotConfiguration} component. A component registered under this name still snapshots
+     * the workflow state with its policy, and logs a warning, as long as the {@code WorkflowSnapshotConfiguration} neither
+     * enables nor disables snapshots. Its policy then takes precedence over the workflow-state policy of the
+     * {@code WorkflowSnapshotConfiguration}. Once the {@code WorkflowSnapshotConfiguration} enables or disables
+     * snapshots, the component is ignored, and a warning is logged.
      */
+    @Deprecated(since = "5.5.0")
     public static final String WORKFLOW_STATE_SNAPSHOT_POLICY = "WorkflowStateSnapshotPolicy";
     /**
-     * Name of the {@link SnapshotPolicy} component of the open-wait list.
-     * <p>
-     * The list is snapshotted only when a component is registered under this name. Snapshotting then requires a
-     * {@link org.axonframework.eventsourcing.snapshot.store.SnapshotStore} component.
+     * The name under which a {@link SnapshotPolicy} component snapshots the open-wait list with a policy of its own.
+     *
+     * @deprecated configure snapshots through {@link WorkflowConfigurer#snapshots}, or register a
+     * {@link WorkflowSnapshotConfiguration} component. A component registered under this name still snapshots
+     * the open-wait list with its policy, and logs a warning, as long as the {@code WorkflowSnapshotConfiguration} neither
+     * enables nor disables snapshots. Its policy then takes precedence over the open-wait policy of the
+     * {@code WorkflowSnapshotConfiguration}. Once the {@code WorkflowSnapshotConfiguration} enables or disables
+     * snapshots, the component is ignored, and a warning is logged.
      */
+    @Deprecated(since = "5.5.0")
     public static final String WAIT_ASSOCIATIONS_SNAPSHOT_POLICY = "WaitAssociationsSnapshotPolicy";
     /**
      * Order for this enhancer.
@@ -194,61 +204,16 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
     }
 
     void registerRunningWorkflowsModule(ComponentRegistry componentRegistry) {
-        var module = declarative(String.class, EventSourcedRunningWorkflows.class)
-                .messagingModel((c, model) -> model.entityEvolver((entity, event, context) -> {
-                    entity.evolve(event.metadata());
-                    return entity;
-                }).build())
-                .entityFactory(c -> (identifier, firstEvent, context) -> new EventSourcedRunningWorkflows())
-                .criteriaResolver(c -> (identifier, context) -> EventSourcedRunningWorkflows.criteriaBuilder());
-        if (componentRegistry.hasComponent(SnapshotPolicy.class, RUNNING_WORKFLOWS_SNAPSHOT_POLICY)) {
-            module.snapshotPolicy((ComponentBuilder<SnapshotPolicy>) c -> c.getComponent(
-                    SnapshotPolicy.class, RUNNING_WORKFLOWS_SNAPSHOT_POLICY
-            ));
-        }
-        componentRegistry.registerModule(module.build());
+        componentRegistry.registerModule(WorkflowEntityModule.runningWorkflows());
         componentRegistry.registerIfNotPresent(Clock.class, cfg -> ClockUtils.get());
     }
 
     void registerWaitAssociationsModule(ComponentRegistry componentRegistry) {
-        var module = declarative(String.class, EventSourcedWaitAssociations.class)
-                .messagingModel((c, model) -> model.entityEvolver((entity, event, context) -> {
-                    entity.evolve(event);
-                    return entity;
-                }).build())
-                .entityFactory(c -> (identifier, firstEvent, context) -> new EventSourcedWaitAssociations())
-                .criteriaResolver(c -> (identifier, context) -> EventSourcedWaitAssociations.criteriaBuilder());
-        if (componentRegistry.hasComponent(SnapshotPolicy.class, WAIT_ASSOCIATIONS_SNAPSHOT_POLICY)) {
-            module.snapshotPolicy((ComponentBuilder<SnapshotPolicy>) c -> c.getComponent(
-                    SnapshotPolicy.class, WAIT_ASSOCIATIONS_SNAPSHOT_POLICY
-            ));
-        }
-        componentRegistry.registerModule(module.build());
+        componentRegistry.registerModule(WorkflowEntityModule.waitAssociations());
     }
 
     void registerWorkflowStateModule(ComponentRegistry componentRegistry) {
-        var module = declarative(String.class, EventSourcedWorkflowState.class)
-                .messagingModel((c, model) -> model.entityEvolver((entity, event, context) ->
-                                                                          EventSourcedWorkflowState.requireEventSourcedState(
-                                                                                  entity.evolve(event, context))
-                ).build())
-                .entityFactory(c -> (identifier, firstEvent, context) -> new EventSourcedWorkflowState(
-                        identifier,
-                        // No prior event exists yet when loadOrCreate runs ahead of the workflow's start
-                        // event becoming durable; empty metadata falls through to the same error below.
-                        getWorkflowDefinitionId(firstEvent == null
-                                                         ? Metadata.emptyInstance()
-                                                         : firstEvent.metadata()).orElseThrow(
-                                () -> new IllegalStateException(
-                                        "Workflow state for '%s' cannot be created without workflowDefinitionId metadata.".formatted(
-                                                identifier)))))
-                .criteriaResolver(c -> (identifier, context) -> EventSourcedWorkflowState.criteriaBuilder(identifier));
-        if (componentRegistry.hasComponent(SnapshotPolicy.class, WORKFLOW_STATE_SNAPSHOT_POLICY)) {
-            module.snapshotPolicy((ComponentBuilder<SnapshotPolicy>) c -> c.getComponent(
-                    SnapshotPolicy.class, WORKFLOW_STATE_SNAPSHOT_POLICY
-            ));
-        }
-        componentRegistry.registerModule(module.build());
+        componentRegistry.registerModule(WorkflowEntityModule.workflowState());
     }
 
     void registerWorkflowEngineExecutor(ComponentRegistry componentRegistry) {

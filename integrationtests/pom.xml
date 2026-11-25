@@ -38,4 +38,14 @@
         <module>multitenancy</module>
         <module>workflow</module>
     </modules>
+
+    <profiles>
+        <profile>
+            <!-- Load tests against a real Postgres or Axon Server; see workflow-perf/README.md. -->
+            <id>perf</id>
+            <modules>
+                <module>workflow-perf</module>
+            </modules>
+        </profile>
+    </profiles>
 </project>

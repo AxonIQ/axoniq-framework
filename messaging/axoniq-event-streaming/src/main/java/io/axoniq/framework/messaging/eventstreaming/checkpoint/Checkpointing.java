@@ -9,6 +9,7 @@
 package io.axoniq.framework.messaging.eventstreaming.checkpoint;
 
 import org.axonframework.common.annotation.Internal;
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventHandlingComponent;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
@@ -166,6 +167,39 @@ public interface Checkpointing {
      * last persisted checkpoint
      */
     CompletableFuture<TrackingToken> onCheckpointAdvanced(Segment segment, TrackingToken requested);
+
+    /**
+     * Invoked right before the processor stores {@code token} for {@code segment}, inside the transaction that stores
+     * it. A unit that keeps a projection of its own writes it here through the given {@code processingContext}, so the
+     * projection and the stored {@link TrackingToken} are committed together, or neither is.
+     * <p>
+     * The processor invokes this on the thread that stores the token, for every position it stores: a checkpoint the
+     * units agreed on through {@link #onCheckpointAdvanced(Segment, TrackingToken)}, a position past events the segment
+     * only skipped, and the final position on release. It awaits the returned future before it stores the token.
+     * <p>
+     * <b>Exceptional completion.</b> A future completed exceptionally fails the store: the token is not stored. For a
+     * checkpoint, the batch transaction then rolls back, as for a failed
+     * {@link #onCheckpointAdvanced(Segment, TrackingToken)}. On release, the claim is still released, as for a failed
+     * {@link #onSegmentReleased(Segment, TrackingToken)}.
+     * <p>
+     * <b>Ownership.</b> Storing the token checks that this node owns the segment. A position that is not stored checks
+     * no owner, and a failed store on release does not roll back. A processor whose strategy is built through
+     * {@link CheckpointingProgressStrategyFactory#detecting(String, java.util.function.Supplier)} checks the claim of
+     * the segment in both cases: after this method for a position that is not stored, and before it on release. What
+     * a unit writes here is then committed only by a node that owns the segment.
+     * <p>
+     * Defaults to doing nothing, for a unit whose durable work lives outside the processor's transaction.
+     *
+     * @param segment           the segment the token is stored for
+     * @param token             the position about to be stored
+     * @param processingContext the context of the transaction that stores the token
+     * @return a future completing once this unit has written what belongs with {@code token}
+     */
+    default CompletableFuture<Void> onCheckpointStore(Segment segment,
+                                                      TrackingToken token,
+                                                      ProcessingContext processingContext) {
+        return CompletableFuture.completedFuture(null);
+    }
 
     /**
      * Invoked when {@code segment} is being released. Flush everything handled so far, discard the segment's local

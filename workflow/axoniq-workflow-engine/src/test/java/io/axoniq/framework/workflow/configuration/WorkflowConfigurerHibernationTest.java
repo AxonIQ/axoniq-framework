@@ -91,9 +91,9 @@ import static org.awaitility.Awaitility.await;
  */
 class WorkflowConfigurerHibernationTest {
 
-    private static final String MODULE = "hibernation";
-    private static final int SEGMENT_COUNT = 2;
-    private static final String WAIT_STEP = "awaitPaid";
+    static final String MODULE = "hibernation";
+    static final int SEGMENT_COUNT = 2;
+    static final String WAIT_STEP = "awaitPaid";
     private static final String SLEEP_STEP = "cooldown";
     private static final String EXECUTE_STEP = "charge";
     private static final String SHIP_STEP = "awaitShipped";
@@ -609,7 +609,7 @@ class WorkflowConfigurerHibernationTest {
         );
     }
 
-    private AxonConfiguration start(boolean hibernation) {
+    AxonConfiguration start(boolean hibernation) {
         return start(hibernation, false, false);
     }
 
@@ -617,7 +617,7 @@ class WorkflowConfigurerHibernationTest {
      * Starts a configuration with hibernation and a snapshot store, which keeps the hibernated workflows the engine
      * records.
      */
-    private AxonConfiguration startRecordingHibernatedWorkflows() {
+    AxonConfiguration startRecordingHibernatedWorkflows() {
         return start(true, false, true);
     }
 
@@ -650,6 +650,7 @@ class WorkflowConfigurerHibernationTest {
             module.hibernationInterval(hibernationInterval);
         }
         var configurer = WorkflowConfigurer.create();
+        configure(configurer);
         configurer.componentRegistry(cr -> cr
                 .registerComponent(EventStorageEngine.class, cfg -> storageEngine)
                 .registerComponent(TokenStore.class, cfg -> tokenStore)
@@ -664,6 +665,14 @@ class WorkflowConfigurerHibernationTest {
         return configuration;
     }
 
+    /**
+     * Applies the settings a subclass runs these tests with. Does nothing here.
+     *
+     * @param configurer the configurer of the configuration that is about to be built
+     */
+    void configure(WorkflowConfigurer configurer) {
+    }
+
     private SnapshotStore snapshotStore(Configuration configuration) {
         if (snapshotStore == null) {
             snapshotStore = new InMemorySnapshotStore(configuration.getComponent(GeneralConverter.class));
@@ -674,7 +683,7 @@ class WorkflowConfigurerHibernationTest {
     /**
      * Starts a workflow of the given kind and returns its id once the given step is durably started.
      */
-    private String startWorkflow(AxonConfiguration configuration, String kind, String orderId, String stepName) {
+    String startWorkflow(AxonConfiguration configuration, String kind, String orderId, String stepName) {
         // The default workflow id is the identifier of the start event.
         var workflowId = publish(configuration, "start", orderId, kind);
         awaitStepStarted(configuration, workflowId, stepName);
@@ -691,7 +700,7 @@ class WorkflowConfigurerHibernationTest {
      * Runs hibernation passes until the workflow left memory. A pass that finds the workflow before it is safe, for
      * example before it received its own STARTED event, is dropped, so a later pass hibernates it.
      */
-    private void awaitHibernated(AxonConfiguration configuration, String workflowId) {
+    void awaitHibernated(AxonConfiguration configuration, String workflowId) {
         var engine = engine(configuration);
         await().atMost(5, TimeUnit.SECONDS).pollInterval(Duration.ofMillis(50)).until(() -> {
             WorkflowEngineHibernationPasses.runPass(engine);
@@ -724,27 +733,27 @@ class WorkflowConfigurerHibernationTest {
      * Waits until the claim of the workflow's segment adopted it as hibernated, and fails as soon as the workflow is in
      * memory, which a claim that loads it would show.
      */
-    private static void awaitAdopted(AxonConfiguration configuration, String workflowId) {
+    static void awaitAdopted(AxonConfiguration configuration, String workflowId) {
         await().atMost(5, TimeUnit.SECONDS)
                .pollInterval(Duration.ofMillis(10))
                .failFast("The claim loaded the workflow into memory.", () -> inMemory(configuration, workflowId))
                .until(() -> WorkflowEngineHibernationPasses.isHibernated(engine(configuration), workflowId));
     }
 
-    private void awaitWorkflowStatus(AxonConfiguration configuration, String workflowId, WorkflowStatus status) {
+    void awaitWorkflowStatus(AxonConfiguration configuration, String workflowId, WorkflowStatus status) {
         await().atMost(10, TimeUnit.SECONDS)
                .ignoreExceptions()
                .until(() -> durableState(configuration, workflowId).workflowStatus() == status);
     }
 
-    private static boolean inMemory(Configuration configuration, String workflowId) {
+    static boolean inMemory(Configuration configuration, String workflowId) {
         return engine(configuration).workflowExecutions()
                                     .stream()
                                     .map(WorkflowExecution::workflowId)
                                     .anyMatch(workflowId::equals);
     }
 
-    private static String publish(AxonConfiguration configuration, String eventName, String orderId, String kind) {
+    static String publish(AxonConfiguration configuration, String eventName, String orderId, String kind) {
         var event = new GenericEventMessage(new MessageType(eventName), Map.of("orderId", orderId, "kind", kind));
         configuration.getComponent(UnitOfWorkFactory.class)
                      .create("publish-" + eventName)

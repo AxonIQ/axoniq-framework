@@ -16,7 +16,9 @@ Any other event, including an event published with `publish` / `awaitPublish`, r
 
 A segment hands the event only to those workflows, not to every workflow it owns.
 To match waits, each node keeps the open waits of the workflows on the segments it holds.
-It loads them from the event store when it claims a segment, from the events tagged `workflowEvent=waitForStep` and `workflowEvent=lifecycle`.
+It loads them when it claims a segment, see <<segment-claims,Segment claims>>.
+Without a workflow index, it loads them from the event store, from the events tagged `workflowEvent=waitForStep` and `workflowEvent=lifecycle`.
+With a workflow index, it loads them from the rows of the segment.
 Until a segment has loaded its open waits, or when loading them fails, that segment hands each event to every workflow it owns.
 
 The engine broadcasts an event to every segment, where each segment acts only on the workflows it owns, in these cases:
@@ -58,12 +60,90 @@ The workflow wakes up when one of these happens:
 The engine then loads the workflow from the event store and replays its history to the point where it waited.
 A lock per workflow keeps a wake, an event and a cancellation of the same workflow apart, so none of them gets lost while the workflow leaves memory.
 
+[[hibernation-claims]]
 === Restarts and segment claims
 
-With a `SnapshotStore` configured, the engine records the hibernated workflows of a segment when it releases that segment, also when the application stops.
+A segment claim keeps a hibernated workflow out of memory when it can tell that the workflow hibernated.
+How it can tell depends on the xref:configuration.adoc#workflow-index[workflow index].
+
+With a workflow index in the database of the token store, the row of a hibernated workflow carries the time the workflow wakes at.
+The engine writes that time the next time the segment stores its token, and on the release of the segment.
+It removes that time when the workflow wakes up.
+A segment claim, on any node, keeps a workflow out of memory when its row carries a wake time and no event after the stored token belongs to that workflow.
+A workflow that made progress after it hibernated closed a wait or ended, and the segment claim reads both events.
+The rows are committed with the token, so this also works after a crash.
+For each workflow it keeps out of memory, the segment claim starts the timer for the wake time and keeps the open waits.
+
+The rows of a workflow index in another database than the token store hold no wake time.
+With such a workflow index, or without a workflow index, and with a `SnapshotStore` configured, the engine records the hibernated workflows of a segment when it releases that segment, also when the application stops.
 The next claim of the segment, on any node, keeps a recorded workflow out of memory, as long as its open waits are the ones it hibernated with.
 It replays only the other workflows.
-Without a `SnapshotStore`, a claim replays every unfinished workflow of the segment, which then hibernates again at the same wait.
+After a crash, the record is missing or out of date, so the segment claim replays the workflows the record does not cover.
+
+In the one other setup, a segment claim replays every unfinished workflow of the segment, which then hibernates again at the same wait.
+That setup is: no `SnapshotStore`, and no workflow index in the database of the token store.
 
 A segment split or merge replaces segments without releasing them.
 The claim of a new segment first forgets the hibernated workflows it owns that were kept for the old segment, and then restores them or keeps them out of memory again.
+With a workflow index, the rows stay valid after a split or a merge, because the segment key of a row does not depend on the segments.
+
+[[segment-claims]]
+== Segment claims
+
+When a node claims a segment, the engine learns three things: which workflow instances of the segment are running, which waits are open, and which workflows are hibernated.
+It restores the running workflows that are not hibernated, and keeps the open waits for <<event-routing,event routing>>.
+
+=== Without a workflow index
+
+The engine sources the list of open waits and the list of running workflows from the event store.
+Both lists hold all segments, so the engine keeps only the entries of the workflows that the claimed segment owns.
+With a `SnapshotStore`, it also reads the hibernated workflows recorded for the segment, see <<hibernation-claims,Restarts and segment claims>>.
+
+=== With a workflow index
+
+The xref:configuration.adoc#workflow-index[workflow index] holds one row per running workflow and one row per open wait.
+A segment claim takes three steps:
+
+. It reads the rows of the claimed segment with one range query per table on the segment key.
+. It reads the events published after the stored token of the segment. It reads only the events tagged `workflowEvent=waitForStep` or `workflowEvent=lifecycle`.
+. It applies those events to the rows. A started workflow is added. An ended workflow is removed with its waits. An opened wait is added. A closed wait is removed.
+
+The rows plus those events are the running workflows and the open waits as of the segment claim.
+Applying an event twice changes nothing, because a workflow starts once and ends once, and a wait opens once and closes once.
+
+A segment claim sources both lists instead, as without a workflow index, in three cases:
+
+* the rows of the workflow module are not complete yet,
+* the segment has no stored token to read the events from,
+* reading the rows or the events after the token fails.
+
+A segment claim that sources does not know which rows carry a wake time.
+So every workflow it loads into memory loses the wake time in its row, and a later segment claim does not take a workflow that moved on for a hibernated one.
+
+A segment claim that finds the rows not complete stores the sourced workflows and waits of all segments as rows.
+It then marks the rows of the workflow module as complete.
+
+=== The segment key
+
+A segment owns the workflow ids whose hash ends in the bits of its segment id.
+Each row stores the segment key of its workflow id: that hash with its bits reversed, read as an unsigned number.
+Reversed, the workflow ids of one segment form one contiguous range of segment keys.
+A split halves the range, and a merge joins two neighboring ranges.
+So the segment key of a row never changes, and the rows of a segment survive a split and a merge.
+
+=== How the rows are written
+
+While a segment handles events, the engine notes what changes in its rows: a workflow started or ended, a wait opened or closed, a workflow hibernated or woke up.
+Each time the processor stores the token of the segment, the engine first writes the noted changes that this token covers.
+With a workflow index in the database of the token store, the rows and the token are committed in one transaction, or neither is.
+The token is therefore the position of the rows.
+
+A node that lost its segment claim writes nothing:
+
+* Storing a token checks that the node still owns the segment, and fails the transaction when it does not.
+* A token that did not advance is not stored. The processor then extends the claim in the same transaction, which makes the same check.
+* On the release of a segment, the processor checks the claim before the engine writes.
+
+With a workflow index in another database than the token store, the engine writes the rows in a transaction of their own, before the processor stores the token.
+The rows are then never behind the token.
+They can be ahead of it, and the events a segment claim reads correct that.

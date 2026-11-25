@@ -7,6 +7,7 @@
  */
 package io.axoniq.framework.springboot;
 
+import org.jspecify.annotations.Nullable;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
@@ -89,6 +90,7 @@ public class WorkflowProperties {
     private long checkpointInterval = 0L;
     private final HistoryProcessorProperties history = new HistoryProcessorProperties();
     private final SnapshotProperties snapshots = new SnapshotProperties();
+    private final IndexProperties index = new IndexProperties();
 
     /**
      * Returns the number of segments to initialize the workflow event processor with.
@@ -249,33 +251,122 @@ public class WorkflowProperties {
     }
 
     /**
-     * The snapshot properties of the workflow engine.
-     * <p>
-     * Snapshots are disabled by default. Enabling them requires a {@code SnapshotStore} bean.
+     * The workflow index properties of the workflow engine, under the {@code axon.workflow.index} prefix.
+     *
+     * @return the workflow index properties of the workflow engine
      */
-    public static class SnapshotProperties {
+    public IndexProperties getIndex() {
+        return index;
+    }
+
+    /**
+     * The properties of the workflow index, the store a segment claim reads its running workflow instances, open
+     * waits and hibernated workflows from.
+     * <p>
+     * With {@code axon.workflow.index.enabled} set to {@code true}, and an {@code EntityManagerFactory} bean present,
+     * a JPA workflow index is registered. An application that defines its own {@code WorkflowIndex} bean replaces it.
+     */
+    public static class IndexProperties {
 
         private boolean enabled = false;
-        private final SnapshotPolicyProperties runningWorkflows = new SnapshotPolicyProperties();
-        private final SnapshotPolicyProperties workflowState = new SnapshotPolicyProperties();
-        private final SnapshotPolicyProperties waitAssociations = new SnapshotPolicyProperties();
+        private boolean storesWithToken = true;
 
         /**
-         * Returns whether snapshots are taken.
+         * Returns whether a JPA workflow index is registered.
          *
-         * @return whether snapshots are taken
+         * @return whether a JPA workflow index is registered
          */
         public boolean isEnabled() {
             return enabled;
         }
 
         /**
-         * Sets whether snapshots are taken.
+         * Sets whether a JPA workflow index is registered.
          *
-         * @param enabled whether snapshots are taken
+         * @param enabled whether a JPA workflow index is registered
          */
         public void setEnabled(boolean enabled) {
             this.enabled = enabled;
+        }
+
+        /**
+         * Returns whether the workflow index is in the database of the token store, so its rows are written in the
+         * transaction of the token.
+         *
+         * @return whether the rows of the workflow index are written in the transaction of the token
+         */
+        public boolean isStoresWithToken() {
+            return storesWithToken;
+        }
+
+        /**
+         * Sets whether the workflow index is in the database of the token store. Set it to {@code false} when the
+         * token store uses another database. The workflow index then keeps no record of hibernated workflows, and a
+         * segment claim loads every running workflow instance of its segment.
+         *
+         * @param storesWithToken whether the rows of the workflow index are written in the transaction of the token
+         */
+        public void setStoresWithToken(boolean storesWithToken) {
+            this.storesWithToken = storesWithToken;
+        }
+    }
+
+    /**
+     * The snapshot properties of the workflow engine.
+     * <p>
+     * With {@code axon.workflow.snapshots.enabled} not set, snapshots are taken when the application has a
+     * {@code SnapshotStore} bean. Set to {@code true}, snapshots are taken and a {@code SnapshotStore} bean is
+     * required. Set to {@code false}, no snapshots are taken.
+     */
+    public static class SnapshotProperties {
+
+        private @Nullable Boolean enabled;
+        private final SnapshotPolicyProperties runningWorkflows = new SnapshotPolicyProperties();
+        private final SnapshotPolicyProperties workflowState = new SnapshotPolicyProperties();
+        private final SnapshotPolicyProperties waitAssociations = new SnapshotPolicyProperties();
+
+        /**
+         * Returns whether snapshots are explicitly enabled or disabled.
+         *
+         * @return {@code true} when snapshots are enabled, {@code false} when they are disabled, or {@code null} when
+         * the workflow engine snapshots its entities whenever the application can take snapshots
+         */
+        public @Nullable Boolean getEnabled() {
+            return enabled;
+        }
+
+        /**
+         * Sets whether snapshots are explicitly enabled or disabled.
+         *
+         * @param enabled {@code true} to enable snapshots, {@code false} to disable them, or {@code null} to snapshot
+         *                the entities of the workflow engine whenever the application can take snapshots
+         */
+        public void setEnabled(@Nullable Boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        /**
+         * Sets whether snapshots are explicitly enabled or disabled, like {@link #setEnabled(Boolean)} does with the
+         * same value.
+         *
+         * @param enabled {@code true} to enable snapshots, {@code false} to disable them
+         */
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        /**
+         * Returns whether snapshots are explicitly enabled.
+         * <p>
+         * A {@code false} result does not mean that no snapshot is taken: unless snapshots are explicitly disabled, the
+         * workflow engine snapshots its entities whenever the application can take snapshots.
+         *
+         * @return {@code true} when snapshots are explicitly enabled, {@code false} otherwise
+         * @deprecated use {@link #getEnabled()}, which also tells whether snapshots are explicitly disabled
+         */
+        @Deprecated(since = "5.5.0")
+        public boolean isEnabled() {
+            return Boolean.TRUE.equals(enabled);
         }
 
         /**

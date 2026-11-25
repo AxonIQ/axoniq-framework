@@ -226,6 +226,7 @@ class WorkflowConfigurerWaitAssociationRoutingTest {
                                                                    ))
                                    .contextFactory(c -> TestContext::new);
         var configurer = WorkflowConfigurer.create();
+        configure(configurer);
         configurer.componentRegistry(cr -> cr
                 .registerComponent(EventStorageEngine.class, cfg -> storageEngine)
                 .registerComponent(TokenStore.class, cfg -> tokenStore)
@@ -251,6 +252,7 @@ class WorkflowConfigurerWaitAssociationRoutingTest {
                                                                    ))
                                    .contextFactory(c -> TestContext::new);
         var configurer = WorkflowConfigurer.create();
+        configure(configurer);
         configurer.componentRegistry(cr -> cr
                 .registerComponent(EventStorageEngine.class, cfg -> storageEngine)
                 .registerComponent(TokenStore.class, cfg -> tokenStore)
@@ -264,6 +266,14 @@ class WorkflowConfigurerWaitAssociationRoutingTest {
     /**
      * Starts a workflow for the given order and returns its id once its wait is durably started.
      */
+    /**
+     * Applies the settings a subclass runs these tests with. Does nothing here.
+     *
+     * @param configurer the configurer of the configuration that is about to be built
+     */
+    void configure(WorkflowConfigurer configurer) {
+    }
+
     private String startWaitingWorkflow(AxonConfiguration configuration, String orderId) {
         // The default workflow id is the identifier of the start event.
         var workflowId = publish(configuration, "start", orderId);

@@ -32,6 +32,7 @@ import org.slf4j.LoggerFactory;
 
 import java.time.Clock;
 import java.time.Duration;
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -88,6 +89,7 @@ public class WorkflowEngine implements
     private WorkflowEngineCheckpointingSupport checkpointingSupport;
     // Package-private so a test can run a hibernation pass instead of waiting for the interval.
     @Nullable WorkflowEngineHibernationSupport hibernation;
+    private @Nullable WorkflowEngineIndexSupport index;
 
     /**
      * Creates a new workflow engine. Be sure to follow-up construction of a {@code WorkflowEngine} with an invocation
@@ -193,8 +195,25 @@ public class WorkflowEngine implements
         this.hibernation = new WorkflowEngineHibernationSupport(
                 scheduler, clock, workflowExecutionRepository, workflowCancellationService, checkpointWorkIndex,
                 unitOfWorkFactory, () -> restoreTimeout, this::loadWorkflow, workflowStore, name, interval,
-                wakeExecutor
+                wakeExecutor, () -> index
         );
+    }
+
+    /**
+     * Enables the given {@link WorkflowIndex}: a claimed segment reads its running workflows, its open waits and its
+     * hibernated workflows from the rows of the index, instead of sourcing them for every segment.
+     * <p>
+     * Set outside the constructor, like {@link #setCheckpointingSupport(WorkflowEngineCheckpointingSupport)}, by the
+     * workflow module when a {@link WorkflowIndex} is configured. The {@link WorkflowEngineIndexSupport} owns the
+     * bookkeeping; this engine only hands it events, stored tokens and claims at a few hooks.
+     *
+     * @param workflowIndex the index to keep current and to claim from
+     * @param name          the name of the workflow module, which keeps the rows of this engine apart from those of
+     *                      other modules
+     */
+    @Internal
+    public void enableIndex(WorkflowIndex workflowIndex, String name) {
+        this.index = new WorkflowEngineIndexSupport(workflowIndex, name, unitOfWorkFactory);
     }
 
     @Override
@@ -218,6 +237,9 @@ public class WorkflowEngine implements
                 activateSegmentWhenCaughtUp(segment, currentToken);
                 checkpointingSupport.requestCheckpoint(segment, currentToken);
                 return MessageStream.empty();
+            }
+            if (index != null) {
+                index.record(segment, currentToken, event);
             }
             // Skip events whose workflowId isn't owned by this engine (expected in multi-module setups).
             if (!deliver(workflowId, event, context)) {
@@ -353,6 +375,16 @@ public class WorkflowEngine implements
         return unsafeExecutionsOf(segment).anyMatch(execution -> !execution.isRunning());
     }
 
+    @Override
+    public CompletableFuture<Void> onCheckpointStore(Segment segment,
+                                                     TrackingToken token,
+                                                     ProcessingContext processingContext) {
+        var support = index;
+        return support == null
+                ? CompletableFuture.completedFuture(null)
+                : support.store(segment, token, processingContext);
+    }
+
     /**
      * Adds a checkpoint latch across the current set of {@link WorkflowExecution WorkflowExecutions} owned by the given
      * {@code segment} that are still performing tasks.
@@ -457,36 +489,86 @@ public class WorkflowEngine implements
         // The segment's events are broadcast until its waits are loaded.
         waitIndex.segmentClaimed(segment);
         var claim = hibernation == null ? null : hibernation.claiming(segment);
-        // The waits are loaded first, as a recorded hibernated workflow is adopted only while its waits are unchanged,
-        // and indexed last, as the index keeps the rows of the workflows this engine holds.
-        return loadWaitAssociations(segment, sourcingContext)
-                .thenCompose(waits -> loadRecordedWorkflows(segment, sourcingContext)
-                        .thenCompose(recorded -> loadRunningWorkflows(
-                                segment,
-                                sourcingContext,
-                                executionContext,
-                                adoptsAsHibernated(segment, recorded, waits, claim)
-                        ))
-                        .thenRun(() -> {
-                            indexWaits(segment, waits);
-                            if (hibernation != null && claim != null) {
-                                hibernation.claimed(segment, claim);
-                            }
-                        }))
+        // The waits are indexed last, as the index keeps the rows of the workflows this engine holds.
+        return claimedWorkflows(segment, claimedFrom, sourcingContext)
+                .thenCompose(claimed -> restoreRunningWorkflows(
+                        segment,
+                        claimed.runningWorkflowIds(),
+                        sourcingContext,
+                        executionContext,
+                        adoptsAsHibernated(segment, claimed.hibernated(), claimed.waits(), claim)
+                ).thenRun(() -> {
+                    indexWaits(segment, claimed.waits());
+                    if (hibernation != null && claim != null) {
+                        hibernation.claimed(segment, claim);
+                    }
+                }))
                 .orTimeout(restoreTimeout.toMillis(), TimeUnit.MILLISECONDS)
                 .whenComplete((restored, failure) -> logFailedRestore(segment, failure))
                 .thenRun(() -> startRestoredWorkflowsWhenCaughtUp(segment, claimedFrom));
     }
 
-    private CompletableFuture<List<WaitAssociation>> loadWaitAssociations(Segment segment,
-                                                                           ProcessingContext sourcingContext) {
-        return workflowStore.loadWaitAssociations(sourcingContext).thenApply(
-                waitAssociations -> waitAssociations.waitAssociations()
-                                                    .stream()
-                                                    .filter(wait -> WorkflowSegmentOwnership.ownedBy(
-                                                            segment, wait.workflowId()
-                                                    ))
-                                                    .toList()
+    /**
+     * Returns what the claim of the given segment restores from: its running workflows, its open waits and its
+     * hibernated workflows.
+     * <p>
+     * With a {@link WorkflowIndex} whose rows answer the claim, these are the rows of the segment. Otherwise they are
+     * sourced from the {@link WorkflowStore}, as without an index.
+     */
+    private CompletableFuture<ClaimedWorkflows> claimedWorkflows(Segment segment,
+                                                                 @Nullable TrackingToken claimedFrom,
+                                                                 ProcessingContext sourcingContext) {
+        var support = index;
+        if (support == null) {
+            return sourceClaimedWorkflows(segment, sourcingContext);
+        }
+        return support.claim(segment, claimedFrom, sourcingContext).thenCompose(
+                rows -> rows.map(claimed -> (support.keepsWakeTimes()
+                                    ? CompletableFuture.completedFuture(claimed.hibernated())
+                                    // The rows hold no wake time, so the hibernated workflows are the recorded ones.
+                                    : loadRecordedWorkflows(segment, sourcingContext)
+                            ).thenApply(hibernated -> new ClaimedWorkflows(
+                                    claimed.runningWorkflowIds(), claimed.waits(), hibernated
+                            )))
+                            .orElseGet(() -> sourceClaimedWorkflows(segment, sourcingContext))
+        );
+    }
+
+    /**
+     * Sources what the claim of the given segment restores from. The waits are loaded first, as a recorded hibernated
+     * workflow is adopted only while its waits are unchanged.
+     * <p>
+     * With a {@link WorkflowIndex}, the sourced workflows and waits of every segment also complete its rows. When its
+     * rows keep the hibernated workflows, none are read: the index could not answer this claim.
+     */
+    private CompletableFuture<ClaimedWorkflows> sourceClaimedWorkflows(Segment segment,
+                                                                       ProcessingContext sourcingContext) {
+        var support = index;
+        return workflowStore.loadWaitAssociations(sourcingContext).thenCompose(
+                waits -> (support == null || !support.keepsWakeTimes()
+                        ? loadRecordedWorkflows(segment, sourcingContext)
+                        : CompletableFuture.completedFuture(HibernatedWorkflows.NONE)
+                ).thenCompose(recorded -> workflowStore.loadRunningWorkflows(sourcingContext).thenCompose(running -> {
+                    var claimed = new ClaimedWorkflows(
+                            running.workflowIds(),
+                            waits.waitAssociations()
+                                 .stream()
+                                 .filter(wait -> WorkflowSegmentOwnership.ownedBy(segment, wait.workflowId()))
+                                 .toList(),
+                            recorded
+                    );
+                    if (support == null) {
+                        return CompletableFuture.completedFuture(claimed);
+                    }
+                    return support.seed(running.workflowIds(), waits.waitAssociations())
+                                  .exceptionally(failure -> {
+                                      logger.warn("Could not complete the workflow index while claiming segment {}; "
+                                                          + "the next claim tries again.",
+                                                  segment.getSegmentId(), failure);
+                                      return null;
+                                  })
+                                  .thenApply(seeded -> claimed);
+                }))
         );
     }
 
@@ -500,6 +582,19 @@ public class WorkflowEngine implements
         return hibernation == null
                 ? CompletableFuture.completedFuture(HibernatedWorkflows.NONE)
                 : hibernation.loadRecordedWorkflows(segment, sourcingContext);
+    }
+
+    /**
+     * What the claim of a segment restores from.
+     *
+     * @param runningWorkflowIds the identifiers of running workflows, at least those of the segment
+     * @param waits              the open waits of the segment
+     * @param hibernated         the workflows recorded as hibernated
+     */
+    private record ClaimedWorkflows(Collection<String> runningWorkflowIds,
+                                    List<WaitAssociation> waits,
+                                    HibernatedWorkflows hibernated) {
+
     }
 
     /**
@@ -604,62 +699,61 @@ public class WorkflowEngine implements
         return execution -> WorkflowSegmentOwnership.ownedBy(segment, execution.workflowId());
     }
 
-    private CompletableFuture<Void> loadRunningWorkflows(Segment segment,
-                                                         ProcessingContext sourcingContext,
-                                                         ProcessingContext executionContext,
-                                                         Predicate<String> adoptsAsHibernated) {
-        return workflowStore.loadRunningWorkflows(sourcingContext)
-                            .thenCompose(runningWorkflows -> {
-                                var ownedIds = runningWorkflows.workflowIds()
-                                                               .stream()
-                                                               .filter(id -> WorkflowSegmentOwnership.ownedBy(
-                                                                       segment, id
-                                                               ))
-                                                               .filter(adoptsAsHibernated.negate())
-                                                               .toList();
-                                if (ownedIds.isEmpty()) {
-                                    logger.debug("No running workflows to rehydrate for segment {}.",
-                                                 segment.getSegmentId());
-                                    return CompletableFuture.completedFuture(null);
-                                }
-                                logger.debug("Rehydrating {} running workflow execution(s) of segment {}.",
-                                             ownedIds.size(), segment.getSegmentId());
-                                var rehydrations = ownedIds.stream()
-                                                           .map(workflowId -> restoreWorkflow(workflowId,
-                                                                                              sourcingContext,
-                                                                                              executionContext)
-                                                                   // Per instance, so one unrestorable workflow cannot
-                                                                   // abort the whole restore pass. Aborting it would
-                                                                   // fail the segment claim callback, which the
-                                                                   // processor only logs, leaving every other instance
-                                                                   // of that segment permanently unrehydrated while the
-                                                                   // node looks healthy. The skipped instance keeps its
-                                                                   // durable state and is restored by a later claim.
-                                                                   .exceptionally(failure -> {
-                                                                       if (isUnrecognizedDefinition(failure)) {
-                                                                           logger.trace(
-                                                                                   "Skipping workflow '{}' of "
-                                                                                           + "segment {}: its "
-                                                                                           + "definition belongs to "
-                                                                                           + "another WorkflowModule, "
-                                                                                           + "not this engine.",
-                                                                                   workflowId,
-                                                                                   segment.getSegmentId());
-                                                                       } else {
-                                                                           logger.error(
-                                                                                   "Skipping workflow '{}' of segment {}: "
-                                                                                           + "it could not be restored. It "
-                                                                                           + "stays durable and is not "
-                                                                                           + "running on this node.",
-                                                                                   workflowId,
-                                                                                   segment.getSegmentId(),
-                                                                                   failure);
-                                                                       }
-                                                                       return null;
-                                                                   }))
-                                                           .toArray(CompletableFuture[]::new);
-                                return CompletableFuture.allOf(rehydrations);
-                            });
+    private CompletableFuture<Void> restoreRunningWorkflows(Segment segment,
+                                                            Collection<String> runningWorkflowIds,
+                                                            ProcessingContext sourcingContext,
+                                                            ProcessingContext executionContext,
+                                                            Predicate<String> adoptsAsHibernated) {
+        var ownedIds = runningWorkflowIds.stream()
+                                         .filter(id -> WorkflowSegmentOwnership.ownedBy(segment, id))
+                                         .filter(adoptsAsHibernated.negate())
+                                         .toList();
+        if (index != null) {
+            // A restored workflow is not hibernated anymore, whatever its row says.
+            ownedIds.forEach(workflowId -> index.restored(segment, workflowId));
+        }
+        if (ownedIds.isEmpty()) {
+            logger.debug("No running workflows to rehydrate for segment {}.",
+                         segment.getSegmentId());
+            return CompletableFuture.completedFuture(null);
+        }
+        logger.debug("Rehydrating {} running workflow execution(s) of segment {}.",
+                     ownedIds.size(), segment.getSegmentId());
+        var rehydrations = ownedIds.stream()
+                                   .map(workflowId -> restoreWorkflow(workflowId,
+                                                                      sourcingContext,
+                                                                      executionContext)
+                                           // Per instance, so one unrestorable workflow cannot
+                                           // abort the whole restore pass. Aborting it would
+                                           // fail the segment claim callback, which the
+                                           // processor only logs, leaving every other instance
+                                           // of that segment permanently unrehydrated while the
+                                           // node looks healthy. The skipped instance keeps its
+                                           // durable state and is restored by a later claim.
+                                           .exceptionally(failure -> {
+                                               if (isUnrecognizedDefinition(failure)) {
+                                                   logger.trace(
+                                                           "Skipping workflow '{}' of "
+                                                                   + "segment {}: its "
+                                                                   + "definition belongs to "
+                                                                   + "another WorkflowModule, "
+                                                                   + "not this engine.",
+                                                           workflowId,
+                                                           segment.getSegmentId());
+                                               } else {
+                                                   logger.error(
+                                                           "Skipping workflow '{}' of segment {}: "
+                                                                   + "it could not be restored. It "
+                                                                   + "stays durable and is not "
+                                                                   + "running on this node.",
+                                                           workflowId,
+                                                           segment.getSegmentId(),
+                                                           failure);
+                                               }
+                                               return null;
+                                           }))
+                                   .toArray(CompletableFuture[]::new);
+        return CompletableFuture.allOf(rehydrations);
     }
 
     /**
@@ -774,6 +868,10 @@ public class WorkflowEngine implements
         var terminalExecutions = workflowExecutionRepository.findAll(terminal);
         workflowExecutionRepository.removeAll(terminal);
         terminalExecutions.forEach(execution -> checkpointWorkIndex.markSafe(execution.workflowId()));
+        if (index != null) {
+            // A row that outlived its workflow would be restored by every claim.
+            terminalExecutions.forEach(execution -> index.ended(segment, execution.workflowId()));
+        }
         var executionsToStart = workflowExecutionRepository.findAll(owned.and(execution -> !execution.isRunning()));
         // From here on, a woken workflow of this segment starts itself, as it is not among the executions started here.
         if (hibernation != null) {
@@ -886,6 +984,9 @@ public class WorkflowEngine implements
         workflowExecutionRepository.clear();
         checkpointWorkIndex.clear();
         waitIndex.clear();
+        if (index != null) {
+            index.clear();
+        }
         workflowCancellationService.clear();
     }
 

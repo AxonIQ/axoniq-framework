@@ -8,6 +8,7 @@
 
 package io.axoniq.framework.messaging.eventstreaming.checkpoint;
 
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkTestUtils;
 import org.axonframework.messaging.eventhandling.processing.streaming.pooled.SegmentProgressStrategyTestSupport;
 import org.axonframework.messaging.eventhandling.processing.streaming.progress.SegmentProgressStrategyFactory;
@@ -15,6 +16,7 @@ import org.axonframework.messaging.eventhandling.processing.streaming.segmenting
 import org.axonframework.messaging.eventhandling.processing.streaming.token.GlobalSequenceTrackingToken;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.ReplayToken;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
+import org.axonframework.messaging.eventhandling.processing.streaming.token.store.UnableToClaimTokenException;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Nested;
@@ -40,6 +42,7 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.clearInvocations;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
@@ -79,6 +82,20 @@ public abstract class CheckpointingProgressStrategyTestSuite extends SegmentProg
 
     private WorkPackageHarness auto(Checkpointing... participants) {
         return harness(checkpointingStrategy(true, List.of(participants)));
+    }
+
+    private WorkPackageHarness deferredWithShortClaimExtension(Checkpointing... participants) {
+        // A threshold this short lets every worker cycle without a batch run the idle upkeep.
+        return harness(segment(), checkpointingStrategy(false, List.of(participants)), 1);
+    }
+
+    private TrackingToken storedToken() {
+        return UnitOfWorkTestUtils.SIMPLE_FACTORY.create()
+                                                 .executeWithResult(context -> tokenStore().fetchToken(
+                                                         PROCESSOR_NAME, segment().getSegmentId(), context
+                                                 ))
+                                                 .orTimeout(5, TimeUnit.SECONDS)
+                                                 .join();
     }
 
     @Nested
@@ -483,20 +500,6 @@ public abstract class CheckpointingProgressStrategyTestSuite extends SegmentProg
             assertThat(storedToken().covers(new GlobalSequenceTrackingToken(2L))).isTrue();
             assertThat(participant.advanced).containsExactly(new GlobalSequenceTrackingToken(1L));
         }
-
-        private WorkPackageHarness deferredWithShortClaimExtension(Checkpointing... participants) {
-            // A threshold this short lets every worker cycle without a batch run the idle upkeep.
-            return harness(segment(), checkpointingStrategy(false, List.of(participants)), 1);
-        }
-
-        private TrackingToken storedToken() {
-            return UnitOfWorkTestUtils.SIMPLE_FACTORY.create()
-                                                     .executeWithResult(context -> tokenStore().fetchToken(
-                                                             PROCESSOR_NAME, segment().getSegmentId(), context
-                                                     ))
-                                                     .orTimeout(5, TimeUnit.SECONDS)
-                                                     .join();
-        }
     }
 
     @Nested
@@ -713,6 +716,129 @@ public abstract class CheckpointingProgressStrategyTestSuite extends SegmentProg
     }
 
     @Nested
+    class CheckpointStore {
+
+        @Test
+        void aParticipantWritesBeforeTheAgreedTokenIsStored() {
+            // given -- the participant notes the stored token at the moment it is asked to write
+            RecordingCheckpointing participant = new RecordingCheckpointing();
+            AtomicReference<TrackingToken> storedWhenWriting = new AtomicReference<>();
+            participant.storeResult = token -> {
+                storedWhenWriting.set(storedToken());
+                return CompletableFuture.completedFuture(null);
+            };
+            WorkPackageHarness testSubject = deferred(participant);
+            testSubject.onSegmentClaimed();
+
+            // when
+            participant.trigger.requestCheckpoint(new GlobalSequenceTrackingToken(5L));
+
+            // then -- it is handed the token about to be stored, while the previous one is still the stored one
+            await().atMost(TIMEOUT).untilAsserted(() -> verify(tokenStore()).storeToken(
+                    eq(new GlobalSequenceTrackingToken(5L)), anyString(), anyInt(), any()
+            ));
+            assertThat(participant.stored).containsExactly(new GlobalSequenceTrackingToken(5L));
+            assertThat(storedWhenWriting.get()).isEqualTo(initialToken());
+        }
+
+        @Test
+        void aParticipantWritesWhenSkippedEventsAreStored() {
+            // given
+            RecordingCheckpointing participant = new RecordingCheckpointing();
+            WorkPackageHarness testSubject = deferredWithShortClaimExtension(participant);
+            testSubject.onSegmentClaimed();
+            AtomicLong position = new AtomicLong();
+
+            // when -- only events of other segments arrive, so the position is stored without a checkpoint request
+            await().atMost(TIMEOUT).untilAsserted(() -> {
+                testSubject.scheduleSkippedEvent(eventAt(position.incrementAndGet()));
+                assertThat(storedToken()).isNotEqualTo(initialToken());
+            });
+
+            // then -- the participant is not asked to agree, but it is asked to write
+            assertThat(participant.advanced).isEmpty();
+            assertThat(participant.stored).isNotEmpty();
+        }
+
+        @Test
+        void aParticipantWritesWhenTheReleasePositionIsStored() {
+            // given
+            RecordingCheckpointing participant = new RecordingCheckpointing();
+            participant.releaseResult = upTo -> CompletableFuture.completedFuture(new GlobalSequenceTrackingToken(9L));
+            WorkPackageHarness testSubject = deferred(participant);
+            testSubject.onSegmentClaimed();
+
+            // when
+            testSubject.release().orTimeout(TIMEOUT.toMillis(), TimeUnit.MILLISECONDS).join();
+
+            // then
+            assertThat(participant.stored).containsExactly(new GlobalSequenceTrackingToken(9L));
+            verify(tokenStore()).storeToken(eq(new GlobalSequenceTrackingToken(9L)), anyString(), anyInt(), any());
+        }
+
+        @Test
+        void aParticipantWritingWithAPositionThatIsNotStoredHasTheClaimChecked() {
+            // given -- position 5 is stored
+            RecordingCheckpointing participant = new RecordingCheckpointing();
+            WorkPackageHarness testSubject = deferred(participant);
+            testSubject.onSegmentClaimed();
+            participant.trigger.requestCheckpoint(new GlobalSequenceTrackingToken(5L));
+            await().atMost(TIMEOUT).untilAsserted(() -> verify(tokenStore()).storeToken(
+                    eq(new GlobalSequenceTrackingToken(5L)), anyString(), anyInt(), any()
+            ));
+            clearInvocations(tokenStore());
+
+            // when -- the same position is requested again, so the participant writes while no token is stored
+            participant.trigger.requestCheckpoint(new GlobalSequenceTrackingToken(5L));
+
+            // then -- the claim is extended instead, which fails the transaction of a node that lost the segment
+            await().atMost(TIMEOUT).untilAsserted(() -> verify(tokenStore()).extendClaim(
+                    eq(PROCESSOR_NAME), eq(segment().getSegmentId()), any()
+            ));
+            assertThat(participant.stored).hasSize(2);
+            verify(tokenStore(), never()).storeToken(any(), anyString(), anyInt(), any());
+        }
+
+        @Test
+        void aParticipantDoesNotWriteOnReleaseOnceAnotherNodeOwnsTheSegment() {
+            // given -- the claim of the segment cannot be extended, as another node owns it
+            RecordingCheckpointing participant = new RecordingCheckpointing();
+            participant.releaseResult = upTo -> CompletableFuture.completedFuture(new GlobalSequenceTrackingToken(9L));
+            WorkPackageHarness testSubject = deferred(participant);
+            testSubject.onSegmentClaimed();
+            doReturn(CompletableFuture.failedFuture(new UnableToClaimTokenException("Claimed by another node.")))
+                    .when(tokenStore()).extendClaim(anyString(), anyInt(), any());
+
+            // when
+            testSubject.release().orTimeout(TIMEOUT.toMillis(), TimeUnit.MILLISECONDS).join();
+
+            // then -- the release completes, and neither the participant nor the token store wrote anything
+            assertThat(participant.stored).isEmpty();
+            verify(tokenStore(), never()).storeToken(any(), anyString(), anyInt(), any());
+        }
+
+        @Test
+        void aParticipantThatFailsToWriteStoresNoToken() {
+            // given
+            RecordingCheckpointing participant = new RecordingCheckpointing();
+            participant.storeResult = token -> CompletableFuture.failedFuture(
+                    new IllegalStateException("The projection could not be written.")
+            );
+            WorkPackageHarness testSubject = deferred(participant);
+            testSubject.onSegmentClaimed();
+
+            // when
+            participant.trigger.requestCheckpoint(new GlobalSequenceTrackingToken(5L));
+
+            // then -- the participant was asked, and the token it could not write for is not stored
+            await().atMost(TIMEOUT).untilAsserted(() -> assertThat(participant.stored).isNotEmpty());
+            await().pollDelay(Duration.ofMillis(200)).atMost(TIMEOUT).untilAsserted(
+                    () -> verify(tokenStore(), never()).storeToken(any(), anyString(), anyInt(), any())
+            );
+        }
+    }
+
+    @Nested
     class MultiSegmentTriggerKeying {
 
         @Test
@@ -786,12 +912,15 @@ public abstract class CheckpointingProgressStrategyTestSuite extends SegmentProg
 
         private final List<TrackingToken> advanced = new CopyOnWriteArrayList<>();
         private final List<TrackingToken> released = new ArrayList<>();
+        private final List<TrackingToken> stored = new CopyOnWriteArrayList<>();
         private volatile CheckpointTrigger trigger;
         private volatile TrackingToken claimedFrom;
         private volatile Function<TrackingToken, CompletableFuture<TrackingToken>> advanceResult =
                 CompletableFuture::completedFuture;
         private volatile Function<TrackingToken, CompletableFuture<TrackingToken>> releaseResult =
                 CompletableFuture::completedFuture;
+        private volatile Function<TrackingToken, CompletableFuture<Void>> storeResult =
+                token -> CompletableFuture.completedFuture(null);
 
         @Override
         public void onSegmentClaimed(@NonNull Segment segment,
@@ -799,6 +928,14 @@ public abstract class CheckpointingProgressStrategyTestSuite extends SegmentProg
                                      @NonNull CheckpointTrigger trigger) {
             this.claimedFrom = from;
             this.trigger = trigger;
+        }
+
+        @Override
+        public CompletableFuture<Void> onCheckpointStore(@NonNull Segment segment,
+                                                         @NonNull TrackingToken token,
+                                                         @NonNull ProcessingContext processingContext) {
+            stored.add(token);
+            return storeResult.apply(token);
         }
 
         @Override

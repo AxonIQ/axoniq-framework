@@ -14,10 +14,19 @@ import io.axoniq.framework.workflow.dsl.api.EventConditions;
 import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
 import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContextFactory;
+import io.axoniq.framework.workflow.index.inmemory.InMemoryWorkflowIndex;
+import io.axoniq.framework.workflow.index.jpa.JpaWorkflowIndex;
+import io.axoniq.framework.workflow.index.jpa.JpaWorkflowIndexConfiguration;
 import io.axoniq.framework.workflow.runtime.execution.PayloadPropertyWorkflowIdProvider;
+import jakarta.persistence.EntityManagerFactory;
 import org.axonframework.common.configuration.Configuration;
+import org.axonframework.conversion.GeneralConverter;
 import org.axonframework.eventsourcing.snapshot.api.SnapshotPolicy;
 import org.axonframework.messaging.core.correlation.MessageOriginProvider;
+import org.axonframework.messaging.core.unitofwork.transaction.jpa.JpaTransactionalExecutorProvider;
+import org.axonframework.messaging.eventhandling.processing.streaming.token.store.TokenStore;
+import org.axonframework.messaging.eventhandling.processing.streaming.token.store.jpa.JpaTokenStore;
+import org.axonframework.messaging.eventhandling.processing.streaming.token.store.jpa.JpaTokenStoreConfiguration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -191,6 +200,52 @@ public class ConfigurationExamples {
                                   .workflowState(SnapshotPolicy.afterEvents(200))      // <2>
                                   .waitAssociations(SnapshotPolicy.afterEvents(500))); // <3>
         // end::snapshots[]
+    }
+
+    public void snapshotsDisabled() {
+        // tag::snapshots-disabled[]
+        WorkflowConfigurer.create()
+                          .snapshots(snapshots -> snapshots.enabled(false));
+        // end::snapshots-disabled[]
+    }
+
+    public void workflowIndexJpa(EntityManagerFactory entityManagerFactory) {
+        // tag::workflow-index-jpa[]
+        var transactions = new JpaTransactionalExecutorProvider(entityManagerFactory);   // <1>
+
+        WorkflowConfigurer.create()
+                          .registerWorkflowIndex(config -> new JpaWorkflowIndex(
+                                  transactions,
+                                  config.getComponent(GeneralConverter.class),
+                                  JpaWorkflowIndexConfiguration.DEFAULT                  // <2>
+                          ))
+                          .componentRegistry(registry -> registry.registerComponent(
+                                  TokenStore.class,
+                                  config -> new JpaTokenStore(
+                                          transactions,
+                                          config.getComponent(GeneralConverter.class),
+                                          JpaTokenStoreConfiguration.DEFAULT
+                                  )
+                          ));
+        // end::workflow-index-jpa[]
+    }
+
+    public void workflowIndexOtherDatabase(EntityManagerFactory indexEntityManagerFactory) {
+        // tag::workflow-index-other-database[]
+        WorkflowConfigurer.create()
+                          .registerWorkflowIndex(config -> new JpaWorkflowIndex(
+                                  new JpaTransactionalExecutorProvider(indexEntityManagerFactory),
+                                  config.getComponent(GeneralConverter.class),
+                                  JpaWorkflowIndexConfiguration.DEFAULT.storesWithToken(false)
+                          ));
+        // end::workflow-index-other-database[]
+    }
+
+    public void workflowIndexInMemory() {
+        // tag::workflow-index-in-memory[]
+        WorkflowConfigurer.create()
+                          .registerWorkflowIndex(config -> new InMemoryWorkflowIndex());
+        // end::workflow-index-in-memory[]
     }
 
     public void performanceTuning() {

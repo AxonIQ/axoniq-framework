@@ -9,7 +9,7 @@ package io.axoniq.framework.springboot.workflow;
 
 import io.axoniq.framework.springboot.WorkflowProperties;
 import io.axoniq.framework.springboot.autoconfig.WorkflowAutoConfiguration;
-import io.axoniq.framework.workflow.configuration.WorkflowConfigurationDefaults;
+import io.axoniq.framework.workflow.configuration.WorkflowSnapshotConfiguration;
 import org.axonframework.eventsourcing.snapshot.api.SnapshotPolicy;
 import org.junit.jupiter.api.*;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
@@ -113,13 +113,13 @@ class WorkflowPropertiesTest {
                 .withConfiguration(AutoConfigurations.of(WorkflowAutoConfiguration.class));
 
         @Test
-        void snapshotsAreDisabledWithFiftyEventsPerSnapshotByDefault() {
+        void snapshotsAreNeitherEnabledNorDisabledWithFiftyEventsPerSnapshotByDefault() {
             contextRunner.run(context -> {
                 // when
                 var snapshots = context.getBean(WorkflowProperties.class).getSnapshots();
 
                 // then
-                assertThat(snapshots.isEnabled()).isFalse();
+                assertThat(snapshots.getEnabled()).isNull();
                 assertThat(snapshots.getRunningWorkflows().getAfterEvents()).isEqualTo(50);
                 assertThat(snapshots.getWorkflowState().getAfterEvents()).isEqualTo(50);
                 assertThat(snapshots.getWaitAssociations().getAfterEvents()).isEqualTo(50);
@@ -138,7 +138,7 @@ class WorkflowPropertiesTest {
                 var snapshots = context.getBean(WorkflowProperties.class).getSnapshots();
 
                 // then
-                assertThat(snapshots.isEnabled()).isTrue();
+                assertThat(snapshots.getEnabled()).isTrue();
                 assertThat(snapshots.getRunningWorkflows().getAfterEvents()).isEqualTo(250);
                 assertThat(snapshots.getWorkflowState().getAfterEvents()).isEqualTo(75);
                 assertThat(snapshots.getWaitAssociations().getAfterEvents()).isEqualTo(300);
@@ -146,14 +146,33 @@ class WorkflowPropertiesTest {
         }
 
         @Test
-        void snapshotPoliciesAreRegisteredOnlyWhenSnapshotsAreEnabled() {
+        void theSnapshotConfigurationFollowsTheEnabledProperty() {
+            // when the property is not set / then snapshots are neither enabled nor disabled
+            autoConfigurationRunner.run(context -> {
+                var snapshots = context.getBean(WorkflowSnapshotConfiguration.class);
+                assertThat(snapshots.enabled()).isFalse();
+                assertThat(snapshots.disabled()).isFalse();
+            });
+
+            // when the property is false / then snapshots are disabled
+            autoConfigurationRunner.withPropertyValues("axon.workflow.snapshots.enabled=false")
+                                   .run(context -> assertThat(
+                                           context.getBean(WorkflowSnapshotConfiguration.class).disabled()
+                                   ).isTrue());
+
+            // when the property is true / then snapshots are enabled
+            autoConfigurationRunner.withPropertyValues("axon.workflow.snapshots.enabled=true")
+                                   .run(context -> assertThat(
+                                           context.getBean(WorkflowSnapshotConfiguration.class).enabled()
+                                   ).isTrue());
+        }
+
+        @Test
+        void noSnapshotPolicyBeanIsRegistered() {
             autoConfigurationRunner.run(context -> assertThat(context).doesNotHaveBean(SnapshotPolicy.class));
 
             autoConfigurationRunner.withPropertyValues("axon.workflow.snapshots.enabled=true")
-                                   .run(context -> assertThat(context)
-                                           .hasBean(WorkflowConfigurationDefaults.RUNNING_WORKFLOWS_SNAPSHOT_POLICY)
-                                           .hasBean(WorkflowConfigurationDefaults.WORKFLOW_STATE_SNAPSHOT_POLICY)
-                                           .hasBean(WorkflowConfigurationDefaults.WAIT_ASSOCIATIONS_SNAPSHOT_POLICY));
+                                   .run(context -> assertThat(context).doesNotHaveBean(SnapshotPolicy.class));
         }
     }
 

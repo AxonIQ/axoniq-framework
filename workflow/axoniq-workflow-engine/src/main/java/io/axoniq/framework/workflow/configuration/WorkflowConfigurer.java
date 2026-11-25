@@ -7,12 +7,14 @@
  */
 package io.axoniq.framework.workflow.configuration;
 
+import io.axoniq.framework.workflow.runtime.execution.WorkflowIndex;
 import org.axonframework.common.configuration.ApplicationConfigurer;
 import org.axonframework.common.configuration.AxonConfiguration;
+import org.axonframework.common.configuration.ComponentBuilder;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.LifecycleRegistry;
 import org.axonframework.eventsourcing.configuration.EventSourcingConfigurer;
-import org.axonframework.eventsourcing.snapshot.api.SnapshotPolicy;
+import org.jspecify.annotations.Nullable;
 
 import java.util.Objects;
 import java.util.function.Consumer;
@@ -70,6 +72,7 @@ import static java.util.Objects.requireNonNull;
 public class WorkflowConfigurer implements ApplicationConfigurer {
 
     private final EventSourcingConfigurer delegate;
+    private @Nullable WorkflowSnapshotConfiguration snapshotConfiguration;
 
     private WorkflowConfigurer(EventSourcingConfigurer delegate) {
         this.delegate = requireNonNull(delegate, "The Event Sourcing Configurer cannot be null.");
@@ -112,11 +115,23 @@ public class WorkflowConfigurer implements ApplicationConfigurer {
     }
 
     /**
-     * Applies the given {@code snapshotConfiguration} function to the {@link WorkflowSnapshotConfiguration} of the
-     * workflow engine.
+     * Applies the given {@code snapshotConfiguration} function to a new {@link WorkflowSnapshotConfiguration}, and
+     * registers the result as the {@code WorkflowSnapshotConfiguration} component, which decides whether, and how,
+     * the workflow engine snapshots its entities.
      * <p>
-     * Snapshots are disabled by default. Enabling them requires a
-     * {@link org.axonframework.eventsourcing.snapshot.store.SnapshotStore} component.
+     * Unless snapshots are explicitly enabled or disabled, the workflow engine snapshots its entities when the
+     * application can take snapshots: when it has a
+     * {@link org.axonframework.eventsourcing.snapshot.store.SnapshotStore} component, a
+     * {@link org.axonframework.conversion.GeneralConverter} component, and a
+     * {@link org.axonframework.messaging.core.MessageTypeResolver} resolving the type of the entity. Explicitly
+     * enabling snapshots requires all three, or the application fails to start. To take no snapshot at all, disable
+     * them:
+     * <pre>{@code
+     * WorkflowConfigurer.create()
+     *                   .snapshots(snapshots -> snapshots.enabled(false));
+     * }</pre>
+     * Every invocation starts from a new {@code WorkflowSnapshotConfiguration}, and replaces the configuration of an
+     * earlier invocation.
      *
      * @param snapshotConfiguration a function customizing the {@link WorkflowSnapshotConfiguration}
      * @return the current instance of the {@code Configurer} for a fluent API
@@ -124,26 +139,41 @@ public class WorkflowConfigurer implements ApplicationConfigurer {
     public WorkflowConfigurer snapshots(
             Function<WorkflowSnapshotConfiguration, WorkflowSnapshotConfiguration> snapshotConfiguration
     ) {
-        var snapshots = requireNonNull(snapshotConfiguration, "The snapshot configuration function must not be null.")
-                .apply(new WorkflowSnapshotConfiguration());
-        if (snapshots.enabled()) {
-            delegate.componentRegistry(cr -> cr
-                    .registerComponent(
-                            SnapshotPolicy.class,
-                            WorkflowConfigurationDefaults.RUNNING_WORKFLOWS_SNAPSHOT_POLICY,
-                            c -> snapshots.runningWorkflows()
-                    )
-                    .registerComponent(
-                            SnapshotPolicy.class,
-                            WorkflowConfigurationDefaults.WORKFLOW_STATE_SNAPSHOT_POLICY,
-                            c -> snapshots.workflowState()
-                    )
-                    .registerComponent(
-                            SnapshotPolicy.class,
-                            WorkflowConfigurationDefaults.WAIT_ASSOCIATIONS_SNAPSHOT_POLICY,
-                            c -> snapshots.waitAssociations()
-                    ));
+        var snapshots = requireNonNull(
+                requireNonNull(snapshotConfiguration, "The snapshot configuration function must not be null.")
+                        .apply(new WorkflowSnapshotConfiguration()),
+                "The snapshot configuration function must not return null."
+        );
+        if (this.snapshotConfiguration == null) {
+            delegate.componentRegistry(cr -> cr.registerComponent(
+                    WorkflowSnapshotConfiguration.class, c -> requireNonNull(this.snapshotConfiguration)
+            ));
         }
+        this.snapshotConfiguration = snapshots;
+        return this;
+    }
+
+    /**
+     * Registers the {@link WorkflowIndex} of the workflow modules. Without one, which is the default, every segment
+     * claim sources the running workflows and the open waits of all segments from the event store.
+     * <p>
+     * With an index, a claimed segment reads only its own rows, and a hibernated workflow stays out of memory across a
+     * restart of the application. One index serves every workflow module.
+     * <p>
+     * Example usage:
+     * <pre>{@code
+     * WorkflowConfigurer.create()
+     *                   .registerWorkflowIndex(config -> new InMemoryWorkflowIndex());
+     * }</pre>
+     *
+     * @param indexBuilder builds the {@link WorkflowIndex} from the
+     *                     {@link org.axonframework.common.configuration.Configuration}
+     * @return this configurer, for a fluent API
+     * @since 5.5.0
+     */
+    public WorkflowConfigurer registerWorkflowIndex(ComponentBuilder<WorkflowIndex> indexBuilder) {
+        requireNonNull(indexBuilder, "The WorkflowIndex builder must not be null.");
+        delegate.componentRegistry(cr -> cr.registerComponent(WorkflowIndex.class, indexBuilder));
         return this;
     }
 

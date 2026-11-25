@@ -23,6 +23,8 @@ class CheckpointingProgressStrategyTest extends CheckpointingProgressStrategyTes
     @Override
     protected SegmentProgressStrategyFactory checkpointingStrategy(boolean autoCheckpointing,
                                                                    List<Checkpointing> participants) {
-        return context -> new CheckpointingProgressStrategy(context, participants, autoCheckpointing);
+        return context -> new CheckpointingProgressStrategy(
+                context, participants, autoCheckpointing, tokenStore(), PROCESSOR_NAME
+        );
     }
 }

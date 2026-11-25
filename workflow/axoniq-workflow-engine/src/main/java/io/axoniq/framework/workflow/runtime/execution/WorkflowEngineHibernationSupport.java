@@ -61,6 +61,10 @@ import java.util.function.Supplier;
  * only once the claim started its restored executions, so a wake never starts a body twice and never runs one while
  * the segment catches up.
  * <p>
+ * With a {@link WorkflowIndex}, no {@link HibernatedWorkflows} are recorded in the {@link WorkflowStore}. The row of a
+ * hibernated workflow carries the time it wakes at instead, stored with the token of its segment, and a claim adopts
+ * the workflows whose row carries one. The record and the row are the same fact in two places, so only one is used.
+ * <p>
  * The {@link WorkflowEngine} creates it when the hibernation setting of the workflow module is enabled, starts it with
  * the engine and stops it on shutdown.
  *
@@ -83,6 +87,7 @@ final class WorkflowEngineHibernationSupport {
     private final String name;
     private final Duration interval;
     private final Executor wakeExecutor;
+    private final Supplier<@Nullable WorkflowEngineIndexSupport> indexSupport;
     private final LockFactory locks = PessimisticLockFactory.usingDefaults();
     private final Map<String, Hibernation> hibernations = new ConcurrentHashMap<>();
     // The hibernated workflows of each segment by segment id, like the records, so a segment's are found directly.
@@ -128,6 +133,44 @@ final class WorkflowEngineHibernationSupport {
                                      String name,
                                      Duration interval,
                                      Executor wakeExecutor) {
+        this(scheduler, clock, repository, cancellationService, checkpointWorkIndex, unitOfWorkFactory, restoreTimeout,
+             loader, workflowStore, name, interval, wakeExecutor, () -> null);
+    }
+
+    /**
+     * Creates the hibernation support of an engine that may have a {@link WorkflowIndex}.
+     *
+     * @param scheduler           schedules the passes and the deadlines of hibernated workflows
+     * @param clock               the clock the scheduler measures deadlines with
+     * @param repository          the executions in memory
+     * @param cancellationService the cancellation registrations of the live workflows
+     * @param checkpointWorkIndex the workflows with unsafe checkpoint work
+     * @param unitOfWorkFactory   creates the unit of work of a wake outside event handling
+     * @param restoreTimeout      the time a wake may take to load a workflow
+     * @param loader              loads a hibernated workflow back into the engine and starts it
+     * @param workflowStore       records the hibernated workflows of each segment
+     * @param name                names the engine in the identifier of each record, so engines of several workflow
+     *                            modules never share one
+     * @param interval            the time between 2 passes, and before a failed wake is tried again
+     * @param wakeExecutor        runs the wakes for a deadline or a cancellation, which load from the store, so they
+     *                            never run on the timer thread
+     * @param indexSupport        supplies the index support of the engine, or {@code null} when the engine has no
+     *                            {@link WorkflowIndex}. With one, the index keeps the time each hibernated workflow
+     *                            wakes at, and no hibernated workflows are recorded in the {@link WorkflowStore}
+     */
+    WorkflowEngineHibernationSupport(WorkflowScheduler scheduler,
+                                     Clock clock,
+                                     WorkflowExecutionRepository repository,
+                                     WorkflowCancellationService cancellationService,
+                                     UnsafeCheckpointWorkIndex checkpointWorkIndex,
+                                     UnitOfWorkFactory unitOfWorkFactory,
+                                     Supplier<Duration> restoreTimeout,
+                                     WorkflowLoader loader,
+                                     WorkflowStore workflowStore,
+                                     String name,
+                                     Duration interval,
+                                     Executor wakeExecutor,
+                                     Supplier<@Nullable WorkflowEngineIndexSupport> indexSupport) {
         this.scheduler = Objects.requireNonNull(scheduler, "The WorkflowScheduler must not be null.");
         this.clock = Objects.requireNonNull(clock, "The Clock must not be null.");
         this.repository = Objects.requireNonNull(repository, "The WorkflowExecutionRepository must not be null.");
@@ -142,6 +185,7 @@ final class WorkflowEngineHibernationSupport {
         this.name = Objects.requireNonNull(name, "The name must not be null.");
         this.interval = Objects.requireNonNull(interval, "The interval must not be null.");
         this.wakeExecutor = Objects.requireNonNull(wakeExecutor, "The wake Executor must not be null.");
+        this.indexSupport = Objects.requireNonNull(indexSupport, "The index support supplier must not be null.");
     }
 
     /**
@@ -467,7 +511,10 @@ final class WorkflowEngineHibernationSupport {
         recordLock.lock();
         try {
             claims.remove(segment.getSegmentId());
-            if (claimedSegments.remove(segment.getSegmentId()) != null) {
+            var index = indexSupport.get();
+            // Nothing is recorded when the rows of an index keep the time each hibernated workflow wakes at.
+            if (claimedSegments.remove(segment.getSegmentId()) != null
+                    && (index == null || !index.keepsWakeTimes())) {
                 record = recordOf(segment);
             }
         } finally {
@@ -580,6 +627,10 @@ final class WorkflowEngineHibernationSupport {
                     return false;
                 }
                 park(workflowId, segment, openWaits.get(), deadline.get(), CompletableFuture.completedFuture(null));
+                var index = indexSupport.get();
+                if (index != null) {
+                    index.wakesAt(segment, workflowId, deadline.get());
+                }
             } finally {
                 recordLock.unlock();
             }
@@ -632,6 +683,11 @@ final class WorkflowEngineHibernationSupport {
             loader.load(workflowId, executionContext, hibernation.segment(), beforeStart);
         }
         removeHibernation(workflowId, hibernation);
+        var index = indexSupport.get();
+        if (index != null) {
+            // Only a wake clears it. A workflow dropped with its segment or with the engine is still hibernated.
+            index.clearWakesAt(hibernation.segment(), workflowId);
+        }
         hibernation.wakeTimer().cancel();
         // A wake held until its segment started finds the workflow gone and does nothing.
         hibernation.armed().complete(null);

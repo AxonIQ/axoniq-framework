@@ -8,13 +8,17 @@
 package io.axoniq.framework.workflow.configuration;
 
 import org.axonframework.eventsourcing.snapshot.api.SnapshotPolicy;
+import org.jspecify.annotations.Nullable;
 
 import static java.util.Objects.requireNonNull;
 
 /**
- * The snapshot settings of the workflow engine, customized through {@link WorkflowConfigurer#snapshots}.
+ * The snapshot settings of the workflow engine, customized through {@link WorkflowConfigurer#snapshots}, or registered
+ * as a {@code WorkflowSnapshotConfiguration} component, such as the one Spring Boot creates from the
+ * {@code axon.workflow.snapshots} properties. This component decides whether, and how, the engine snapshots its
+ * entities.
  * <p>
- * Snapshots are disabled by default. Once {@link #enabled(boolean) enabled}, the engine snapshots:
+ * The engine sources three event-sourced entities, and can snapshot each:
  * <ul>
  *     <li>The running-workflow list, as its {@link #runningWorkflows(SnapshotPolicy) snapshot policy} dictates. There
  *     is one list, so there is one snapshot of it.</li>
@@ -23,7 +27,19 @@ import static java.util.Objects.requireNonNull;
  *     <li>The open-wait list, as its {@link #waitAssociations(SnapshotPolicy) snapshot policy} dictates. There is one
  *     list, so there is one snapshot of it. Every segment claim loads this list.</li>
  * </ul>
- * A restarting node then sources each from its latest snapshot instead of from every event ever published.
+ * A restarting node, or a node claiming a segment, then sources each from its latest snapshot instead of from every
+ * event ever published.
+ * <p>
+ * Whether snapshots are taken depends on {@link #enabled(boolean)}:
+ * <ul>
+ *     <li>Not set (the default): an entity is snapshotted when the application can take snapshots, that is, when it
+ *     has a {@link org.axonframework.eventsourcing.snapshot.store.SnapshotStore} component, a
+ *     {@link org.axonframework.conversion.GeneralConverter} component, and a
+ *     {@link org.axonframework.messaging.core.MessageTypeResolver} that resolves the type of the entity. Otherwise no
+ *     snapshot is taken, and the application starts as usual.</li>
+ *     <li>{@code true}: every entity is snapshotted. An application that cannot take snapshots fails to start.</li>
+ *     <li>{@code false}: no snapshot is taken.</li>
+ * </ul>
  * <p>
  * Example usage:
  * <pre>{@code
@@ -39,13 +55,18 @@ import static java.util.Objects.requireNonNull;
  */
 public class WorkflowSnapshotConfiguration {
 
-    private boolean enabled = false;
+    private @Nullable Boolean enabled;
     private SnapshotPolicy runningWorkflows = SnapshotPolicy.afterEvents(50);
     private SnapshotPolicy workflowState = SnapshotPolicy.afterEvents(50);
     private SnapshotPolicy waitAssociations = SnapshotPolicy.afterEvents(50);
 
     /**
-     * Enables or disables snapshots. Defaults to {@code false}.
+     * Enables or disables snapshots.
+     * <p>
+     * When this is not set, snapshots are taken if the application has a
+     * {@link org.axonframework.eventsourcing.snapshot.store.SnapshotStore}, and are not taken otherwise. Set to
+     * {@code true}, snapshots are taken and the application needs a {@code SnapshotStore} to start. Set to
+     * {@code false}, no snapshots are taken.
      *
      * @param enabled whether snapshots are taken
      * @return this configuration, for a fluent API
@@ -93,12 +114,24 @@ public class WorkflowSnapshotConfiguration {
     }
 
     /**
-     * Returns whether snapshots are taken.
+     * Returns whether snapshots are explicitly enabled.
      *
-     * @return {@code true} if snapshots are taken, {@code false} otherwise
+     * @return {@code true} if snapshots were enabled through {@link #enabled(boolean)}, {@code false} when they were
+     * disabled or not set
      */
     public boolean enabled() {
-        return enabled;
+        return Boolean.TRUE.equals(enabled);
+    }
+
+    /**
+     * Returns whether snapshots are explicitly disabled.
+     *
+     * @return {@code true} if snapshots were disabled through {@link #enabled(boolean)}, {@code false} when they were
+     * enabled or not set
+     * @since 5.5.0
+     */
+    public boolean disabled() {
+        return Boolean.FALSE.equals(enabled);
     }
 
     /**
