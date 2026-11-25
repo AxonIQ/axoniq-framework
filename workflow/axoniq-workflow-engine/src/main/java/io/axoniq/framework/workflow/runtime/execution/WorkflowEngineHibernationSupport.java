@@ -45,24 +45,26 @@ import java.util.function.Supplier;
  * deadline leaves memory, and is restored from the event store when that event arrives, that deadline expires, or a
  * cancellation is requested for it.
  * <p>
- * Residency follows the {@link LiveWorkflows} registry, which keeps every live workflow, in memory or hibernated, and
- * applies the transitions this support decides on: a workflow hibernates by swapping its execution in memory for a
- * {@link Hibernated hibernation}, and wakes by swapping it back. The lock of each workflow, from the registry, keeps
- * hibernation, event delivery, cancellation and wakes of one workflow apart, so an event or a cancellation either
- * reaches the execution in memory or finds the workflow hibernated, never neither. The execution itself only reports
- * whether it is at a safe point, through its {@link WorkflowExecutionHibernationSupport}.
+ * This support is the hibernation policy: it decides when a workflow hibernates and wakes, builds the
+ * {@link HibernationHint hint} and the timer of a hibernation, and throttles the wakes that do not run for an event. It
+ * keeps no residency of its own. The {@link LiveWorkflows} registry keeps every live workflow, in memory or
+ * hibernated, with the rows of the open waits of the hibernated ones, and applies the transitions this support decides
+ * on: a workflow hibernates by swapping its execution in memory for a {@link Hibernated hibernation}, and wakes by
+ * swapping it back. The lock of each workflow, from the registry, keeps hibernation, event delivery, cancellation and
+ * wakes of one workflow apart, so an event or a cancellation either reaches the execution in memory or finds the
+ * workflow hibernated, never neither. The execution itself only reports whether it is at a safe point, through its
+ * {@link WorkflowExecutionHibernationSupport}.
  * <p>
  * Every half idle delay, a pass asks the running executions in memory that made no progress for the idle delay to
  * hibernate. A hibernated workflow keeps a timer for its nearest deadline, and the registry keeps the rows of its open
  * waits, which route broadcast events to it, and finds it for a cancellation request, which this support wakes it for,
- * see {@link #requestWhileHibernated(String, Function, Supplier)}. No event is written:
- * a hibernating workflow records its {@link HibernationHint hint}, its open waits and nearest deadline, in the
- * {@link RunningWorkflowsProjection}, which writes it to the workflow index with a checkpoint that joins the
- * processor's transaction, and clears it again when the workflow wakes. Releasing or claiming a segment forgets the
- * hibernated workflows of that segment. A claim of the segment, here or on another node, restores every running
- * workflow of the segment, except those whose hint it accepts: it {@link #adopt(SegmentClaim, String, HibernationHint)
- * adopts} those as hibernated workflows instead, which wake for an event like any other, but for their deadline or a
- * cancellation only once the claim caught up.
+ * see {@link #requestWhileHibernated(String, Function, Supplier)}. No event is written: a hibernating workflow records
+ * its {@link HibernationHint hint}, its open waits and nearest deadline, in the {@link RunningWorkflowsProjection},
+ * which writes it to the workflow index with a checkpoint that joins the processor's transaction, and clears it again
+ * when the workflow wakes. Releasing or claiming a segment forgets the hibernated workflows of that segment. A claim
+ * of the segment, here or on another node, restores every running workflow of the segment, except those whose hint it
+ * accepts: it {@link #adopt(SegmentClaim, String, HibernationHint) adopts} those as hibernated workflows instead, which
+ * wake for an event like any other, but for their deadline or a cancellation only once the claim caught up.
  * <p>
  * A wake restores the workflow from the event store in a unit of work of its own, on the execution context of the
  * claim that holds its segment, and hands it what woke it before its body starts. A wake by an event runs on the

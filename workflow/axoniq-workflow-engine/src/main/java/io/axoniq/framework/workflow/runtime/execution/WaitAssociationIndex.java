@@ -36,9 +36,9 @@ import java.util.regex.Pattern;
  * The {@link LiveWorkflows} registry owns it: it adds the open waits of a workflow when the workflow hibernates or
  * is adopted as hibernated, and removes them when it wakes or is dropped, each time under the lock of that workflow.
  * The waits are parsed into {@link Row rows} beforehand, see {@link #rowOf(String, String, QualifiedName, Collection)},
- * so adding them only updates the index. A row may match more events
- * than its wait accepts, never fewer: the woken workflow still checks its full condition. A wait whose condition is a
- * predicate has no associations, so it matches every event of its name.
+ * so adding them only updates the index. A row may match more events than its wait accepts, never fewer: the woken
+ * workflow still checks its full condition. A wait whose condition is a predicate has no associations, so it matches
+ * every event of its name.
  * <p>
  * A row is kept under its event name and the value of one of its {@code =} associations, like the association values
  * of a saga; a lookup reads that value from the event and finds the rows by it, so its cost does not grow with the

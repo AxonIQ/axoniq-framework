@@ -36,9 +36,10 @@ import java.util.function.Supplier;
  * while it waits to enter one, keeps its carrier thread. Once every carrier is kept that way, the virtual thread they
  * wait for never runs again.
  * <p>
- * Where the engine takes both, it takes the lock of a workflow before the lock of a claim. An action of a claim
- * therefore takes no lock of a workflow: the hibernated workflows of a failed claim are dropped outside its lock, and
- * the cancellation requests of an execution that leaves memory under it are answered on another thread.
+ * Where the engine takes both, it takes the lock of a workflow before the lock of a claim, see the lock order of
+ * {@link LiveWorkflows}. An action of a claim therefore takes no lock of a workflow: the hibernated workflows of a
+ * failed claim are dropped outside its lock, and the cancellation requests of an execution that leaves memory under it
+ * are answered on another thread.
  * <p>
  * The {@link SegmentClaims} of the engine create and end the claims; the engine and its hibernation support run their
  * actions on them.
