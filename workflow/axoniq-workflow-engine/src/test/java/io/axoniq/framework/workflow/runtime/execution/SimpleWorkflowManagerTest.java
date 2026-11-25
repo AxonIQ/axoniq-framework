@@ -342,8 +342,7 @@ class SimpleWorkflowManagerTest {
         );
 
         private static SegmentClaim claimOfEverySegment() {
-            var segmentClaims = new SegmentClaims((segment, phase) -> {
-            });
+            var segmentClaims = new SegmentClaims();
             segmentClaims.initialize(null);
             return segmentClaims.startClaim(Segment.ROOT_SEGMENT, new StubProcessingContext());
         }

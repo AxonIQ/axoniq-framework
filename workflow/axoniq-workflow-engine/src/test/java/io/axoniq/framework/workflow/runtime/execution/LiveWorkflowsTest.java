@@ -72,8 +72,7 @@ class LiveWorkflowsTest {
 
     private final HookRepository repository = new HookRepository();
     private final LiveWorkflows liveWorkflows = new LiveWorkflows(repository);
-    private final SegmentClaims segmentClaims = new SegmentClaims((segment, phase) -> {
-    });
+    private final SegmentClaims segmentClaims = new SegmentClaims();
     private final SegmentClaim claim = startClaim(segmentClaims);
     private final List<String> loads = new CopyOnWriteArrayList<>();
     private final WorkflowEngineHibernationSupport support = new WorkflowEngineHibernationSupport(
@@ -85,7 +84,7 @@ class LiveWorkflowsTest {
                 loads.add(hibernated.workflowId());
                 var execution = new InspectionCountingWorkflowExecution(hibernated.workflowId());
                 var woken = new AtomicBoolean();
-                hibernated.claim().runWhileCurrent(() -> woken.set(liveWorkflows.wake(hibernated, execution)));
+                hibernated.claim().runIfCurrent(() -> woken.set(liveWorkflows.wake(hibernated, execution)));
                 if (woken.get()) {
                     beforeStart.accept(execution);
                 }
@@ -120,7 +119,7 @@ class LiveWorkflowsTest {
      */
     private void adopt(Hibernated hibernated) {
         try (var ignored = liveWorkflows.lock(hibernated.workflowId())) {
-            assertThat(claim.runWhileCurrent(() -> assertThat(liveWorkflows.adopt(hibernated)).isTrue())).isTrue();
+            assertThat(claim.runIfCurrent(() -> assertThat(liveWorkflows.adopt(hibernated)).isTrue())).isTrue();
         }
     }
 
@@ -130,7 +129,7 @@ class LiveWorkflowsTest {
     private boolean hibernate(WorkflowExecution execution, Hibernated hibernated) {
         var hibernatedNow = new AtomicBoolean();
         try (var ignored = liveWorkflows.lock(hibernated.workflowId())) {
-            claim.runWhileCurrent(() -> hibernatedNow.set(liveWorkflows.hibernate(execution, hibernated)));
+            claim.runIfCurrent(() -> hibernatedNow.set(liveWorkflows.hibernate(execution, hibernated)));
         }
         return hibernatedNow.get();
     }
@@ -141,7 +140,7 @@ class LiveWorkflowsTest {
     private boolean wake(Hibernated hibernated, WorkflowExecution execution) {
         var woken = new AtomicBoolean();
         try (var ignored = liveWorkflows.lock(hibernated.workflowId())) {
-            claim.runWhileCurrent(() -> woken.set(liveWorkflows.wake(hibernated, execution)));
+            claim.runIfCurrent(() -> woken.set(liveWorkflows.wake(hibernated, execution)));
         }
         return woken.get();
     }

@@ -82,6 +82,26 @@ final class SegmentClaim {
         }
     }
 
+    /**
+     * When the body of a workflow execution that enters memory under a claim starts: right away, by the action that
+     * brings it into memory, or later, by the activation of the claim. Never both, as the action and the activation
+     * run under the lock of the claim, and the activation runs once.
+     */
+    enum BodyStart {
+
+        /**
+         * The claim activated, or there is no startup head to catch up with: the action that brings the execution
+         * into memory starts its body itself.
+         */
+        NOW,
+        /**
+         * The action leaves the body alone. Either the claim still catches up, and its activation starts the body, as
+         * it starts every execution it finds that does not run yet, or the claim ended or failed, and the body does not
+         * start under it.
+         */
+        AT_ACTIVATION
+    }
+
     private final ReentrantLock lock = new ReentrantLock();
 
     private final Segment segment;
@@ -133,7 +153,7 @@ final class SegmentClaim {
      * @param action the action to run
      * @return {@code true} when the action ran, {@code false} when the claim ended or failed
      */
-    boolean runWhileCurrent(Runnable action) {
+    boolean runIfCurrent(Runnable action) {
         lock.lock();
         try {
             if (!state.isCurrent()) {
@@ -147,22 +167,23 @@ final class SegmentClaim {
     }
 
     /**
-     * Runs the given {@code start} under the lock of this claim, telling it whether workflow bodies may start now, but
-     * only while this claim is current: neither ended nor failed. Bodies may start once the claim activated, or right
-     * away when there is no startup head, also before the activation ran. An action that starts an execution when it
-     * may thereby never races the activation of the claim, which starts every execution it finds.
+     * Runs the given {@code action} under the lock of this claim, telling it when workflow bodies start, but only while
+     * this claim is current: neither ended nor failed. Bodies start {@link BodyStart#NOW now} once the claim activated,
+     * or right away when there is no startup head, also before the activation ran. An action that starts an execution
+     * only when told {@link BodyStart#NOW now} thereby never races the activation of the claim, which starts every
+     * execution it finds.
      *
-     * @param start receives whether workflow bodies may start now
+     * @param action receives when workflow bodies start
      * @return {@code true} when the action ran, {@code false} when the claim ended or failed
      */
-    boolean startWhileCurrent(Consumer<Boolean> start) {
+    boolean runIfCurrentWithBodyStart(Consumer<BodyStart> action) {
         var head = startupHead.get();
         lock.lock();
         try {
             if (!state.isCurrent()) {
                 return false;
             }
-            start.accept(head == null || state == State.ACTIVE);
+            action.accept(bodyStart(head));
             return true;
         } finally {
             lock.unlock();
@@ -170,20 +191,29 @@ final class SegmentClaim {
     }
 
     /**
-     * Runs the given {@code start} under the lock of this claim, telling it whether workflow bodies may start now, also
-     * when this claim ended or failed. Bodies may start once the claim activated and while it is current, or whenever
-     * there is no startup head. An action that creates an execution and starts it when it may thereby never races an
-     * activation that starts every execution it finds.
+     * Runs the given {@code action} under the lock of this claim, telling it when workflow bodies start, whether or not
+     * this claim is current: also when it ended or failed. Bodies start {@link BodyStart#NOW now} once the claim
+     * activated and while it is current, or whenever there is no startup head. An action that creates an execution and
+     * starts it only when told {@link BodyStart#NOW now} thereby never races an activation that starts every execution
+     * it finds.
      *
-     * @param start receives whether workflow bodies may start now
+     * @param action receives when workflow bodies start
      */
-    void startExclusively(Consumer<Boolean> start) {
+    void runAlwaysWithBodyStart(Consumer<BodyStart> action) {
         lock.lock();
         try {
-            start.accept(startupHead.get() == null || state == State.ACTIVE);
+            action.accept(bodyStart(startupHead.get()));
         } finally {
             lock.unlock();
         }
+    }
+
+    /**
+     * Returns when the body of an execution entering memory under this claim starts, given the startup head. The caller
+     * holds the lock of the claim.
+     */
+    private BodyStart bodyStart(@Nullable TrackingToken head) {
+        return head == null || state == State.ACTIVE ? BodyStart.NOW : BodyStart.AT_ACTIVATION;
     }
 
     /**
@@ -231,7 +261,7 @@ final class SegmentClaim {
      * Marks this claim as failed, and runs the given {@code cleanup} under its lock, but only while the claim is current:
      * a claim that ended or failed already runs no cleanup, so the cleanup runs at most once, and never once a next
      * claim of the segment started. A failed claim is never activated, and runs no
-     * {@link #runWhileCurrent(Runnable) action} anymore. Returns once an action or activation of the claim in progress
+     * {@link #runIfCurrent(Runnable) action} anymore. Returns once an action or activation of the claim in progress
      * has finished. A next claim of the segment only starts once the cleanup finished, so the cleanup never touches
      * what that claim restores.
      *

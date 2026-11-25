@@ -7,6 +7,7 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
+import io.axoniq.framework.workflow.runtime.execution.SegmentClaim.BodyStart;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
@@ -35,8 +36,9 @@ import java.util.function.Function;
  * <p>
  * A claim activates once its segment caught up with the startup head: right away, when there is no startup head, or
  * when the segment resumes from a position that covers it or has consumed nothing yet, or else once an event the
- * segment handles, or the position of the segment, covers it. The {@link Activation} the engine hands over then runs,
- * exactly once per claim.
+ * segment handles, or the position of the segment, covers it. The {@link Activation} the engine hands to
+ * {@link #activateOrAwaitCatchUp(SegmentClaim, TrackingToken, Activation)} or
+ * {@link #activateOnDelivery(Segment, TrackingToken, Activation)} then runs, exactly once per claim.
  * <p>
  * A segment that handles an event, or fails to, while it has no current claim gets an <em>implicit</em> claim: one
  * without an execution context, recorded on first use. That happens when the processor hands events of a segment to the
@@ -63,7 +65,6 @@ final class SegmentClaims {
     static final int CATCH_UP_POLLS_WITHOUT_POSITION = 10;
     private static final Logger logger = LoggerFactory.getLogger(SegmentClaims.class);
 
-    private final Activation activation;
     private final Map<Integer, SegmentClaim> claims = new ConcurrentHashMap<>();
     @Nullable
     private volatile TrackingToken startupHead;
@@ -74,15 +75,6 @@ final class SegmentClaims {
     Consumer<Runnable> catchUpPolls =
             poll -> CompletableFuture.delayedExecutor(CATCH_UP_POLL_INTERVAL.toMillis(), TimeUnit.MILLISECONDS)
                                      .execute(poll);
-
-    /**
-     * Creates the claims of an engine, which run the given {@code activation} for each claim that caught up.
-     *
-     * @param activation starts the restored workflow executions of a segment whose claim caught up
-     */
-    SegmentClaims(Activation activation) {
-        this.activation = Objects.requireNonNull(activation, "The activation must not be null.");
-    }
 
     /**
      * Records the position a claim must reach before it activates.
@@ -188,12 +180,14 @@ final class SegmentClaims {
 
     /**
      * Activates the given {@code claim} when the position its segment resumes from covers the startup head, or else
-     * polls the position of its segment until it does.
+     * polls the position of its segment until it does, and activates it then.
      *
      * @param claim       the claim that restored its executions
      * @param claimedFrom the stored position the segment resumes from, or {@code null} when it has consumed nothing
+     * @param activation  starts the restored executions of the claim once it caught up
      */
-    void activateOrAwaitCatchUp(SegmentClaim claim, @Nullable TrackingToken claimedFrom) {
+    void activateOrAwaitCatchUp(SegmentClaim claim, @Nullable TrackingToken claimedFrom, Activation activation) {
+        Objects.requireNonNull(activation, "The activation must not be null.");
         var segment = claim.segment();
         boolean activated = claim.activate(
                 claimedFrom, () -> activation.start(segment, "on claim of segment " + segment.getSegmentId())
@@ -201,7 +195,7 @@ final class SegmentClaims {
         if (!activated) {
             logger.info("Segment {} is catching up; restored workflow executions start after catch-up.",
                         segment.getSegmentId());
-            awaitCatchUp(claim, 0);
+            awaitCatchUp(claim, activation, 0);
         }
     }
 
@@ -218,9 +212,10 @@ final class SegmentClaims {
      * not end it. An event the segment handles still activates the claim after polling ended.
      *
      * @param claim                the claim waiting to catch up
+     * @param activation           starts the restored executions of the claim once it caught up
      * @param pollsWithoutPosition the number of consecutive polls so far that found no position of the segment
      */
-    private void awaitCatchUp(SegmentClaim claim, int pollsWithoutPosition) {
+    private void awaitCatchUp(SegmentClaim claim, Activation activation, int pollsWithoutPosition) {
         catchUpPolls.accept(() -> {
             if (stopped || !claim.isWaiting()) {
                 return;
@@ -245,7 +240,7 @@ final class SegmentClaims {
                             segment.getSegmentId());
                 return;
             }
-            awaitCatchUp(claim, withoutPosition);
+            awaitCatchUp(claim, activation, withoutPosition);
         });
     }
 
@@ -255,8 +250,10 @@ final class SegmentClaims {
      *
      * @param segment        the segment handling an event, or {@code null} outside a segmented processor
      * @param deliveredToken the token of the handled event, or {@code null} when unknown
+     * @param activation     starts the restored executions of the claim when it caught up
      */
-    void activateOnDelivery(@Nullable Segment segment, @Nullable TrackingToken deliveredToken) {
+    void activateOnDelivery(@Nullable Segment segment, @Nullable TrackingToken deliveredToken, Activation activation) {
+        Objects.requireNonNull(activation, "The activation must not be null.");
         if (segment == null || deliveredToken == null) {
             return;
         }
@@ -264,21 +261,22 @@ final class SegmentClaims {
     }
 
     /**
-     * Runs the given {@code start} while no activation of the current claim of the given {@code segment} runs, telling
-     * it whether workflow bodies may start now, see {@link SegmentClaim#startExclusively(Consumer)}. An action that
-     * creates an execution and starts it when it may thereby never races an activation that starts every execution it
-     * finds. A segment without a current claim gets an implicit one.
+     * Runs the given {@code action} under the lock of the current claim of the given {@code segment}, telling it when
+     * workflow bodies start, whether or not that claim is still current, see
+     * {@link SegmentClaim#runAlwaysWithBodyStart(Consumer)}. An action that creates an execution and starts it only
+     * when told {@link BodyStart#NOW now} thereby never races an activation that starts every execution it finds. A
+     * segment without a current claim gets an implicit one.
      *
      * @param segment the segment handling an event, or {@code null} outside a segmented processor, where bodies always
-     *                may start
-     * @param start   receives whether workflow bodies may start now
+     *                start {@link BodyStart#NOW now}
+     * @param action  receives when workflow bodies start
      */
-    void startExclusively(@Nullable Segment segment, Consumer<Boolean> start) {
+    void runAlwaysWithBodyStart(@Nullable Segment segment, Consumer<BodyStart> action) {
         if (segment == null) {
-            start.accept(true);
+            action.accept(BodyStart.NOW);
             return;
         }
-        currentOrImplicitClaim(segment).startExclusively(start);
+        currentOrImplicitClaim(segment).runAlwaysWithBodyStart(action);
     }
 
     /**
@@ -296,7 +294,8 @@ final class SegmentClaims {
 
     /**
      * Starts the restored workflow executions of a segment whose claim caught up with the startup head. Runs under the
-     * lock of that claim, at most once per claim.
+     * lock of that claim, at most once per claim. The engine hands it to every call that may activate a claim, so the
+     * call site shows what an activation runs.
      */
     @FunctionalInterface
     interface Activation {

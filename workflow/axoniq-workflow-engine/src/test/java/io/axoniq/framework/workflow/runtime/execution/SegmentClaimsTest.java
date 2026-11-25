@@ -7,6 +7,7 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
+import io.axoniq.framework.workflow.runtime.execution.SegmentClaim.BodyStart;
 import org.axonframework.messaging.core.unitofwork.StubProcessingContext;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
@@ -44,7 +45,8 @@ class SegmentClaimsTest {
     // The catch-up polls that are due, which run only when the test runs them.
     private final Queue<Runnable> duePolls = new ConcurrentLinkedQueue<>();
     private final AtomicReference<@Nullable TrackingToken> segmentPosition = new AtomicReference<>();
-    private final SegmentClaims testSubject = new SegmentClaims((segment, phase) -> activations.add(phase));
+    private final SegmentClaims.Activation recordActivation = (segment, phase) -> activations.add(phase);
+    private final SegmentClaims testSubject = new SegmentClaims();
 
     @BeforeEach
     void setUp() {
@@ -129,7 +131,7 @@ class SegmentClaimsTest {
             var claim = claimBehindTheStartupHead();
 
             // when
-            testSubject.activateOrAwaitCatchUp(claim, STARTUP_HEAD);
+            testSubject.activateOrAwaitCatchUp(claim, STARTUP_HEAD, recordActivation);
 
             // then
             assertThat(activations).containsExactly("on claim of segment " + SEGMENT.getSegmentId());
@@ -140,7 +142,7 @@ class SegmentClaimsTest {
         void activatesAClaimBehindTheStartupHeadOnceThePolledPositionCoversIt() {
             // given
             var claim = claimBehindTheStartupHead();
-            testSubject.activateOrAwaitCatchUp(claim, token(5));
+            testSubject.activateOrAwaitCatchUp(claim, token(5), recordActivation);
             segmentPosition.set(token(7));
             runDuePoll();
             assertThat(activations).isEmpty();
@@ -160,7 +162,7 @@ class SegmentClaimsTest {
         void pollsNoPositionOnceStopped() {
             // given
             var claim = claimBehindTheStartupHead();
-            testSubject.activateOrAwaitCatchUp(claim, token(5));
+            testSubject.activateOrAwaitCatchUp(claim, token(5), recordActivation);
             segmentPosition.set(STARTUP_HEAD);
 
             // when
@@ -180,7 +182,7 @@ class SegmentClaimsTest {
             testSubject.setSegmentPositions(segment -> {
                 throw new IllegalStateException("The position cannot be read.");
             });
-            testSubject.activateOrAwaitCatchUp(claim, token(5));
+            testSubject.activateOrAwaitCatchUp(claim, token(5), recordActivation);
 
             // when
             runDuePoll();
@@ -197,7 +199,7 @@ class SegmentClaimsTest {
         void stopsPollingOnceTheSegmentIsReleased() {
             // given
             var claim = claimBehindTheStartupHead();
-            testSubject.activateOrAwaitCatchUp(claim, token(5));
+            testSubject.activateOrAwaitCatchUp(claim, token(5), recordActivation);
             segmentPosition.set(STARTUP_HEAD);
 
             // when
@@ -215,8 +217,8 @@ class SegmentClaimsTest {
             var claim = claimBehindTheStartupHead();
 
             // when
-            testSubject.activateOnDelivery(null, STARTUP_HEAD);
-            testSubject.activateOnDelivery(SEGMENT, null);
+            testSubject.activateOnDelivery(null, STARTUP_HEAD, recordActivation);
+            testSubject.activateOnDelivery(SEGMENT, null, recordActivation);
 
             // then
             assertThat(activations).isEmpty();
@@ -229,10 +231,10 @@ class SegmentClaimsTest {
             testSubject.initialize(STARTUP_HEAD);
 
             // when
-            testSubject.activateOnDelivery(SEGMENT, token(9));
+            testSubject.activateOnDelivery(SEGMENT, token(9), recordActivation);
             var implicitClaim = testSubject.claimOf(SEGMENT).orElseThrow();
             boolean waitingBefore = implicitClaim.isWaiting();
-            testSubject.activateOnDelivery(SEGMENT, STARTUP_HEAD);
+            testSubject.activateOnDelivery(SEGMENT, STARTUP_HEAD, recordActivation);
 
             // then
             assertThat(implicitClaim.executionContext()).isNull();
@@ -247,21 +249,21 @@ class SegmentClaimsTest {
     }
 
     @Nested
-    class StartWhileCurrent {
+    class RunIfCurrentWithBodyStart {
 
         @Test
         void letsBodiesStartBeforeTheActivationWithoutAStartupHead() {
             // given
             testSubject.initialize(null);
             var claim = testSubject.startClaim(SEGMENT, new StubProcessingContext());
-            var mayStart = new ArrayList<Boolean>();
+            var bodyStarts = new ArrayList<BodyStart>();
 
             // when
-            boolean ran = claim.startWhileCurrent(mayStart::add);
+            boolean ran = claim.runIfCurrentWithBodyStart(bodyStarts::add);
 
             // then - and the activation still runs, once
             assertThat(ran).isTrue();
-            assertThat(mayStart).containsExactly(true);
+            assertThat(bodyStarts).containsExactly(BodyStart.NOW);
             assertThat(claim.activate(null, () -> activations.add("activated"))).isTrue();
             assertThat(claim.activate(null, () -> activations.add("activated"))).isTrue();
             assertThat(activations).containsExactly("activated");
@@ -271,16 +273,16 @@ class SegmentClaimsTest {
         void letsBodiesStartOnlyOnceTheClaimActivated() {
             // given
             var claim = claimBehindTheStartupHead();
-            var mayStart = new ArrayList<Boolean>();
+            var bodyStarts = new ArrayList<BodyStart>();
 
             // when
-            claim.startWhileCurrent(mayStart::add);
+            claim.runIfCurrentWithBodyStart(bodyStarts::add);
             claim.activate(STARTUP_HEAD, () -> {
             });
-            claim.startWhileCurrent(mayStart::add);
+            claim.runIfCurrentWithBodyStart(bodyStarts::add);
 
             // then
-            assertThat(mayStart).containsExactly(false, true);
+            assertThat(bodyStarts).containsExactly(BodyStart.AT_ACTIVATION, BodyStart.NOW);
         }
 
         @Test
@@ -291,8 +293,8 @@ class SegmentClaimsTest {
             });
 
             // when
-            boolean started = failed.startWhileCurrent(mayStart -> fail("Started on a failed claim."));
-            boolean ran = failed.runWhileCurrent(() -> fail("Ran on a failed claim."));
+            boolean started = failed.runIfCurrentWithBodyStart(bodyStart -> fail("Started on a failed claim."));
+            boolean ran = failed.runIfCurrent(() -> fail("Ran on a failed claim."));
 
             // then
             assertThat(started).isFalse();
@@ -306,8 +308,8 @@ class SegmentClaimsTest {
             testSubject.release(SEGMENT);
 
             // when
-            boolean started = ended.startWhileCurrent(mayStart -> fail("Started on an ended claim."));
-            boolean ran = ended.runWhileCurrent(() -> fail("Ran on an ended claim."));
+            boolean started = ended.runIfCurrentWithBodyStart(bodyStart -> fail("Started on an ended claim."));
+            boolean ran = ended.runIfCurrent(() -> fail("Ran on an ended claim."));
 
             // then
             assertThat(started).isFalse();
@@ -316,32 +318,32 @@ class SegmentClaimsTest {
     }
 
     @Nested
-    class StartExclusively {
+    class RunAlwaysWithBodyStart {
 
         @Test
         void letsBodiesStartOutsideASegmentedProcessor() {
             // given
             testSubject.initialize(STARTUP_HEAD);
-            var mayStart = new ArrayList<Boolean>();
+            var bodyStarts = new ArrayList<BodyStart>();
 
             // when
-            testSubject.startExclusively(null, mayStart::add);
+            testSubject.runAlwaysWithBodyStart(null, bodyStarts::add);
 
             // then
-            assertThat(mayStart).containsExactly(true);
+            assertThat(bodyStarts).containsExactly(BodyStart.NOW);
         }
 
         @Test
         void recordsAnImplicitClaimForASegmentWithoutOne() {
             // given
             testSubject.initialize(STARTUP_HEAD);
-            var mayStart = new ArrayList<Boolean>();
+            var bodyStarts = new ArrayList<BodyStart>();
 
             // when
-            testSubject.startExclusively(SEGMENT, mayStart::add);
+            testSubject.runAlwaysWithBodyStart(SEGMENT, bodyStarts::add);
 
             // then
-            assertThat(mayStart).containsExactly(false);
+            assertThat(bodyStarts).containsExactly(BodyStart.AT_ACTIVATION);
             assertThat(testSubject.claimOf(SEGMENT)).hasValueSatisfying(
                     claim -> assertThat(claim.executionContext()).isNull()
             );
@@ -354,13 +356,13 @@ class SegmentClaimsTest {
             claim.activate(STARTUP_HEAD, () -> {
             });
             testSubject.release(SEGMENT);
-            var mayStart = new ArrayList<Boolean>();
+            var bodyStarts = new ArrayList<BodyStart>();
 
             // when
-            claim.startExclusively(mayStart::add);
+            claim.runAlwaysWithBodyStart(bodyStarts::add);
 
             // then
-            assertThat(mayStart).containsExactly(false);
+            assertThat(bodyStarts).containsExactly(BodyStart.AT_ACTIVATION);
         }
     }
 
@@ -379,7 +381,7 @@ class SegmentClaimsTest {
 
             // then - and the current claim is unaffected
             assertThat(cleanups).isEmpty();
-            assertThat(current.runWhileCurrent(() -> cleanups.add("current"))).isTrue();
+            assertThat(current.runIfCurrent(() -> cleanups.add("current"))).isTrue();
             assertThat(testSubject.hasFailed(SEGMENT)).isFalse();
         }
 
@@ -469,7 +471,7 @@ class SegmentClaimsTest {
             var claim = claimBehindTheStartupHead();
             var actionRuns = new CountDownLatch(1);
             var actionMayEnd = new CountDownLatch(1);
-            var action = Thread.ofVirtual().start(() -> claim.runWhileCurrent(() -> {
+            var action = Thread.ofVirtual().start(() -> claim.runIfCurrent(() -> {
                 actionRuns.countDown();
                 try {
                     actionMayEnd.await(30, TimeUnit.SECONDS);
@@ -488,7 +490,7 @@ class SegmentClaimsTest {
                 actionMayEnd.countDown();
                 assertThat(release.join(Duration.ofSeconds(5))).isTrue();
                 assertThat(action.join(Duration.ofSeconds(5))).isTrue();
-                assertThat(claim.runWhileCurrent(() -> fail("Ran on an ended claim."))).isFalse();
+                assertThat(claim.runIfCurrent(() -> fail("Ran on an ended claim."))).isFalse();
             } finally {
                 actionMayEnd.countDown();
             }
@@ -496,7 +498,7 @@ class SegmentClaimsTest {
     }
 
     @Nested
-    class RunWhileCurrent {
+    class RunIfCurrent {
 
         @Test
         void letsAnActionWaitForAVirtualThreadWhileAVirtualThreadPerCarrierRunsAnActionOfTheClaim()
@@ -507,7 +509,7 @@ class SegmentClaimsTest {
             var released = new CountDownLatch(1);
             var actions = new ArrayList<Thread>();
             for (int i = 0; i < carrierThreadCount(); i++) {
-                actions.add(Thread.ofVirtual().start(() -> claim.runWhileCurrent(() -> {
+                actions.add(Thread.ofVirtual().start(() -> claim.runIfCurrent(() -> {
                     try {
                         released.await(30, TimeUnit.SECONDS);
                     } catch (InterruptedException e) {

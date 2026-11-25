@@ -67,8 +67,7 @@ class WorkflowEngineHibernationSupportAdoptionTest {
     private final ControllableWorkflowIndex workflowIndex = new ControllableWorkflowIndex();
     private final RunningWorkflowsProjection projection = new RunningWorkflowsProjection(workflowIndex, INDEX);
     // The test activates its claim itself, see activate().
-    private final SegmentClaims segmentClaims = new SegmentClaims((segment, phase) -> {
-    });
+    private final SegmentClaims segmentClaims = new SegmentClaims();
     private final AtomicInteger firedTimers = new AtomicInteger();
     private final ScheduledThreadPoolExecutor timer = new ScheduledThreadPoolExecutor(1) {
         @Override
@@ -105,12 +104,12 @@ class WorkflowEngineHibernationSupportAdoptionTest {
         loads.add(hibernated.workflowId());
         var execution = new InspectionCountingWorkflowExecution(hibernated.workflowId());
         var woken = new AtomicBoolean();
-        hibernated.claim().runWhileCurrent(() -> woken.set(liveWorkflows.wake(hibernated, execution)));
+        hibernated.claim().runIfCurrent(() -> woken.set(liveWorkflows.wake(hibernated, execution)));
         if (woken.get()) {
             try {
                 beforeStart.accept(execution);
             } catch (RuntimeException e) {
-                hibernated.claim().runWhileCurrent(() -> liveWorkflows.hibernate(execution, hibernated));
+                hibernated.claim().runIfCurrent(() -> liveWorkflows.hibernate(execution, hibernated));
                 throw e;
             }
         }
@@ -453,7 +452,7 @@ class WorkflowEngineHibernationSupportAdoptionTest {
             execution = mocked;
             loader = (hibernated, beforeStart) -> {
                 var woken = new AtomicBoolean();
-                hibernated.claim().runWhileCurrent(() -> woken.set(liveWorkflows.wake(hibernated, execution)));
+                hibernated.claim().runIfCurrent(() -> woken.set(liveWorkflows.wake(hibernated, execution)));
                 if (woken.get()) {
                     beforeStart.accept(execution);
                     liveWorkflows.markCancellable(execution);

@@ -12,6 +12,7 @@ import io.axoniq.framework.workflow.index.api.WorkflowIndex;
 import io.axoniq.framework.workflow.index.api.WorkflowIndex.HibernationHint;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
+import io.axoniq.framework.workflow.runtime.execution.SegmentClaim.BodyStart;
 import io.axoniq.framework.workflow.runtime.util.MetadataUtils;
 import io.axoniq.framework.workflow.runtime.util.ProcessingContextUtils;
 import io.axoniq.license.entitlement.EntitlementManager;
@@ -85,7 +86,10 @@ public class WorkflowEngine implements
     private final UnitOfWorkFactory unitOfWorkFactory;
     // Package-private so a test can start a new claim of a segment without stopping the executions of the current one,
     // and run the catch-up polls itself.
-    final SegmentClaims segmentClaims = new SegmentClaims(this::removeTerminalAndStartRestoredWorkflowExecutions);
+    final SegmentClaims segmentClaims = new SegmentClaims();
+    // The activation this engine hands to every call of its segment claims that may activate a claim. A field, so
+    // handling an event does not create a method reference for it.
+    private final SegmentClaims.Activation activation = this::removeTerminalAndStartRestoredWorkflowExecutions;
     private final WorkflowEngineSequencingPolicy segmentedRouting;
     private final RunningWorkflowsProjection runningWorkflows;
     private final RunningWorkflowsClaimLoader claimLoader;
@@ -301,7 +305,7 @@ public class WorkflowEngine implements
             // whether or not this engine runs that instance.
             runningWorkflows.apply(segment, event);
             route(segment, event, context);
-            segmentClaims.activateOnDelivery(segment, currentToken);
+            segmentClaims.activateOnDelivery(segment, currentToken, activation);
             checkpointingSupport.requestCheckpoint(segment, currentToken);
         } catch (RuntimeException | Error e) {
             if (segment != null) {
@@ -443,7 +447,7 @@ public class WorkflowEngine implements
 
         // Exclusive with the activation of the segment, which starts every execution it finds that does not run
         // yet: either that activation finds this execution and starts it, or this start does, never both.
-        segmentClaims.startExclusively(segment, mayStartBodies -> {
+        segmentClaims.runAlwaysWithBodyStart(segment, bodyStart -> {
             var claim = segment == null ? null : segmentClaims.claimOf(segment).orElse(null);
             var execution = liveWorkflows.enter(workflowId, mayHibernate(claim), () -> {
                 logger.debug("Creating a new workflow '{}' with payload '{}'", workflowId, eventMessage.payload());
@@ -451,7 +455,7 @@ public class WorkflowEngine implements
             });
             liveWorkflows.markCancellable(execution);
             allowHibernation(execution, claim);
-            if (mayStartBodies) {
+            if (bodyStart == BodyStart.NOW) {
                 execute(execution);
             }
         });
@@ -635,7 +639,7 @@ public class WorkflowEngine implements
                         }
                         onFailedRestore(segment, failure);
                     } else {
-                        segmentClaims.activateOrAwaitCatchUp(claim, claimedFrom);
+                        segmentClaims.activateOrAwaitCatchUp(claim, claimedFrom, activation);
                     }
                 });
     }
@@ -863,7 +867,7 @@ public class WorkflowEngine implements
         // Only while the claim is current: an instance that finishes restoring after its claim failed or the segment
         // was released would otherwise stay behind, and run from the state it sourced back then. A restore that
         // outlives its claim also leaves a hibernation of the workflow under another claim alone.
-        boolean added = claim.runWhileCurrent(() -> {
+        boolean added = claim.runIfCurrent(() -> {
             var support = hibernation;
             boolean restoredOver = support != null
                     && liveWorkflows.get(workflowId) instanceof LiveWorkflows.Hibernated hibernated
@@ -960,7 +964,7 @@ public class WorkflowEngine implements
         execution.restoreAppendPosition(sourced.position());
         boolean[] woken = new boolean[1];
         // Only while the claim is current, like a restore.
-        claim.runWhileCurrent(() -> woken[0] = liveWorkflows.wake(hibernated, execution));
+        claim.runIfCurrent(() -> woken[0] = liveWorkflows.wake(hibernated, execution));
         if (!woken[0]) {
             logger.debug("Not waking workflow '{}': the claim of segment {} failed or ended meanwhile.",
                          workflowId, segment.getSegmentId());
@@ -971,8 +975,8 @@ public class WorkflowEngine implements
             beforeStart.accept(execution);
             // Started here only once the claim caught up; before that, its activation starts it with the restored
             // ones.
-            claim.startWhileCurrent(mayStartBodies -> {
-                if (mayStartBodies && !execution.isRunning()) {
+            claim.runIfCurrentWithBodyStart(bodyStart -> {
+                if (bodyStart == BodyStart.NOW && !execution.isRunning()) {
                     liveWorkflows.markCancellable(execution);
                     execute(execution);
                 }
@@ -985,7 +989,7 @@ public class WorkflowEngine implements
             // Only while the claim is current: a claim that ended dropped the hibernated workflows of its segment, and
             // must not find this one hibernated again once it no longer looks.
             boolean[] returned = new boolean[1];
-            claim.runWhileCurrent(() -> returned[0] = liveWorkflows.hibernate(execution, hibernated));
+            claim.runIfCurrent(() -> returned[0] = liveWorkflows.hibernate(execution, hibernated));
             if (!returned[0]) {
                 liveWorkflows.leave(execution);
             }
@@ -1002,7 +1006,9 @@ public class WorkflowEngine implements
     }
 
     /**
-     * Removes terminal workflow executions and starts the remaining restored executions of the given segment.
+     * Removes terminal workflow executions and starts the remaining restored executions of the given segment: the
+     * {@link SegmentClaims.Activation activation} of a claim that caught up with the startup head, which this engine
+     * hands to every call of its {@link SegmentClaims} that may activate a claim.
      * <p>
      * Both passes are scoped to the segment they run for. Instances of other segments are none of this segment's
      * business: they belong to a segment at its own position, possibly still replaying, and starting one here would run

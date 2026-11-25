@@ -13,6 +13,7 @@ import io.axoniq.framework.workflow.index.api.WorkflowIndex.OpenWait;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.framework.workflow.runtime.execution.LiveWorkflows.Hibernated;
 import io.axoniq.framework.workflow.runtime.execution.LiveWorkflows.QueuedRequest;
+import io.axoniq.framework.workflow.runtime.execution.SegmentClaim.BodyStart;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.conversion.EventConverter;
@@ -299,9 +300,11 @@ final class WorkflowEngineHibernationSupport {
                 return false;
             }
             var adopted = new AtomicBoolean();
-            claim.startWhileCurrent(mayStartBodies -> adopted.set(park(
-                    hibernationOf(claim, workflowId, hint,
-                                  mayStartBodies ? CompletableFuture.completedFuture(null) : new CompletableFuture<>()),
+            // Armed right away when bodies start now; else by the activation of the claim, see arm(Segment).
+            claim.runIfCurrentWithBodyStart(bodyStart -> adopted.set(park(
+                    hibernationOf(claim, workflowId, hint, bodyStart == BodyStart.NOW
+                            ? CompletableFuture.completedFuture(null)
+                            : new CompletableFuture<>()),
                     liveWorkflows::adopt
             )));
             return adopted.get();
@@ -444,7 +447,7 @@ final class WorkflowEngineHibernationSupport {
                                 .orElseThrow();
             var hint = hintOf(waits.get(), deadline);
             var parked = new AtomicBoolean();
-            claim.runWhileCurrent(() -> {
+            claim.runIfCurrent(() -> {
                 projection.recordHibernated(claim.segment(), workflowId, hint);
                 parked.set(park(hibernationOf(claim, workflowId, hint, CompletableFuture.completedFuture(null)),
                                 hibernated -> liveWorkflows.hibernate(execution, hibernated)));
