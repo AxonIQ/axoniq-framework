@@ -60,7 +60,7 @@ class WorkflowEngineBroadcastRoutingTest {
         executions = IntStream.range(0, 2_000)
                               .mapToObj(i -> new InspectionCountingWorkflowExecution("broadcast-" + i))
                               .toList();
-        executions.forEach(execution -> liveWorkflows.enter(execution.id(), () -> execution));
+        executions.forEach(execution -> liveWorkflows.enter(execution.id(), false, () -> execution));
     }
 
     private static ProcessingContext contextOf(Segment segment) {

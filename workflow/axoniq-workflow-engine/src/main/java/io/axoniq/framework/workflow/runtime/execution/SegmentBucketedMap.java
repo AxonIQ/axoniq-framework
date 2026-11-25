@@ -100,6 +100,34 @@ final class SegmentBucketedMap<V> {
     }
 
     /**
+     * Stores the given value for the given id, unless a value is stored for it already. Behaves as
+     * {@link ConcurrentHashMap#putIfAbsent(Object, Object)}.
+     *
+     * @param id    the workflow id, not empty
+     * @param value the value
+     * @return the value stored already, or {@code null} when the given value is stored
+     * @throws IllegalArgumentException when the id is empty
+     */
+    @Nullable
+    V putIfAbsent(String id, V value) {
+        return bucketOf(requireNotEmpty(id)).putIfAbsent(id, value);
+    }
+
+    /**
+     * Replaces the value stored for the given id with the given replacement, but only while it is the expected value.
+     * Behaves as {@link ConcurrentHashMap#replace(Object, Object, Object)}.
+     *
+     * @param id          the workflow id, not empty
+     * @param expected    the value that must be stored
+     * @param replacement the value to store instead
+     * @return {@code true} when the expected value was stored and is replaced
+     * @throws IllegalArgumentException when the id is empty
+     */
+    boolean replace(String id, V expected, V replacement) {
+        return bucketOf(requireNotEmpty(id)).replace(id, expected, replacement);
+    }
+
+    /**
      * Stores the given value for the given id, replacing any stored value.
      *
      * @param id    the workflow id, not empty

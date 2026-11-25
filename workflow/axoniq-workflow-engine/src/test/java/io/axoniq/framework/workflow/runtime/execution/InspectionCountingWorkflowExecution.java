@@ -38,6 +38,7 @@ final class InspectionCountingWorkflowExecution implements WorkflowExecution {
     private final String workflowId;
     private final AtomicInteger inspections = new AtomicInteger();
     private final List<EventMessage> deliveredEvents = new CopyOnWriteArrayList<>();
+    private final List<Consumer<WorkflowExecution>> appendedTasks = new CopyOnWriteArrayList<>();
     private volatile @Nullable CheckpointWorkStateListener checkpointWorkStateListener;
 
     InspectionCountingWorkflowExecution(String workflowId) {
@@ -60,6 +61,14 @@ final class InspectionCountingWorkflowExecution implements WorkflowExecution {
 
     List<EventMessage> deliveredEvents() {
         return List.copyOf(deliveredEvents);
+    }
+
+    /**
+     * Returns the tasks appended to this execution, which it never runs, such as a cancellation request queued on an
+     * execution that woke for it.
+     */
+    List<Consumer<WorkflowExecution>> appendedTasks() {
+        return List.copyOf(appendedTasks);
     }
 
     /**
@@ -105,7 +114,7 @@ final class InspectionCountingWorkflowExecution implements WorkflowExecution {
 
     @Override
     public void appendTask(Consumer<WorkflowExecution> task) {
-        throw unexpected();
+        appendedTasks.add(task);
     }
 
     @Override

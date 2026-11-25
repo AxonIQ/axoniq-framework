@@ -108,8 +108,8 @@ class WorkflowEngineSegmentCallbackTest {
         var foreign = execution(FOREIGN_ID);
         var repository = new InMemoryWorkflowExecutionRepository();
         var liveWorkflows = new LiveWorkflows(repository);
-        liveWorkflows.enter(OWNED_ID, () -> owned);
-        liveWorkflows.enter(FOREIGN_ID, () -> foreign);
+        liveWorkflows.enter(OWNED_ID, false, () -> owned);
+        liveWorkflows.enter(FOREIGN_ID, false, () -> foreign);
         var cancellationService = new WorkflowCancellationService();
         var engine = engine(liveWorkflows, mock(WorkflowStore.class), cancellationService);
         engine.registerCancellation(owned);
@@ -130,7 +130,7 @@ class WorkflowEngineSegmentCallbackTest {
         // given: a released execution, whose cancellation was replaced by another registration of its workflow
         var owned = execution(OWNED_ID);
         var liveWorkflows = new LiveWorkflows(new InMemoryWorkflowExecutionRepository());
-        liveWorkflows.enter(OWNED_ID, () -> owned);
+        liveWorkflows.enter(OWNED_ID, false, () -> owned);
         var cancellationService = new WorkflowCancellationService();
         var engine = engine(liveWorkflows, mock(WorkflowStore.class), cancellationService);
         engine.registerCancellation(owned);

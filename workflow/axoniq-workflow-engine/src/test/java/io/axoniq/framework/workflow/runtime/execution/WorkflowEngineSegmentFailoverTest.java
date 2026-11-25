@@ -101,8 +101,8 @@ class WorkflowEngineSegmentFailoverTest {
         var foreignId = idOnAnotherSegmentThan(OWNED_ID);
         var owned = execution(OWNED_ID);
         var foreign = execution(foreignId);
-        liveWorkflows.enter(OWNED_ID, () -> owned);
-        liveWorkflows.enter(foreignId, () -> foreign);
+        liveWorkflows.enter(OWNED_ID, false, () -> owned);
+        liveWorkflows.enter(foreignId, false, () -> foreign);
 
         workflowEngine.releaseWorkflowsFor(owner);
 

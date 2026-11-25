@@ -33,8 +33,10 @@ import java.util.regex.Pattern;
  * In-memory index of the open waits of the hibernated workflows of a {@link WorkflowEngine}, so a broadcast event wakes
  * only the hibernated workflows that may wait for it.
  * <p>
- * The {@link WorkflowEngineHibernationSupport} adds the open waits of a workflow when it hibernates, and removes them
- * when it wakes or its segment is released, each time under the lock of that workflow. A row may match more events
+ * The {@link LiveWorkflows} registry owns it: it adds the open waits of a workflow when the workflow hibernates or
+ * is adopted as hibernated, and removes them when it wakes or is dropped, each time under the lock of that workflow.
+ * The waits are parsed into {@link Row rows} beforehand, see {@link #rowOf(String, String, QualifiedName, Collection)},
+ * so adding them only updates the index. A row may match more events
  * than its wait accepts, never fewer: the woken workflow still checks its full condition. A wait whose condition is a
  * predicate has no associations, so it matches every event of its name.
  * <p>
@@ -63,14 +65,15 @@ final class WaitAssociationIndex {
     private final ConcurrentHashMap<String, Set<RowKey>> rowsByWorkflow = new ConcurrentHashMap<>();
 
     /**
-     * Adds an open wait of a hibernated workflow, replacing an earlier row of the same step.
+     * Parses an open wait of a workflow into the row this index keeps for it, without adding it.
      *
      * @param workflowId   the identifier of the waiting workflow
      * @param stepName     the name of the waiting step
      * @param eventName    the name of the awaited event, or {@code null} to match every event
      * @param associations the canonical serialized associations the awaited event must all satisfy
+     * @return the row of the wait, to {@link #add(Row) add} once the workflow hibernates
      */
-    void add(String workflowId, String stepName, @Nullable QualifiedName eventName, Collection<String> associations) {
+    Row rowOf(String workflowId, String stepName, @Nullable QualifiedName eventName, Collection<String> associations) {
         var checks = new ArrayList<BiPredicate<EventMessage, ProcessingContext>>();
         var checkable = new ArrayList<SerializedAssociation>();
         for (var association : associations) {
@@ -85,9 +88,20 @@ final class WaitAssociationIndex {
                                      + "match.", association, stepName, workflowId, e);
             }
         }
-        var key = new RowKey(workflowId, stepName);
+        return new Row(new RowKey(workflowId, stepName),
+                       new IndexedWait(eventName, List.copyOf(checks), lookupKeyOf(eventName, checkable)));
+    }
+
+    /**
+     * Adds the given row of an open wait of a hibernated workflow, replacing an earlier row of the same step.
+     *
+     * @param row the row, parsed by {@link #rowOf(String, String, QualifiedName, Collection)}
+     */
+    void add(Row row) {
+        var key = row.key();
+        var indexed = row.indexed();
+        var workflowId = key.workflowId();
         remove(key);
-        var indexed = new IndexedWait(eventName, List.copyOf(checks), lookupKeyOf(eventName, checkable));
         if (indexed.lookupKey() instanceof LookupKey lookupKey) {
             keyPaths.computeIfAbsent(lookupKey.eventName(), name -> ConcurrentHashMap.newKeySet())
                     .add(lookupKey.path());
@@ -107,6 +121,15 @@ final class WaitAssociationIndex {
         if (keys != null) {
             List.copyOf(keys).forEach(this::remove);
         }
+    }
+
+    /**
+     * Removes every row.
+     */
+    void clear() {
+        rows.clear();
+        places.clear();
+        rowsByWorkflow.clear();
     }
 
     /**
@@ -220,6 +243,16 @@ final class WaitAssociationIndex {
     }
 
     private record RowKey(String workflowId, String stepName) {
+
+    }
+
+    /**
+     * An open wait of a workflow, parsed into the row the index keeps for it.
+     *
+     * @param key     the workflow and step of the wait
+     * @param indexed the wait as the index keeps it
+     */
+    record Row(RowKey key, IndexedWait indexed) {
 
     }
 

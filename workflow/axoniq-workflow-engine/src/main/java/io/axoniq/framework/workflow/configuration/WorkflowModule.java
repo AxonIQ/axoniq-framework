@@ -452,7 +452,10 @@ public interface WorkflowModule<C extends WorkflowContext> extends Module {
          * {@link WorkflowExecutionRepository#save(String, java.util.function.Supplier) save} returns another execution
          * than the one the engine stores, for example one the repository was given otherwise, the engine does not
          * start or restore that workflow. The engine saves and removes executions while it holds a lock that other
-         * workflows may wait for, so the repository should neither block nor take long to save or remove one.
+         * workflows may wait for, so the repository should neither block nor take long to save or remove one. With
+         * hibernation, a workflow that hibernates or wakes holds off the hibernations, wakes and broadcast events of
+         * every workflow of the module while the repository removes or saves its execution, and a broadcast event may
+         * list the executions of its segment while hibernations and wakes wait for it.
          *
          * @param workflowExecutionRepository a {@link ComponentBuilder} constructing the
          *                                    {@link WorkflowExecutionRepository}

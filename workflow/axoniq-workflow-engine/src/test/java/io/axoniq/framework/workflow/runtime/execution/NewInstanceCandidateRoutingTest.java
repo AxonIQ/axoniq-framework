@@ -299,7 +299,7 @@ class NewInstanceCandidateRoutingTest {
         register("Alpha", "1.0.0", always(), event -> "alpha-1");
         var waitingId = "alpha-1";
         var waiting = execution(waitingId);
-        liveWorkflows.enter(waitingId, () -> waiting);
+        liveWorkflows.enter(waitingId, false, () -> waiting);
 
         assertThat(routing.sequenceIdentifierFor(unregisteredEvent(), context(owningSegment(waitingId))))
                 .as("no definition starts on this event, but an instance on any segment may be waiting for it")
@@ -594,7 +594,7 @@ class NewInstanceCandidateRoutingTest {
         register("Alpha", "1.0.0", always(), event -> "alpha-1");
         var publisherId = idOnAnotherSegmentThan("alpha-1");
         var publisher = execution(publisherId);
-        liveWorkflows.enter(publisherId, () -> publisher);
+        liveWorkflows.enter(publisherId, false, () -> publisher);
 
         assertThat(routing.sequenceIdentifierFor(publishedEvent(publisherId), context(owningSegment(publisherId))))
                 .as("candidate routing would deliver the event to alpha-1's segment only and leave the publisher on "

@@ -34,6 +34,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.IntStream;
 
@@ -43,10 +44,12 @@ import static org.awaitility.Awaitility.await;
 
 /**
  * Tests how the {@link WorkflowEngineHibernationSupport} adopts the hibernated workflows whose hints a claim accepted:
- * when they wake, and what they record in the {@link RunningWorkflowsProjection}.
+ * when they wake, and what they record in the {@link RunningWorkflowsProjection}. Which hibernated workflows a
+ * broadcast event addresses is up to the {@link LiveWorkflows}, see {@code LiveWorkflowsTest}.
  * <p>
- * Every collaborator is a real one, except the loader, which only records the wakes: loading and starting a workflow
- * is the engine's part, see {@link WorkflowEngineHibernationSupport.WorkflowLoader}.
+ * Every collaborator is a real one, except the loader, which records the wakes and brings a stand-in execution into
+ * memory in place of the hibernation: loading and starting a workflow is the engine's part, see
+ * {@link WorkflowEngineHibernationSupport.WorkflowLoader}.
  *
  * @author Allard Buijze
  */
@@ -83,17 +86,32 @@ class WorkflowEngineHibernationSupportAdoptionTest {
         });
     };
     private final List<String> loads = new CopyOnWriteArrayList<>();
-    private volatile WorkflowEngineHibernationSupport.WorkflowLoader loader = (claim, workflowId, beforeStart) -> {
-        loads.add(workflowId);
-        return true;
+    private final LiveWorkflows liveWorkflows = new LiveWorkflows(new InMemoryWorkflowExecutionRepository());
+    // Records the wake, and brings an execution into memory in place of the hibernation, as the engine does,
+    // swapping it back for the hibernation when the action before its start fails.
+    private final WorkflowEngineHibernationSupport.WorkflowLoader wakeInMemory = (hibernated, beforeStart) -> {
+        loads.add(hibernated.workflowId());
+        var execution = new InspectionCountingWorkflowExecution(hibernated.workflowId());
+        var woken = new AtomicBoolean();
+        hibernated.claim().runWhileCurrent(() -> woken.set(liveWorkflows.wake(hibernated, execution)));
+        if (woken.get()) {
+            try {
+                beforeStart.accept(execution);
+            } catch (RuntimeException e) {
+                hibernated.claim().runWhileCurrent(() -> liveWorkflows.hibernate(execution, hibernated));
+                throw e;
+            }
+        }
+        return woken.get();
     };
+    private volatile WorkflowEngineHibernationSupport.WorkflowLoader loader = wakeInMemory;
     private final WorkflowEngineHibernationSupport support = new WorkflowEngineHibernationSupport(
             new DefaultWorkflowScheduler(Clock.systemUTC(), timer),
             Clock.systemUTC(),
-            new LiveWorkflows(new InMemoryWorkflowExecutionRepository()),
+            liveWorkflows,
             cancellationService,
             projection,
-            (claim, workflowId, beforeStart) -> loader.load(claim, workflowId, beforeStart),
+            (hibernated, beforeStart) -> loader.load(hibernated, beforeStart),
             Duration.ofSeconds(30),
             wakeExecutor
     );
@@ -167,8 +185,9 @@ class WorkflowEngineHibernationSupportAdoptionTest {
             activate();
 
             // then
-            await().atMost(5, TimeUnit.SECONDS).until(() -> loads.equals(List.of("wf-1")));
-            assertThat(support.hibernatedWorkflowIds()).isEmpty();
+            await().atMost(5, TimeUnit.SECONDS).until(() -> liveWorkflows.find("wf-1").isPresent());
+            assertThat(loads).containsExactly("wf-1");
+            assertThat(liveWorkflows.hibernatedWorkflowIds()).isEmpty();
         }
 
         @Test
@@ -181,7 +200,8 @@ class WorkflowEngineHibernationSupportAdoptionTest {
             assertThat(support.adopt(claim, "wf-1", pastDeadline("1"))).isTrue();
 
             // then
-            await().atMost(5, TimeUnit.SECONDS).until(() -> loads.equals(List.of("wf-1")));
+            await().atMost(5, TimeUnit.SECONDS).until(() -> liveWorkflows.find("wf-1").isPresent());
+            assertThat(loads).containsExactly("wf-1");
         }
 
         @Test
@@ -190,7 +210,7 @@ class WorkflowEngineHibernationSupportAdoptionTest {
             var running = new AtomicInteger();
             var mostAtOnce = new AtomicInteger();
             var finish = new CountDownLatch(1);
-            loader = (claim, workflowId, beforeStart) -> {
+            loader = (hibernated, beforeStart) -> {
                 mostAtOnce.accumulateAndGet(running.incrementAndGet(), Math::max);
                 try {
                     finish.await(10, TimeUnit.SECONDS);
@@ -198,8 +218,7 @@ class WorkflowEngineHibernationSupportAdoptionTest {
                     Thread.currentThread().interrupt();
                 }
                 running.decrementAndGet();
-                loads.add(workflowId);
-                return true;
+                return wakeInMemory.load(hibernated, beforeStart);
             };
             var hints = new HashMap<String, HibernationHint>();
             IntStream.range(0, 3 * WorkflowEngineHibernationSupport.MAX_CONCURRENT_DETACHED_WAKES)
@@ -214,7 +233,8 @@ class WorkflowEngineHibernationSupportAdoptionTest {
                    .until(() -> running.get() + support.wakesWaitingForAPermit() == hints.size());
             assertThat(running).hasValue(WorkflowEngineHibernationSupport.MAX_CONCURRENT_DETACHED_WAKES);
             finish.countDown();
-            await().atMost(5, TimeUnit.SECONDS).until(() -> loads.size() == hints.size());
+            await().atMost(5, TimeUnit.SECONDS).until(() -> liveWorkflows.hibernatedWorkflowIds().isEmpty());
+            assertThat(loads).hasSize(hints.size());
             assertThat(mostAtOnce).hasValue(WorkflowEngineHibernationSupport.MAX_CONCURRENT_DETACHED_WAKES);
         }
     }
@@ -223,25 +243,12 @@ class WorkflowEngineHibernationSupportAdoptionTest {
     class Event {
 
         @Test
-        void wakesAnAdoptedWorkflowForAnAwaitedEventWhileItsClaimCatchesUp() {
-            // given
-            adopt(Map.of("wf-1", futureDeadline("1"), "wf-2", futureDeadline("2")));
-
-            // when
-            support.broadcast(SEGMENT, paid("1"), new StubProcessingContext());
-
-            // then - only the workflow awaiting it, on the handling thread; its start is up to the loader
-            assertThat(loads).containsExactly("wf-1");
-            assertThat(support.hibernatedWorkflowIds()).containsExactly("wf-2");
-        }
-
-        @Test
         void clearsTheHintOfAnAdoptedWorkflowThatWoke() {
             // given
             adopt(Map.of("wf-1", futureDeadline("1")));
 
             // when
-            support.broadcast(SEGMENT, paid("1"), new StubProcessingContext());
+            liveWorkflows.broadcast(SEGMENT, paid("1"), new StubProcessingContext());
             projection.decideCheckpoint(SEGMENT).write(null).orTimeout(5, TimeUnit.SECONDS).join();
 
             // then
@@ -255,20 +262,20 @@ class WorkflowEngineHibernationSupportAdoptionTest {
         void keepsTheHintOfAnAdoptedWorkflowWhoseWakeFailed() {
             // given
             adopt(Map.of("wf-1", futureDeadline("1")));
-            loader = (claim, workflowId, beforeStart) -> {
+            loader = (hibernated, beforeStart) -> {
                 throw new IllegalStateException("event store down");
             };
 
             // when
             try {
-                support.broadcast(SEGMENT, paid("1"), new StubProcessingContext());
+                liveWorkflows.broadcast(SEGMENT, paid("1"), new StubProcessingContext());
             } catch (IllegalStateException expected) {
                 // fails the event, so the processor delivers it again
             }
             projection.decideCheckpoint(SEGMENT).write(null).orTimeout(5, TimeUnit.SECONDS).join();
 
             // then
-            assertThat(support.hibernatedWorkflowIds()).containsExactly("wf-1");
+            assertThat(liveWorkflows.hibernatedWorkflowIds()).containsExactly("wf-1");
             assertThat(workflowIndex.issuedWrites()).isEmpty();
         }
     }
@@ -285,10 +292,16 @@ class WorkflowEngineHibernationSupportAdoptionTest {
             cancellationService.requestWorkflowCancellation("wf-1", null);
 
             // then
-            await().atMost(5, TimeUnit.SECONDS).until(WorkflowEngineHibernationSupportAdoptionTest.this::noWakeInProgress);
+            await().atMost(5, TimeUnit.SECONDS)
+                   .until(WorkflowEngineHibernationSupportAdoptionTest.this::noWakeInProgress);
             assertThat(loads).isEmpty();
             activate();
-            await().atMost(5, TimeUnit.SECONDS).until(() -> loads.equals(List.of("wf-1")));
+            await().atMost(5, TimeUnit.SECONDS).until(() -> loads.equals(List.of("wf-1")) && noWakeInProgress());
+            // the wake succeeded, and queued the request on the woken execution, which runs it once its body started
+            assertThat(liveWorkflows.hibernatedWorkflowIds()).isEmpty();
+            assertThat(liveWorkflows.find("wf-1")).hasValueSatisfying(
+                    woken -> assertThat(((InspectionCountingWorkflowExecution) woken).appendedTasks()).hasSize(1)
+            );
         }
     }
 
@@ -296,15 +309,29 @@ class WorkflowEngineHibernationSupportAdoptionTest {
     class Adoption {
 
         @Test
-        void listsAnAdoptedWorkflowAsHibernatedAndTreatsItsStartAsADuplicate() {
+        void listsAnAdoptedWorkflowAsHibernatedWithoutWakingIt() {
             // when
             adopt(Map.of("wf-1", futureDeadline("1")));
 
             // then
-            assertThat(support.hibernatedWorkflowIds()).containsExactly("wf-1");
-            assertThat(support.unlessHibernated("wf-1", () -> {
-            })).isFalse();
+            assertThat(liveWorkflows.hibernatedWorkflowIds()).containsExactly("wf-1");
+            assertThat(liveWorkflows.isHibernated("wf-1")).isTrue();
+            assertThat(liveWorkflows.find("wf-1")).isEmpty();
             assertThat(loads).isEmpty();
+        }
+
+        @Test
+        void adoptsNoWorkflowThatIsLiveAlready() {
+            // given
+            adopt(Map.of("wf-1", futureDeadline("1")));
+            var hibernated = liveWorkflows.get("wf-1");
+
+            // when
+            var adopted = support.adopt(claim, "wf-1", futureDeadline("2"));
+
+            // then
+            assertThat(adopted).isFalse();
+            assertThat(liveWorkflows.get("wf-1")).isSameAs(hibernated);
         }
 
         @Test
@@ -317,7 +344,7 @@ class WorkflowEngineHibernationSupportAdoptionTest {
 
             // then
             assertThat(adopted).isFalse();
-            assertThat(support.hibernatedWorkflowIds()).isEmpty();
+            assertThat(liveWorkflows.hibernatedWorkflowIds()).isEmpty();
         }
 
         @Test
@@ -331,7 +358,7 @@ class WorkflowEngineHibernationSupportAdoptionTest {
             support.drop(claim);
 
             // then
-            assertThat(support.hibernatedWorkflowIds()).containsExactly("wf-2");
+            assertThat(liveWorkflows.hibernatedWorkflowIds()).containsExactly("wf-2");
         }
     }
 }
