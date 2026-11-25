@@ -20,9 +20,6 @@ import java.util.Objects;
 
 /**
  * The row of one open wait in the {@link JpaWorkflowIndex}: which workflow waits, in which step, for which event.
- * <p>
- * A wait has a generated identifier instead of a key of its own values, like an association value of a saga. The row
- * is selected by the segment key of its workflow, and removed by its workflow id and step name.
  *
  * @author Stefan Dragisic
  * @see io.axoniq.framework.workflow.runtime.execution.WaitAssociation
@@ -57,7 +54,6 @@ public class WorkflowIndexWaitEntry {
     private @Nullable String eventName;
 
     // Not a large object: a claim reads every wait of its segment, and a large object costs a round trip per row.
-    // A database that enforces the length rejects a set of associations of more than 10,000 bytes.
     @Basic
     @Column(length = 10000)
     private byte[] associations;
@@ -66,7 +62,6 @@ public class WorkflowIndexWaitEntry {
      * Constructor required by JPA. Do not use.
      */
     protected WorkflowIndexWaitEntry() {
-        // required by JPA
     }
 
     /**

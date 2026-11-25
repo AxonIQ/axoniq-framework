@@ -16,8 +16,7 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * The workflows of one segment that the rows of a {@link WorkflowIndex} keep hibernated: their row carries the time
- * they wake at.
+ * The workflows of one segment that hibernated, as the rows of a {@link WorkflowIndex} hold them.
  * <p>
  * A workflow counts as hibernated only while its open waits are exactly the ones it hibernated with, so a row that is
  * outdated never hides a workflow that must run.
@@ -32,12 +31,12 @@ import java.util.Set;
 public record HibernatedWorkflows(Map<String, HibernatedWorkflow> workflows) {
 
     /**
-     * No hibernated workflows, for a claim that keeps none out of memory.
+     * No hibernated workflows, for a segment without wake times.
      */
     public static final HibernatedWorkflows NONE = new HibernatedWorkflows(Map.of());
 
     /**
-     * Creates the hibernated workflows of a segment, copying the given workflows.
+     * Creates a record, copying the given workflows.
      *
      * @param workflows the hibernated workflows by workflow identifier
      */
@@ -49,7 +48,7 @@ public record HibernatedWorkflows(Map<String, HibernatedWorkflow> workflows) {
      * Returns the given workflow when it is still hibernated: its open waits are exactly the ones it hibernated with.
      *
      * @param workflowId the identifier of the workflow
-     * @param openWaits  the step names of the workflow's open waits
+     * @param openWaits  the step names of the workflow's open waits in the event store
      * @return the hibernated workflow, or empty when it is not hibernated or its open waits changed since
      */
     public Optional<HibernatedWorkflow> hibernated(String workflowId, Set<String> openWaits) {

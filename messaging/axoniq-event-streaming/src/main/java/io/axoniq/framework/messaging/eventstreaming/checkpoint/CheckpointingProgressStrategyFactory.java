@@ -65,15 +65,12 @@ public final class CheckpointingProgressStrategyFactory implements SegmentProgre
     }
 
     /**
-     * Creates a factory whose strategies also check the claim of their segment when a participant writes with a
-     * position that is not stored.
+     * Creates a factory whose strategies also check the claim of their segment.
      *
      * @param participants      the self-checkpointing components of the processor
      * @param autoCheckpointing {@code true} when an ordinary handler shares the processor
-     * @param tokenStore        the token store of the processor, which holds the claims of its segments, or
-     *                          {@code null} to not check a claim
-     * @param processorName     the name of the processor the claims are held under, or {@code null} to not check a
-     *                          claim
+     * @param tokenStore        the token store holding the claims of the segments, or {@code null} to not check them
+     * @param processorName     the name of the processor the claims are held under, or {@code null} to not check them
      */
     public CheckpointingProgressStrategyFactory(List<Checkpointing> participants,
                                                 boolean autoCheckpointing,
@@ -106,12 +103,10 @@ public final class CheckpointingProgressStrategyFactory implements SegmentProgre
     }
 
     /**
-     * Returns a builder that detects the self-checkpointing components of a processor, as {@link #detecting()} does,
-     * and whose strategies check the claim of their segment through the given token store.
+     * Like {@link #detecting()}, but the strategies also check the claim of their segment.
      *
-     * @param processorName the name of the processor the claims are held under, or {@code null} to not check a claim
-     * @param tokenStore    supplies the token store of the processor once the processor is constructed, or
-     *                      {@code null} to not check a claim
+     * @param processorName the name of the processor the claims are held under, or {@code null} to not check them
+     * @param tokenStore    supplies the token store once the processor exists, or {@code null} to not check claims
      * @return the builder of the progress strategy factory of a processor
      */
     public static Function<List<EventHandlingComponent>, SegmentProgressStrategyFactory> detecting(

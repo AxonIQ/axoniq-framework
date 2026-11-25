@@ -9,30 +9,22 @@ package io.axoniq.framework.workflow.index.jpa;
 
 /**
  * Configuration of a {@link JpaWorkflowIndex}.
- * <p>
- * Example usage:
- * <pre>{@code
- * JpaWorkflowIndexConfiguration.DEFAULT.storesWithToken(false);
- * }</pre>
  *
- * @param storesWithToken whether the index is stored through the transaction of the token store, so its rows and the
- *                        token are committed together. Set it to {@code false} when the index lives in another database
- *                        than the token store
+ * @param storesWithToken whether the rows are stored in the transaction of the token store, so they commit with the
+ *                        token; {@code false} when the index lives in another database
  * @author Stefan Dragisic
  * @since 5.5.0
  */
 public record JpaWorkflowIndexConfiguration(boolean storesWithToken) {
 
     /**
-     * The default configuration: the index is stored through the transaction of the token store.
+     * The default configuration, which stores the rows in the transaction of the token store.
      */
     public static final JpaWorkflowIndexConfiguration DEFAULT = new JpaWorkflowIndexConfiguration(true);
 
     /**
-     * Sets whether the index is stored through the transaction of the token store. Defaults to {@code true}.
-     * <p>
-     * With {@code false}, the rows are stored in a transaction of their own, before the token. The engine then stores
-     * no wake time for a hibernated workflow, so a segment claim loads every running workflow.
+     * Sets whether the rows are stored in the transaction of the token store. Defaults to {@code true}. With
+     * {@code false}, the engine keeps no wake times, so a segment claim loads every running workflow.
      *
      * @param storesWithToken whether rows and token are committed in one transaction
      * @return a copy of this configuration with the given setting

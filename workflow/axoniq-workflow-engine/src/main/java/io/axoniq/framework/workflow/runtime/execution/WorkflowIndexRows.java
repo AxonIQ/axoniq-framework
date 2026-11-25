@@ -18,17 +18,13 @@ import java.util.OptionalLong;
 import java.util.Set;
 
 /**
- * The rows of one segment in a {@link WorkflowIndex}: its running workflows, the hibernated ones among them, its open
- * waits, and the position they are correct at.
- * <p>
- * Internal, because it is part of how the {@link WorkflowEngine} restores the workflows of a claimed segment.
+ * The rows of one segment in a {@link WorkflowIndex}, and the position they are correct at. Internal, because the
+ * {@link WorkflowEngine} uses it to restore the workflows of a claimed segment.
  *
  * @param runningWorkflowIds the identifiers of the running workflows of the segment
- * @param wakesAt            the time each hibernated workflow wakes at, by workflow identifier. A workflow without an
- *                           entry is not known to hibernate
+ * @param wakesAt            the time each hibernated workflow wakes at, by workflow identifier
  * @param waits              the open waits of the segment
- * @param position           the position the rows are correct at, or empty when no position is stored for exactly
- *                           this segment. A claim then sources instead of reading the rows
+ * @param position           the position the rows are correct at, or empty when this exact segment has none
  * @author Stefan Dragisic
  * @since 5.5.0
  */
@@ -44,8 +40,7 @@ public record WorkflowIndexRows(Set<String> runningWorkflowIds,
      * @param runningWorkflowIds the identifiers of the running workflows of the segment
      * @param wakesAt            the time each hibernated workflow wakes at, by workflow identifier
      * @param waits              the open waits of the segment
-     * @param position           the position the rows are correct at, or empty when none is stored for exactly this
-     *                           segment
+     * @param position           the position the rows are correct at, or empty when this exact segment has none
      */
     public WorkflowIndexRows {
         runningWorkflowIds = Set.copyOf(

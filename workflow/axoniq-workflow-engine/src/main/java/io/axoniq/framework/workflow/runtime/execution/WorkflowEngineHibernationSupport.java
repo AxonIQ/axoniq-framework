@@ -55,12 +55,10 @@ import java.util.function.Supplier;
  * timer for its nearest deadline and a stand-in {@link WorkflowCancellation}, and its wait association rows stay in the
  * index.
  * <p>
- * With a {@link WorkflowIndex} that stores with the token, the row of a hibernated workflow carries the time it wakes
- * at, stored with the token of its segment. The next claim of the segment, on any node, adopts the workflows whose row
- * carries one and whose open waits did not change, instead of loading them into memory. An adopted workflow wakes only
- * once the claim started its restored executions, so a wake never starts a body twice and never runs one while the
- * segment catches up. Without such an index, a claim loads every running workflow of the segment, and the hibernation
- * pass sends the idle ones back out of memory.
+ * With a {@link WorkflowIndex} that keeps wake times, the next claim of a segment, on any node, adopts the hibernated
+ * workflows whose open waits did not change, instead of loading them into memory. An adopted workflow wakes only once
+ * the claim started its restored executions, so a wake never starts a body twice and never runs one while the segment
+ * catches up. Without such an index, a claim restores every running workflow of the segment.
  * <p>
  * The {@link WorkflowEngine} creates it when the hibernation setting of the workflow module is enabled, starts it with
  * the engine and stops it on shutdown.
@@ -110,9 +108,8 @@ final class WorkflowEngineHibernationSupport {
      * @param interval            the time between 2 passes, and before a failed wake is tried again
      * @param wakeExecutor        runs the wakes for a deadline or a cancellation, which load from the store, so they
      *                            never run on the timer thread
-     * @param indexSupport        supplies the index support of the engine, or {@code null} when the engine has no
-     *                            {@link WorkflowIndex}. With one that stores with the token, the index keeps the time
-     *                            each hibernated workflow wakes at
+     * @param indexSupport        supplies the index support of the engine, or {@code null} without a
+     *                            {@link WorkflowIndex}
      */
     WorkflowEngineHibernationSupport(WorkflowScheduler scheduler,
                                      Clock clock,
@@ -556,7 +553,6 @@ final class WorkflowEngineHibernationSupport {
         removeHibernation(workflowId, hibernation);
         var index = indexSupport.get();
         if (index != null) {
-            // Only a wake clears it. A workflow dropped with its segment or with the engine is still hibernated.
             index.clearWakesAt(hibernation.segment(), workflowId);
         }
         hibernation.wakeTimer().cancel();

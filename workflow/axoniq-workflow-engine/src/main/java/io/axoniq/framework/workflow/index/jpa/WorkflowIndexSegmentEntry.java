@@ -16,11 +16,8 @@ import java.io.Serializable;
 import java.util.Objects;
 
 /**
- * The position the rows of one segment in the {@link JpaWorkflowIndex} are correct at: every lifecycle and wait event
- * of the segment before it is applied to them. A segment claim reads the events from there.
- * <p>
- * The row is keyed by the range of segment keys of the segment. A segment without a row has rows that started with an
- * empty index, or that a split or a merge replaced; its claim sources instead.
+ * The event store position up to which the rows of one segment in the {@link JpaWorkflowIndex} are correct, so a claim
+ * reads events from there. A segment without this row, such as after a split or a merge, is sourced on claim instead.
  *
  * @author Stefan Dragisic
  * @since 5.5.0
@@ -45,7 +42,6 @@ public class WorkflowIndexSegmentEntry {
      * Constructor required by JPA. Do not use.
      */
     protected WorkflowIndexSegmentEntry() {
-        // required by JPA
     }
 
     /**
@@ -85,7 +81,6 @@ public class WorkflowIndexSegmentEntry {
          * Constructor required by JPA. Do not use.
          */
         public PK() {
-            // required by JPA
         }
 
         /**

@@ -54,27 +54,10 @@ import java.util.concurrent.locks.ReentrantLock;
 /**
  * Keeps the {@link WorkflowIndex} of a {@link WorkflowEngine} current, and answers a segment claim from it.
  * <p>
- * While the engine handles the events of the workflows a segment owns, this support notes what changes in the rows: a
- * workflow started or ended, a wait opened or closed, a workflow hibernated or woke. Each time the processor stores a
- * token, it stores the noted changes that token covers, in the same call and, for an index that
- * {@link WorkflowIndex#storesWithToken() stores with the token}, in the same transaction. The token is therefore the
- * position of the rows.
- * <p>
- * Each store also moves the position of the segment: the position its rows are correct at. A claim reads the rows of
- * its segment, and then the tail: the lifecycle and wait events from the lower of that position and the token the
- * segment resumes from. Rows plus tail are the running workflows and the open waits as of the claim, which is what
- * sourcing the {@link RunningWorkflows} and the {@link WaitAssociations} in full gives. The claim notes the changes of
- * the tail, so the rows catch up with it, also with what a node without the index handled. Storing a change again has
- * no further effect.
- * <p>
- * A segment without a position is sourced, and its claim notes its sourced workflows and waits as the rows of the
- * segment. That is the first claim of every segment, and the first claim after a split or a merge.
- * <p>
- * Like those two lists, the rows hold every workflow and wait a segment owns, also those of another workflow module on
- * the same event store. A claim skips the workflows of another module, as it does without an index.
- * <p>
- * The {@link WorkflowEngine} creates it when a {@link WorkflowIndex} is configured, the way it creates its
- * {@link WorkflowEngineHibernationSupport}.
+ * Row changes are noted while the engine handles events, and stored with the token that covers them. A claim reads
+ * the rows of its segment, then the tail: the lifecycle and wait events from the lower of the segment position and the
+ * resume token. Rows plus tail equal sourcing the {@link RunningWorkflows} and {@link WaitAssociations}, and the claim
+ * notes the tail, so the rows also catch up with a node without the index. Storing a change twice has no effect.
  *
  * @author Stefan Dragisic
  * @since 5.5.0
@@ -84,15 +67,13 @@ final class WorkflowEngineIndexSupport {
     private static final Logger logger = LoggerFactory.getLogger(WorkflowEngineIndexSupport.class);
 
     /**
-     * The longest time between two stores of the position of a segment while none of its rows change. It bounds the
-     * events a claim reads in vain.
+     * The longest time between 2 position stores of a segment whose rows do not change. It bounds the tail of a claim.
      */
     static final Duration POSITION_INTERVAL = Duration.ofSeconds(10);
 
     private final WorkflowIndex index;
     private final String module;
     private final UnitOfWorkFactory unitOfWorkFactory;
-    // The noted changes of each claimed segment, by segment id.
     private final Map<Integer, PendingChanges> pending = new ConcurrentHashMap<>();
 
     /**
@@ -109,10 +90,7 @@ final class WorkflowEngineIndexSupport {
     }
 
     /**
-     * Notes what the given event of a workflow changes in the rows of its segment.
-     * <p>
-     * Every lifecycle and wait event of a workflow the segment owns is noted, also when this engine does not hold the
-     * workflow: the restore of a workflow can fail, and its row is what lets a later claim find it again.
+     * Notes the row changes of the given event, also for a workflow whose restore failed, so a later claim finds it.
      *
      * @param segment the segment that handles the event, or {@code null} outside a segmented processor
      * @param token   the position of the event, or {@code null} when it is not known
@@ -128,10 +106,6 @@ final class WorkflowEngineIndexSupport {
         }
     }
 
-    /**
-     * Returns what the given event of a workflow changes in the rows: nothing, or the start, the end, an opened or a
-     * closed wait of its workflow.
-     */
     private static List<WorkflowIndexChange> changesOf(EventMessage event) {
         var metadata = event.metadata();
         var changes = new ArrayList<WorkflowIndexChange>(2);
@@ -144,7 +118,7 @@ final class WorkflowEngineIndexSupport {
             case WaitAssociationChange.WorkflowTerminated ended -> changes.add(new WorkflowEnded(ended.workflowId()));
             case WaitAssociationChange.WaitStarted opened -> changes.add(new WaitOpened(opened.association()));
             case WaitAssociationChange.WaitTerminated closed -> {
-                // Every step that ends is reported as a closed wait. Only a wait has a row to remove.
+                // Every ended step is reported as a closed wait, but only a wait has a row.
                 if (MetadataUtils.isWaitForEventStep(metadata)) {
                     changes.add(new WaitClosed(closed.workflowId(), closed.stepName()));
                 }
@@ -157,8 +131,7 @@ final class WorkflowEngineIndexSupport {
     }
 
     /**
-     * Notes that the given workflow ended, for a workflow a claim restored and found ended, so a row that outlived its
-     * workflow is removed.
+     * Notes that a workflow a claim restored had already ended, so its outdated row is removed.
      *
      * @param segment    the segment that owns the workflow, or {@code null} outside a segmented processor
      * @param workflowId the identifier of the workflow
@@ -170,9 +143,7 @@ final class WorkflowEngineIndexSupport {
     }
 
     /**
-     * Notes that the given workflow hibernated, so its row gets the time it wakes at with the next stored token.
-     * <p>
-     * Ignored for an index that does not {@link #keepsWakeTimes() keep the wake times}.
+     * Notes that the given workflow hibernated, unless the index does not {@link #keepsWakeTimes() keep wake times}.
      *
      * @param segment    the segment that owns the workflow, or {@code null} outside a segmented processor
      * @param workflowId the identifier of the workflow
@@ -183,11 +154,7 @@ final class WorkflowEngineIndexSupport {
     }
 
     /**
-     * Notes that the given hibernated workflow was loaded back into memory, so its row loses the time it wakes at with
-     * the next stored token.
-     * <p>
-     * Only a wake notes this. A workflow that leaves memory with its segment or with the engine is still hibernated in
-     * the store, and the next claim must find it so.
+     * Notes that the given workflow woke. Only a wake clears the wake time: a dropped workflow is still hibernated.
      *
      * @param segment    the segment that owns the workflow, or {@code null} outside a segmented processor
      * @param workflowId the identifier of the workflow
@@ -197,11 +164,7 @@ final class WorkflowEngineIndexSupport {
     }
 
     /**
-     * Notes that the claim of the given segment restored the given workflow into memory. When its row carries the time
-     * it wakes at, the row loses it: the workflow is not hibernated anymore, and a later claim must not take it so.
-     * <p>
-     * A claim that read the rows knows which rows carry a time. A claim that sourced does not, so the row of every
-     * workflow it restores loses its time. A row without a time is left as it is.
+     * Notes that a claim restored the given workflow, so its row loses any wake time it may carry.
      *
      * @param segment    the claimed segment
      * @param workflowId the identifier of the restored workflow
@@ -220,12 +183,8 @@ final class WorkflowEngineIndexSupport {
     }
 
     /**
-     * Returns whether the rows keep the time each hibernated workflow wakes at, so a claim finds its hibernated
-     * workflows in them.
-     * <p>
-     * Only an index that {@link WorkflowIndex#storesWithToken() stores with the token} does: a wake is a fact of one
-     * node, so a node that lost its segment must not be able to store it. With any other index, the engine records its
-     * hibernated workflows the way it does without an index.
+     * Returns whether the rows keep wake times: only with an index that
+     * {@link WorkflowIndex#storesWithToken() stores with the token}, so a node that lost its segment cannot store one.
      *
      * @return {@code true} when a claim reads its hibernated workflows from the rows
      */
@@ -234,16 +193,8 @@ final class WorkflowEngineIndexSupport {
     }
 
     /**
-     * Stores the noted changes of the given segment that the given token covers, and moves the position of the segment
-     * to that token, right before the processor stores it.
-     * <p>
-     * The position is moved with every store that changes a row, with the first store after a claim, and at least
-     * every {@link #POSITION_INTERVAL} otherwise. A claim reads the events from the position, so a position that falls
-     * behind costs a longer read, never a missed event.
-     * <p>
-     * With an index that {@link WorkflowIndex#storesWithToken() stores with the token}, the changes join the
-     * transaction of the given context and are forgotten once it commits. Otherwise they are stored in a transaction
-     * of their own, before the token, so the rows are never behind the token.
+     * Stores the noted changes the given token covers, right before the processor stores that token. The segment
+     * position moves to the token with every change, and at least every {@link #POSITION_INTERVAL}.
      *
      * @param segment the segment the token is stored for
      * @param token   the position about to be stored
@@ -283,9 +234,7 @@ final class WorkflowEngineIndexSupport {
     }
 
     /**
-     * Returns the given noted changes in their order, without the ones a later change in the same batch undoes: a
-     * workflow that started and ended, and a wait that opened and closed. The change that ends or closes is kept, as it
-     * may also remove a row stored earlier.
+     * Drops the changes a later change in the batch undoes. The end or close stays, as it may remove an older row.
      */
     private static List<WorkflowIndexChange> collapsed(List<PendingChange> covered) {
         var ended = new HashSet<String>();
@@ -312,22 +261,14 @@ final class WorkflowEngineIndexSupport {
     }
 
     /**
-     * Answers the claim of the given segment from the index: the rows of the segment, brought up to the claim by the
-     * lifecycle and wait events from the lower of the position of the rows and the token the segment resumes from.
-     * <p>
-     * A node without the index moves the token and writes no row. Reading from the position of the rows applies what
-     * such a node handled, and the claim notes those changes, so the rows catch up with the next stored token.
-     * <p>
-     * A workflow counts as hibernated when its row carries the time it wakes at and no event of the tail belongs to it.
-     * A workflow that made progress after it hibernated closed a wait or ended, and both are events the tail holds.
+     * Answers the claim of the given segment from its rows and the tail. A workflow counts as hibernated when its row
+     * carries a wake time and the tail holds none of its events: a workflow that progressed closed a wait or ended.
      *
      * @param segment         the claimed segment
      * @param claimedFrom     the stored position the segment resumes from, or {@code null} when it has consumed nothing
      * @param sourcingContext the context of the claim, whose resources the tail is read with
-     * @return a future with the rows of the claim, or empty when the rows cannot answer it: no position is stored for
-     * the segment, the token gives no position to read the tail from, no event store is at hand, or reading the rows or
-     * the tail failed. The claim then sources the {@link RunningWorkflows} and the {@link WaitAssociations}, see
-     * {@link #sourced(Segment, Collection, Collection)}
+     * @return a future with the rows of the claim, or empty when the rows cannot answer it and the claim must source,
+     * see {@link #sourced(Segment, Collection, Collection)}
      */
     CompletableFuture<Optional<ClaimedRows>> claim(Segment segment,
                                                    @Nullable TrackingToken claimedFrom,
@@ -354,7 +295,6 @@ final class WorkflowEngineIndexSupport {
                 var claimed = claim.rows(keepsWakeTimes());
                 var pendingChanges = pendingOf(segment);
                 pendingChanges.hinted(claim.hinted());
-                // The rows catch up with the tail, which holds what a node without the index handled too.
                 pendingChanges.note(null, claim.changes());
                 logger.debug("Claimed segment {} from the index: {} running workflow(s), {} open wait(s), {} "
                                      + "hibernated, {} change(s) read from position {}.",
@@ -370,27 +310,17 @@ final class WorkflowEngineIndexSupport {
         });
     }
 
-    /**
-     * Returns that the rows cannot answer the claim of the given segment, so the claim sources instead. The rows may
-     * still carry wake times, so every workflow the claim restores loses its time, see
-     * {@link #restored(Segment, String)}.
-     */
     private Optional<ClaimedRows> sourced(Segment segment) {
         return sourced(segment, Set.of());
     }
 
-    /**
-     * Returns that the rows cannot answer the claim of the given segment, as {@link #sourced(Segment)} does, and keeps
-     * the running workflows its rows hold, so the rows of workflows the claim does not source are removed.
-     */
     private Optional<ClaimedRows> sourced(Segment segment, Set<String> rowsOfSegment) {
         pendingOf(segment).sourced(rowsOfSegment);
         return Optional.empty();
     }
 
     /**
-     * Returns the position the tail of a claim starts at: the lowest position the given token may still have to
-     * consume. Starting early is safe, as applying an event again changes nothing. Starting late would miss an event.
+     * Returns the lowest position the given token may still have to consume. Starting early is safe, late is not.
      */
     private static OptionalLong tailStart(TrackingToken claimedFrom) {
         var lowerBound = WrappedToken.unwrapLowerBound(claimedFrom);
@@ -401,10 +331,7 @@ final class WorkflowEngineIndexSupport {
     }
 
     /**
-     * Applies the lifecycle and wait events from the given position on to the given claim.
-     * <p>
-     * Read in a unit of work of its own, as each workflow is restored in one: the position a read ends at belongs to
-     * its transaction, and must not become the position of another read.
+     * Reads the tail in a unit of work of its own, so the position the read ends at never leaks into another read.
      */
     private CompletableFuture<Claim> readTail(Claim claim,
                                               long position,
@@ -423,10 +350,7 @@ final class WorkflowEngineIndexSupport {
     }
 
     /**
-     * Notes the given sourced running workflows and open waits as the rows of the given segment, after a claim that
-     * sourced them because the rows could not answer it. The rows of each sourced workflow are replaced, and a row of
-     * the segment whose workflow was not sourced is removed. The rows and the position of the segment are stored with
-     * the next token, under its owner check.
+     * Notes the running workflows and open waits a claim sourced as the rows of the segment, replacing all others.
      *
      * @param segment            the claimed segment
      * @param runningWorkflowIds the identifiers of the sourced running workflows, of any segment
@@ -456,9 +380,6 @@ final class WorkflowEngineIndexSupport {
         pendingChanges.note(null, changes);
     }
 
-    /**
-     * Forgets every noted change, when the engine stops.
-     */
     void clear() {
         pending.clear();
     }
@@ -468,8 +389,7 @@ final class WorkflowEngineIndexSupport {
     }
 
     /**
-     * What a claim of a segment may use instead of sourcing the {@link RunningWorkflows}, the {@link WaitAssociations}
-     * and loading the hibernated workflows of the segment.
+     * What a claim of a segment uses instead of sourcing.
      *
      * @param runningWorkflowIds the identifiers of the running workflows of the segment
      * @param waits              the open waits of the segment
@@ -482,22 +402,18 @@ final class WorkflowEngineIndexSupport {
     }
 
     /**
-     * The noted changes of one segment. Guarded by its lock: the worker of the segment notes and stores, while
-     * hibernation and a claim note from their own threads.
+     * The noted changes of one segment, behind a lock, as hibernation and a claim note from their own threads.
      */
     private static final class PendingChanges {
 
         private final ReentrantLock lock = new ReentrantLock();
         private final List<PendingChange> changes = new ArrayList<>();
-        // The latest state per workflow: the time it wakes at, or empty when it woke.
+        // The wake time per workflow, or empty when it woke.
         private final Map<String, Optional<Instant>> wakesAt = new HashMap<>();
         // The workflows whose row carried a wake time when the segment was claimed.
         private final Set<String> hinted = new HashSet<>();
-        // Whether the claim sourced instead of reading the rows, so it does not know which rows carry a wake time.
         private boolean sourced;
-        // The running workflows the rows held when a sourced claim read them.
         private Set<String> rowsAtClaim = Set.of();
-        // Whether the position of the segment was stored since the claim, and when.
         private boolean positionStored;
         private long positionStoredAt;
 
@@ -513,7 +429,6 @@ final class WorkflowEngineIndexSupport {
         private void noteWakesAt(String workflowId, Optional<Instant> wakes) {
             lock.lock();
             try {
-                // Only the latest state of a workflow is stored.
                 wakesAt.put(workflowId, wakes);
             } finally {
                 lock.unlock();
@@ -548,9 +463,6 @@ final class WorkflowEngineIndexSupport {
             }
         }
 
-        /**
-         * Returns whether the position is due: not stored since the claim, or longer ago than the interval.
-         */
         private boolean positionDue() {
             lock.lock();
             try {
@@ -560,9 +472,6 @@ final class WorkflowEngineIndexSupport {
             }
         }
 
-        /**
-         * Returns whether the row of the given restored workflow may carry a wake time, and forgets that it did.
-         */
         private boolean restoredWithWakeTime(String workflowId) {
             lock.lock();
             try {
@@ -598,7 +507,7 @@ final class WorkflowEngineIndexSupport {
             lock.lock();
             try {
                 changes.removeIf(storedChanges::contains);
-                // A state noted since the store stays, as it is not stored yet.
+                // Removes only the stored value, so a wake time noted since the store stays.
                 storedWakesAt.forEach(wakesAt::remove);
                 if (positionStored) {
                     this.positionStored = true;
@@ -622,7 +531,7 @@ final class WorkflowEngineIndexSupport {
     }
 
     /**
-     * The rows of a claimed segment while the tail is applied to them. Used by one thread at a time.
+     * The rows of a claimed segment while the tail is applied. Used by one thread at a time.
      */
     private static final class Claim {
 
@@ -631,7 +540,6 @@ final class WorkflowEngineIndexSupport {
         private final Map<String, Instant> wakesAt;
         private final Map<WaitKey, WaitAssociation> waits = new LinkedHashMap<>();
         private final Set<String> touched = new HashSet<>();
-        // What the tail changes in the rows, in its order.
         private final List<WorkflowIndexChange> changes = new ArrayList<>();
 
         private Claim(Segment segment, WorkflowIndexRows rows) {
@@ -676,16 +584,10 @@ final class WorkflowEngineIndexSupport {
             return this;
         }
 
-        /**
-         * Returns what the tail changes in the rows, in its order.
-         */
         private List<WorkflowIndexChange> changes() {
             return changes;
         }
 
-        /**
-         * Returns the running workflows whose row carries a wake time, adopted as hibernated or not.
-         */
         private Set<String> hinted() {
             var hinted = new HashSet<>(wakesAt.keySet());
             hinted.retainAll(running);

@@ -196,16 +196,11 @@ public class WorkflowEngine implements
     }
 
     /**
-     * Enables the given {@link WorkflowIndex}: a claimed segment reads its running workflows, its open waits and its
-     * hibernated workflows from the rows of the index, instead of sourcing them for every segment.
-     * <p>
-     * Set outside the constructor, like {@link #setCheckpointingSupport(WorkflowEngineCheckpointingSupport)}, by the
-     * workflow module when a {@link WorkflowIndex} is configured. The {@link WorkflowEngineIndexSupport} owns the
-     * bookkeeping; this engine only hands it events, stored tokens and claims at a few hooks.
+     * Enables the given {@link WorkflowIndex}, so a claimed segment reads its workflows and waits from the rows of the
+     * index instead of sourcing them. Internal, because the workflow module calls it when an index is configured.
      *
      * @param workflowIndex the index to keep current and to claim from
-     * @param name          the name of the workflow module, which keeps the rows of this engine apart from those of
-     *                      other modules
+     * @param name          the name of the workflow module, which keeps its rows apart from those of other modules
      */
     @Internal
     public void enableIndex(WorkflowIndex workflowIndex, String name) {
@@ -451,9 +446,9 @@ public class WorkflowEngine implements
      * so a segment migrating between nodes carries its instances with it. When another node dies, the coordinator hands
      * its segments to a surviving node and this callback rebuilds their instances there, without restarting anything.
      * <p>
-     * The instances are materialized from their current durable state and started immediately. With hibernation and a
-     * {@link WorkflowIndex} that stores with the token, a workflow whose row carries a wake time and whose open waits
-     * did not change since stays out of memory instead.
+     * The instances are materialized from their current durable state and started immediately. With hibernation, a
+     * workflow whose {@link WorkflowIndex} row carries a wake time and whose open waits did not change since stays out
+     * of memory instead.
      *
      * @param segment          the segment that was claimed
      * @param claimedFrom      the stored position the segment resumes from, or {@code null} when it has consumed
@@ -506,11 +501,8 @@ public class WorkflowEngine implements
     }
 
     /**
-     * Returns what the claim of the given segment restores from: its running workflows, its open waits and its
-     * hibernated workflows.
-     * <p>
-     * With a {@link WorkflowIndex} whose rows answer the claim, these are the rows of the segment. Otherwise they are
-     * sourced from the {@link WorkflowStore}, as without an index.
+     * Returns what the claim of the given segment restores from: the rows of the {@link WorkflowIndex} when they can
+     * answer it, otherwise what the {@link WorkflowStore} sources.
      */
     private CompletableFuture<ClaimedWorkflows> claimedWorkflows(Segment segment,
                                                                  @Nullable TrackingToken claimedFrom,
@@ -523,7 +515,6 @@ public class WorkflowEngine implements
                 rows -> rows.map(claimed -> CompletableFuture.completedFuture(new ClaimedWorkflows(
                                     claimed.runningWorkflowIds(),
                                     claimed.waits(),
-                                    // Rows without wake times keep no workflow hibernated across a claim.
                                     support.keepsWakeTimes() ? claimed.hibernated() : HibernatedWorkflows.NONE
                             )))
                             .orElseGet(() -> sourceClaimedWorkflows(segment, sourcingContext))
@@ -531,10 +522,8 @@ public class WorkflowEngine implements
     }
 
     /**
-     * Sources what the claim of the given segment restores from. A sourced claim keeps no workflow hibernated: only the
-     * rows of a {@link WorkflowIndex} know when a hibernated workflow wakes.
-     * <p>
-     * With a {@link WorkflowIndex}, the sourced workflows and waits of the segment become its rows.
+     * Sources what the claim of the given segment restores from, with no workflow hibernated: only index rows know when
+     * one wakes. With a {@link WorkflowIndex}, the result becomes the rows of the segment.
      */
     private CompletableFuture<ClaimedWorkflows> sourceClaimedWorkflows(Segment segment,
                                                                        ProcessingContext sourcingContext) {
@@ -610,8 +599,7 @@ public class WorkflowEngine implements
      * <p>
      * In-flight steps are stopped rather than cancelled, exactly as on {@link #shutdown()}: no cancellation events are
      * emitted, so the node claiming the segment next resumes each instance from its persisted state. With hibernation,
-     * the segment's hibernated workflows are forgotten here; the rows of a {@link WorkflowIndex} keep them out of memory
-     * on the next claim.
+     * the segment's hibernated workflows are forgotten, and a {@link WorkflowIndex} keeps them out of memory.
      *
      * @param segment the segment that was released
      * @return a future completed after this engine has requested every released execution to stop
@@ -686,7 +674,6 @@ public class WorkflowEngine implements
                                          .filter(adoptsAsHibernated.negate())
                                          .toList();
         if (index != null) {
-            // A restored workflow is not hibernated anymore, whatever its row says.
             ownedIds.forEach(workflowId -> index.restored(segment, workflowId));
         }
         if (ownedIds.isEmpty()) {

@@ -16,15 +16,9 @@ import java.util.Objects;
  * The range of segment keys a {@link Segment} owns, so a store finds the workflow instances of a segment with one range
  * query on an indexed column.
  * <p>
- * A {@link Segment} owns the workflow ids whose hash ends in the bits of its segment id, see
- * {@link Segment#matches(Object)}. The segment key of a workflow id is that hash with its bits reversed, read as an
- * unsigned number. Reversed, the ids of one segment form one contiguous range of keys. A split halves the range and a
- * merge joins two neighbouring ranges, so the key stored with a row never changes.
- * <p>
- * This is the rule of {@link WorkflowSegmentOwnership} in a form a database can index: a key lies in the range of a
- * segment exactly when that segment owns the workflow id.
- * <p>
- * Internal, because it is part of how a {@link WorkflowIndex} stores and selects its rows.
+ * The segment key of a workflow id is its hash with the bits reversed, read as an unsigned number. Reversed, the ids a
+ * segment {@link Segment#matches(Object) matches} form one contiguous range, and a split or a merge never changes a
+ * key. Internal, because it is part of how a {@link WorkflowIndex} stores and selects its rows.
  *
  * @param from the lowest segment key the segment owns
  * @param to   the highest segment key the segment owns
@@ -37,7 +31,7 @@ public record SegmentKeyRange(long from, long to) {
     private static final long HIGHEST_KEY = 0xFFFF_FFFFL;
 
     /**
-     * Returns the segment key of the given workflow id: its hash with the bits reversed, as an unsigned number.
+     * Returns the segment key of the given workflow id.
      *
      * @param workflowId the identifier of the workflow instance
      * @return the segment key, between 0 and 2<sup>32</sup> - 1
@@ -70,8 +64,7 @@ public record SegmentKeyRange(long from, long to) {
     }
 
     /**
-     * Returns whether this range and the given range share a segment key, as a segment and the segments it was split
-     * into or merged from do.
+     * Returns whether this range and the given range share a segment key, as they do across a split or a merge.
      *
      * @param other the range to compare with
      * @return {@code true} when at least one segment key lies in both ranges

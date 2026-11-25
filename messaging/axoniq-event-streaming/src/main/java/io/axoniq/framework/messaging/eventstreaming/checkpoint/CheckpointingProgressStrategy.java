@@ -65,10 +65,7 @@ public final class CheckpointingProgressStrategy implements SegmentProgressStrat
     private final SegmentProgressContext context;
     private final List<Checkpointing> participants;
     private final boolean autoCheckpointing;
-    /**
-     * The token store and the processor name the claim of the segment is held under, or {@code null} to not check that
-     * claim.
-     */
+    // The claim of the segment is checked only when both are set.
     private final @Nullable TokenStore tokenStore;
     private final @Nullable String processorName;
 
@@ -100,15 +97,13 @@ public final class CheckpointingProgressStrategy implements SegmentProgressStrat
     }
 
     /**
-     * Creates a strategy that also checks the claim of the segment when a participant writes with a position that is
-     * not stored, see {@link Checkpointing#onCheckpointStore(Segment, TrackingToken, ProcessingContext)}.
+     * Creates a strategy that also checks the claim of the segment, see
+     * {@link Checkpointing#onCheckpointStore(Segment, TrackingToken, ProcessingContext)}.
      *
      * @param context           the context of the segment this strategy keeps the progress of
      * @param participants      the self-checkpointing components of the segment
-     * @param autoCheckpointing {@code true} when an ordinary handler shares the processor, so a checkpoint is requested
-     *                          every batch
-     * @param tokenStore        the token store of the processor, which holds the claim of the segment, or {@code null}
-     *                          to not check that claim
+     * @param autoCheckpointing {@code true} when an ordinary handler shares the processor
+     * @param tokenStore        the token store holding the claim of the segment, or {@code null} to not check it
      * @param processorName     the name of the processor the claim is held under, or {@code null} to not check it
      */
     public CheckpointingProgressStrategy(SegmentProgressContext context,
@@ -338,13 +333,7 @@ public final class CheckpointingProgressStrategy implements SegmentProgressStrat
     }
 
     /**
-     * Stores the given token, after every participant wrote what belongs with it through
-     * {@link Checkpointing#onCheckpointStore(Segment, TrackingToken, ProcessingContext)}. Both happen on the calling
-     * thread, the one the transaction of the given context is bound to, so they are committed together.
-     * <p>
-     * A failed checkpoint rolls its transaction back, so there the order of the writes and the owner check does not
-     * matter. A failed release does not, as the claim must be released anyway. So on a {@code release}, the claim is
-     * checked first, and a node that lost the segment writes nothing.
+     * Lets every participant write what belongs with the token, then stores it, in the transaction of the context.
      */
     private CompletableFuture<Void> store(@Nullable TrackingToken token,
                                           ProcessingContext processingContext,
@@ -354,8 +343,7 @@ public final class CheckpointingProgressStrategy implements SegmentProgressStrat
                 return context.persistProgress(null, processingContext);
             }
             if (release && tokenStore != null && processorName != null) {
-                // A release that cannot store its token still commits, so the claim is checked before any
-                // participant writes: a node that lost the segment then writes nothing.
+                // A failed release still commits, so check the claim before any participant writes.
                 joinAndUnwrap(tokenStore.extendClaim(processorName,
                                                      context.segment().getSegmentId(),
                                                      processingContext));
@@ -372,12 +360,8 @@ public final class CheckpointingProgressStrategy implements SegmentProgressStrat
     }
 
     /**
-     * Extends the claim of the segment within the transaction of the given context, when no token was stored in it.
-     * <p>
-     * Storing a token checks that this node still owns the segment, and fails the transaction when it does not. A
-     * token that did not advance is not stored, so nothing checked the owner, while the participants did write in the
-     * transaction. Extending the claim makes the same check, so a node that lost the segment cannot commit what it
-     * wrote.
+     * Extends the claim when no token was stored, so a node that lost the segment cannot commit what the participants
+     * wrote. Storing a token makes the same owner check.
      */
     private CompletableFuture<Void> extendClaimUnlessStored(@Nullable TrackingToken storedBefore,
                                                             ProcessingContext processingContext) {

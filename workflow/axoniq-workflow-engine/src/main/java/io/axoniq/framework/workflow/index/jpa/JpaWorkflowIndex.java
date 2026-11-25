@@ -41,25 +41,16 @@ import java.util.concurrent.CompletableFuture;
 import static java.util.Objects.requireNonNull;
 
 /**
- * JPA implementation of {@link WorkflowIndex}, keeping the rows in the tables of {@link WorkflowIndexEntry},
- * {@link WorkflowIndexWaitEntry} and {@link WorkflowIndexSegmentEntry}.
- * <p>
- * Give it the {@link TransactionalExecutorProvider} the token store of the workflow processors uses. A store in the
- * context of a token store write then joins the transaction of that write, so the rows and the token are committed
- * together, and a node that lost its segment fails to store both. When the index lives in another database, configure
- * {@link JpaWorkflowIndexConfiguration#storesWithToken(boolean) storesWithToken(false)}.
- * <p>
- * The rows of a segment are selected with one range query per table on the segment key, see
- * {@link SegmentKeyRange}.
+ * JPA implementation of {@link WorkflowIndex}, on the entities {@link WorkflowIndexEntry},
+ * {@link WorkflowIndexWaitEntry} and {@link WorkflowIndexSegmentEntry}. Give it the
+ * {@link TransactionalExecutorProvider} of the token store, so the rows and the token commit together. When the index
+ * lives in another database, use {@link JpaWorkflowIndexConfiguration#storesWithToken(boolean) storesWithToken(false)}.
  * <p>
  * Example usage:
  * <pre>{@code
- * WorkflowConfigurer.create()
- *                   .registerWorkflowIndex(config -> new JpaWorkflowIndex(
- *                           new JpaTransactionalExecutorProvider(entityManagerFactory),
- *                           config.getComponent(Converter.class),
- *                           JpaWorkflowIndexConfiguration.DEFAULT
- *                   ));
+ * WorkflowConfigurer.create().registerWorkflowIndex(config -> new JpaWorkflowIndex(
+ *         new JpaTransactionalExecutorProvider(entityManagerFactory), config.getComponent(Converter.class),
+ *         JpaWorkflowIndexConfiguration.DEFAULT));
  * }</pre>
  *
  * @author Stefan Dragisic
@@ -152,8 +143,7 @@ public class JpaWorkflowIndex implements WorkflowIndex {
                                          WorkflowIndexChanges changes,
                                          @Nullable ProcessingContext context) {
         return executor(context).accept(entityManager -> {
-            // Every row is written with a statement of its own, so no entity of this index stays in the persistence
-            // context this store shares with the token store.
+            // No entity may stay in the persistence context this store shares with the token store.
             List<Object> added = new ArrayList<>();
             for (WorkflowIndexChange change : changes.changes()) {
                 apply(entityManager, module, change, added);
@@ -228,15 +218,12 @@ public class JpaWorkflowIndex implements WorkflowIndex {
         added.add(entry);
     }
 
-    /**
-     * Sets the position of the given segment, and removes the positions of the segments a split or a merge replaced:
-     * those whose range overlaps it.
-     */
     private static void movePosition(EntityManager entityManager,
                                      String module,
                                      WorkflowIndexChanges.SegmentPosition position,
                                      List<Object> added) {
         var range = position.range();
+        // Removes the positions of the segments a split or a merge replaced: those that overlap this range.
         entityManager.createQuery("delete from WorkflowIndexSegmentEntry e "
                                           + "where e.workflowModule = :workflowModule "
                                           + "and e.segmentFrom <= :to and e.segmentTo >= :from "

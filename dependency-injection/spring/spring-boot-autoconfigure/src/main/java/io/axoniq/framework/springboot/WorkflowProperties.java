@@ -260,12 +260,7 @@ public class WorkflowProperties {
     }
 
     /**
-     * The properties of the workflow index, the store a segment claim reads its running workflow instances, open
-     * waits and hibernated workflows from.
-     * <p>
-     * A JPA workflow index is registered when an {@code EntityManagerFactory} bean is present, unless
-     * {@code axon.workflow.index.enabled} is {@code false}. An application that defines its own {@code WorkflowIndex}
-     * bean replaces it.
+     * The properties of the workflow index, the store a segment claim reads its running workflows and open waits from.
      */
     public static class IndexProperties {
 
@@ -291,24 +286,19 @@ public class WorkflowProperties {
         }
 
         /**
-         * Returns whether the workflow index is in the database of the token store, so its rows are written in the
-         * transaction of the token.
+         * Returns whether the rows of the workflow index are written in the transaction of the token.
          *
-         * @return whether the rows of the workflow index are written in the transaction of the token, or {@code null}
-         * when not set, so it follows from the token store: {@code true} for a {@code JpaTokenStore}
+         * @return whether the rows are written with the token, or {@code null} to follow the token store
          */
         public @Nullable Boolean getStoresWithToken() {
             return storesWithToken;
         }
 
         /**
-         * Sets whether the workflow index is in the database of the token store. Not set, it is {@code true} when the
-         * token store is a {@code JpaTokenStore}. Set it to {@code false} when the token store uses another database.
-         * The workflow index then keeps no wake times, so a segment claim loads the hibernated workflows of its
-         * segment.
+         * Sets whether the rows of the workflow index are written in the transaction of the token. When unset, it is
+         * {@code true} only for a {@code JpaTokenStore}. Set {@code false} when the token store uses another database.
          *
-         * @param storesWithToken whether the rows of the workflow index are written in the transaction of the token,
-         *                        or {@code null} to follow the token store
+         * @param storesWithToken whether the rows are written with the token, or {@code null} to follow the token store
          */
         public void setStoresWithToken(@Nullable Boolean storesWithToken) {
             this.storesWithToken = storesWithToken;

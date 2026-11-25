@@ -20,10 +20,8 @@ import java.io.Serializable;
 import java.util.Objects;
 
 /**
- * The row of one running workflow in the {@link JpaWorkflowIndex}.
- * <p>
- * The segment key is indexed together with the workflow module, so the rows of one segment are selected as one range
- * of that index. It is derived from the workflow id alone and never changes, also not when segments split or merge.
+ * The row of one running workflow in the {@link JpaWorkflowIndex}. Its segment key comes from the workflow id alone, so
+ * it never changes when segments split or merge.
  *
  * @author Stefan Dragisic
  * @see io.axoniq.framework.workflow.runtime.execution.SegmentKeyRange
@@ -45,14 +43,13 @@ public class WorkflowIndexEntry {
     @Basic(optional = false)
     private long segmentKey;
 
-    // An ISO-8601 instant, kept as text like the timestamp of a token entry.
+    // An ISO-8601 instant as text, like the timestamp of a token entry.
     private @Nullable String wakesAt;
 
     /**
      * Constructor required by JPA. Do not use.
      */
     protected WorkflowIndexEntry() {
-        // required by JPA
     }
 
     /**
@@ -61,8 +58,7 @@ public class WorkflowIndexEntry {
      * @param workflowModule the name of the workflow module the workflow runs in
      * @param workflowId     the identifier of the workflow
      * @param segmentKey     the segment key of the workflow id
-     * @param wakesAt        the time the workflow wakes at, as an ISO-8601 instant, or {@code null} when it is not
-     *                       hibernated
+     * @param wakesAt        the wake time as an ISO-8601 instant, or {@code null} when the workflow is not hibernated
      */
     public WorkflowIndexEntry(String workflowModule, String workflowId, long segmentKey, @Nullable String wakesAt) {
         this.workflowModule = Objects.requireNonNull(workflowModule, "The workflow module must not be null.");
@@ -119,7 +115,6 @@ public class WorkflowIndexEntry {
          * Constructor required by JPA. Do not use.
          */
         public PK() {
-            // required by JPA
         }
 
         /**

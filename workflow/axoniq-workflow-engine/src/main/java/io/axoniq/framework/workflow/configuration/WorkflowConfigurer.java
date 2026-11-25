@@ -150,20 +150,15 @@ public class WorkflowConfigurer implements ApplicationConfigurer {
     }
 
     /**
-     * Registers the {@link WorkflowIndex} of the workflow modules. Without one, which is the default, every segment
-     * claim sources the running workflows and the open waits of all segments from the event store.
-     * <p>
-     * With an index, a claimed segment reads only its own rows, and a hibernated workflow stays out of memory across a
-     * restart of the application. One index serves every workflow module.
+     * Registers the {@link WorkflowIndex} all workflow modules share, so a segment claim reads only its own rows.
+     * Without an index, which is the default, a claim sources all running workflows from the event store.
      * <p>
      * Example usage:
      * <pre>{@code
-     * WorkflowConfigurer.create()
-     *                   .registerWorkflowIndex(config -> new InMemoryWorkflowIndex());
+     * WorkflowConfigurer.create().registerWorkflowIndex(config -> new InMemoryWorkflowIndex());
      * }</pre>
      *
-     * @param indexBuilder builds the {@link WorkflowIndex} from the
-     *                     {@link org.axonframework.common.configuration.Configuration}
+     * @param indexBuilder builds the {@link WorkflowIndex} from the configuration
      * @return this configurer, for a fluent API
      * @since 5.5.0
      */

@@ -13,12 +13,8 @@ import java.time.Instant;
 import java.util.Objects;
 
 /**
- * One change to the rows of a {@link WorkflowIndex}.
- * <p>
- * Every change has the same outcome when it is stored twice. A workflow starts once and ends once, and a wait opens
- * once and closes once, so a change that arrives late or again never hides a workflow or a wait that must be found.
- * <p>
- * Internal, because it is part of how the {@link WorkflowEngine} keeps a {@link WorkflowIndex} current.
+ * One change to the rows of a {@link WorkflowIndex}. Storing a change twice has the same outcome as storing it once.
+ * Internal, because the {@link WorkflowEngine} uses it to keep the index current.
  *
  * @author Stefan Dragisic
  * @since 5.5.0
@@ -110,8 +106,7 @@ public sealed interface WorkflowIndexChange {
     }
 
     /**
-     * A workflow hibernated: its row gets the time it wakes at. The row is added when it is missing, as a workflow can
-     * hibernate before the stored token covers the event it started with.
+     * A workflow hibernated: its row gets the time it wakes at, and is added if its start is not stored yet.
      *
      * @param workflowId the identifier of the workflow
      * @param wakesAt    the nearest timeout of its open waits, which wakes it
@@ -131,8 +126,7 @@ public sealed interface WorkflowIndexChange {
     }
 
     /**
-     * A hibernated workflow woke: its row loses the time it wakes at. A missing row stays missing, so a workflow that
-     * woke and ended does not return.
+     * A workflow woke: its row loses the time it wakes at. A missing row stays missing, as the workflow may have ended.
      *
      * @param workflowId the identifier of the workflow
      */

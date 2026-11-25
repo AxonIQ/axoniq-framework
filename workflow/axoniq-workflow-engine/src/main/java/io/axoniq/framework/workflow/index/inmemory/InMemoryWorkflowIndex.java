@@ -33,13 +33,8 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * In-memory implementation of {@link WorkflowIndex}, for tests and for an application that runs on a single node with
- * an in-memory token store.
- * <p>
- * The rows live in this instance, so they are lost with it and are not shared between nodes. A change stored in a
- * started {@link ProcessingContext} is applied when that context commits, like a token of the
- * {@link org.axonframework.messaging.eventhandling.processing.streaming.token.store.inmemory.InMemoryTokenStore}. A
- * change stored without one is applied at once.
+ * In-memory {@link WorkflowIndex}, for tests and for a single node with an in-memory token store. The rows are not
+ * shared between nodes. A change stored in a started {@link ProcessingContext} is applied when that context commits.
  *
  * @author Stefan Dragisic
  * @since 5.5.0
@@ -50,8 +45,7 @@ public class InMemoryWorkflowIndex implements WorkflowIndex {
     private final boolean storesWithToken;
 
     /**
-     * Creates an index that reports to {@link #storesWithToken() store with the token}: with the token store in the
-     * same memory, no other node can hold the segment.
+     * Creates an index that {@link #storesWithToken() stores with the token}, as no other node can hold its segments.
      */
     public InMemoryWorkflowIndex() {
         this(true);
@@ -129,15 +123,12 @@ public class InMemoryWorkflowIndex implements WorkflowIndex {
         return modules.computeIfAbsent(module, name -> new ModuleRows());
     }
 
-    /**
-     * The rows of one workflow module. Guarded by its own monitor.
-     */
+    // Guarded by its own monitor.
     private static final class ModuleRows {
 
-        // The running workflows, each with the time it wakes at, or null when it is not hibernated.
+        // The time each running workflow wakes at, or null when it is not hibernated.
         private final Map<String, @Nullable Instant> workflows = new HashMap<>();
         private final Map<WaitKey, WaitAssociation> waits = new LinkedHashMap<>();
-        // The position the rows of each segment are correct at, by the key range of the segment.
         private final Map<SegmentKeyRange, Long> positions = new HashMap<>();
 
         private void apply(WorkflowIndexChange change) {

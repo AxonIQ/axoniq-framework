@@ -28,31 +28,13 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean;
 
 /**
- * Spring Boot autoconfiguration that registers a JPA-backed {@link WorkflowIndex} bean.
+ * Spring Boot autoconfiguration that registers a {@link JpaWorkflowIndex} on the application's
+ * {@code EntityManagerFactory}, and adds its entities to the persistence unit.
  * <p>
- * This configuration activates when an {@code EntityManagerFactory} bean is present, unless
- * {@code axon.workflow.index.enabled} or {@code axon.workflow.enabled} is {@code false}. The registered
- * {@link JpaWorkflowIndex} uses the application's {@code EntityManagerFactory}, like the JPA token store does. With a
- * {@link JpaTokenStore}, the workflow engine writes the rows of the workflow index in the transaction that stores the
- * token of its event processor. The entities of the workflow index are registered with the persistence unit of the
- * application.
- * <p>
- * To turn the workflow index off, set:
- * <pre>{@code
- * axon.workflow.index.enabled=false
- * }</pre>
- * <p>
- * When the token store uses another database than the workflow index, also set:
- * <pre>{@code
- * axon.workflow.index.stores-with-token=false
- * }</pre>
- * <p>
- * To replace the JPA workflow index with another one, declare your own {@link WorkflowIndex} bean. The
- * {@code @ConditionalOnMissingBean} guard on the default yields to it.
+ * Set {@code axon.workflow.index.enabled=false} to turn it off, or declare your own {@link WorkflowIndex} bean to
+ * replace it. When the token store uses another database, set {@code axon.workflow.index.stores-with-token=false}.
  *
  * @author Stefan Dragisic
- * @see WorkflowIndex
- * @see JpaWorkflowIndex
  * @since 5.5.0
  */
 @AutoConfiguration(
@@ -72,14 +54,12 @@ import org.springframework.context.annotation.Bean;
 public class JpaWorkflowIndexAutoConfiguration {
 
     /**
-     * Creates a {@link JpaWorkflowIndex} that reads and writes its rows through the given
-     * {@code entityManagerFactory}.
+     * Creates a {@link JpaWorkflowIndex} on the given {@code entityManagerFactory}.
      *
      * @param entityManagerFactory the JPA {@link EntityManagerFactory} used for persistence
-     * @param converter            the {@link GeneralConverter} used to convert the associations of an open wait
+     * @param converter            the {@link GeneralConverter} for the associations of an open wait
      * @param workflowProperties   the {@link WorkflowProperties} holding the workflow index settings
-     * @param tokenStore           the token store of the application, which decides whether the rows are written
-     *                             with the token when {@code axon.workflow.index.stores-with-token} is not set
+     * @param tokenStore           the token store, used when {@code axon.workflow.index.stores-with-token} is not set
      * @return a {@link WorkflowIndex} backed by JPA
      */
     @Bean
