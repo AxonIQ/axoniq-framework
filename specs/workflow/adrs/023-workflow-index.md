@@ -27,9 +27,9 @@ of date after a crash, so a claim then loads every hibernated workflow of the se
 
 ## Decision
 
-The engine has an optional **workflow index**: a store of rows, cut per segment, written with the token of the
-processor. The events stay the source of truth, and the rows are derived from them. The workflow index is off by
-default. Off, a segment claim sources the two lists and reads the hibernation record.
+The engine has a **workflow index**: a store of rows, cut per segment, written with the token of the
+processor. The events stay the source of truth, and the rows are derived from them. A Spring Boot application with
+JPA has it by default. Without it, a segment claim sources the two lists and reads the hibernation record.
 
 ### Rows
 

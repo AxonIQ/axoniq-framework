@@ -326,8 +326,9 @@ A segment claim reads only the rows of its own segment, and then the few wait an
 The engine writes the rows that changed each time the processor stores its token.
 The events stay the source of truth.
 
-The workflow index is off by default.
-Turn it on when restarts and failovers take long: with many running workflows, with many segments, or with <<hibernation,hibernated workflows>> that must stay out of memory after a crash.
+In a Spring Boot application with JPA, the workflow index is on by default, see <<spring-boot,Spring Boot>>.
+Without Spring Boot, register it on the `WorkflowConfigurer`, as shown below.
+It pays off most with many running workflows, with many segments, and with <<hibernation,hibernated workflows>> that must stay out of memory after a crash.
 
 === Enabling the workflow index
 
@@ -495,12 +496,12 @@ The <<workflow-index,workflow index>> is configured with `axon.workflow.index.*`
 |Property |Default |Description
 
 |`enabled`
-|`false`
-|`true` registers a `JpaWorkflowIndex` bean and the three entities of the workflow index. This needs an `EntityManagerFactory` bean and a `GeneralConverter` bean.
+|`true`
+|Registers a `JpaWorkflowIndex` bean and the three entities of the workflow index, when the application has an `EntityManagerFactory` bean and a `GeneralConverter` bean. `false` turns the workflow index off.
 
 |`stores-with-token`
-|`true`
-|Whether the workflow index is in the database of the token store. Set it to `false` when the token store uses another database.
+|not set
+|Whether the workflow index is in the database of the token store. Not set, it is `true` when the token store is a `JpaTokenStore`. Set it to `false` when the token store uses another database.
 |===
 
 The `JpaWorkflowIndex` bean uses the `EntityManagerFactory` of the application.

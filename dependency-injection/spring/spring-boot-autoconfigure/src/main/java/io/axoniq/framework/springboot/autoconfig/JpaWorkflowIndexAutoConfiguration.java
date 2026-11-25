@@ -16,7 +16,10 @@ import jakarta.persistence.EntityManagerFactory;
 import org.axonframework.conversion.GeneralConverter;
 import org.axonframework.extension.springboot.util.RegisterDefaultEntities;
 import org.axonframework.messaging.core.unitofwork.transaction.jpa.JpaTransactionalExecutorProvider;
+import org.axonframework.messaging.eventhandling.processing.streaming.token.store.TokenStore;
+import org.axonframework.messaging.eventhandling.processing.streaming.token.store.jpa.JpaTokenStore;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -27,15 +30,16 @@ import org.springframework.context.annotation.Bean;
 /**
  * Spring Boot autoconfiguration that registers a JPA-backed {@link WorkflowIndex} bean.
  * <p>
- * This configuration activates when {@code axon.workflow.index.enabled} is {@code true}, workflows are not switched
- * off through {@code axon.workflow.enabled}, and an {@code EntityManagerFactory} bean is present. The registered
- * {@link JpaWorkflowIndex} uses the application's {@code EntityManagerFactory}, like the JPA token store does, so the
- * workflow engine writes the rows of the workflow index in the transaction that stores the token of its event
- * processor. The entities of the workflow index are registered with the persistence unit of the application.
+ * This configuration activates when an {@code EntityManagerFactory} bean is present, unless
+ * {@code axon.workflow.index.enabled} or {@code axon.workflow.enabled} is {@code false}. The registered
+ * {@link JpaWorkflowIndex} uses the application's {@code EntityManagerFactory}, like the JPA token store does. With a
+ * {@link JpaTokenStore}, the workflow engine writes the rows of the workflow index in the transaction that stores the
+ * token of its event processor. The entities of the workflow index are registered with the persistence unit of the
+ * application.
  * <p>
- * To enable the workflow index, set:
+ * To turn the workflow index off, set:
  * <pre>{@code
- * axon.workflow.index.enabled=true
+ * axon.workflow.index.enabled=false
  * }</pre>
  * <p>
  * When the token store uses another database than the workflow index, also set:
@@ -60,7 +64,7 @@ import org.springframework.context.annotation.Bean;
 @ConditionalOnClass({EntityManagerFactory.class, WorkflowEngine.class})
 @ConditionalOnBean(EntityManagerFactory.class)
 @ConditionalOnProperty(prefix = "axon.workflow", name = "enabled", matchIfMissing = true)
-@ConditionalOnProperty(prefix = "axon.workflow.index", name = "enabled", havingValue = "true")
+@ConditionalOnProperty(prefix = "axon.workflow.index", name = "enabled", havingValue = "true", matchIfMissing = true)
 @EnableConfigurationProperties(WorkflowProperties.class)
 @RegisterDefaultEntities(packages = {
         "io.axoniq.framework.workflow.index.jpa",
@@ -74,6 +78,8 @@ public class JpaWorkflowIndexAutoConfiguration {
      * @param entityManagerFactory the JPA {@link EntityManagerFactory} used for persistence
      * @param converter            the {@link GeneralConverter} used to convert the associations of an open wait
      * @param workflowProperties   the {@link WorkflowProperties} holding the workflow index settings
+     * @param tokenStore           the token store of the application, which decides whether the rows are written
+     *                             with the token when {@code axon.workflow.index.stores-with-token} is not set
      * @return a {@link WorkflowIndex} backed by JPA
      */
     @Bean
@@ -81,11 +87,17 @@ public class JpaWorkflowIndexAutoConfiguration {
     @ConditionalOnBean(GeneralConverter.class)
     public WorkflowIndex jpaWorkflowIndex(EntityManagerFactory entityManagerFactory,
                                           GeneralConverter converter,
-                                          WorkflowProperties workflowProperties) {
+                                          WorkflowProperties workflowProperties,
+                                          ObjectProvider<TokenStore> tokenStore) {
+        Boolean configured = workflowProperties.getIndex().getStoresWithToken();
+        // Not set: only a JPA token store shares the transaction the index writes in.
+        boolean storesWithToken = configured != null
+                ? configured
+                : tokenStore.getIfAvailable() instanceof JpaTokenStore;
         return new JpaWorkflowIndex(
                 new JpaTransactionalExecutorProvider(entityManagerFactory),
                 converter,
-                JpaWorkflowIndexConfiguration.DEFAULT.storesWithToken(workflowProperties.getIndex().isStoresWithToken())
+                JpaWorkflowIndexConfiguration.DEFAULT.storesWithToken(storesWithToken)
         );
     }
 }

@@ -47,9 +47,10 @@ import static org.awaitility.Awaitility.await;
 
 /**
  * Verifies, on the real autoconfiguration chain with Axon Server as the event store and PostgreSQL for the token store
- * and the workflow index, that {@code axon.workflow.index.enabled=true} registers a JPA {@link WorkflowIndex} the
- * workflow engine keeps its rows in, that a restarted application restores a waiting workflow from those rows, that
- * the property is needed for it, and that a {@code WorkflowIndex} bean of the application replaces it.
+ * and the workflow index, that a JPA {@link WorkflowIndex} is registered by default, that the workflow engine keeps
+ * its rows in it, that a restarted application restores a waiting workflow from those rows, that
+ * {@code axon.workflow.index.enabled=false} turns it off, and that a {@code WorkflowIndex} bean of the application
+ * replaces it.
  *
  * @author Stefan Dragisic
  */
@@ -155,8 +156,21 @@ class JpaWorkflowIndexAutoConfigurationIT {
     class WithoutTheProperty {
 
         @Test
-        void registersNoWorkflowIndex() {
+        void registersAJpaWorkflowIndexThatStoresWithTheToken() {
             try (var context = contextWith(WaitingWorkflowApplication.class)) {
+                var index = context.getBean(WorkflowIndex.class);
+                assertThat(index).isInstanceOf(JpaWorkflowIndex.class);
+                assertThat(index.storesWithToken()).isTrue();
+            }
+        }
+    }
+
+    @Nested
+    class WithThePropertyOff {
+
+        @Test
+        void registersNoWorkflowIndex() {
+            try (var context = contextWith(WaitingWorkflowApplication.class, "--axon.workflow.index.enabled=false")) {
                 assertThat(context.getBeansOfType(WorkflowIndex.class)).isEmpty();
             }
         }
