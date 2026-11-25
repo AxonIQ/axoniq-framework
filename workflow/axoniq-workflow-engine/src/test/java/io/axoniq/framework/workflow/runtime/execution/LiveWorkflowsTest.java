@@ -80,7 +80,6 @@ class LiveWorkflowsTest {
             new ControllableWorkflowScheduler(),
             Clock.systemUTC(),
             liveWorkflows,
-            new WorkflowCancellationService(),
             new RunningWorkflowsProjection(WorkflowIndex.none(), "orders"),
             (hibernated, beforeStart) -> {
                 loads.add(hibernated.workflowId());

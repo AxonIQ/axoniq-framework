@@ -587,19 +587,20 @@ class WorkflowConfigurerHibernationTest {
         }
 
         @Test
-        void reachesTheHibernatedWorkflowThroughTheRegistrationOfAnExecutionThatLeftMemory() {
-            // given: a hibernated workflow, with the cancellation of the execution that left memory registered again,
-            // as a wake leaves it behind that fails after it registered the cancellation of the execution it woke
+        void reachesTheHibernatedWorkflowAfterAWakeThatFailedOnceItLoadedTheWorkflow() {
+            // given: a hibernated workflow, whose wake by an event failed after it loaded the workflow, so the loaded
+            // execution left memory again and the workflow is hibernated only
             var configuration = start(true);
             var workflowId = startWorkflow(configuration, "wait", "order-1", WAIT_STEP);
-            var execution = execution(configuration, workflowId);
             awaitHibernated(configuration, workflowId);
-            WorkflowEngineHibernation.registerCancellationOf(engine(configuration), execution);
+            assertThat(handle(configuration, workflowId, unreadableEventOf(configuration, workflowId)))
+                    .isCompletedExceptionally();
+            assertThat(WorkflowEngineHibernation.isHibernated(engine(configuration), workflowId)).isTrue();
 
             // when
             var cancelled = cancellationService(configuration).requestWorkflowCancellation(workflowId, null);
 
-            // then: the request goes to the hibernated workflow, instead of back to that registration
+            // then: the request goes to the hibernated workflow, not to the execution that left memory
             assertThat(cancelled).succeedsWithin(Duration.ofSeconds(10));
             awaitWorkflowStatus(configuration, workflowId, WorkflowStatus.CANCELLED);
         }
@@ -817,15 +818,8 @@ class WorkflowConfigurerHibernationTest {
             var configuration = start(true);
             var workflowId = startWorkflow(configuration, "wait", "order-1", WAIT_STEP);
             awaitHibernated(configuration, workflowId);
-            var definitionId = durableState(configuration, workflowId).workflowDefinitionId();
-            // an event of the workflow that its state cannot apply: its retry info is not one
-            var unreadable = new GenericEventMessage(
-                    new MessageType(MODULE + "Retrying"),
-                    "not retry info",
-                    MetadataUtils.withWorkflowDefinitionId(
-                            MetadataUtils.create(workflowId, "charge", StepStatus.RETRYING), definitionId
-                    )
-            );
+            // an event of the workflow that its state cannot apply
+            var unreadable = unreadableEventOf(configuration, workflowId);
 
             // when: the wake loads the workflow, and fails to hand it the event
             var handled = handle(configuration, workflowId, unreadable);
@@ -854,31 +848,6 @@ class WorkflowConfigurerHibernationTest {
             // then
             assertThat(handled).isCompletedExceptionally();
             assertThat(WorkflowEngineHibernation.isHibernated(engine(configuration), workflowId)).isTrue();
-        }
-
-        /**
-         * Hands the event to the engine as the segment owning the workflow handles it, without storing it, so the
-         * processor never delivers it and only the outcome of this delivery counts. The processor did not hand it
-         * over, so the engine does not ask the processor to release the segment when the event fails either.
-         */
-        private CompletableFuture<?> handle(AxonConfiguration configuration, String workflowId, EventMessage event) {
-            engine(configuration).setSegmentReleaser(segment -> {
-            });
-            var segment = segmentOf(workflowId);
-            return configuration.getComponent(UnitOfWorkFactory.class)
-                                .create("handle-" + event.identifier())
-                                .executeWithResult(context -> {
-                                    context.putResource(Segment.RESOURCE_KEY, segment);
-                                    engine(configuration).handle(event, context);
-                                    return CompletableFuture.completedFuture(null);
-                                })
-                                // Waits for the outcome, which the caller inspects.
-                                .handle((result, failure) -> failure)
-                                .thenApply(failure -> failure == null
-                                        ? CompletableFuture.completedFuture(null)
-                                        : CompletableFuture.failedFuture(failure))
-                                .orTimeout(10, TimeUnit.SECONDS)
-                                .join();
         }
     }
 
@@ -1771,6 +1740,46 @@ class WorkflowConfigurerHibernationTest {
                      .thenCompose(transaction -> transaction.commit())
                      .orTimeout(5, TimeUnit.SECONDS)
                      .join();
+    }
+
+    /**
+     * Hands the event to the engine as the segment owning the workflow handles it, without storing it, so the
+     * processor never delivers it and only the outcome of this delivery counts. The processor did not hand it
+     * over, so the engine does not ask the processor to release the segment when the event fails either.
+     */
+    private static CompletableFuture<?> handle(AxonConfiguration configuration, String workflowId, EventMessage event) {
+        engine(configuration).setSegmentReleaser(segment -> {
+        });
+        var segment = segmentOf(workflowId);
+        return configuration.getComponent(UnitOfWorkFactory.class)
+                            .create("handle-" + event.identifier())
+                            .executeWithResult(context -> {
+                                context.putResource(Segment.RESOURCE_KEY, segment);
+                                engine(configuration).handle(event, context);
+                                return CompletableFuture.completedFuture(null);
+                            })
+                            // Waits for the outcome, which the caller inspects.
+                            .handle((result, failure) -> failure)
+                            .thenApply(failure -> failure == null
+                                    ? CompletableFuture.completedFuture(null)
+                                    : CompletableFuture.failedFuture(failure))
+                            .orTimeout(10, TimeUnit.SECONDS)
+                            .join();
+    }
+
+    /**
+     * Returns an event of the given workflow that its state cannot apply, as its retry info is not one, so a wake that
+     * hands it to the workflow fails after it loaded the workflow.
+     */
+    private static EventMessage unreadableEventOf(AxonConfiguration configuration, String workflowId) {
+        var definitionId = durableState(configuration, workflowId).workflowDefinitionId();
+        return new GenericEventMessage(
+                new MessageType(MODULE + "Retrying"),
+                "not retry info",
+                MetadataUtils.withWorkflowDefinitionId(
+                        MetadataUtils.create(workflowId, "charge", StepStatus.RETRYING), definitionId
+                )
+        );
     }
 
     private static WorkflowEngine engine(Configuration configuration) {

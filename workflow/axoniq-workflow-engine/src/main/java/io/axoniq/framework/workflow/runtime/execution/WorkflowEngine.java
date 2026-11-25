@@ -82,7 +82,6 @@ public class WorkflowEngine implements
     private static final Logger logger = LoggerFactory.getLogger(WorkflowEngine.class);
     private final WorkflowConfigurationRegistry<?> workflowConfigurationRegistry;
     private final LiveWorkflows liveWorkflows;
-    private final WorkflowCancellationService workflowCancellationService;
     private final WorkflowStore workflowStore;
     private final UnitOfWorkFactory unitOfWorkFactory;
     // Package-private so a test can start a new claim of a segment without stopping the executions of the current one,
@@ -91,8 +90,6 @@ public class WorkflowEngine implements
     private final WorkflowEngineSequencingPolicy segmentedRouting;
     private final RunningWorkflowsProjection runningWorkflows;
     private final RunningWorkflowsClaimLoader claimLoader;
-    // The cancellation each execution registered, so only that registration is removed when the execution leaves.
-    private final Map<WorkflowExecution, WorkflowCancellation> registeredCancellations = new ConcurrentHashMap<>();
     // Package-private so a test can shrink it instead of waiting out the production timeout.
     Duration restoreTimeout = DEFAULT_RESTORE_TIMEOUT;
     private WorkflowEngineCheckpointingSupport checkpointingSupport;
@@ -117,8 +114,8 @@ public class WorkflowEngine implements
      *                                      {@link
      *                                      io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowConfiguration
      *                                      workflow configuration}
-     * @param liveWorkflows                 the workflows live in memory, whose residency only the engine changes
-     * @param workflowCancellationService   workflow cancellation service
+     * @param liveWorkflows                 the workflows live in memory, whose residency only the engine changes,
+     *                                      and which the cancellation requests of the workflow module find
      * @param workflowStore                 dedicated store for workflow information, like {@link RunningWorkflows} and
      *                                      {@link WorkflowState}
      * @param workflowIndex                 the index persisting the running workflows per segment
@@ -131,7 +128,6 @@ public class WorkflowEngine implements
     public WorkflowEngine(
             WorkflowConfigurationRegistry<?> workflowConfigurationRegistry,
             LiveWorkflows liveWorkflows,
-            WorkflowCancellationService workflowCancellationService,
             WorkflowStore workflowStore,
             WorkflowIndex workflowIndex,
             String indexName,
@@ -141,9 +137,6 @@ public class WorkflowEngine implements
                 workflowConfigurationRegistry, "The WorkflowConfigurationRegistry must not be null."
         );
         this.liveWorkflows = requireNonNull(liveWorkflows, "The LiveWorkflows must not be null.");
-        this.workflowCancellationService = requireNonNull(
-                workflowCancellationService, "The WorkflowCancellationService must not be null."
-        );
         this.workflowStore = requireNonNull(workflowStore, "The WorkflowStore must not be null.");
         this.unitOfWorkFactory = requireNonNull(unitOfWorkFactory, "The UnitOfWorkFactory must not be null.");
         this.segmentedRouting = new WorkflowEngineSequencingPolicy(workflowConfigurationRegistry);
@@ -176,8 +169,8 @@ public class WorkflowEngine implements
      * Sets the checkpointing support required by this engine.
      * <p>
      * The component is set outside the
-     * {@link #WorkflowEngine(WorkflowConfigurationRegistry, LiveWorkflows, WorkflowCancellationService, WorkflowStore,
-     * WorkflowIndex, String, UnitOfWorkFactory)}, because they require <b>this</b>
+     * {@link #WorkflowEngine(WorkflowConfigurationRegistry, LiveWorkflows, WorkflowStore, WorkflowIndex, String,
+     * UnitOfWorkFactory)}, because they require <b>this</b>
      * {@code WorkflowEngine} itself to function. Hence, a cyclic dependency would exist upon start-up if completion
      * otherwise.
      *
@@ -260,8 +253,7 @@ public class WorkflowEngine implements
                                   Executor wakeExecutor) {
         this.wakeTimeout = requireNonNull(wakeTimeout, "The wake timeout must not be null.");
         this.hibernation = new WorkflowEngineHibernationSupport(
-                scheduler, clock, liveWorkflows, workflowCancellationService, runningWorkflows, this::wakeWorkflow,
-                idleDelay, wakeExecutor
+                scheduler, clock, liveWorkflows, runningWorkflows, this::wakeWorkflow, idleDelay, wakeExecutor
         );
     }
 
@@ -463,7 +455,7 @@ public class WorkflowEngine implements
                 logger.debug("Creating a new workflow '{}' with payload '{}'", workflowId, eventMessage.payload());
                 return workflowConfiguration.workflowExecutionFactory().create(workflowContext);
             });
-            registerCancellation(execution);
+            liveWorkflows.markCancellable(execution);
             allowHibernation(execution, claim);
             if (mayStartBodies) {
                 execute(execution);
@@ -719,7 +711,7 @@ public class WorkflowEngine implements
             logger.info("Stopping {} workflow execution(s) of segment {}.", stopped.size(), segment.getSegmentId());
             stopped.forEach(WorkflowExecution::stopForShutdown);
             // A stopped execution skips the termination handler, so its cleanup happens here.
-            stopped.forEach(this::removeExecution);
+            stopped.forEach(liveWorkflows::leave);
         }
     }
 
@@ -989,16 +981,15 @@ public class WorkflowEngine implements
             // ones.
             claim.startWhileCurrent(mayStartBodies -> {
                 if (mayStartBodies && !execution.isRunning()) {
-                    registerCancellation(execution);
+                    liveWorkflows.markCancellable(execution);
                     execute(execution);
                 }
             });
         } catch (RuntimeException e) {
             // Partly woken: this execution swaps back for the hibernation, or only leaves memory once the claim ended.
-            // The hibernation support registers the cancellation stand-in of the hibernation again, should this
-            // execution have replaced it, and fails the requests that waited for this execution.
+            // First, the requests that waited for this execution fail, so they do not wake the workflow once more.
             execution.stopForShutdown();
-            unregisterCancellation(execution);
+            liveWorkflows.failRequests(execution, e);
             // Only while the claim is current: a claim that ended dropped the hibernated workflows of its segment, and
             // must not find this one hibernated again once it no longer looks.
             boolean[] returned = new boolean[1];
@@ -1006,7 +997,6 @@ public class WorkflowEngine implements
             if (!returned[0]) {
                 liveWorkflows.leave(execution);
             }
-            leftMemory(execution, e);
             throw e;
         }
         return true;
@@ -1039,12 +1029,7 @@ public class WorkflowEngine implements
                                               .stream()
                                               .filter(execution -> execution.state().workflowStatus().isTerminal())
                                               .toList();
-        terminalExecutions.forEach(execution -> {
-            if (liveWorkflows.leave(execution)) {
-                unregisterCancellation(execution);
-                leftMemory(execution, null);
-            }
-        });
+        terminalExecutions.forEach(liveWorkflows::leave);
         var executionsToStart = liveWorkflows.inMemoryOwnedBy(segment)
                                              .stream()
                                              .filter(execution -> !execution.isRunning())
@@ -1055,7 +1040,7 @@ public class WorkflowEngine implements
         }
         logger.debug("Starting {} restored workflow execution(s) {}.", executionsToStart.size(), phase);
         for (var execution : executionsToStart) {
-            registerCancellation(execution);
+            liveWorkflows.markCancellable(execution);
             execute(execution);
         }
         logger.debug("Started {} restored workflow execution(s) {}.", executionsToStart.size(), phase);
@@ -1072,43 +1057,18 @@ public class WorkflowEngine implements
                                      logger.debug("Workflow {} finished with status {}, removing it from repository",
                                                   execution.workflowId(),
                                                   finished.state().workflowStatus());
-                                     removeExecution(execution);
+                                     liveWorkflows.leave(execution);
                                  }
                          ).whenComplete((ignored, failure) -> {
                              if (failure != null) {
                                  logger.error("Workflow {} stopped with an unhandled execution failure",
                                               execution.workflowId(), failure);
                              }
-                             // An execution that hibernated left memory without leaving the engine: its cancellation
-                             // is no longer registered, but still remembered, which would keep it in memory.
-                             if (!liveWorkflows.isInMemory(execution)) {
-                                 unregisterCancellation(execution);
-                             }
                          });
                      } catch (Throwable t) {
                          throw new RuntimeException("Error during workflow execution", t);
                      }
                  });
-    }
-
-    /**
-     * Registers the cancellation of the given execution for its workflow, replacing the registration of the workflow,
-     * and remembers it, so the execution unregisters exactly this registration when it leaves.
-     * <p>
-     * Package-private so a test can register the cancellation of an execution that left memory.
-     */
-    void registerCancellation(WorkflowExecution execution) {
-        if (execution instanceof WorkflowCancellationProvider provider) {
-            var cancellation = provider.workflowCancellation();
-            var support = hibernation;
-            var registered = support == null ? cancellation : support.decorate(execution, cancellation);
-            registeredCancellations.put(execution, registered);
-            workflowCancellationService.register(execution.workflowId(), registered);
-        } else {
-            throw new IllegalStateException(
-                    "Provided workflow execution {} does not implement WorkflowCancellationProvider, but the cancellation was registered.".formatted(
-                            execution.workflowId()));
-        }
     }
 
     /**
@@ -1132,40 +1092,6 @@ public class WorkflowEngine implements
         if (support != null) {
             support.allow(execution, claim);
         }
-    }
-
-    /**
-     * Unregisters the cancellation the given execution registered, unless another registration replaced it.
-     */
-    private void unregisterCancellation(WorkflowExecution execution) {
-        var registered = registeredCancellations.remove(execution);
-        if (registered != null) {
-            workflowCancellationService.unregister(execution.workflowId(), registered);
-        }
-    }
-
-    /**
-     * Tells the hibernation support, when enabled, that the given execution left memory, so the requests that waited
-     * for it to run them are answered.
-     *
-     * @param failure the failure that made the execution leave, or {@code null} when it left otherwise
-     */
-    private void leftMemory(WorkflowExecution execution, @Nullable Throwable failure) {
-        var support = hibernation;
-        if (support != null) {
-            support.leftMemory(execution, failure);
-        }
-    }
-
-    /**
-     * Takes the given execution out of memory when it leaves this engine, which releases its safe point, and releases
-     * its cancellation. Leaves the registrations of another execution of the workflow, or of its hibernation, that
-     * replaced this one in place.
-     */
-    private void removeExecution(WorkflowExecution execution) {
-        unregisterCancellation(execution);
-        liveWorkflows.leave(execution);
-        leftMemory(execution, null);
     }
 
     /**
@@ -1193,9 +1119,6 @@ public class WorkflowEngine implements
             execution.stopForShutdown();
         }
         liveWorkflows.clear();
-        registeredCancellations.clear();
-        workflowCancellationService.clear();
-        executions.forEach(execution -> leftMemory(execution, null));
     }
 
     /**

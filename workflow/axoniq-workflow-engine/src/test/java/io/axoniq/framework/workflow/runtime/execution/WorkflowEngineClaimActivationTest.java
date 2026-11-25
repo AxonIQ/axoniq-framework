@@ -32,6 +32,7 @@ import org.junit.jupiter.api.*;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.Optional;
 import java.util.Queue;
 import java.util.concurrent.CompletableFuture;
@@ -81,14 +82,15 @@ class WorkflowEngineClaimActivationTest {
     // The catch-up polls the engine scheduled, which run only when the test runs them.
     private final Queue<Runnable> duePolls = new ConcurrentLinkedQueue<>();
     private final EventStore eventStore = eventStore(new InMemoryEventStorageEngine());
+    private final LiveWorkflows liveWorkflows = new LiveWorkflows(new InMemoryWorkflowExecutionRepository());
+    private final WorkflowCancellationService cancellationService = new WorkflowCancellationService(liveWorkflows);
     private WorkflowEngine engine;
     private WorkflowEngineCheckpointingSupport checkpointingSupport;
 
     @BeforeEach
     void setUp() {
         engine = new WorkflowEngine(configurationRegistry,
-                                    new LiveWorkflows(new InMemoryWorkflowExecutionRepository()),
-                                    new WorkflowCancellationService(),
+                                    liveWorkflows,
                                     workflowStore,
                                     // Without an index, every claim restores the running workflow list of the store.
                                     WorkflowIndex.none(),
@@ -482,6 +484,43 @@ class WorkflowEngineClaimActivationTest {
             assertThat(poller.join(Duration.ofSeconds(5))).isTrue();
             runCatchUpPolls();
             assertThat(bodyStarts).containsExactly(WORKFLOW_ID);
+        }
+    }
+
+    @Nested
+    class CancellationWhileCatchingUp {
+
+        @Test
+        void reachesARestoredWorkflowOnlyOnceTheClaimCaughtUp() {
+            // given - a claim behind the startup head restored a running workflow, whose body does not run yet
+            var execution = recordingExecution();
+            workflowStore.running(WORKFLOW_ID).withState(WORKFLOW_ID, DEFINITION_ID, WorkflowStatus.STARTED);
+            claim(token(5)).join();
+
+            // when / then - a request does not reach it
+            assertThatThrownBy(() -> cancellationService.requestWorkflowCancellation(WORKFLOW_ID, null))
+                    .isInstanceOf(NoSuchElementException.class);
+            // and - once the claim caught up, which starts its body, a request reaches it
+            segmentPosition.set(STARTUP_HEAD);
+            runCatchUpPolls();
+            assertThat(bodyStarts).containsExactly(WORKFLOW_ID);
+            cancellationService.requestWorkflowCancellation(WORKFLOW_ID, null);
+            verify(execution.workflowCancellation()).requestWorkflowCancellation(null);
+        }
+
+        @Test
+        void reachesAWorkflowStartedWhileTheClaimCatchesUp() {
+            // given - a claim behind the startup head, and a workflow its segment starts meanwhile
+            var execution = recordingExecution();
+            claim(token(5)).join();
+            engine.handle(startEvent(), handlingContext(SEGMENT, token(6)));
+            assertThat(bodyStarts).isEmpty();
+
+            // when
+            cancellationService.requestWorkflowCancellation(WORKFLOW_ID, null);
+
+            // then
+            verify(execution.workflowCancellation()).requestWorkflowCancellation(null);
         }
     }
 }

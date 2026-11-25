@@ -14,17 +14,16 @@ import org.jspecify.annotations.Nullable;
 
 import java.util.NoSuchElementException;
 import java.util.Objects;
-import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Internal entry point for requesting cancellation of running workflows by identifier.
  * <p>
- * The service associates each live workflow id with its per-execution {@link WorkflowCancellation} coordinator. It does
- * not implement cancellation policy itself; it locates the coordinator that schedules cancellation safely on the
- * workflow control thread. A future user-facing workflow manager can delegate to this service without exposing the
- * execution implementation.
+ * The service finds each workflow through the {@link LiveWorkflows} of its workflow module, which hands a request to
+ * the per-execution {@link WorkflowCancellation} coordinator of the workflow's execution in memory, or wakes a
+ * hibernated workflow for it. It does not implement cancellation policy itself; the coordinator schedules cancellation
+ * safely on the workflow control thread. The workflow module creates one per module, from its {@link LiveWorkflows},
+ * and the {@link SimpleWorkflowManager} delegates to it without exposing the execution implementation.
  *
  * @author Simon Zambrovski
  * @author Stefan Dragisic
@@ -33,109 +32,74 @@ import java.util.concurrent.ConcurrentHashMap;
 @Internal
 public final class WorkflowCancellationService implements DescribableComponent {
 
-    private final ConcurrentHashMap<String, WorkflowCancellation> cancellations = new ConcurrentHashMap<>();
-
-    private static void abortPendingWorkflowCancellation(@Nullable WorkflowCancellation cancellation,
-                                                         String reason) {
-        if (cancellation instanceof WorkflowCancellation.Request request) {
-            request.abortPendingWorkflowCancellation(new CancellationException(reason));
-        }
-    }
+    private final LiveWorkflows liveWorkflows;
 
     /**
-     * Registers the cancellation coordinator for a live workflow.
+     * Creates the cancellation service of a workflow module, which finds the workflows to cancel among the given live
+     * workflows. Internal, as the workflow module creates the service from the {@link LiveWorkflows} it shares with its
+     * {@link WorkflowEngine}; a service created from other live workflows reaches none of the module's workflows.
      *
-     * @param workflowId   identifier of the live workflow
-     * @param cancellation cancellation coordinator to register
+     * @param liveWorkflows the live workflows of the workflow module
      */
-    void register(String workflowId, WorkflowCancellation cancellation) {
-        cancellations.put(Objects.requireNonNull(workflowId, "Workflow id is mandatory"),
-                          Objects.requireNonNull(cancellation, "Workflow cancellation is mandatory"));
-    }
-
-    /**
-     * Removes the cancellation coordinator associated with a workflow.
-     *
-     * @param workflowId identifier of the workflow that is no longer live
-     */
-    void unregister(String workflowId) {
-        var cancellation = cancellations.remove(Objects.requireNonNull(workflowId, "Workflow id is mandatory"));
-        abortPendingWorkflowCancellation(cancellation,
-                                         "Workflow execution completed before cancellation was performed");
-    }
-
-    /**
-     * Unregisters the given cancellation of the given workflow, but only while it is the one registered for it, so a
-     * registration that replaced it stays.
-     *
-     * @param workflowId   the identifier of the workflow
-     * @param cancellation the cancellation to unregister
-     */
-    void unregister(String workflowId, WorkflowCancellation cancellation) {
-        if (cancellations.remove(Objects.requireNonNull(workflowId, "Workflow id is mandatory"),
-                                 Objects.requireNonNull(cancellation, "Workflow cancellation is mandatory"))) {
-            abortPendingWorkflowCancellation(cancellation,
-                                             "Workflow execution completed before cancellation was performed");
-        }
-    }
-
-    /**
-     * Returns the cancellation coordinator registered for the given workflow.
-     *
-     * @param workflowId the identifier of the workflow
-     * @return the registered cancellation coordinator, or {@code null} when none is registered
-     */
-    @Nullable
-    WorkflowCancellation registered(String workflowId) {
-        return cancellations.get(Objects.requireNonNull(workflowId, "Workflow id is mandatory"));
-    }
-
-    /**
-     * Removes every registered workflow cancellation coordinator, on shutdown of the engine. A workflow cancellation
-     * that is still pending fails with a {@link CancellationException}, as no workflow is left to perform it.
-     */
-    void clear() {
-        cancellations.values().forEach(cancellation -> abortPendingWorkflowCancellation(
-                cancellation, "Workflow engine shut down before cancellation was performed"));
-        cancellations.clear();
+    @Internal
+    public WorkflowCancellationService(LiveWorkflows liveWorkflows) {
+        this.liveWorkflows = Objects.requireNonNull(liveWorkflows, "The LiveWorkflows must not be null.");
     }
 
     /**
      * Requests cooperative cancellation of one workflow step.
+     * <p>
+     * Blocks while a wake of the workflow loads it from the event store, up to the wake timeout of the module, as the
+     * request finds the workflow under the lock that wake holds.
      *
      * @param workflowId identifier of the workflow containing the step
      * @param stepName   name of the step to cancel
      * @param cause      optional reason for the cancellation
      * @return a future completing with {@code true} when a terminal step cancellation was recorded, or {@code false}
      * when the step was unknown or already terminal
+     * @throws NoSuchElementException when no workflow with the given identifier is running on this node, or it is
+     *                                restored by a claim of its segment that did not catch up yet
      */
     public CompletableFuture<Boolean> requestStepCancellation(String workflowId,
                                                               String stepName,
                                                               @Nullable Throwable cause) {
-        return cancellationFor(workflowId).requestStepCancellation(stepName, cause);
+        return liveWorkflows.request(requireWorkflowId(workflowId),
+                                     cancellation -> cancellation.requestStepCancellation(stepName, cause));
     }
 
     /**
      * Requests cooperative cancellation of every currently-running step without terminating the workflow.
+     * <p>
+     * Blocks while a wake of the workflow loads it from the event store, up to the wake timeout of the module, as the
+     * request finds the workflow under the lock that wake holds.
      *
      * @param workflowId identifier of the workflow whose steps to cancel
      * @param cause      optional reason for the cancellation
      * @return a future completing with the number of steps for which terminal cancellation was recorded
+     * @throws NoSuchElementException when no workflow with the given identifier is running on this node, or it is
+     *                                restored by a claim of its segment that did not catch up yet
      */
     public CompletableFuture<Integer> requestCancellationOfAllSteps(String workflowId,
                                                                     @Nullable Throwable cause) {
-        return cancellationFor(workflowId).requestCancellationOfAllSteps(cause);
+        return liveWorkflows.request(requireWorkflowId(workflowId),
+                                     cancellation -> cancellation.requestCancellationOfAllSteps(cause));
     }
 
     /**
      * Requests cancellation of a workflow.
+     * <p>
+     * Blocks while a wake of the workflow loads it from the event store, up to the wake timeout of the module, as the
+     * request finds the workflow under the lock that wake holds.
      *
      * @param workflowId identifier of the workflow to cancel
      * @param cause      optional reason for the cancellation
      * @return a future completing after the workflow cancellation event is durable and the workflow body was woken
+     * @throws NoSuchElementException when no workflow with the given identifier is running on this node, or it is
+     *                                restored by a claim of its segment that did not catch up yet
      */
     public CompletableFuture<Void> requestWorkflowCancellation(String workflowId, @Nullable Throwable cause) {
-        return cancellationFor(workflowId).requestWorkflowCancellation(cause);
+        return liveWorkflows.request(requireWorkflowId(workflowId),
+                                     cancellation -> cancellation.requestWorkflowCancellation(cause));
     }
 
     /**
@@ -145,14 +109,10 @@ public final class WorkflowCancellationService implements DescribableComponent {
      */
     @Override
     public void describeTo(ComponentDescriptor descriptor) {
-        descriptor.describeProperty("registeredWorkflowIds", cancellations.keySet().stream().toList());
+        descriptor.describeProperty("registeredWorkflowIds", liveWorkflows.cancellableWorkflowIds());
     }
 
-    private WorkflowCancellation cancellationFor(String workflowId) {
-        var cancellation = cancellations.get(Objects.requireNonNull(workflowId, "Workflow id is mandatory"));
-        if (cancellation == null) {
-            throw new NoSuchElementException("No running workflow found with id '" + workflowId + "'");
-        }
-        return cancellation;
+    private static String requireWorkflowId(String workflowId) {
+        return Objects.requireNonNull(workflowId, "Workflow id is mandatory");
     }
 }

@@ -240,7 +240,6 @@ class NewInstanceCandidateRoutingTest {
         liveWorkflows = new LiveWorkflows(new InMemoryWorkflowExecutionRepository());
         engine = new WorkflowEngine(registry,
                                     liveWorkflows,
-                                    mock(WorkflowCancellationService.class),
                                     mock(WorkflowStore.class),
                                     new InMemoryWorkflowIndex(),
                                     "WorkflowEngine",

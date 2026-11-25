@@ -20,6 +20,7 @@ import org.axonframework.messaging.eventhandling.processing.streaming.segmenting
 import org.junit.jupiter.api.*;
 
 import java.time.Duration;
+import java.util.NoSuchElementException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeoutException;
 
@@ -44,15 +45,8 @@ class WorkflowEngineSegmentCallbackTest {
     private static final Duration SHORT_TIMEOUT = Duration.ofMillis(200);
 
     private static WorkflowEngine engine(LiveWorkflows liveWorkflows, WorkflowStore workflowStore) {
-        return engine(liveWorkflows, workflowStore, mock(WorkflowCancellationService.class));
-    }
-
-    private static WorkflowEngine engine(LiveWorkflows liveWorkflows,
-                                         WorkflowStore workflowStore,
-                                         WorkflowCancellationService cancellationService) {
         var engine = new WorkflowEngine(new SimpleWorkflowConfigurationRegistry(),
                                         liveWorkflows,
-                                        cancellationService,
                                         workflowStore,
                                         new InMemoryWorkflowIndex(),
                                         "WorkflowEngine",
@@ -110,38 +104,21 @@ class WorkflowEngineSegmentCallbackTest {
         var liveWorkflows = new LiveWorkflows(repository);
         liveWorkflows.enter(OWNED_ID, false, () -> owned);
         liveWorkflows.enter(FOREIGN_ID, false, () -> foreign);
-        var cancellationService = new WorkflowCancellationService();
-        var engine = engine(liveWorkflows, mock(WorkflowStore.class), cancellationService);
-        engine.registerCancellation(owned);
-        engine.registerCancellation(foreign);
+        liveWorkflows.markCancellable(owned);
+        liveWorkflows.markCancellable(foreign);
+        var cancellationService = new WorkflowCancellationService(liveWorkflows);
+        var engine = engine(liveWorkflows, mock(WorkflowStore.class));
 
         var release = engine.releaseWorkflowsFor(SEGMENT);
 
         assertThat(release).isCompleted();
         verify(owned).stopForShutdown();
         verify(foreign, never()).stopForShutdown();
-        assertThat(cancellationService.registered(OWNED_ID)).isNull();
-        assertThat(cancellationService.registered(FOREIGN_ID)).isNotNull();
+        assertThatThrownBy(() -> cancellationService.requestWorkflowCancellation(OWNED_ID, null))
+                .isInstanceOf(NoSuchElementException.class);
+        cancellationService.requestWorkflowCancellation(FOREIGN_ID, null);
+        verify(((WorkflowCancellationProvider) foreign).workflowCancellation()).requestWorkflowCancellation(null);
         assertThat(repository.findAll()).containsExactly(foreign);
-    }
-
-    @Test
-    void aReleaseLeavesTheCancellationThatReplacedTheOneOfAReleasedExecutionRegistered() {
-        // given: a released execution, whose cancellation was replaced by another registration of its workflow
-        var owned = execution(OWNED_ID);
-        var liveWorkflows = new LiveWorkflows(new InMemoryWorkflowExecutionRepository());
-        liveWorkflows.enter(OWNED_ID, false, () -> owned);
-        var cancellationService = new WorkflowCancellationService();
-        var engine = engine(liveWorkflows, mock(WorkflowStore.class), cancellationService);
-        engine.registerCancellation(owned);
-        var replacement = mock(WorkflowCancellation.class);
-        cancellationService.register(OWNED_ID, replacement);
-
-        // when
-        engine.releaseWorkflowsFor(SEGMENT);
-
-        // then
-        assertThat(cancellationService.registered(OWNED_ID)).isSameAs(replacement);
     }
 
     @Test
@@ -157,7 +134,6 @@ class WorkflowEngineSegmentCallbackTest {
     void theProductionTimeoutIsUsedWhenNoneIsSetForATest() {
         var engine = new WorkflowEngine(new SimpleWorkflowConfigurationRegistry(),
                                         new LiveWorkflows(new InMemoryWorkflowExecutionRepository()),
-                                        mock(WorkflowCancellationService.class),
                                         mock(WorkflowStore.class),
                                         new InMemoryWorkflowIndex(),
                                         "WorkflowEngine",

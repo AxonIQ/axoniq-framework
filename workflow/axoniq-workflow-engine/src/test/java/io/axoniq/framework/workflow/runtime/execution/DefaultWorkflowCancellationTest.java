@@ -81,13 +81,16 @@ class DefaultWorkflowCancellationTest {
     }
 
     @Test
-    void unregisteringWorkflowWithPendingCancellationCompletesTheRequestExceptionally() {
-        var cancellation = requestForRealExecution();
-        var service = new WorkflowCancellationService();
-        service.register("workflow-id", cancellation);
+    void leavingMemoryWithPendingCancellationCompletesTheRequestExceptionally() {
+        var execution = realExecution();
+        var cancellation = (DefaultWorkflowCancellation) execution.workflowCancellation();
+        var liveWorkflows = new LiveWorkflows(new InMemoryWorkflowExecutionRepository());
+        liveWorkflows.enter("workflow-id", false, () -> execution);
+        liveWorkflows.markCancellable(execution);
+        var service = new WorkflowCancellationService(liveWorkflows);
         var request = service.requestWorkflowCancellation("workflow-id", null);
 
-        service.unregister("workflow-id");
+        liveWorkflows.leave(execution);
 
         assertThat(request).isCompletedExceptionally();
         assertThatThrownBy(request::join)
@@ -99,6 +102,10 @@ class DefaultWorkflowCancellationTest {
     }
 
     private DefaultWorkflowCancellation requestForRealExecution() {
+        return (DefaultWorkflowCancellation) realExecution().workflowCancellation();
+    }
+
+    private SimpleWorkflowExecution realExecution() {
         var processingContext = mock(ProcessingContext.class);
         when(processingContext.component(UnitOfWorkFactory.class)).thenReturn(new SimpleUnitOfWorkFactory(
                 processingContext));
@@ -110,10 +117,9 @@ class DefaultWorkflowCancellationTest {
         var executor = Executors.newSingleThreadExecutor();
         executorServices.add(executor);
         when(processingContext.component(eq(ExecutorService.class), any())).thenReturn(executor);
-        var execution = new SimpleWorkflowExecution(
+        return new SimpleWorkflowExecution(
                 "workflow-id", Map.of(), processingContext, new TestWorkflowConfiguration(), mock(WorkflowContext.class)
         );
-        return (DefaultWorkflowCancellation) execution.workflowCancellation();
     }
 
     private static final class TestWorkflowConfiguration implements WorkflowConfiguration<WorkflowContext> {

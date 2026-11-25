@@ -327,7 +327,6 @@ class SimpleWorkflowModule<C extends WorkflowContext>
                                                   WorkflowConfigurationRegistry.class, configurationRegistryName()
                                           ),
                                           c.getComponent(LiveWorkflows.class, liveWorkflowsName()),
-                                          c.getComponent(WorkflowCancellationService.class, cancellationServiceName()),
                                           c.getComponent(WorkflowStore.class),
                                           c.getComponent(WorkflowIndex.class),
                                           name,
@@ -416,7 +415,9 @@ class SimpleWorkflowModule<C extends WorkflowContext>
 
     private ComponentDefinition<WorkflowCancellationService> workflowCancellationService() {
         return ComponentDefinition.ofTypeAndName(WorkflowCancellationService.class, cancellationServiceName())
-                                  .withBuilder(c -> new WorkflowCancellationService());
+                                  .withBuilder(c -> new WorkflowCancellationService(
+                                          c.getComponent(LiveWorkflows.class, liveWorkflowsName())
+                                  ));
     }
 
     private String cancellationServiceName() {

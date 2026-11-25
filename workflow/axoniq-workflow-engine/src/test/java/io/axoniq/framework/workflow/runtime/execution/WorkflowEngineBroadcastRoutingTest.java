@@ -46,7 +46,6 @@ class WorkflowEngineBroadcastRoutingTest {
         liveWorkflows = new LiveWorkflows(new InMemoryWorkflowExecutionRepository());
         engine = new WorkflowEngine(new SimpleWorkflowConfigurationRegistry(),
                                     liveWorkflows,
-                                    new WorkflowCancellationService(),
                                     new RecordingWorkflowStore(),
                                     WorkflowIndex.none(),
                                     "WorkflowEngine",

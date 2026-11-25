@@ -112,11 +112,10 @@ class SimpleWorkflowManagerTest {
     @Test
     void forwardsCancellationRequestsForALiveSingleInstance() {
         var executions = new InMemoryWorkflowExecutionRepository();
-        var execution = execution("order-42", "PaymentWorkflow");
-        executions.save("order-42", () -> execution);
-        var cancellations = new WorkflowCancellationService();
+        var liveWorkflows = new LiveWorkflows(executions);
         var cancellation = mock(WorkflowCancellation.class);
-        cancellations.register("order-42", cancellation);
+        enterCancellable(liveWorkflows, execution("order-42", "PaymentWorkflow", cancellation));
+        var cancellations = new WorkflowCancellationService(liveWorkflows);
         when(cancellation.requestStepCancellation("reserve-funds", null))
                 .thenReturn(CompletableFuture.completedFuture(true));
         when(cancellation.requestCancellationOfAllSteps(null)).thenReturn(CompletableFuture.completedFuture(2));
@@ -136,13 +135,12 @@ class SimpleWorkflowManagerTest {
     @Test
     void aggregatesCancellationRequestsForEveryMatchingLiveInstance() {
         var executions = new InMemoryWorkflowExecutionRepository();
-        executions.save("order-42", () -> execution("order-42", "PaymentWorkflow"));
-        executions.save("order-43", () -> execution("order-43", "PaymentWorkflow"));
-        var cancellations = new WorkflowCancellationService();
+        var liveWorkflows = new LiveWorkflows(executions);
         var firstCancellation = cancellation(false, 2);
         var secondCancellation = cancellation(true, 3);
-        cancellations.register("order-42", firstCancellation);
-        cancellations.register("order-43", secondCancellation);
+        enterCancellable(liveWorkflows, execution("order-42", "PaymentWorkflow", firstCancellation));
+        enterCancellable(liveWorkflows, execution("order-43", "PaymentWorkflow", secondCancellation));
+        var cancellations = new WorkflowCancellationService(liveWorkflows);
         var manager = manager(history(), executions, cancellations);
 
         var instances = manager.findMany(WorkflowStateQuery.byWorkflowDefinitionId(
@@ -247,7 +245,9 @@ class SimpleWorkflowManagerTest {
                                               Supplier<Set<String>> hibernatedWorkflowIds) {
             return new SimpleWorkflowManager(history,
                                              new InMemoryWorkflowExecutionRepository(),
-                                             new WorkflowCancellationService(),
+                                             new WorkflowCancellationService(
+                                                     new LiveWorkflows(new InMemoryWorkflowExecutionRepository())
+                                             ),
                                              storeMirroring(history),
                                              new SimpleUnitOfWorkFactory(EmptyApplicationContext.INSTANCE),
                                              Runnable::run,
@@ -354,7 +354,7 @@ class SimpleWorkflowManagerTest {
 
     private static SimpleWorkflowManager manager(WorkflowHistoryRepository history,
                                                  WorkflowExecutionRepository executions) {
-        return manager(history, executions, new WorkflowCancellationService());
+        return manager(history, executions, new WorkflowCancellationService(new LiveWorkflows(executions)));
     }
 
     private static SimpleWorkflowManager manager(WorkflowHistoryRepository history,
@@ -397,10 +397,23 @@ class SimpleWorkflowManagerTest {
         };
     }
 
-    private static WorkflowExecution execution(String workflowId, String workflowName) {
-        var execution = mock(WorkflowExecution.class);
+    private static WorkflowExecution execution(String workflowId,
+                                               String workflowName,
+                                               WorkflowCancellation cancellation) {
+        var execution = mock(WorkflowExecutionFixture.CancellationCapableExecution.class);
+        when(execution.workflowId()).thenReturn(workflowId);
         when(execution.state()).thenReturn(state(workflowId, workflowName));
+        when(execution.workflowCancellation()).thenReturn(cancellation);
         return execution;
+    }
+
+    /**
+     * Brings the given execution into memory through the given live workflows, taking cancellation requests, as the
+     * engine does with an execution it starts.
+     */
+    private static void enterCancellable(LiveWorkflows liveWorkflows, WorkflowExecution execution) {
+        liveWorkflows.enter(execution.workflowId(), false, () -> execution);
+        liveWorkflows.markCancellable(execution);
     }
 
     private static WorkflowCancellation cancellation(boolean stepCancellationResult, int cancelledSteps) {

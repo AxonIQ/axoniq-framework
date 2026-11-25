@@ -7,7 +7,6 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 
@@ -127,18 +126,6 @@ public final class WorkflowEngineHibernation {
                      .filter(WorkflowHibernationProvider.class::isInstance)
                      .map(execution -> ((WorkflowHibernationProvider) execution).workflowHibernation())
                      .anyMatch(hibernation -> hibernation.requestedChecks.get() > hibernation.completedChecks.get());
-    }
-
-    /**
-     * Registers the cancellation of the given execution in the given engine, as the engine does when it starts the
-     * execution, also when the execution left memory meanwhile: the registration a wake leaves behind when it fails
-     * after it registered the cancellation of the execution it woke.
-     *
-     * @param engine    the engine running the workflow
-     * @param execution the execution whose cancellation to register
-     */
-    public static void registerCancellationOf(WorkflowEngine engine, WorkflowExecution execution) {
-        engine.registerCancellation(execution);
     }
 
     /**

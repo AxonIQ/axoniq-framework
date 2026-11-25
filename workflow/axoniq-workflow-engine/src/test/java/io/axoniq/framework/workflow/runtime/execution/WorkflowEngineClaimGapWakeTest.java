@@ -135,7 +135,6 @@ class WorkflowEngineClaimGapWakeTest {
         workflowEngine = new WorkflowEngine(
                 configurationRegistry,
                 new LiveWorkflows(new InMemoryWorkflowExecutionRepository()),
-                mock(WorkflowCancellationService.class),
                 workflowStore,
                 new InMemoryWorkflowIndex(),
                 "WorkflowEngine",

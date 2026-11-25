@@ -66,7 +66,6 @@ class WorkflowEngineSegmentFailoverTest {
         workflowEngine = new WorkflowEngine(
                 mock(WorkflowConfigurationRegistry.class),
                 liveWorkflows,
-                mock(WorkflowCancellationService.class),
                 workflowStore,
                 new InMemoryWorkflowIndex(),
                 "WorkflowEngine",

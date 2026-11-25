@@ -11,6 +11,7 @@ import io.axoniq.framework.workflow.index.api.WorkflowIndex.Entry;
 import io.axoniq.framework.workflow.index.api.WorkflowIndex.HibernationHint;
 import io.axoniq.framework.workflow.index.api.WorkflowIndex.IndexDelta;
 import io.axoniq.framework.workflow.index.api.WorkflowIndex.OpenWait;
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.framework.workflow.runtime.execution.RunningWorkflowsClaimLoader.ClaimedIndex;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.unitofwork.StubProcessingContext;
@@ -26,7 +27,9 @@ import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executor;
@@ -36,11 +39,14 @@ import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
 import java.util.stream.IntStream;
 
 import static io.axoniq.framework.workflow.runtime.execution.SegmentTestFixtures.token;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
 
 /**
  * Tests how the {@link WorkflowEngineHibernationSupport} adopts the hibernated workflows whose hints a claim accepted:
@@ -63,7 +69,6 @@ class WorkflowEngineHibernationSupportAdoptionTest {
     // The test activates its claim itself, see activate().
     private final SegmentClaims segmentClaims = new SegmentClaims((segment, phase) -> {
     });
-    private final WorkflowCancellationService cancellationService = new WorkflowCancellationService();
     private final AtomicInteger firedTimers = new AtomicInteger();
     private final ScheduledThreadPoolExecutor timer = new ScheduledThreadPoolExecutor(1) {
         @Override
@@ -74,12 +79,18 @@ class WorkflowEngineHibernationSupportAdoptionTest {
     };
     private final ExecutorService wakeThreads = Executors.newVirtualThreadPerTaskExecutor();
     private final AtomicInteger wakesInProgress = new AtomicInteger();
+    // Opened by default; a test closes it to hold the submitted wakes until it opens it again.
+    private volatile CountDownLatch wakeGate = new CountDownLatch(0);
     // Counts each wake from its submission until it ended.
     private final Executor wakeExecutor = task -> {
         wakesInProgress.incrementAndGet();
+        var gate = wakeGate;
         wakeThreads.execute(() -> {
             try {
+                gate.await();
                 task.run();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
             } finally {
                 wakesInProgress.decrementAndGet();
             }
@@ -87,6 +98,7 @@ class WorkflowEngineHibernationSupportAdoptionTest {
     };
     private final List<String> loads = new CopyOnWriteArrayList<>();
     private final LiveWorkflows liveWorkflows = new LiveWorkflows(new InMemoryWorkflowExecutionRepository());
+    private final WorkflowCancellationService cancellationService = new WorkflowCancellationService(liveWorkflows);
     // Records the wake, and brings an execution into memory in place of the hibernation, as the engine does,
     // swapping it back for the hibernation when the action before its start fails.
     private final WorkflowEngineHibernationSupport.WorkflowLoader wakeInMemory = (hibernated, beforeStart) -> {
@@ -109,7 +121,6 @@ class WorkflowEngineHibernationSupportAdoptionTest {
             new DefaultWorkflowScheduler(Clock.systemUTC(), timer),
             Clock.systemUTC(),
             liveWorkflows,
-            cancellationService,
             projection,
             (hibernated, beforeStart) -> loader.load(hibernated, beforeStart),
             Duration.ofSeconds(30),
@@ -303,6 +314,63 @@ class WorkflowEngineHibernationSupportAdoptionTest {
                     woken -> assertThat(((InspectionCountingWorkflowExecution) woken).appendedTasks()).hasSize(1)
             );
         }
+
+        @Test
+        void queuesARequestOnAWorkflowThatAnEventWokeWhileItsClaimCatchesUp() {
+            // given - an adopted workflow that an event woke while its claim catches up, so its body did not start
+            adopt(Map.of("wf-1", futureDeadline("1")));
+            liveWorkflows.deliver("wf-1", paid("1"), new StubProcessingContext());
+            var woken = (InspectionCountingWorkflowExecution) liveWorkflows.find("wf-1").orElseThrow();
+
+            // when
+            var cancelled = cancellationService.requestWorkflowCancellation("wf-1", null);
+
+            // then - the request waits as a task of the woken execution
+            assertThat(cancelled).isNotDone();
+            assertThat(woken.appendedTasks()).hasSize(1);
+            // and - once the execution left memory before it ran that task, the request is made again, and finds no
+            // workflow
+            liveWorkflows.leave(woken);
+            assertThat(cancelled).failsWithin(Duration.ofSeconds(5))
+                                 .withThrowableThat()
+                                 .havingRootCause()
+                                 .isInstanceOf(NoSuchElementException.class);
+        }
+
+        @Test
+        void cancelsTheStepsOfAWorkflowThatAnEventWokeBeforeTheRequestCouldWakeIt() {
+            // given - an adopted workflow whose claim caught up, whose woken execution replays its steps
+            var woken = new ReplayingExecution("wf-1");
+            adopt(Map.of("wf-1", futureDeadline("1")));
+            activate();
+            // and - a request for all its steps, whose wake waits for the wake executor
+            wakeGate = new CountDownLatch(1);
+            var cancelled = cancellationService.requestCancellationOfAllSteps("wf-1", null);
+
+            // when - an event wakes the workflow first, after which the wake of the request runs
+            liveWorkflows.deliver("wf-1", paid("1"), new StubProcessingContext());
+            wakeGate.countDown();
+            await().atMost(5, TimeUnit.SECONDS)
+                   .until(WorkflowEngineHibernationSupportAdoptionTest.this::noWakeInProgress);
+
+            // then - the request waits for the woken body, and cancels the steps once that body replayed them
+            woken.assertCancelsTheStepsOnceReplayed(cancelled);
+        }
+
+        @Test
+        void cancelsTheStepsOfAWorkflowThatAnEventWokeOnceItsBodyReplayedThem() {
+            // given - an adopted workflow whose claim caught up, which an event woke, and whose body replays its steps
+            var woken = new ReplayingExecution("wf-1");
+            adopt(Map.of("wf-1", futureDeadline("1")));
+            activate();
+            liveWorkflows.deliver("wf-1", paid("1"), new StubProcessingContext());
+
+            // when
+            var cancelled = cancellationService.requestCancellationOfAllSteps("wf-1", null);
+
+            // then - the request waits for the woken body, and cancels the steps once that body replayed them
+            woken.assertCancelsTheStepsOnceReplayed(cancelled);
+        }
     }
 
     @Nested
@@ -359,6 +427,51 @@ class WorkflowEngineHibernationSupportAdoptionTest {
 
             // then
             assertThat(liveWorkflows.hibernatedWorkflowIds()).containsExactly("wf-2");
+        }
+    }
+
+    /**
+     * A woken execution that registers its running steps only once its body replayed them, as a restored execution
+     * does, and that the loader of this test wakes in place of its hibernation and starts right away, as the engine
+     * does once the claim caught up.
+     */
+    private final class ReplayingExecution {
+
+        private final AtomicBoolean stepsReplayed = new AtomicBoolean();
+        private final List<Consumer<WorkflowExecution>> tasks = new CopyOnWriteArrayList<>();
+        private final WorkflowExecution execution;
+
+        private ReplayingExecution(String workflowId) {
+            var cancellation = mock(WorkflowCancellation.class);
+            when(cancellation.requestCancellationOfAllSteps(null)).thenAnswer(
+                    invocation -> CompletableFuture.completedFuture(stepsReplayed.get() ? 2 : 0)
+            );
+            var mocked = mock(WorkflowExecutionFixture.CancellationCapableExecution.class);
+            when(mocked.workflowId()).thenReturn(workflowId);
+            when(mocked.workflowCancellation()).thenReturn(cancellation);
+            doAnswer(invocation -> tasks.add(invocation.getArgument(0))).when(mocked).appendTask(any());
+            execution = mocked;
+            loader = (hibernated, beforeStart) -> {
+                var woken = new AtomicBoolean();
+                hibernated.claim().runWhileCurrent(() -> woken.set(liveWorkflows.wake(hibernated, execution)));
+                if (woken.get()) {
+                    beforeStart.accept(execution);
+                    liveWorkflows.markCancellable(execution);
+                }
+                return woken.get();
+            };
+        }
+
+        /**
+         * Asserts that the given request waits as the one task of this execution, and cancels its two steps once the
+         * body replayed them and took that task.
+         */
+        private void assertCancelsTheStepsOnceReplayed(CompletableFuture<Integer> cancelled) {
+            assertThat(cancelled).isNotDone();
+            assertThat(tasks).hasSize(1);
+            stepsReplayed.set(true);
+            tasks.forEach(task -> task.accept(execution));
+            assertThat(cancelled).succeedsWithin(Duration.ofSeconds(5)).isEqualTo(2);
         }
     }
 }

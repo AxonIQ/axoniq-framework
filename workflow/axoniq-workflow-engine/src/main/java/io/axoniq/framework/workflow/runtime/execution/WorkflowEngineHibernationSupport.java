@@ -12,6 +12,7 @@ import io.axoniq.framework.workflow.index.api.WorkflowIndex.HibernationHint;
 import io.axoniq.framework.workflow.index.api.WorkflowIndex.OpenWait;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.framework.workflow.runtime.execution.LiveWorkflows.Hibernated;
+import io.axoniq.framework.workflow.runtime.execution.LiveWorkflows.QueuedRequest;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.conversion.EventConverter;
@@ -27,15 +28,11 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
-import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
@@ -56,8 +53,9 @@ import java.util.function.Supplier;
  * whether it is at a safe point, through its {@link WorkflowExecutionHibernationSupport}.
  * <p>
  * Every half idle delay, a pass asks the running executions in memory that made no progress for the idle delay to
- * hibernate. A hibernated workflow keeps a timer for its nearest deadline and a stand-in {@link WorkflowCancellation},
- * and the registry keeps the rows of its open waits, which route broadcast events to it. No event is written:
+ * hibernate. A hibernated workflow keeps a timer for its nearest deadline, and the registry keeps the rows of its open
+ * waits, which route broadcast events to it, and finds it for a cancellation request, which this support wakes it for,
+ * see {@link #requestWhileHibernated(String, Function, Supplier)}. No event is written:
  * a hibernating workflow records its {@link HibernationHint hint}, its open waits and nearest deadline, in the
  * {@link RunningWorkflowsProjection}, which writes it to the workflow index with a checkpoint that joins the
  * processor's transaction, and clears it again when the workflow wakes. Releasing or claiming a segment forgets the
@@ -93,14 +91,11 @@ final class WorkflowEngineHibernationSupport {
     private final WorkflowScheduler scheduler;
     private final Clock clock;
     private final LiveWorkflows liveWorkflows;
-    private final WorkflowCancellationService cancellationService;
     private final RunningWorkflowsProjection projection;
     private final WorkflowLoader loader;
     private final Duration idleDelay;
     private final Executor wakeExecutor;
     private final Semaphore detachedWakes = new Semaphore(MAX_CONCURRENT_DETACHED_WAKES);
-    // The cancellation requests of hibernated workflows queued on the executions that woke for them, until they run.
-    private final Map<WorkflowExecution, Set<CompletableFuture<Void>>> queuedRequests = new ConcurrentHashMap<>();
     // Cleared on stop, so no workflow hibernates after the hibernated ones are dropped.
     private volatile boolean running;
     private volatile WorkflowScheduler.@Nullable ScheduledTask nextPass;
@@ -108,21 +103,20 @@ final class WorkflowEngineHibernationSupport {
     /**
      * Creates the hibernation support of an engine.
      *
-     * @param scheduler           schedules the passes and the deadlines of hibernated workflows
-     * @param clock               the clock the scheduler measures deadlines with
-     * @param liveWorkflows       the live workflows, which apply the transitions between memory and hibernation
-     * @param cancellationService the cancellation registrations of the live workflows
-     * @param projection          records the hints of hibernated workflows for the workflow index
-     * @param loader              loads a hibernated workflow back into the engine and starts it
-     * @param idleDelay           the time a workflow must make no progress before it hibernates, and before a failed
-     *                            wake by a deadline or a cancellation is tried again
-     * @param wakeExecutor        runs the wakes for a deadline or a cancellation, which load from the store, so they
-     *                            never run on the timer thread
+     * @param scheduler     schedules the passes and the deadlines of hibernated workflows
+     * @param clock         the clock the scheduler measures deadlines with
+     * @param liveWorkflows the live workflows, which apply the transitions between memory and hibernation
+     * @param projection    records the hints of hibernated workflows for the workflow index
+     * @param loader        loads a hibernated workflow back into the engine and starts it
+     * @param idleDelay     the time a workflow must make no progress before it hibernates, and before a failed wake by
+     *                      a deadline or a cancellation is tried again
+     * @param wakeExecutor  runs the wakes for a deadline or a cancellation, which load from the store, so they never
+     *                      run on the timer thread, and answers the cancellation requests queued on a woken execution
+     *                      that left memory before it ran them
      */
     WorkflowEngineHibernationSupport(WorkflowScheduler scheduler,
                                      Clock clock,
                                      LiveWorkflows liveWorkflows,
-                                     WorkflowCancellationService cancellationService,
                                      RunningWorkflowsProjection projection,
                                      WorkflowLoader loader,
                                      Duration idleDelay,
@@ -130,8 +124,6 @@ final class WorkflowEngineHibernationSupport {
         this.scheduler = Objects.requireNonNull(scheduler, "The WorkflowScheduler must not be null.");
         this.clock = Objects.requireNonNull(clock, "The Clock must not be null.");
         this.liveWorkflows = Objects.requireNonNull(liveWorkflows, "The LiveWorkflows must not be null.");
-        this.cancellationService = Objects.requireNonNull(cancellationService,
-                                                          "The WorkflowCancellationService must not be null.");
         this.projection = Objects.requireNonNull(projection, "The RunningWorkflowsProjection must not be null.");
         this.loader = Objects.requireNonNull(loader, "The WorkflowLoader must not be null.");
         this.idleDelay = Objects.requireNonNull(idleDelay, "The idle delay must not be null.");
@@ -211,67 +203,78 @@ final class WorkflowEngineHibernationSupport {
     }
 
     /**
-     * Decorates the cancellation of the given execution, so a request runs against the execution only while it is in
-     * memory. A request that arrives after the execution hibernated goes to the registration that replaced it: the
-     * stand-in of the hibernated workflow, or the cancellation of the restored execution.
-     *
-     * @param execution    the execution the cancellation belongs to
-     * @param cancellation the cancellation of the execution
-     * @return the cancellation to register for the workflow
-     */
-    WorkflowCancellation decorate(WorkflowExecution execution, WorkflowCancellation cancellation) {
-        return new HibernationAwareWorkflowCancellation(execution, cancellation);
-    }
-
-    /**
-     * Answers the cancellation requests that wait in the task queue of the given execution, which left memory, so it
-     * runs none of them. Without a failure, each request is made again through the
-     * {@link WorkflowCancellationService}: it reaches the workflow wherever it runs now, hibernated again, restored by
-     * a claim, or nowhere on this node, in which case it fails with a {@link java.util.NoSuchElementException}. With a
-     * failure, which made a wake fail, each request fails with it.
+     * Makes a cancellation request of the given hibernated workflow once it woke for it: wakes it on the wake executor,
+     * once the hibernation may wake, and queues the request as a task of the restored execution before its body starts,
+     * the way an event that wakes a workflow is queued, see
+     * {@link LiveWorkflows#queue(WorkflowExecution, QueuedRequest)}. The {@link LiveWorkflows} registry calls this for
+     * a request that finds the workflow hibernated, once it released the lock of the workflow, which a wake takes only
+     * once it has a permit to load.
      * <p>
-     * The requests are answered on the wake executor, never on the calling thread: an execution may leave memory under
-     * the lock of a claim, and a request made again takes the lock of its workflow, which the engine otherwise takes
-     * before the lock of a claim. Only when the wake executor no longer accepts tasks, on shutdown, are they answered
-     * on the calling thread.
+     * A restored body takes no task before it waits again where it hibernated, because every earlier wait is answered
+     * from its recorded state. So the body makes the request once it replayed its steps and they are registered again.
+     * When the restored execution leaves memory before it took the request, the request is made again right away, or
+     * fails with the failure of a wake whose start failed. When no wake queued it, as another wake, such as one for an
+     * event, restored the workflow first, it is queued on the execution that wake restored, whose steps may not be
+     * registered again yet; when the workflow left this node meanwhile, also as its own wake restored it and it left
+     * memory again before the request was queued, it is made again; when it stayed hibernated, as its wake failed
+     * before the workflow was in memory, it fails.
      *
-     * @param execution the execution that left memory
-     * @param failure   the failure that made the execution leave memory, or {@code null} when it left otherwise
+     * @param workflowId the identifier of the hibernated workflow the request is for
+     * @param request    makes the request against the cancellation of the woken execution
+     * @param again      makes the request again, through the registry, wherever the workflow is then
+     * @param <T>        the type of the outcome of the request
+     * @return the outcome of the request
      */
-    void leftMemory(WorkflowExecution execution, @Nullable Throwable failure) {
-        var queued = queuedRequests.remove(execution);
-        if (queued == null) {
-            return;
-        }
-        Runnable answer = () -> queued.forEach(ready -> {
-            if (failure == null) {
-                ready.complete(null);
-            } else {
-                ready.completeExceptionally(failure);
+    <T> CompletableFuture<T> requestWhileHibernated(String workflowId,
+                                                    Function<WorkflowCancellation, CompletableFuture<T>> request,
+                                                    Supplier<CompletableFuture<T>> again) {
+        var queued = new QueuedRequest<>(request, again, wakeExecutor);
+        var queuedOnRestored = new AtomicBoolean();
+        wakeWhenArmed(workflowId, restored -> {
+            // Not queued when the restored execution left memory again before this ran, which takes no lock.
+            if (liveWorkflows.queue(restored, queued)) {
+                queuedOnRestored.set(true);
+            }
+        }).whenComplete((ignored, failure) -> {
+            if (queuedOnRestored.get()) {
+                return;
+            }
+            if (failure != null) {
+                queued.fail(failure);
+            } else if (liveWorkflows.isHibernated(workflowId)) {
+                queued.fail(new IllegalStateException(
+                        "Workflow '" + workflowId + "' could not be woken from hibernation"
+                ));
+            } else if (!liveWorkflows.queueOnWoken(workflowId, queued)) {
+                // It left this node, or a claim restored it, meanwhile: the registry finds where it is now.
+                queued.makeAgain();
             }
         });
-        try {
-            wakeExecutor.execute(answer);
-        } catch (RejectedExecutionException e) {
-            answer.run();
-        }
+        return queued.result();
     }
 
     /**
-     * Queues the given request as a task of the given restored execution, the way an event that wakes a workflow is
-     * queued, and remembers it until it runs, so it is answered when the execution leaves memory first.
+     * Makes a cancellation request of the given execution, which woke from hibernation, once its body took it: queues
+     * the request as a task of the execution, the way {@link #requestWhileHibernated(String, Function, Supplier)} does,
+     * as a woken body registers its running steps again only as it replays them, and its body may not even have
+     * started, when its claim did not catch up. The {@link LiveWorkflows} registry calls this for every request that
+     * finds an execution that woke from hibernation, under the lock of the workflow.
+     *
+     * @param woken   the execution that woke
+     * @param request makes the request against the cancellation of the woken execution
+     * @param again   makes the request again, through the registry, wherever the workflow is then
+     * @param <T>     the type of the outcome of the request
+     * @return the outcome of the request
      */
-    private void queueRequest(WorkflowExecution restored, CompletableFuture<Void> ready) {
-        queuedRequests.computeIfAbsent(restored, ignored -> ConcurrentHashMap.newKeySet()).add(ready);
-        ready.whenComplete((result, failure) -> queuedRequests.computeIfPresent(restored, (ignored, requests) -> {
-            requests.remove(ready);
-            return requests.isEmpty() ? null : requests;
-        }));
-        restored.appendTask(ignored -> ready.complete(null));
-        if (!liveWorkflows.isInMemory(restored)) {
-            // It left before the request was remembered, or dropped the task as it is stopped.
-            leftMemory(restored, null);
+    <T> CompletableFuture<T> requestOnceStarted(WorkflowExecution woken,
+                                                Function<WorkflowCancellation, CompletableFuture<T>> request,
+                                                Supplier<CompletableFuture<T>> again) {
+        var queued = new QueuedRequest<>(request, again, wakeExecutor);
+        if (!liveWorkflows.queue(woken, queued)) {
+            // It left memory meanwhile, which takes no lock: the registry finds where it is now.
+            queued.makeAgain();
         }
+        return queued.result();
     }
 
     /**
@@ -381,8 +384,8 @@ final class WorkflowEngineHibernationSupport {
     }
 
     /**
-     * Removes the given hibernation, unless another one replaced it, with its wait rows, its deadline and its stand-in
-     * cancellation. The caller holds the lock of the workflow.
+     * Removes the given hibernation, unless another one replaced it, with its wait rows and its deadline. The caller
+     * holds the lock of the workflow.
      */
     private void forget(Hibernated hibernated) {
         if (liveWorkflows.drop(hibernated)) {
@@ -391,13 +394,13 @@ final class WorkflowEngineHibernationSupport {
     }
 
     /**
-     * Cancels the deadline of the given hibernation, which is no longer live, and unregisters its stand-in
-     * cancellation. A wake held until the hibernation may wake finds the workflow gone and does nothing.
+     * Cancels the deadline of the given hibernation, which is no longer live. A wake held until the hibernation may
+     * wake finds the workflow gone and does nothing, and a cancellation request that waited for it is made again, and
+     * finds the workflow wherever it is now.
      */
     private void release(Hibernated hibernated) {
         hibernated.wakeTimer().cancel();
         hibernated.armed().complete(null);
-        cancellationService.unregister(hibernated.workflowId(), hibernated.cancellation());
     }
 
     /**
@@ -440,8 +443,6 @@ final class WorkflowEngineHibernationSupport {
                                 hibernated -> liveWorkflows.hibernate(execution, hibernated)));
             });
             if (parked.get()) {
-                // A request queued on the execution after its safe point was checked goes to the hibernation now.
-                leftMemory(execution, null);
                 logger.debug("Workflow [{}] hibernated until an awaited event or its deadline at {}.",
                              workflowId, deadline);
             }
@@ -497,8 +498,7 @@ final class WorkflowEngineHibernationSupport {
     Hibernated hibernationOf(SegmentClaim claim, String workflowId, HibernationHint hint,
                              CompletableFuture<Void> armed) {
         return new Hibernated(workflowId, claim, hint, liveWorkflows.rowsOf(workflowId, hint),
-                              scheduler.schedule(hint.wakeAt()), armed, new HibernatedWorkflowCancellation(workflowId),
-                              this);
+                              scheduler.schedule(hint.wakeAt()), armed, this);
     }
 
     /**
@@ -512,7 +512,6 @@ final class WorkflowEngineHibernationSupport {
             hibernated.wakeTimer().cancel();
             return false;
         }
-        cancellationService.register(hibernated.workflowId(), hibernated.cancellation());
         hibernated.wakeTimer().completion().thenCompose(ignored -> wakeWhenArmed(hibernated.workflowId(), restored -> {
         }));
         return true;
@@ -530,24 +529,19 @@ final class WorkflowEngineHibernationSupport {
         try {
             loaded = loader.load(hibernated, beforeStart);
         } catch (RuntimeException e) {
-            if (liveWorkflows.get(workflowId) == hibernated) {
-                // Still hibernated: the execution that failed to start may have registered its cancellation in place
-                // of the stand-in.
-                cancellationService.register(workflowId, hibernated.cancellation());
-            } else {
+            if (liveWorkflows.get(workflowId) != hibernated) {
                 // Its claim ended while it woke, so it left this node.
                 release(hibernated);
             }
             throw e;
         }
         if (loaded) {
-            // The stand-in stays registered until the woken execution registers its own cancellation.
             hibernated.wakeTimer().cancel();
             hibernated.armed().complete(null);
             projection.recordWoken(hibernated.claim().segment(), workflowId);
             logger.debug("Workflow [{}] woken from hibernation.", workflowId);
         } else {
-            // It ended elsewhere, or its claim ended meanwhile: its stand-in has nothing left to stand in for.
+            // It ended elsewhere, or its claim ended meanwhile.
             forget(hibernated);
             logger.debug("Workflow [{}] did not need waking: it ended, or the claim of its segment did.", workflowId);
         }
@@ -660,144 +654,5 @@ final class WorkflowEngineHibernationSupport {
          * @return {@code false} when there was nothing to load: the workflow ended elsewhere, or the claim ended
          */
         boolean load(Hibernated hibernated, Consumer<WorkflowExecution> beforeStart);
-    }
-
-    /**
-     * Runs the cancellation requests of one execution while it is in memory. Once the execution hibernated, a request
-     * goes to the registration that replaced this one. A workflow that left the engine otherwise, because it ended or
-     * its segment was released, keeps the behavior of its own cancellation.
-     */
-    private final class HibernationAwareWorkflowCancellation implements WorkflowCancellation.Request {
-
-        private final WorkflowExecution execution;
-        private final WorkflowCancellation delegate;
-
-        private HibernationAwareWorkflowCancellation(WorkflowExecution execution, WorkflowCancellation delegate) {
-            this.execution = execution;
-            this.delegate = delegate;
-        }
-
-        @Override
-        public CompletableFuture<Boolean> requestStepCancellation(String stepName, @Nullable Throwable cause) {
-            return whileInMemory(cancellation -> cancellation.requestStepCancellation(stepName, cause));
-        }
-
-        @Override
-        public CompletableFuture<Integer> requestCancellationOfAllSteps(@Nullable Throwable cause) {
-            return whileInMemory(cancellation -> cancellation.requestCancellationOfAllSteps(cause));
-        }
-
-        @Override
-        public CompletableFuture<Void> requestWorkflowCancellation(@Nullable Throwable cause) {
-            return whileInMemory(cancellation -> cancellation.requestWorkflowCancellation(cause));
-        }
-
-        @Override
-        public boolean hasPendingWorkflowCancellation() {
-            return delegate instanceof WorkflowCancellation.Request request
-                    && request.hasPendingWorkflowCancellation();
-        }
-
-        @Override
-        public WorkflowCancellation.@Nullable PendingRequest consumeWorkflowCancellation() {
-            return delegate instanceof WorkflowCancellation.Request request
-                    ? request.consumeWorkflowCancellation()
-                    : null;
-        }
-
-        @Override
-        public void abortPendingWorkflowCancellation(CancellationException reason) {
-            if (delegate instanceof WorkflowCancellation.Request request) {
-                request.abortPendingWorkflowCancellation(reason);
-            }
-        }
-
-        /**
-         * Runs the given request against the execution while it is in memory, against the stand-in of the hibernation
-         * while the workflow is hibernated, and otherwise against the registration of the execution that replaced
-         * this one. Never against this cancellation itself, which would recurse.
-         */
-        private <T> CompletableFuture<T> whileInMemory(Function<WorkflowCancellation, CompletableFuture<T>> request) {
-            var workflowId = execution.workflowId();
-            try (var ignored = liveWorkflows.lock(workflowId)) {
-                var entry = liveWorkflows.get(workflowId);
-                if (entry == null || liveWorkflows.isInMemory(execution)) {
-                    return request.apply(delegate);
-                }
-                if (entry instanceof Hibernated hibernated) {
-                    return request.apply(hibernated.cancellation());
-                }
-            }
-            var replacement = cancellationService.registered(workflowId);
-            if (replacement == null || replacement == this) {
-                return CompletableFuture.failedFuture(new NoSuchElementException(
-                        "No running workflow found with id '" + workflowId + "'"
-                ));
-            }
-            return request.apply(replacement);
-        }
-    }
-
-    /**
-     * Stands in for the cancellation of a hibernated workflow. It wakes the workflow and queues the request as a task
-     * of the restored execution before its body starts, the way an event that wakes a workflow is queued.
-     * <p>
-     * A restored body takes no task before it waits again where it hibernated, because every earlier wait is answered
-     * from its recorded state. So the request runs once the body replayed its steps and they are registered again. When
-     * the restored execution leaves memory before it ran the request, the request is made again through the
-     * {@link WorkflowCancellationService}, see {@link #leftMemory(WorkflowExecution, Throwable)}.
-     */
-    private final class HibernatedWorkflowCancellation implements WorkflowCancellation {
-
-        private final String workflowId;
-
-        private HibernatedWorkflowCancellation(String workflowId) {
-            this.workflowId = workflowId;
-        }
-
-        @Override
-        public CompletableFuture<Boolean> requestStepCancellation(String stepName, @Nullable Throwable cause) {
-            return wakeThen(() -> cancellationService.requestStepCancellation(workflowId, stepName, cause));
-        }
-
-        @Override
-        public CompletableFuture<Integer> requestCancellationOfAllSteps(@Nullable Throwable cause) {
-            return wakeThen(() -> cancellationService.requestCancellationOfAllSteps(workflowId, cause));
-        }
-
-        @Override
-        public CompletableFuture<Void> requestWorkflowCancellation(@Nullable Throwable cause) {
-            return wakeThen(() -> cancellationService.requestWorkflowCancellation(workflowId, cause));
-        }
-
-        private <T> CompletableFuture<T> wakeThen(Supplier<CompletableFuture<T>> request) {
-            var ready = new CompletableFuture<Void>();
-            // Attached before the wake, so the request runs in the task that completes ready.
-            var result = ready.thenCompose(ignored -> request.get());
-            var queued = new AtomicBoolean();
-            wakeWhenArmed(workflowId, restored -> {
-                queued.set(true);
-                queueRequest(restored, ready);
-            }).whenComplete((ignored, failure) -> {
-                if (queued.get()) {
-                    return;
-                }
-                if (failure != null) {
-                    ready.completeExceptionally(failure);
-                } else if (liveWorkflows.isHibernated(workflowId)) {
-                    ready.completeExceptionally(new IllegalStateException(
-                            "Workflow '" + workflowId + "' could not be woken from hibernation"
-                    ));
-                } else {
-                    // Another wake restored it first, so queue the request there too, or it ended elsewhere and the
-                    // cancellation service answers for it.
-                    liveWorkflows.find(workflowId).ifPresentOrElse(
-                            restored -> queueRequest(restored, ready),
-                            () -> ready.complete(null)
-                    );
-                }
-            });
-            return result;
-        }
     }
 }
