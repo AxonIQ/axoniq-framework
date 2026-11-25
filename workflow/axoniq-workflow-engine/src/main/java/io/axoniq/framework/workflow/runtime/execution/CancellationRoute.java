@@ -188,7 +188,9 @@ final class CancellationRoute {
     <T> CompletableFuture<T> request(Function<WorkflowCancellation, CompletableFuture<T>> request,
                                      Supplier<CompletableFuture<T>> again) {
         return switch (phase.get()) {
-            // Not seen while the caller holds the lock of the workflow, see the class documentation.
+            // It left memory after the caller found its entry, as leaving memory takes no lock; or it is a woken
+            // execution whose start failed, whose entry stays until the engine, under the lock of the workflow, takes
+            // it out of memory.
             case Left left -> throw noRunningWorkflow(execution.workflowId());
             case Phase woken when answerOn != null -> {
                 var queued = new QueuedRequest<>(request, again);
