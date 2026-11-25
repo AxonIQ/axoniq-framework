@@ -576,7 +576,7 @@ public class WorkflowEngine implements
      * @return set of currently running workflow executions.
      */
     public Set<WorkflowExecution> workflowExecutions() {
-        return liveWorkflows.inMemory();
+        return liveWorkflows.listInMemory();
     }
 
     /**
@@ -697,7 +697,7 @@ public class WorkflowEngine implements
      * Stops and drops the workflow executions owned by the given {@code segment}, without emitting any event.
      */
     private void stopExecutionsOf(Segment segment) {
-        var stopped = liveWorkflows.inMemoryOwnedBy(segment);
+        var stopped = liveWorkflows.listInMemoryOwnedBy(segment);
         if (!stopped.isEmpty()) {
             logger.info("Stopping {} workflow execution(s) of segment {}.", stopped.size(), segment.getSegmentId());
             stopped.forEach(WorkflowExecution::stopForShutdown);
@@ -1017,12 +1017,12 @@ public class WorkflowEngine implements
             // The hibernated workflows the claim adopted may now wake for their deadline or a cancellation.
             hibernation.arm(segment);
         }
-        var terminalExecutions = liveWorkflows.inMemoryOwnedBy(segment)
+        var terminalExecutions = liveWorkflows.listInMemoryOwnedBy(segment)
                                               .stream()
                                               .filter(execution -> execution.state().workflowStatus().isTerminal())
                                               .toList();
         terminalExecutions.forEach(liveWorkflows::leave);
-        var executionsToStart = liveWorkflows.inMemoryOwnedBy(segment)
+        var executionsToStart = liveWorkflows.listInMemoryOwnedBy(segment)
                                              .stream()
                                              .filter(execution -> !execution.isRunning())
                                              .toList();
@@ -1078,7 +1078,7 @@ public class WorkflowEngine implements
     public void shutdown() {
         segmentClaims.stop();
         hibernation.stop();
-        var executions = liveWorkflows.inMemory();
+        var executions = liveWorkflows.listInMemory();
         logger.info("Shutting down WorkflowEngine: interrupting running steps of {} workflow instance(s).",
                     executions.size());
         for (var execution : executions) {

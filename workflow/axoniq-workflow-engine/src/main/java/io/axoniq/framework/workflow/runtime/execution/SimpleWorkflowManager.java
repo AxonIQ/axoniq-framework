@@ -200,7 +200,7 @@ public class SimpleWorkflowManager implements WorkflowManager {
             // A query for states also gets those of the workflows that are no longer live.
             return found.liveOnly ? CompletableFuture.completedFuture(found) : withHistory(found);
         }
-        var listed = liveWorkflows.inMemory(query).thenApply(found::listed);
+        var listed = liveWorkflows.listInMemory(query).thenApply(found::listed);
         if (!hibernationEnabled.getAsBoolean()) {
             // Every live workflow is in memory, so the listing finds them all.
             return found.liveOnly ? listed : listed.thenCompose(this::withHistory);
@@ -208,7 +208,7 @@ public class SimpleWorkflowManager implements WorkflowManager {
         // A workflow that was hibernated as the first listing passed it, and that the history does not hold yet, is
         // found by the second listing once it woke.
         return listed.thenCompose(this::withHistory)
-                     .thenCompose(lookup -> liveWorkflows.inMemory(query).thenApply(lookup::listed));
+                     .thenCompose(lookup -> liveWorkflows.listInMemory(query).thenApply(lookup::listed));
     }
 
     /**

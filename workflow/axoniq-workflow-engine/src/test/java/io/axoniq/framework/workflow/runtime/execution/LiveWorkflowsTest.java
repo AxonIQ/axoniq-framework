@@ -218,7 +218,7 @@ class LiveWorkflowsTest {
             assertThat(liveWorkflows.isInMemory(execution)).isTrue();
             assertThat(liveWorkflows.find(WORKFLOW_ID)).containsSame(execution);
             assertThat(repository.findById(WORKFLOW_ID)).containsSame(execution);
-            assertThat(liveWorkflows.inMemory()).containsExactly(execution);
+            assertThat(liveWorkflows.listInMemory()).containsExactly(execution);
             assertThat(execution.checkpointWorkStateListener())
                     .as("an execution in memory reports its safe points")
                     .isNotNull();

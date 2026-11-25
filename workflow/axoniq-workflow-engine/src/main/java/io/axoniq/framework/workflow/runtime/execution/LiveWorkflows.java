@@ -589,34 +589,36 @@ public final class LiveWorkflows {
     }
 
     /**
-     * Returns every execution in memory, read from the repository.
+     * Lists every execution in memory from the repository, not from the entries: a workflow that hibernates or wakes
+     * while the repository lists its executions may be missed.
      *
      * @return an unmodifiable snapshot of the executions in memory
      */
-    Set<WorkflowExecution> inMemory() {
+    Set<WorkflowExecution> listInMemory() {
         return repository.findAll();
     }
 
     /**
-     * Returns the executions in memory whose state matches the given query, read from the repository, see
-     * {@link WorkflowExecutionRepository#findAll(WorkflowStateQuery)}.
+     * Lists the executions in memory whose state matches the given query from the repository, see
+     * {@link WorkflowExecutionRepository#findAll(WorkflowStateQuery)}, not from the entries: a workflow that hibernates
+     * or wakes while the repository lists its executions may be missed.
      *
      * @param query the query the state of each returned execution matches
      * @return a future completing with the executions in memory matching the query
      */
-    CompletableFuture<Set<WorkflowExecution>> inMemory(WorkflowStateQuery query) {
+    CompletableFuture<Set<WorkflowExecution>> listInMemory(WorkflowStateQuery query) {
         return repository.findAll(query);
     }
 
     /**
-     * Returns the executions in memory owned by the given segment, read from the repository, which visits only the
-     * executions of that segment, see {@link WorkflowExecutionRepository#findAllOwnedBy(Segment)}.
+     * Lists the executions in memory owned by the given segment from the repository, which visits only the executions
+     * of that segment, see {@link WorkflowExecutionRepository#findAllOwnedBy(Segment)}, not from the entries.
      *
      * @param segment the segment owning the executions, or {@code null} for every execution, as outside a segmented
      *                processor every execution is in scope
      * @return an unmodifiable snapshot of the executions in memory owned by the segment
      */
-    Set<WorkflowExecution> inMemoryOwnedBy(@Nullable Segment segment) {
+    Set<WorkflowExecution> listInMemoryOwnedBy(@Nullable Segment segment) {
         return repository.findAllOwnedBy(segment);
     }
 

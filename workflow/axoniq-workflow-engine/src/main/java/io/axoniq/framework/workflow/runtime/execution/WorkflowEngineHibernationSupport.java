@@ -176,7 +176,7 @@ final class WorkflowEngineHibernationSupport implements Hibernation {
      * point.
      */
     void pass() {
-        for (var execution : liveWorkflows.inMemory()) {
+        for (var execution : liveWorkflows.listInMemory()) {
             try {
                 if (execution instanceof WorkflowHibernationProvider provider) {
                     provider.workflowHibernation().request(idleDelay);
