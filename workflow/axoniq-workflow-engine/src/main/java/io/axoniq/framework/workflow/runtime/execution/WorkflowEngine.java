@@ -9,7 +9,6 @@ package io.axoniq.framework.workflow.runtime.execution;
 
 import io.axoniq.framework.workflow.dsl.api.WorkflowState;
 import io.axoniq.framework.workflow.index.api.WorkflowIndex;
-import io.axoniq.framework.workflow.index.api.WorkflowIndex.HibernationHint;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.framework.workflow.runtime.execution.SegmentClaim.BodyStart;
@@ -36,7 +35,6 @@ import org.slf4j.LoggerFactory;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.HashSet;
-import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
@@ -98,10 +96,14 @@ public class WorkflowEngine implements
     private WorkflowEngineCheckpointingSupport checkpointingSupport;
     private volatile Consumer<Segment> segmentReleaser = segment -> {
     };
-    // Package-private so a test can tell whether hibernation is enabled.
-    @Nullable
-    WorkflowEngineHibernationSupport hibernation;
-    private Duration wakeTimeout = DEFAULT_RESTORE_TIMEOUT;
+    // Set once, by enableHibernation, before the engine starts; volatile, as the manager of the module reads it through
+    // isHibernationEnabled() on the threads of its queries. Package-private so a test can adopt a hibernated workflow
+    // under a claim of its own.
+    volatile Hibernation hibernation = NoHibernation.INSTANCE;
+    // Set by start, so hibernation cannot be enabled once a claim may have restored workflows without it. Guarded by
+    // the monitor of this engine, as start and enableHibernation are synchronized, so the check and the act of each
+    // run as one.
+    private boolean started;
 
     /**
      * Creates a new workflow engine keeping its index of running workflows in the given {@code workflowIndex}.
@@ -247,16 +249,27 @@ public class WorkflowEngine implements
      * @param idleDelay    the time a workflow must make no progress before it hibernates
      * @param wakeTimeout  the time a wake may take to load a workflow from the event store
      * @param wakeExecutor runs the wakes for a deadline or a cancellation
+     * @throws IllegalStateException when hibernation is enabled already, or this engine started
      */
     @Internal
-    public void enableHibernation(WorkflowScheduler scheduler,
-                                  Clock clock,
-                                  Duration idleDelay,
-                                  Duration wakeTimeout,
-                                  Executor wakeExecutor) {
-        this.wakeTimeout = requireNonNull(wakeTimeout, "The wake timeout must not be null.");
+    public synchronized void enableHibernation(WorkflowScheduler scheduler,
+                                               Clock clock,
+                                               Duration idleDelay,
+                                               Duration wakeTimeout,
+                                               Executor wakeExecutor) {
+        requireNonNull(wakeTimeout, "The wake timeout must not be null.");
+        // Once: every hibernated workflow wakes through the hibernation of this engine, so replacing it would strand
+        // the workflows the replaced one hibernated.
+        if (hibernation.isEnabled()) {
+            throw new IllegalStateException("Hibernation is enabled already.");
+        }
+        if (started) {
+            throw new IllegalStateException("Hibernation can only be enabled before the engine starts.");
+        }
         this.hibernation = new WorkflowEngineHibernationSupport(
-                scheduler, clock, liveWorkflows, runningWorkflows, this::wakeWorkflow, idleDelay, wakeExecutor
+                scheduler, clock, liveWorkflows, runningWorkflows,
+                (hibernated, beforeStart) -> wakeWorkflow(hibernated, beforeStart, wakeTimeout),
+                idleDelay, wakeExecutor
         );
     }
 
@@ -269,7 +282,7 @@ public class WorkflowEngine implements
      */
     @Internal
     public boolean isHibernationEnabled() {
-        return hibernation != null;
+        return hibernation.isEnabled();
     }
 
     /**
@@ -282,7 +295,7 @@ public class WorkflowEngine implements
      */
     @Internal
     public Set<String> hibernatedWorkflowIds() {
-        return hibernation == null ? Set.of() : liveWorkflows.hibernatedWorkflowIds();
+        return hibernation.hibernatedWorkflowIds();
     }
 
     @Override
@@ -449,12 +462,12 @@ public class WorkflowEngine implements
         // yet: either that activation finds this execution and starts it, or this start does, never both.
         segmentClaims.runAlwaysWithBodyStart(segment, bodyStart -> {
             var claim = segment == null ? null : segmentClaims.claimOf(segment).orElse(null);
-            var execution = liveWorkflows.enter(workflowId, mayHibernate(claim), () -> {
+            var execution = liveWorkflows.enter(workflowId, hibernation.mayHibernate(claim), () -> {
                 logger.debug("Creating a new workflow '{}' with payload '{}'", workflowId, eventMessage.payload());
                 return workflowConfiguration.workflowExecutionFactory().create(workflowContext);
             });
             liveWorkflows.markCancellable(execution);
-            allowHibernation(execution, claim);
+            hibernation.allow(execution, claim);
             if (bodyStart == BodyStart.NOW) {
                 execute(execution);
             }
@@ -554,12 +567,10 @@ public class WorkflowEngine implements
      * @param latestToken latest token observed while starting the processor
      * @return a completed future after startup validation
      */
-    public CompletableFuture<Void> start(@Nullable TrackingToken latestToken) {
+    public synchronized CompletableFuture<Void> start(@Nullable TrackingToken latestToken) {
+        started = true;
         segmentClaims.initialize(latestToken);
-        var support = hibernation;
-        if (support != null) {
-            support.start();
-        }
+        hibernation.start();
         workflowConfigurationRegistry.warnAboutSameVersionDuplicates();
         return CompletableFuture.completedFuture(null);
     }
@@ -605,14 +616,14 @@ public class WorkflowEngine implements
         // hibernates meanwhile does so under that claim, which ended, so it stays in memory and is stopped here.
         var claim = segmentClaims.startClaim(segment, executionContext);
         stopExecutionsOf(segment);
-        dropHibernatedWorkflowsOf(segment);
+        hibernation.dropOverlapping(segment);
         runningWorkflows.discard(segment);
         return claimLoader
                 // Half the restore timeout for streaming the index tail, so a stalled stream still leaves time to
                 // fall back to the full running-workflow list and restore the instances within the restore timeout.
                 .load(segment, claimedFrom, sourcingContext, restoreTimeout.dividedBy(2))
                 // Without hibernation, a hibernated instance is restored like any other, and its hint cleared.
-                .thenApply(claimed -> hibernation == null ? claimed.restoringHibernated() : claimed)
+                .thenApply(claimed -> hibernation.withAcceptedHints(claimed))
                 .thenCompose(claimed -> restoreRunningWorkflows(claim,
                                                                 claimed.runningWorkflowIds(),
                                                                 sourcingContext,
@@ -624,7 +635,7 @@ public class WorkflowEngine implements
                 // Tracked before the hibernated instances are adopted, so it records their wakes.
                 .thenAccept(claimed -> {
                     runningWorkflows.initialize(segment, claimed);
-                    adoptHibernatedWorkflows(claim, claimed.hibernated());
+                    hibernation.adopt(claim, claimed.hibernated());
                 })
                 .whenComplete((restored, failure) -> {
                     if (failure != null) {
@@ -633,37 +644,12 @@ public class WorkflowEngine implements
                         // dropped as well, also when the segment is never released here.
                         claim.fail(() -> stopExecutionsOf(segment));
                         // Outside the lock of the claim, as dropping takes the locks of the workflows.
-                        var support = hibernation;
-                        if (support != null) {
-                            support.drop(claim);
-                        }
+                        hibernation.dropOf(claim);
                         onFailedRestore(segment, failure);
                     } else {
                         segmentClaims.activateOrAwaitCatchUp(claim, claimedFrom, activation);
                     }
                 });
-    }
-
-    /**
-     * Leaves the given instances, whose hibernation hints the claim accepted, out of memory as hibernated instances of
-     * the claim. An instance that is not adopted, as the claim ended meanwhile, gets its hint cleared.
-     */
-    private void adoptHibernatedWorkflows(SegmentClaim claim,
-                                          Map<String, HibernationHint> hibernated) {
-        var support = hibernation;
-        if (support == null || hibernated.isEmpty()) {
-            return;
-        }
-        var segment = claim.segment();
-        int adopted = 0;
-        for (var entry : hibernated.entrySet()) {
-            if (support.adopt(claim, entry.getKey(), entry.getValue())) {
-                adopted++;
-            } else {
-                runningWorkflows.recordWoken(segment, entry.getKey());
-            }
-        }
-        logger.debug("Left {} hibernated workflow(s) of segment {} out of memory.", adopted, segment.getSegmentId());
     }
 
     /**
@@ -684,20 +670,9 @@ public class WorkflowEngine implements
         // claim still restores is either dropped below or not added at all.
         segmentClaims.release(segment);
         stopExecutionsOf(segment);
-        dropHibernatedWorkflowsOf(segment);
+        hibernation.dropOverlapping(segment);
         runningWorkflows.discard(segment);
         return CompletableFuture.completedFuture(null);
-    }
-
-    /**
-     * Forgets the hibernated workflows of the given segment, and of every segment overlapping it: the claim of their
-     * segment, here or on another node, restores them from the event store.
-     */
-    private void dropHibernatedWorkflowsOf(Segment segment) {
-        var support = hibernation;
-        if (support != null) {
-            support.drop(segment);
-        }
     }
 
     /**
@@ -843,20 +818,18 @@ public class WorkflowEngine implements
                                                         ProcessingContext executionContext,
                                                         @Nullable ConsistencyMarker restoredAt) {
         var execution = executionOf(workflowId, state, executionContext);
-        if (hibernation == null) {
-            return enterRestored(claim, workflowId, execution, restoredAt);
-        }
-        // Under the lock of the workflow, so it cannot hibernate, wake or be adopted while it enters memory.
-        try (var ignored = liveWorkflows.lock(workflowId)) {
-            return enterRestored(claim, workflowId, execution, restoredAt);
-        }
+        // Guarded, so the workflow cannot hibernate, wake or be adopted while it enters memory.
+        return hibernation.restoreGuarded(
+                workflowId, () -> enterRestored(claim, workflowId, execution, restoredAt)
+        );
     }
 
     /**
      * Brings the given restored execution into memory under the given claim, unless that claim is no longer current:
      * in place of a hibernation of the workflow under another claim, if any, see
-     * {@link WorkflowEngineHibernationSupport#restoreOver(SegmentClaim, LiveWorkflows.Hibernated, WorkflowExecution,
-     * boolean)}. With hibernation, the caller holds the lock of the workflow.
+     * {@link Hibernation#restoreOverHibernation(SegmentClaim, String, WorkflowExecution, boolean)}. Runs guarded
+     * against the hibernations, wakes and adoptions of the workflow, see
+     * {@link Hibernation#restoreGuarded(String, java.util.function.Supplier)}.
      *
      * @return the restored execution, or empty when the claim failed or ended meanwhile
      */
@@ -868,11 +841,10 @@ public class WorkflowEngine implements
         // was released would otherwise stay behind, and run from the state it sourced back then. A restore that
         // outlives its claim also leaves a hibernation of the workflow under another claim alone.
         boolean added = claim.runIfCurrent(() -> {
-            var support = hibernation;
-            boolean restoredOver = support != null
-                    && liveWorkflows.get(workflowId) instanceof LiveWorkflows.Hibernated hibernated
-                    && support.restoreOver(claim, hibernated, execution, mayHibernate(claim));
-            if (!restoredOver && liveWorkflows.enter(workflowId, mayHibernate(claim), () -> execution) != execution) {
+            boolean mayHibernate = hibernation.mayHibernate(claim);
+            // Takes the place of a hibernation of the workflow under another claim, if any; else the restore enters.
+            boolean restoredOver = hibernation.restoreOverHibernation(claim, workflowId, execution, mayHibernate);
+            if (!restoredOver && liveWorkflows.enter(workflowId, mayHibernate, () -> execution) != execution) {
                 // A claim drops what earlier claims of its segment left behind, so only a concurrent restore of the
                 // instance gets here. Never adopt its execution: moving the append position of that execution to this
                 // read would let it run from its own, older state.
@@ -881,7 +853,7 @@ public class WorkflowEngine implements
                 );
             }
             execution.restoreAppendPosition(restoredAt);
-            allowHibernation(execution, claim);
+            hibernation.allow(execution, claim);
         });
         if (!added) {
             logger.debug("Not restoring workflow '{}': the claim of segment {} failed or ended meanwhile.",
@@ -928,7 +900,8 @@ public class WorkflowEngine implements
 
     /**
      * Loads a hibernated workflow back from the event store under the claim it hibernated under, and starts it once
-     * that claim caught up, as the hibernation support's {@link WorkflowEngineHibernationSupport.WorkflowLoader}.
+     * that claim caught up, as the hibernation support's {@link WorkflowEngineHibernationSupport.WorkflowLoader}. The
+     * load fails once it takes longer than the given {@code wakeTimeout}.
      * <p>
      * The workflow is sourced in a unit of work of its own, like a restore on a claim, so the position its read ended
      * at is its own. That unit of work holds the resources of the execution context of the claim, except its event
@@ -941,7 +914,8 @@ public class WorkflowEngine implements
      * @return {@code false} when the workflow ended elsewhere, or the claim ended meanwhile
      */
     private boolean wakeWorkflow(LiveWorkflows.Hibernated hibernated,
-                                 Consumer<WorkflowExecution> beforeStart) {
+                                 Consumer<WorkflowExecution> beforeStart,
+                                 Duration wakeTimeout) {
         var claim = hibernated.claim();
         var workflowId = hibernated.workflowId();
         var segment = claim.segment();
@@ -971,7 +945,7 @@ public class WorkflowEngine implements
             return false;
         }
         try {
-            allowHibernation(execution, claim);
+            hibernation.allow(execution, claim);
             beforeStart.accept(execution);
             // Started here only once the claim caught up; before that, its activation starts it with the restored
             // ones.
@@ -1018,10 +992,9 @@ public class WorkflowEngine implements
      * @param phase   startup phase in which the executions are started
      */
     private void removeTerminalAndStartRestoredWorkflowExecutions(@Nullable Segment segment, String phase) {
-        var support = hibernation;
-        if (support != null && segment != null) {
+        if (segment != null) {
             // The hibernated workflows the claim adopted may now wake for their deadline or a cancellation.
-            support.arm(segment);
+            hibernation.arm(segment);
         }
         var terminalExecutions = liveWorkflows.inMemoryOwnedBy(segment)
                                               .stream()
@@ -1070,29 +1043,6 @@ public class WorkflowEngine implements
     }
 
     /**
-     * Returns whether an execution started or restored under the given claim may hibernate: hibernation is enabled,
-     * and the claim has an execution context to wake it on. Such an execution gets its events under the lock of its
-     * workflow, see {@link LiveWorkflows#deliver(String, EventMessage, ProcessingContext)}.
-     */
-    private boolean mayHibernate(@Nullable SegmentClaim claim) {
-        return hibernation != null && claim != null && claim.executionContext() != null;
-    }
-
-    /**
-     * Lets the given execution, which just entered memory, hibernate under the given claim when hibernation is
-     * enabled.
-     *
-     * @param claim the claim the execution was started or restored under, or {@code null} outside a segmented
-     *              processor, in which case it never hibernates
-     */
-    private void allowHibernation(WorkflowExecution execution, @Nullable SegmentClaim claim) {
-        var support = hibernation;
-        if (support != null) {
-            support.allow(execution, claim);
-        }
-    }
-
-    /**
      * Shuts downs the engine and removes all running workflow executions.
      * <p>
      * Before clearing the repository, all in-flight step futures are interrupted so that workflow driver threads parked
@@ -1106,10 +1056,7 @@ public class WorkflowEngine implements
      */
     public void shutdown() {
         segmentClaims.stop();
-        var support = hibernation;
-        if (support != null) {
-            support.stop();
-        }
+        hibernation.stop();
         var executions = liveWorkflows.inMemory();
         logger.info("Shutting down WorkflowEngine: interrupting running steps of {} workflow instance(s).",
                     executions.size());

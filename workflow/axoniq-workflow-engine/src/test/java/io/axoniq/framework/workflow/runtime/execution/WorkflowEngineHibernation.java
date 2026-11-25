@@ -31,7 +31,7 @@ public final class WorkflowEngineHibernation {
      * @return {@code true} when the engine may hibernate workflows
      */
     public static boolean isEnabled(WorkflowEngine engine) {
-        return engine.hibernation != null;
+        return engine.isHibernationEnabled();
     }
 
     /**

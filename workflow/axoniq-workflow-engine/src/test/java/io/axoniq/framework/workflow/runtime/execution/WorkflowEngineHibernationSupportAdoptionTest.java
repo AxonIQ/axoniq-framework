@@ -422,7 +422,7 @@ class WorkflowEngineHibernationSupportAdoptionTest {
             assertThat(support.adopt(later, "wf-2", futureDeadline("2"))).isTrue();
 
             // when
-            support.drop(claim);
+            support.dropOf(claim);
 
             // then
             assertThat(liveWorkflows.hibernatedWorkflowIds()).containsExactly("wf-2");

@@ -56,7 +56,8 @@ import static org.mockito.Mockito.*;
  * Tests where a {@link WorkflowEngine} keeps a hibernated workflow when the claim of its segment changes while the
  * workflow is restored or woken: a restore by a claim of an overlapping segment takes the workflow over, and a wake
  * that fails once the claim of the hibernation ended leaves the workflow out of this node. Also tests what becomes of
- * the cancellation requests that wait for a woken workflow whose start fails.
+ * the cancellation requests that wait for a woken workflow whose start fails, and that hibernation is enabled only once,
+ * before the engine starts.
  * <p>
  * The executions are the mocks of {@link WorkflowExecutionFixture}, as in the other restore tests of the engine; the
  * live workflows, the hibernation support and the claims are real.
@@ -161,8 +162,7 @@ class WorkflowEngineHibernatedWorkflowClaimTest {
         var adopted = new CompletableFuture<Void>();
         when(workflowStore.loadWorkflow(eq(WORKFLOW_ID), any())).thenAnswer(invocation -> {
             // the restore of the whole segment dropped the hibernations it found before it sources the workflow
-            assertThat(engine.hibernation.adopt(halfClaim, WORKFLOW_ID, new HibernationHint(DEADLINE, List.of())))
-                    .isTrue();
+            adoptTheWorkflow(halfClaim);
             adopted.complete(null);
             return sourced;
         });
@@ -186,8 +186,7 @@ class WorkflowEngineHibernatedWorkflowClaimTest {
         // of it holds hibernated
         var halfClaim = engine.segmentClaims.startClaim(SECOND_HALF, new StubProcessingContext());
         when(workflowStore.loadWorkflow(eq(WORKFLOW_ID), any())).thenAnswer(invocation -> {
-            assertThat(engine.hibernation.adopt(halfClaim, WORKFLOW_ID, new HibernationHint(DEADLINE, List.of())))
-                    .isTrue();
+            adoptTheWorkflow(halfClaim);
             engine.segmentClaims.release(WHOLE);
             return sourced;
         });
@@ -208,7 +207,7 @@ class WorkflowEngineHibernatedWorkflowClaimTest {
         // given - a hibernated workflow, whose woken execution fails to take the waking event once the claim of its
         // segment ended
         var claim = engine.segmentClaims.startClaim(WHOLE, new StubProcessingContext());
-        assertThat(engine.hibernation.adopt(claim, WORKFLOW_ID, new HibernationHint(DEADLINE, List.of()))).isTrue();
+        adoptTheWorkflow(claim);
         onEvent = () -> {
             engine.segmentClaims.release(WHOLE);
             throw new IllegalStateException("unreadable event");
@@ -234,8 +233,7 @@ class WorkflowEngineHibernatedWorkflowClaimTest {
         void setUp() {
             // given - a hibernated workflow of a claim that caught up, whose woken execution fails to start
             var claim = engine.segmentClaims.startClaim(WHOLE, new StubProcessingContext());
-            assertThat(engine.hibernation.adopt(claim, WORKFLOW_ID, new HibernationHint(DEADLINE, List.of())))
-                    .isTrue();
+            adoptTheWorkflow(claim);
             onStart = () -> {
                 throw new IllegalStateException(START_FAILURE);
             };
@@ -307,8 +305,7 @@ class WorkflowEngineHibernatedWorkflowClaimTest {
             // given - a hibernated workflow of a claim that caught up, whose segment is released right after a
             // cancellation woke it, before the request is queued on the woken execution
             var claim = engine.segmentClaims.startClaim(WHOLE, new StubProcessingContext());
-            assertThat(engine.hibernation.adopt(claim, WORKFLOW_ID, new HibernationHint(DEADLINE, List.of())))
-                    .isTrue();
+            adoptTheWorkflow(claim);
             wakeExecutor = wakeThreads;
             onWoken = () -> engine.releaseWorkflowsFor(WHOLE);
 
@@ -323,6 +320,48 @@ class WorkflowEngineHibernatedWorkflowClaimTest {
             assertThat(engine.workflowExecutions()).isEmpty();
             assertThat(engine.hibernatedWorkflowIds()).isEmpty();
         }
+    }
+
+    @Nested
+    class EnablingHibernation {
+
+        @Test
+        void failsWhenHibernationIsEnabledAlready() {
+            // when / then - the engine of this test enabled hibernation already
+            assertThatThrownBy(() -> engine.enableHibernation(scheduler, Clock.systemUTC(), Duration.ofMinutes(1),
+                                                              Duration.ofSeconds(10), Runnable::run))
+                    .isInstanceOf(IllegalStateException.class);
+            assertThat(engine.isHibernationEnabled()).isTrue();
+        }
+
+        @Test
+        void failsOnceTheEngineStarted() {
+            // given - an engine without hibernation that started
+            var started = new WorkflowEngine(new SimpleWorkflowConfigurationRegistry(),
+                                             new LiveWorkflows(new InMemoryWorkflowExecutionRepository()),
+                                             workflowStore,
+                                             new InMemoryWorkflowIndex(),
+                                             "StartedWorkflowEngine",
+                                             unitOfWorkFactory());
+            started.setCheckpointingSupport(new WorkflowEngineCheckpointingSupport(started, 0L));
+            started.start(null);
+
+            // when / then
+            assertThatThrownBy(() -> started.enableHibernation(scheduler, Clock.systemUTC(), Duration.ofMinutes(1),
+                                                               Duration.ofSeconds(10), Runnable::run))
+                    .isInstanceOf(IllegalStateException.class);
+            assertThat(started.isHibernationEnabled()).isFalse();
+            started.shutdown();
+        }
+    }
+
+    /**
+     * Leaves the workflow out of memory as a hibernated workflow of the given claim, as a claim that accepted its hint
+     * does.
+     */
+    private void adoptTheWorkflow(SegmentClaim claim) {
+        engine.hibernation.adopt(claim, Map.of(WORKFLOW_ID, new HibernationHint(DEADLINE, List.of())));
+        assertThat(engine.hibernatedWorkflowIds()).contains(WORKFLOW_ID);
     }
 
     /**
