@@ -380,7 +380,7 @@ class SimpleWorkflowModule<C extends WorkflowContext>
                                           c.getComponent(
                                                   MutableWorkflowHistoryRepository.class, historyRepositoryName()
                                           ),
-                                          c.getComponent(WorkflowExecutionRepository.class, executionRepositoryName()),
+                                          c.getComponent(LiveWorkflows.class, liveWorkflowsName()),
                                           c.getComponent(WorkflowCancellationService.class, cancellationServiceName()),
                                           c.getComponent(WorkflowStore.class),
                                           c.getComponent(UnitOfWorkFactory.class),
@@ -389,9 +389,7 @@ class SimpleWorkflowModule<C extends WorkflowContext>
                                                   WorkflowConfigurationDefaults.WORKFLOW_ENGINE_EXECUTOR
                                           ),
                                           () -> c.getComponent(WorkflowEngine.class, engineName())
-                                                 .hibernatedWorkflowIds(),
-                                          listener -> c.getComponent(WorkflowEngine.class, engineName())
-                                                       .onWake(listener),
+                                                 .isHibernationEnabled(),
                                           useHistory
                                   ));
     }

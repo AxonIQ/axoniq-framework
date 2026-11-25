@@ -8,9 +8,9 @@
 package io.axoniq.framework.workflow.runtime.execution;
 
 import io.axoniq.framework.workflow.index.api.WorkflowIndex.HibernationHint;
+import io.axoniq.framework.workflow.query.api.WorkflowStateQuery;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution.CheckpointWorkStateListener;
-import org.axonframework.common.Registration;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.lock.Lock;
 import org.axonframework.common.lock.LockFactory;
@@ -21,8 +21,6 @@ import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 import org.jspecify.annotations.Nullable;
 
-import java.util.AbstractSet;
-import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -36,9 +34,9 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.locks.StampedLock;
-import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
@@ -47,29 +45,30 @@ import java.util.stream.Stream;
  * <p>
  * Each live workflow has one entry, keyed by its identifier: an {@link InMemory} entry holds its execution, a
  * {@link Hibernated} entry what wakes it again. Every transition is a compare-and-set on that entry: entering adds it
- * only when the workflow has none, leaving removes it only while it is the entry of the given execution, and
- * hibernating and waking replace it only while it is the given entry. Only the winner applies the side effects, and
- * those are scoped to the entry as well, so an execution that left memory never touches the workflow's next entry,
- * such as the execution restored by a later claim of its segment, or the hibernation it moved into.
+ * only when the workflow has none, leaving memory or this node removes it only while it is the entry of the given
+ * execution or hibernation, and every transition of a workflow that stays live replaces it in place, only while it is
+ * the given entry: hibernating, waking, and a restore that takes over a hibernation under another claim. So the key of
+ * a live workflow never leaves the entries while the workflow stays live. Only the winner of a transition applies the
+ * side effects, and those are scoped to the entry as well, so an execution that left memory never touches the
+ * workflow's next entry, such as the execution restored by a later claim of its segment, or the hibernation it moved
+ * into.
  * <p>
  * The {@link WorkflowExecutionRepository} stays the store of the executions in memory, which a user may replace, and
  * which the parameter resolver of a workflow's state reads. Only this class writes it, in step with the entries:
  * entering saves the execution, and leaving removes it, while it holds the lock of the bin of the workflow's entry, so
  * no other transition of that workflow interleaves. Every execution in the repository therefore belongs to a live
  * workflow, and a workflow that enters memory never finds the repository, or the entries, holding the execution of a
- * workflow that is still leaving it. Point lookups read the entries, while listings of executions read the repository,
- * as a broadcast event to the workflows of a segment does.
+ * workflow that is still leaving it.
  * <p>
- * Under the lock of a bin, only the factory of the entering execution, the repository and the wake listeners run. None
- * of them touches this registry, nor takes the lock of a workflow or of a claim, so the lock of a bin is always taken
- * last. As the lock of a bin is a monitor, a custom repository that blocks while it saves or removes an execution keeps
- * the transitions of the other workflows of that bin waiting, and keeps the carrier of a virtual thread that leaves
- * memory.
+ * Under the lock of a bin, only the factory of the entering execution and the repository run. Neither touches this
+ * registry, nor takes the lock of a workflow or of a claim, so the lock of a bin is always taken last. As the lock of a
+ * bin is a monitor, a custom repository that blocks while it saves or removes an execution keeps the transitions of the
+ * other workflows of that bin waiting, and keeps the carrier of a virtual thread that leaves memory.
  * <p>
  * <b>Hibernated workflows.</b> A hibernated workflow has no execution in memory. The open waits it hibernated with
  * are kept as rows of a {@link WaitAssociationIndex}, so a broadcast event wakes only the hibernated workflows that may
  * wait for it, without visiting the others. Hibernating moves a workflow from the repository to the rows, and waking
- * moves it back, each in one swap, so a workflow that stays live is never absent from the entries. The rows of a
+ * or a restore that takes over a hibernation moves it back, each in one swap. The rows of a
  * hibernation are parsed when it is created, see {@link #rowsOf(String, HibernationHint)}, so a swap only updates the
  * entries, the rows and the repository. The {@link WorkflowEngineHibernationSupport} decides when a workflow hibernates
  * and wakes, and owns the timers of the hibernated workflows; this registry applies the transitions.
@@ -114,13 +113,20 @@ import java.util.stream.Stream;
  * first waits for that swap to finish, and then makes its attempt on an optimistic stamp. Only a repeated attempt
  * holds the read lock.
  * <p>
+ * <b>Finding the live workflows a query matches.</b> The {@link SimpleWorkflowManager} needs no swap lock: it reads the
+ * entry of each workflow it looks for, or visits every entry once, and never matches the rows. As the key of a live
+ * workflow never leaves the entries, reading the entry of a workflow that stays live finds it, in memory or
+ * hibernated, whenever the read runs, and visiting every entry finds it exactly once, see {@link #entries()}. Only a
+ * listing of the executions in memory, see {@link #inMemory(WorkflowStateQuery)}, misses a workflow that is
+ * hibernated as the listing passes it; the manager documents how a query that lists them finds such a workflow.
+ * <p>
  * <b>Locks.</b> The lock of a workflow, see {@link #lock(String)}, serializes the decisions about one workflow:
  * starting, adopting, hibernating, waking and dropping it, retrying its wake, delivering an event to it when it may
  * hibernate or is hibernated, and requesting its cancellation. Every writer of the rows of a workflow holds it, as the
  * rows are keyed by the workflow's identifier. Where the engine takes several locks, it takes the lock of a workflow,
  * then the lock of a {@link SegmentClaim claim}, then the write lock of the swap lock, then the lock of a bin of the
- * entries. The write lock of the swap lock is a leaf: under it, only the entries, the rows, the repository and the wake
- * listeners are touched; nothing takes the lock of a workflow, of a claim or of the
+ * entries. The write lock of the swap lock is a leaf: under it, only the entries, the rows and the repository are
+ * touched; nothing takes the lock of a workflow, of a claim or of the
  * {@link RunningWorkflowsProjection projection}, and nothing runs or loads a workflow. The read lock is held only by a
  * repeated lookup, which takes no other lock of this registry.
  * <p>
@@ -162,9 +168,6 @@ public final class LiveWorkflows {
     private final WaitAssociationIndex waits = new WaitAssociationIndex();
     private final LockFactory locks = PessimisticLockFactory.usingDefaults();
     private final StampedLock swaps = new StampedLock();
-    private final Set<String> hibernatedWorkflowIds = new HibernatedWorkflowIds();
-    // The manager queries looking up hibernated workflows, which a wake tells the workflow it woke.
-    private final Set<Consumer<String>> wakeListeners = ConcurrentHashMap.newKeySet();
 
     /**
      * Creates the registry of the live workflows of a workflow module, keeping the executions in memory in the given
@@ -232,8 +235,8 @@ public final class LiveWorkflows {
         }
         if (!(entry instanceof InMemory entered)) {
             // A guard: no caller gets here. A start checks under the lock of the workflow that it is not hibernated,
-            // and a restore, under that lock as well, first drops a hibernation of the workflow under another claim,
-            // and fails itself for one under its own claim, which restores only the workflows it did not adopt.
+            // and a restore, under that lock as well, takes over a hibernation of the workflow instead of entering,
+            // see restoreOver.
             throw new IllegalStateException("Workflow '%s' is hibernated on this node.".formatted(workflowId));
         }
         if (entered == created[0]) {
@@ -326,8 +329,7 @@ public final class LiveWorkflows {
         }
         long stamp = swaps.writeLock();
         try {
-            // Rows first, so the hibernated entry has them once it replaced the entry in memory, and the execution
-            // leaves the repository only once its workflow is hibernated, as the manager reads both without this lock.
+            // Rows first, so the hibernated entry has them once it replaced the entry in memory.
             addWaits(hibernated);
             if (!live.replace(workflowId, entry, hibernated)) {
                 waits.removeWorkflow(workflowId);
@@ -343,14 +345,9 @@ public final class LiveWorkflows {
     }
 
     /**
-     * Swaps the given hibernation for the given execution, which the engine restored from the event store: saves the
-     * execution in the repository and removes the rows of the workflow, under the write lock of the swap lock. The
-     * caller holds the lock of the workflow and the lock of the claim of the hibernation, and starts the execution once
-     * this returned. The execution may hibernate again.
-     * <p>
-     * The workflow is in the repository before its entry is no longer hibernated, so a lookup that reads the two
-     * without the swap lock, like the {@link SimpleWorkflowManager}, never finds it in neither; a
-     * {@link #onWake(Consumer) wake listener} learns of it in between.
+     * Swaps the given hibernation for the given execution, which the engine restored from the event store to wake the
+     * workflow, see {@link #swapIn(Hibernated, InMemory)}. The caller holds the lock of the workflow and the lock of
+     * the claim of the hibernation, and starts the execution once this returned. The execution may hibernate again.
      * <p>
      * Until the engine marks the woken execution {@link #markCancellable(WorkflowExecution) cancellable}, as its body
      * starts, a cancellation request for the workflow is queued on it, see the class documentation.
@@ -361,8 +358,35 @@ public final class LiveWorkflows {
      * @throws IllegalStateException when the repository returns another execution of the workflow than the given one
      */
     boolean wake(Hibernated hibernated, WorkflowExecution execution) {
+        return swapIn(hibernated, new InMemory(execution, true, hibernated.owner()));
+    }
+
+    /**
+     * Swaps the given hibernation, under a claim of an overlapping segment, for the given execution, which a claim
+     * restored from the event store, see {@link #swapIn(Hibernated, InMemory)}: the restore wins over the hibernation,
+     * which is then forgotten like one of a released segment. Only while a split or a merge is in progress does a claim
+     * of an overlapping segment hold a workflow hibernated that another claim restores. The caller holds the lock of
+     * the workflow and the lock of the restoring claim, and cancels the timer of the hibernation.
+     *
+     * @param hibernated   the hibernation of the workflow under the other claim
+     * @param execution    the execution the restoring claim restored
+     * @param mayHibernate whether the execution may hibernate, see {@link #enter(String, boolean, Supplier)}
+     * @return {@code false} when the hibernation is no longer the workflow's entry, so the execution did not enter
+     * @throws IllegalStateException when the repository returns another execution of the workflow than the given one
+     */
+    boolean restoreOver(Hibernated hibernated, WorkflowExecution execution, boolean mayHibernate) {
+        return swapIn(hibernated, new InMemory(execution, mayHibernate, null));
+    }
+
+    /**
+     * Replaces the given hibernation with the given entry in memory, in place: saves its execution in the repository
+     * and removes the rows of the workflow, under the write lock of the swap lock. From then on, the execution reports
+     * its safe points to this registry.
+     */
+    private boolean swapIn(Hibernated hibernated, InMemory entry) {
         var workflowId = hibernated.workflowId();
-        @Nullable InMemory[] woken = new InMemory[1];
+        var execution = entry.execution();
+        boolean[] swapped = new boolean[1];
         boolean[] conflict = new boolean[1];
         long stamp = swaps.writeLock();
         try {
@@ -370,16 +394,14 @@ public final class LiveWorkflows {
                 if (current != hibernated) {
                     return current;
                 }
-                var candidate = new InMemory(execution, true, hibernated.owner());
-                if (repository.save(id, candidate::execution) != execution) {
+                if (repository.save(id, entry::execution) != execution) {
                     conflict[0] = true;
                     return current;
                 }
-                wakeListeners.forEach(listener -> listener.accept(id));
-                woken[0] = candidate;
-                return candidate;
+                swapped[0] = true;
+                return entry;
             });
-            if (woken[0] != null) {
+            if (swapped[0]) {
                 waits.removeWorkflow(workflowId);
             }
         } finally {
@@ -390,11 +412,10 @@ public final class LiveWorkflows {
                     "Workflow '%s' already has an execution on this node.".formatted(workflowId)
             );
         }
-        var entered = woken[0];
-        if (entered == null) {
+        if (!swapped[0]) {
             return false;
         }
-        entered.execution().registerCheckpointWorkStateListener(safePointsOf(entered));
+        execution.registerCheckpointWorkStateListener(safePointsOf(entry));
         return true;
     }
 
@@ -593,32 +614,23 @@ public final class LiveWorkflows {
     }
 
     /**
-     * Returns the identifiers of the hibernated workflows, as an unmodifiable view that follows the workflows that
-     * hibernate and wake: checking whether a workflow is among them copies nothing, while iterating them, counting
-     * them, or checking whether there are any visits the live workflows.
+     * Returns the identifiers of the hibernated workflows, which visits every live workflow.
      *
-     * @return a view of the identifiers of the hibernated workflows
+     * @return an unmodifiable snapshot of the identifiers of the hibernated workflows
      */
     Set<String> hibernatedWorkflowIds() {
-        return hibernatedWorkflowIds;
+        return hibernatedOwnedBy(null).map(Hibernated::workflowId).collect(Collectors.toUnmodifiableSet());
     }
 
     /**
-     * Registers a listener that every wake tells the identifier of the workflow it woke, once the workflow is in the
-     * repository and before its entry is no longer hibernated.
-     * <p>
-     * A lookup that checks the hibernated workflows both before and after it lists the executions in memory, without
-     * the swap lock, registers one for its duration: a workflow that hibernates after the first check and wakes before
-     * the second is in none of the three, but reports its wake to the listener. The listener runs under the swap lock
-     * and the lock of a bin of the entries, so it must not block or take any lock.
+     * Returns the entry of every live workflow, in memory or hibernated. As the key of a live workflow never leaves the
+     * entries, see the class documentation, the stream holds exactly one entry of each workflow that stays live while
+     * the stream is consumed, whichever entry it has when it is visited.
      *
-     * @param listener the listener to tell the identifier of each workflow that wakes, on the thread that wakes it
-     * @return the registration that removes the listener again
+     * @return a weakly consistent stream of the entries of the live workflows
      */
-    Registration onWake(Consumer<String> listener) {
-        Objects.requireNonNull(listener, "The wake listener must not be null.");
-        wakeListeners.add(listener);
-        return () -> wakeListeners.remove(listener);
+    Stream<LiveWorkflow> entries() {
+        return live.values();
     }
 
     /**
@@ -648,6 +660,17 @@ public final class LiveWorkflows {
      */
     Set<WorkflowExecution> inMemory() {
         return repository.findAll();
+    }
+
+    /**
+     * Returns the executions in memory whose state matches the given query, read from the repository, see
+     * {@link WorkflowExecutionRepository#findAll(WorkflowStateQuery)}.
+     *
+     * @param query the query the state of each returned execution matches
+     * @return a future completing with the executions in memory matching the query
+     */
+    CompletableFuture<Set<WorkflowExecution>> inMemory(WorkflowStateQuery query) {
+        return repository.findAll(query);
     }
 
     /**
@@ -1163,32 +1186,6 @@ public final class LiveWorkflows {
             } catch (RuntimeException e) {
                 result.completeExceptionally(e);
             }
-        }
-    }
-
-    /**
-     * The identifiers of the hibernated workflows, as a view of the entries.
-     */
-    private final class HibernatedWorkflowIds extends AbstractSet<String> {
-
-        @Override
-        public boolean contains(Object workflowId) {
-            return workflowId instanceof String id && isHibernated(id);
-        }
-
-        @Override
-        public Iterator<String> iterator() {
-            return hibernatedOwnedBy(null).map(Hibernated::workflowId).iterator();
-        }
-
-        @Override
-        public int size() {
-            return (int) hibernatedOwnedBy(null).count();
-        }
-
-        @Override
-        public boolean isEmpty() {
-            return hibernatedOwnedBy(null).findAny().isEmpty();
         }
     }
 }

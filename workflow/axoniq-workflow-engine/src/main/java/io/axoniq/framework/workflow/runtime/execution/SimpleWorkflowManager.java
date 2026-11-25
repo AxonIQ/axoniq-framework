@@ -12,11 +12,11 @@ import io.axoniq.framework.workflow.history.api.WorkflowHistory;
 import io.axoniq.framework.workflow.history.api.WorkflowHistoryRepository;
 import io.axoniq.framework.workflow.query.api.WorkflowStateQuery;
 import io.axoniq.framework.workflow.query.utils.WorkflowStateQueryMatcher;
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.framework.workflow.runtime.api.manager.NonUniqueWorkflowInstanceMatchException;
 import io.axoniq.framework.workflow.runtime.api.manager.WorkflowInstance;
 import io.axoniq.framework.workflow.runtime.api.manager.WorkflowInstances;
 import io.axoniq.framework.workflow.runtime.api.manager.WorkflowManager;
-import org.axonframework.common.Registration;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.jspecify.annotations.Nullable;
@@ -32,19 +32,49 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Flow;
 import java.util.concurrent.SubmissionPublisher;
-import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.Consumer;
-import java.util.function.Function;
-import java.util.function.Predicate;
-import java.util.function.Supplier;
+import java.util.function.BooleanSupplier;
 import java.util.stream.Stream;
 
 /**
- * Workflow Manager backed by the workflow history projection and live cancellation coordinators.
+ * Workflow Manager backed by the workflow history projection and the {@link LiveWorkflows live workflows} of its
+ * workflow module.
+ * <p>
+ * A workflow whose execution is in memory answers a query for itself. Every other workflow a query may match is sourced
+ * from the {@link WorkflowStore}, so the answer for a workflow that is not in memory is the event store's, never a
+ * projection that may still lag behind it. That includes the hibernated workflows, which are live, but have no
+ * execution in memory. A query sources only the hibernated workflows it may match: those it names, when it names
+ * workflow ids; otherwise those the history finds for it, or, when no history is projected, every hibernated workflow.
+ * <p>
+ * <b>Finding the live workflows.</b> {@link LiveWorkflows} holds one entry per live workflow, in memory or hibernated,
+ * in one map, which a query reads without a lock:
+ * <ul>
+ *     <li>A query that names workflow ids reads the entry of each of them.</li>
+ *     <li>A query that names none, on a module that projects no history, visits every entry once.</li>
+ *     <li>A query that names none, on a module that projects its history, lists the executions in memory that match
+ *     it, reads the entry of each workflow the history finds for it, and, when the engine may hibernate workflows,
+ *     lists the executions in memory once more.</li>
+ * </ul>
+ * An entry in memory answers with the state of its execution, and a hibernated one is sourced. Without hibernation,
+ * every live workflow is in memory, so a query for the live workflows that names no id, on a module that projects its
+ * history, only lists them.
+ * <p>
+ * The key of a live workflow never leaves the map: entering memory adds it, leaving memory or this node removes it,
+ * and every transition in between, hibernating, waking, or a restore that takes over a hibernation, replaces the entry
+ * in place. So reading the entry of a workflow that stays live finds it, in memory or hibernated, whenever the read
+ * runs, and visiting every entry visits it exactly once, as an iteration of a {@code ConcurrentHashMap} visits each key
+ * that stays in it exactly once. A query that names workflow ids, or runs on a module that projects no history,
+ * therefore never misses a workflow that hibernates, wakes, or hibernates and wakes while the query looks it up, and
+ * never finds it twice: each workflow is found by its identifier, and its state is kept once, so a workflow found in
+ * memory is not sourced as well.
+ * <p>
+ * A listing of the executions in memory misses a workflow that is hibernated as the listing passes it. A query that
+ * names no id, on a module that projects its history, finds that workflow by reading its entry when the history holds
+ * it, and by the second listing when it woke before that listing passed it. It misses a workflow only when the history
+ * does not hold it, as its projection lags behind, and the workflow is hibernated both as the first listing passes it
+ * and as the second one does. Finding such a workflow would take sourcing every hibernated workflow.
  *
  * @author Simon Zambrovski
  * @since 5.4.0
@@ -57,58 +87,44 @@ public class SimpleWorkflowManager implements WorkflowManager {
      */
     static final int MAX_CONCURRENT_SOURCING = 16;
     private final WorkflowHistoryRepository historyRepository;
-    private final WorkflowExecutionRepository executionRepository;
+    private final LiveWorkflows liveWorkflows;
     private final WorkflowCancellationService cancellationService;
     private final WorkflowStore workflowStore;
     private final UnitOfWorkFactory unitOfWorkFactory;
     private final Executor executor;
-    private final Supplier<Set<String>> hibernatedWorkflowIds;
-    private final Function<Consumer<String>, Registration> wakeListeners;
+    private final BooleanSupplier hibernationEnabled;
     private final boolean projectedHistory;
 
     /**
-     * Creates a Workflow Manager using a history projection and live cancellation delivery, for an engine that may
-     * hibernate workflows.
-     * <p>
-     * A hibernated workflow is live, but has no execution in memory: its state is sourced from the
-     * {@link WorkflowStore}, and a cancellation request wakes it. A query sources only the hibernated workflows it may
-     * match: those it names, when it names workflow ids; otherwise those the history finds for it, or, when no history
-     * is projected, every hibernated workflow. A query also learns of the workflows that wake while it looks them up,
-     * so it does not miss a workflow that wakes or hibernates while it lists the workflows.
+     * Creates a Workflow Manager using a history projection and the live workflows of a workflow module, which may
+     * hibernate.
      *
-     * @param historyRepository     repository containing projected workflow states
-     * @param executionRepository   repository containing live workflow executions
-     * @param cancellationService   service delivering cancellation requests to live workflows
-     * @param workflowStore         store the state of a workflow that is not in memory is sourced from
-     * @param unitOfWorkFactory     factory for the unit of work each such sourcing runs in
-     * @param executor              executor used for asynchronous manager operations
-     * @param hibernatedWorkflowIds supplies the identifiers of the workflows the engine hibernated at the moment it is
-     *                              called, which a query naming workflow ids or finding them in the history only
-     *                              checks those ids against
-     * @param wakeListeners         registers a listener that the engine tells the identifier of every workflow that
-     *                              wakes, and returns the registration that removes it again; a query registers one
-     *                              for as long as it looks up the hibernated workflows
-     * @param projectedHistory      whether the {@code historyRepository} is projected from the event store, so it
-     *                              finds the hibernated workflows a query matches, {@code false} when the module
-     *                              projects no history
+     * @param historyRepository   repository containing projected workflow states
+     * @param liveWorkflows       the workflows of the module that are live on this node, in memory or hibernated
+     * @param cancellationService service delivering cancellation requests to live workflows
+     * @param workflowStore       store the state of a workflow that is not in memory is sourced from
+     * @param unitOfWorkFactory   factory for the unit of work each such sourcing runs in
+     * @param executor            executor used for asynchronous manager operations
+     * @param hibernationEnabled  tells whether the engine of the module may hibernate workflows; without hibernation,
+     *                            every live workflow is in memory
+     * @param projectedHistory    whether the {@code historyRepository} is projected from the event store, so it finds
+     *                            the hibernated workflows a query matches, {@code false} when the module projects no
+     *                            history
      */
     public SimpleWorkflowManager(WorkflowHistoryRepository historyRepository,
-                                 WorkflowExecutionRepository executionRepository,
+                                 LiveWorkflows liveWorkflows,
                                  WorkflowCancellationService cancellationService,
                                  WorkflowStore workflowStore,
                                  UnitOfWorkFactory unitOfWorkFactory,
                                  Executor executor,
-                                 Supplier<Set<String>> hibernatedWorkflowIds,
-                                 Function<Consumer<String>, Registration> wakeListeners,
+                                 BooleanSupplier hibernationEnabled,
                                  boolean projectedHistory) {
-        this.hibernatedWorkflowIds = Objects.requireNonNull(hibernatedWorkflowIds,
-                                                            "The hibernated workflow ids must not be null.");
-        this.wakeListeners = Objects.requireNonNull(wakeListeners, "The wake listeners must not be null.");
+        this.hibernationEnabled = Objects.requireNonNull(hibernationEnabled,
+                                                         "The hibernation-enabled supplier must not be null.");
         this.projectedHistory = projectedHistory;
         this.historyRepository = Objects.requireNonNull(historyRepository,
                                                         "The WorkflowHistoryRepository must not be null.");
-        this.executionRepository = Objects.requireNonNull(executionRepository,
-                                                          "The WorkflowExecutionRepository must not be null.");
+        this.liveWorkflows = Objects.requireNonNull(liveWorkflows, "The LiveWorkflows must not be null.");
         this.cancellationService = Objects.requireNonNull(cancellationService,
                                                           "The WorkflowCancellationService must not be null.");
         this.workflowStore = Objects.requireNonNull(workflowStore, "The WorkflowStore must not be null.");
@@ -146,112 +162,79 @@ public class SimpleWorkflowManager implements WorkflowManager {
     }
 
     /**
-     * Resolves the states matching a query: live executions answer for themselves; every other candidate is sourced
-     * from the {@link WorkflowStore}, so the answer for an id that is no longer live is the event store's, never a
-     * projection that may still lag behind it.
-     * <p>
-     * Candidates for sourcing are the history matches that are not in memory, plus every workflow id the query names
-     * explicitly, so a workflow the projection has not seen yet is still found by id. Hibernated workflows are among
-     * those, unless no history is projected and the query names no workflow id: then every hibernated workflow is a
-     * candidate. A workflow that wakes while the query looks them up answers for itself while it is still in memory,
-     * and is a candidate otherwise. A sourced state is kept only when it exists and still matches the query.
+     * Resolves the states matching a query: those of the live workflows it matches, see the class documentation, and
+     * those of the workflows the history finds for it and of the workflows it names that are no longer in memory, which
+     * are sourced, so a workflow the projection has not seen yet is still found by id.
      */
     private CompletableFuture<List<WorkflowState>> matching(WorkflowStateQuery query) {
-        var named = explicitWorkflowIds(query).toList();
-        if (!named.isEmpty() || projectedHistory) {
-            return merged(query, named, false).thenCompose(merge -> resolve(query, merge, Set.of(), named, false));
-        }
-        var woken = ConcurrentHashMap.<String>newKeySet();
-        return whileListeningForWakes(woken::add, () -> merged(query, named, true))
-                .thenCompose(merge -> resolve(query, merge, woken, named, false));
+        return resolve(query, false);
     }
 
     /**
-     * Lists the executions in memory matching the query, and the candidates for sourcing: the history matches and the
-     * named ids, plus, when {@code everyHibernated}, the hibernated workflows, read before and after the executions in
-     * memory are listed, see {@link #hibernatedLookup(WorkflowStateQuery, List)}.
+     * Resolves the live workflows matching a query, see the class documentation: the executions in memory, and the
+     * hibernated workflows the query may match that, sourced, still match it and are not terminal.
      */
-    private CompletableFuture<Merge> merged(WorkflowStateQuery query, List<String> named, boolean everyHibernated) {
-        var hibernatedBefore = everyHibernated ? Set.copyOf(hibernatedWorkflowIds.get()) : Set.<String>of();
-        return executionRepository.findAll(query)
-                                  .thenCombine(historyRepository.findAll(query), (liveExecutions, history) -> {
-                                      var byId = new LinkedHashMap<String, WorkflowState>();
-                                      liveExecutions.forEach(e -> byId.putIfAbsent(e.state().workflowId(), e.state()));
-                                      var candidates = new LinkedHashSet<String>();
-                                      history.stream().map(WorkflowHistory::workflowId).forEach(candidates::add);
-                                      candidates.addAll(named);
-                                      if (everyHibernated) {
-                                          candidates.addAll(hibernatedBefore);
-                                          candidates.addAll(hibernatedWorkflowIds.get());
-                                      }
-                                      candidates.removeAll(byId.keySet());
-                                      return new Merge(byId, candidates);
-                                  });
+    private CompletableFuture<List<WorkflowState>> matchingLive(WorkflowStateQuery query) {
+        return resolve(query, true);
+    }
+
+    private CompletableFuture<List<WorkflowState>> resolve(WorkflowStateQuery query, boolean liveOnly) {
+        // Started inside a future, so a lookup that throws fails the query rather than escaping it.
+        return CompletableFuture.completedFuture(new Found(query, liveOnly))
+                                .thenCompose(this::lookUp)
+                                .thenCompose(this::sourced);
     }
 
     /**
-     * Completes the given merge into the states matching the query. A workflow that woke while the query looked up the
-     * hibernated workflows, and that the query names when it names workflow ids, answers for itself while it is still
-     * in memory, and is sourced like the other candidates otherwise. A state of such a workflow or of a sourced one is
-     * kept only when it matches the query and, for {@code live} results, is not terminal.
+     * Finds the workflows the query of the given lookup may match, see the class documentation.
      */
-    private CompletableFuture<List<WorkflowState>> resolve(WorkflowStateQuery query,
-                                                           Merge merge,
-                                                           Set<String> woken,
-                                                           List<String> named,
-                                                           boolean live) {
-        Predicate<WorkflowState> kept = state -> WorkflowStateQueryMatcher.matches(query, state)
-                && !(live && state.workflowStatus().isTerminal());
-        var byId = merge.byId();
-        var candidates = merge.candidates();
-        for (String workflowId : woken) {
-            if (byId.containsKey(workflowId) || candidates.contains(workflowId)
-                    || !(named.isEmpty() || named.contains(workflowId))) {
-                continue;
+    private CompletableFuture<Found> lookUp(Found found) {
+        var query = found.query;
+        var named = explicitWorkflowIds(query).distinct().toList();
+        if (!named.isEmpty() || !projectedHistory) {
+            if (!named.isEmpty()) {
+                named.forEach(found::read);
+            } else {
+                liveWorkflows.entries().forEach(found::visit);
             }
-            executionRepository.findById(workflowId).ifPresentOrElse(execution -> {
-                var state = execution.state();
-                if (kept.test(state)) {
-                    byId.put(workflowId, state);
-                }
-            }, () -> candidates.add(workflowId));
+            // A query for states also gets those of the workflows that are no longer live.
+            return found.liveOnly ? CompletableFuture.completedFuture(found) : withHistory(found);
         }
-        return sourceAll(List.copyOf(candidates)).thenApply(sourced -> {
-            for (WorkflowState state : sourced) {
-                if (kept.test(state)) {
-                    byId.putIfAbsent(state.workflowId(), state);
-                }
-            }
-            return List.copyOf(byId.values());
+        var listed = liveWorkflows.inMemory(query).thenApply(found::listed);
+        if (!hibernationEnabled.getAsBoolean()) {
+            // Every live workflow is in memory, so the listing finds them all.
+            return found.liveOnly ? listed : listed.thenCompose(this::withHistory);
+        }
+        // A workflow that was hibernated as the first listing passed it, and that the history does not hold yet, is
+        // found by the second listing once it woke.
+        return listed.thenCompose(this::withHistory)
+                     .thenCompose(lookup -> liveWorkflows.inMemory(query).thenApply(lookup::listed));
+    }
+
+    /**
+     * Reads the entries of the workflows the history finds for the query of the given lookup.
+     */
+    private CompletableFuture<Found> withHistory(Found found) {
+        return historyRepository.findAll(found.query).thenApply(matches -> {
+            matches.forEach(match -> found.read(match.workflowId()));
+            return found;
         });
     }
 
     /**
-     * Runs the given lookups while the given listener learns of every workflow that wakes, and removes the listener
-     * once they completed, normally or exceptionally, or failed to start. Any failure to register the listener or to
-     * start the lookups, {@link Error Errors} included, surfaces as a failed future. When removing the listener after
-     * the lookups failed to start fails as well, that failure is added as suppressed to the failure of the lookups.
+     * Sources the workflows the given lookup did not find in memory, and completes it into the states matching its
+     * query.
      */
-    private <T> CompletableFuture<T> whileListeningForWakes(Consumer<String> listener,
-                                                            Supplier<CompletableFuture<T>> lookups) {
-        Registration registration;
-        try {
-            registration = wakeListeners.apply(listener);
-        } catch (Throwable e) {
-            return CompletableFuture.failedFuture(e);
-        }
-        CompletableFuture<T> result;
-        try {
-            result = lookups.get();
-        } catch (Throwable e) {
-            try {
-                registration.cancel();
-            } catch (Throwable cancelFailure) {
-                e.addSuppressed(cancelFailure);
+    private CompletableFuture<List<WorkflowState>> sourced(Found found) {
+        found.toSource.removeAll(found.inMemory.keySet());
+        return sourceAll(List.copyOf(found.toSource)).thenApply(sourced -> {
+            for (WorkflowState state : sourced) {
+                if (found.keeps(state)) {
+                    found.inMemory.putIfAbsent(state.workflowId(), state);
+                }
             }
-            return CompletableFuture.failedFuture(e);
-        }
-        return result.whenComplete((ignored, error) -> registration.cancel());
+            return List.copyOf(found.inMemory.values());
+        });
     }
 
     /**
@@ -283,76 +266,6 @@ public class SimpleWorkflowManager implements WorkflowManager {
                                 .executeWithResult(context -> workflowStore.findWorkflow(workflowId, context));
     }
 
-    /**
-     * Resolves the live workflows matching a query: the executions in memory, plus the hibernated workflows the query
-     * may match and the workflows that wake while the query looks those up, that still match it and are not terminal.
-     */
-    private CompletableFuture<List<WorkflowState>> matchingLive(WorkflowStateQuery query) {
-        var named = explicitWorkflowIds(query).distinct().toList();
-        var hibernated = hibernatedLookup(query, named);
-        var woken = ConcurrentHashMap.<String>newKeySet();
-        return whileListeningForWakes(woken::add, () -> hibernated.get().thenCompose(
-                before -> executionRepository.findAll(query).thenCompose(
-                        executions -> hibernated.get().thenApply(after -> {
-                            var byId = new LinkedHashMap<String, WorkflowState>();
-                            executions.forEach(e -> byId.putIfAbsent(e.state().workflowId(), e.state()));
-                            var candidates = new LinkedHashSet<>(before);
-                            candidates.addAll(after);
-                            candidates.removeAll(byId.keySet());
-                            return new Merge(byId, candidates);
-                        })
-                )
-        )).thenCompose(merge -> resolve(query, merge, woken, named, true));
-    }
-
-    /**
-     * Returns a lookup of the hibernated workflows the given query may match: those it names, when it names workflow
-     * ids; otherwise those the history finds for it, or every hibernated workflow when no history is projected. Each
-     * lookup answers for the workflows hibernated at that moment. Only the last kind copies the identifiers of every
-     * hibernated workflow: the others check just the ids the query names or the history finds, and query the history
-     * at most once, and not at all while no workflow is hibernated.
-     * <p>
-     * A query looks up the hibernated workflows both before and after it lists the executions in memory, and listens
-     * for the workflows that wake from before the first lookup until after the second, so it does not miss a workflow
-     * that wakes or hibernates while it lists the workflows: a workflow that wakes enters memory before it leaves the
-     * hibernated ones, one that hibernates joins them before it leaves memory, and one that hibernates after the first
-     * lookup and wakes before the second reports its wake to the query.
-     */
-    private Supplier<CompletableFuture<Set<String>>> hibernatedLookup(WorkflowStateQuery query, List<String> named) {
-        if (!named.isEmpty()) {
-            return () -> CompletableFuture.completedFuture(hibernatedAmong(named));
-        }
-        if (!projectedHistory) {
-            return () -> CompletableFuture.completedFuture(Set.copyOf(hibernatedWorkflowIds.get()));
-        }
-        var history = new AtomicReference<@Nullable CompletableFuture<List<String>>>();
-        return () -> {
-            if (hibernatedWorkflowIds.get().isEmpty()) {
-                return CompletableFuture.completedFuture(Set.of());
-            }
-            var found = history.get();
-            if (found == null) {
-                found = historyRepository.findAll(query)
-                                         .thenApply(matches -> matches.stream()
-                                                                      .map(WorkflowHistory::workflowId)
-                                                                      .distinct()
-                                                                      .toList());
-                history.set(found);
-            }
-            return found.thenApply(this::hibernatedAmong);
-        };
-    }
-
-    /**
-     * Returns those of the given workflows that are hibernated, in the given order.
-     */
-    private Set<String> hibernatedAmong(List<String> workflowIds) {
-        var hibernated = hibernatedWorkflowIds.get();
-        var result = new LinkedHashSet<String>();
-        workflowIds.stream().filter(hibernated::contains).forEach(result::add);
-        return result;
-    }
-
     private CompletableFuture<Optional<WorkflowState>> singleMatch(WorkflowStateQuery query) {
         return matching(query).thenApply(matches -> {
             if (matches.size() > 1) {
@@ -369,8 +282,84 @@ public class SimpleWorkflowManager implements WorkflowManager {
         CompletableFuture<T> request();
     }
 
-    private record Merge(LinkedHashMap<String, WorkflowState> byId, LinkedHashSet<String> candidates) {
+    /**
+     * What a query found: the states of the workflows in memory it matches, which answer for themselves, and the
+     * workflows it sources from the {@link WorkflowStore}. Used by one query, on one thread at a time.
+     */
+    private final class Found {
 
+        private final WorkflowStateQuery query;
+        private final boolean liveOnly;
+        private final LinkedHashMap<String, WorkflowState> inMemory = new LinkedHashMap<>();
+        private final LinkedHashSet<String> toSource = new LinkedHashSet<>();
+
+        private Found(WorkflowStateQuery query, boolean liveOnly) {
+            this.query = query;
+            this.liveOnly = liveOnly;
+        }
+
+        /**
+         * Adds the executions in memory that a listing found for the query.
+         */
+        private Found listed(Set<WorkflowExecution> executions) {
+            executions.forEach(execution -> {
+                var state = execution.state();
+                inMemory.putIfAbsent(state.workflowId(), state);
+            });
+            return this;
+        }
+
+        /**
+         * Reads the entry of the given workflow. One in memory answers with its state when that matches the query, and
+         * a hibernated one is sourced. Unless only live workflows are resolved, so is one in memory whose state does
+         * not match, which the store answers for, and one that is not live.
+         */
+        private void read(String workflowId) {
+            if (inMemory.containsKey(workflowId)) {
+                return;
+            }
+            switch (liveWorkflows.get(workflowId)) {
+                case LiveWorkflows.InMemory entry -> {
+                    var state = entry.execution().state();
+                    if (WorkflowStateQueryMatcher.matches(query, state)) {
+                        inMemory.putIfAbsent(workflowId, state);
+                    } else if (!liveOnly) {
+                        toSource.add(workflowId);
+                    }
+                }
+                case LiveWorkflows.Hibernated ignored -> toSource.add(workflowId);
+                case null -> {
+                    if (!liveOnly) {
+                        toSource.add(workflowId);
+                    }
+                }
+            }
+        }
+
+        /**
+         * Visits an entry of every live workflow: one in memory answers with its state when that matches the query, and
+         * a hibernated one is sourced.
+         */
+        private void visit(LiveWorkflows.LiveWorkflow entry) {
+            switch (entry) {
+                case LiveWorkflows.InMemory inMemoryEntry -> {
+                    var state = inMemoryEntry.execution().state();
+                    if (WorkflowStateQueryMatcher.matches(query, state)) {
+                        inMemory.putIfAbsent(state.workflowId(), state);
+                    }
+                }
+                case LiveWorkflows.Hibernated hibernated -> toSource.add(hibernated.workflowId());
+            }
+        }
+
+        /**
+         * Returns whether the given sourced state is kept: it matches the query and, when only live workflows are
+         * resolved, is not terminal.
+         */
+        private boolean keeps(WorkflowState state) {
+            return WorkflowStateQueryMatcher.matches(query, state)
+                    && !(liveOnly && state.workflowStatus().isTerminal());
+        }
     }
 
     private final class SingleInstanceResult implements WorkflowInstances.Single {

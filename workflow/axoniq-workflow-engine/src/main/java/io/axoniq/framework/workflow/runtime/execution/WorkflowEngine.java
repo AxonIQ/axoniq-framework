@@ -15,7 +15,6 @@ import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecut
 import io.axoniq.framework.workflow.runtime.util.MetadataUtils;
 import io.axoniq.framework.workflow.runtime.util.ProcessingContextUtils;
 import io.axoniq.license.entitlement.EntitlementManager;
-import org.axonframework.common.Registration;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.configuration.ComponentNotFoundException;
 import org.axonframework.eventsourcing.eventstore.ConsistencyMarker;
@@ -258,33 +257,28 @@ public class WorkflowEngine implements
     }
 
     /**
+     * Returns whether this engine may hibernate workflows, as its workflow module enabled hibernation for it, see
+     * {@link #enableHibernation(WorkflowScheduler, Clock, Duration, Duration, Executor)}. Without hibernation, every
+     * live workflow of this engine is in memory.
+     *
+     * @return {@code true} when hibernation is enabled
+     */
+    @Internal
+    public boolean isHibernationEnabled() {
+        return hibernation != null;
+    }
+
+    /**
      * Returns the identifiers of the workflows this engine hibernated. They are live, but not in memory.
      * <p>
-     * The set is an unmodifiable view that follows the workflows that hibernate and wake; copy it for a snapshot.
-     * Checking whether a workflow is among them looks up that workflow only, while counting them, checking whether
-     * there are any, or iterating them visits the workflows live in this engine.
+     * Visits every workflow live in this engine.
      *
-     * @return a view of the identifiers of the hibernated workflows, or an empty set when hibernation is not enabled
+     * @return an unmodifiable snapshot of the identifiers of the hibernated workflows, or an empty set when hibernation
+     * is not enabled
      */
     @Internal
     public Set<String> hibernatedWorkflowIds() {
         return hibernation == null ? Set.of() : liveWorkflows.hibernatedWorkflowIds();
-    }
-
-    /**
-     * Registers a listener that every wake of a workflow this engine hibernated tells the identifier of that workflow,
-     * once the workflow is back in memory and before it leaves the {@link #hibernatedWorkflowIds() hibernated ones}.
-     * <p>
-     * A lookup that checks the hibernated workflows both before and after it lists the executions in memory, as the
-     * {@link SimpleWorkflowManager} does, registers one for its duration, so it also learns of a workflow that
-     * hibernates after the first check and wakes before the second.
-     *
-     * @param listener the listener to tell the identifier of each workflow that wakes, on the thread that wakes it
-     * @return the registration that removes the listener again
-     */
-    @Internal
-    public Registration onWake(Consumer<String> listener) {
-        return liveWorkflows.onWake(listener);
     }
 
     @Override
@@ -845,38 +839,36 @@ public class WorkflowEngine implements
                                                         ProcessingContext executionContext,
                                                         @Nullable ConsistencyMarker restoredAt) {
         var execution = executionOf(workflowId, state, executionContext);
-        var support = hibernation;
-        if (support == null) {
-            return enterRestored(claim, workflowId, execution, restoredAt, () -> {
-            });
+        if (hibernation == null) {
+            return enterRestored(claim, workflowId, execution, restoredAt);
         }
-        // Under the lock of the workflow, so it cannot hibernate or be adopted between taking its hibernation by
-        // another claim out of the way and entering memory.
+        // Under the lock of the workflow, so it cannot hibernate, wake or be adopted while it enters memory.
         try (var ignored = liveWorkflows.lock(workflowId)) {
-            return enterRestored(claim, workflowId, execution, restoredAt,
-                                 () -> support.yieldToRestore(claim, workflowId));
+            return enterRestored(claim, workflowId, execution, restoredAt);
         }
     }
 
     /**
-     * Brings the given restored execution into memory under the given claim, unless that claim is no longer current,
-     * after running the given action under the lock of the claim.
+     * Brings the given restored execution into memory under the given claim, unless that claim is no longer current:
+     * in place of a hibernation of the workflow under another claim, if any, see
+     * {@link WorkflowEngineHibernationSupport#restoreOver(SegmentClaim, LiveWorkflows.Hibernated, WorkflowExecution,
+     * boolean)}. With hibernation, the caller holds the lock of the workflow.
      *
-     * @param beforeEnter takes a hibernation of the workflow under another claim out of the way, only while the claim
-     *                    is current, so a restore that outlives its claim leaves the other claim's workflow alone
      * @return the restored execution, or empty when the claim failed or ended meanwhile
      */
     private Optional<WorkflowExecution> enterRestored(SegmentClaim claim,
                                                       String workflowId,
                                                       WorkflowExecution execution,
-                                                      @Nullable ConsistencyMarker restoredAt,
-                                                      Runnable beforeEnter) {
+                                                      @Nullable ConsistencyMarker restoredAt) {
         // Only while the claim is current: an instance that finishes restoring after its claim failed or the segment
-        // was released would otherwise stay behind, and run from the state it sourced back then.
+        // was released would otherwise stay behind, and run from the state it sourced back then. A restore that
+        // outlives its claim also leaves a hibernation of the workflow under another claim alone.
         boolean added = claim.runWhileCurrent(() -> {
-            beforeEnter.run();
-            var storedExecution = liveWorkflows.enter(workflowId, mayHibernate(claim), () -> execution);
-            if (storedExecution != execution) {
+            var support = hibernation;
+            boolean restoredOver = support != null
+                    && liveWorkflows.get(workflowId) instanceof LiveWorkflows.Hibernated hibernated
+                    && support.restoreOver(claim, hibernated, execution, mayHibernate(claim));
+            if (!restoredOver && liveWorkflows.enter(workflowId, mayHibernate(claim), () -> execution) != execution) {
                 // A claim drops what earlier claims of its segment left behind, so only a concurrent restore of the
                 // instance gets here. Never adopt its execution: moving the append position of that execution to this
                 // read would let it run from its own, older state.

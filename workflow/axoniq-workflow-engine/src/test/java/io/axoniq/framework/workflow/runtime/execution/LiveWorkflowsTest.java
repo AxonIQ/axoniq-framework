@@ -573,21 +573,68 @@ class LiveWorkflowsTest {
         }
 
         @Test
-        void aWakeTellsTheWakeListenersOnceTheWorkflowIsInTheRepositoryAndBeforeItIsNoLongerHibernated() {
-            // given
-            var hibernated = awaitingPayment(WORKFLOW_ID, "1");
-            adopt(hibernated);
-            var seen = new ArrayList<String>();
-            liveWorkflows.onWake(workflowId -> seen.add(
-                    workflowId + " stored=" + repository.findById(workflowId).isPresent()
-                            + " hibernated=" + liveWorkflows.isHibernated(workflowId)
-            ));
+        void everyVisitOfTheEntriesFindsAWorkflowThatKeepsHibernatingAndWakingExactlyOnce()
+                throws InterruptedException {
+            // given - a workflow that hibernates and wakes on another thread, over and over, next to one that stays
+            var execution = new InspectionCountingWorkflowExecution(WORKFLOW_ID);
+            liveWorkflows.enter(WORKFLOW_ID, true, () -> execution);
+            liveWorkflows.enter(OTHER_ID, false, () -> new InspectionCountingWorkflowExecution(OTHER_ID));
+            var stop = new AtomicBoolean();
+            var swaps = new AtomicInteger();
+            var swapper = Thread.ofPlatform().start(() -> {
+                WorkflowExecution inMemory = execution;
+                while (!stop.get()) {
+                    var hibernated = awaitingPayment(WORKFLOW_ID, "1");
+                    assertThat(hibernate(inMemory, hibernated)).isTrue();
+                    inMemory = new InspectionCountingWorkflowExecution(WORKFLOW_ID);
+                    assertThat(wake(hibernated, inMemory)).isTrue();
+                    swaps.incrementAndGet();
+                }
+            });
 
-            // when
-            wake(hibernated, new InspectionCountingWorkflowExecution(WORKFLOW_ID));
+            // when - the entries are visited while it swaps
+            var found = new ArrayList<Long>();
+            long deadline = System.nanoTime() + TIMEOUT.toNanos();
+            try {
+                while (swaps.get() < 500 && System.nanoTime() < deadline) {
+                    found.add(liveWorkflows.entries().filter(entry -> entry.workflowId().equals(WORKFLOW_ID)).count());
+                }
+            } finally {
+                stop.set(true);
+                swapper.join(TIMEOUT);
+            }
 
             // then
-            assertThat(seen).containsExactly(WORKFLOW_ID + " stored=true hibernated=true");
+            assertThat(swaps).hasValueGreaterThanOrEqualTo(500);
+            assertThat(found).isNotEmpty().containsOnly(1L);
+        }
+
+        @Test
+        void aRestoreTakesOverTheHibernationInPlaceAndForgetsItsWaits() {
+            // given - a hibernation under another claim than the one that restored the workflow
+            var hibernated = awaitingPayment(WORKFLOW_ID, "1");
+            adopt(hibernated);
+            var restored = new InspectionCountingWorkflowExecution(WORKFLOW_ID);
+
+            // when
+            boolean restoredNow;
+            try (var ignored = liveWorkflows.lock(WORKFLOW_ID)) {
+                restoredNow = liveWorkflows.restoreOver(hibernated, restored, false);
+            }
+
+            // then
+            assertThat(restoredNow).isTrue();
+            assertThat(liveWorkflows.find(WORKFLOW_ID)).containsSame(restored);
+            assertThat(repository.findById(WORKFLOW_ID)).containsSame(restored);
+            assertThat(liveWorkflows.hibernatedWorkflowIds()).isEmpty();
+            assertThat(restored.checkpointWorkStateListener())
+                    .as("a restored execution reports its safe points")
+                    .isNotNull();
+            // and an awaited event reaches it in memory, without waking it
+            var event = paid("1");
+            liveWorkflows.broadcast(SEGMENT, event, new StubProcessingContext());
+            assertThat(restored.deliveredEvents()).containsExactly(event);
+            assertThat(loads).isEmpty();
         }
 
         @Test

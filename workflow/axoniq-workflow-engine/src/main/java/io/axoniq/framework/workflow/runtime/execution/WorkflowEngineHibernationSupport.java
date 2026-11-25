@@ -346,29 +346,34 @@ final class WorkflowEngineHibernationSupport {
     }
 
     /**
-     * Takes a hibernation of the given workflow under another claim out of the way of the given claim, which restores
-     * the workflow: the restore wins, and the hibernation is forgotten like one of a released segment. Only a claim of
-     * an overlapping segment, while a split or a merge is in progress, holds a workflow hibernated that another claim
-     * restores. The caller holds the lock of the workflow, and the lock of the restoring claim while it is current;
-     * forgetting the hibernation takes no lock of a workflow or a claim.
+     * Brings the given execution, which the given claim restored, into memory in place of the given hibernation of the
+     * workflow under another claim: the restore wins, and the hibernation is forgotten like one of a released segment,
+     * see {@link LiveWorkflows#restoreOver(Hibernated, WorkflowExecution, boolean)}. Only a claim of an overlapping
+     * segment, while a split or a merge is in progress, holds a workflow hibernated that another claim restores. The
+     * caller holds the lock of the workflow, and the lock of the restoring claim while it is current.
      *
-     * @param claim      the claim restoring the workflow
-     * @param workflowId the identifier of the workflow
+     * @param claim        the claim restoring the workflow
+     * @param hibernated   the hibernation of the workflow
+     * @param execution    the execution the claim restored
+     * @param mayHibernate whether the execution may hibernate
+     * @return {@code false} when the hibernation is no longer the workflow's entry, so the execution did not enter
      * @throws IllegalStateException when the workflow is hibernated under the restoring claim itself, which restores
      *                               only the workflows it did not adopt
      */
-    void yieldToRestore(SegmentClaim claim, String workflowId) {
-        if (!(liveWorkflows.get(workflowId) instanceof Hibernated hibernated)) {
-            return;
-        }
+    boolean restoreOver(SegmentClaim claim, Hibernated hibernated, WorkflowExecution execution, boolean mayHibernate) {
+        var workflowId = hibernated.workflowId();
         if (hibernated.claim() == claim) {
             throw new IllegalStateException(
                     "Workflow '%s' is hibernated under the claim that restores it.".formatted(workflowId)
             );
         }
-        forget(hibernated);
-        logger.debug("Forgot hibernated workflow [{}] of segment {}, as a claim of segment {} restores it.",
+        if (!liveWorkflows.restoreOver(hibernated, execution, mayHibernate)) {
+            return false;
+        }
+        release(hibernated);
+        logger.debug("Forgot hibernated workflow [{}] of segment {}, as a claim of segment {} restored it.",
                      workflowId, hibernated.claim().segment().getSegmentId(), claim.segment().getSegmentId());
+        return true;
     }
 
     /**

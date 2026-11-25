@@ -26,10 +26,10 @@ import java.util.function.Consumer;
 import java.util.function.Predicate;
 
 /**
- * A running {@link WorkflowExecution} that only knows its workflow id, counts every time anyone inspects it, and
- * records the events delivered to it and the checkpoint work state listener registered on it. Any other interaction
- * fails, so a test notices when the code under test does more with it than inspecting it, delivering an event, or
- * listening to its safe points.
+ * A running {@link WorkflowExecution} that only knows its workflow id, and its state when given one, counts every time
+ * anyone inspects it, and records the events delivered to it and the checkpoint work state listener registered on it.
+ * Any other interaction fails, so a test notices when the code under test does more with it than inspecting it, reading
+ * the state it was given, delivering an event, or listening to its safe points.
  *
  * @author Allard Buijze
  */
@@ -40,9 +40,18 @@ final class InspectionCountingWorkflowExecution implements WorkflowExecution {
     private final List<EventMessage> deliveredEvents = new CopyOnWriteArrayList<>();
     private final List<Consumer<WorkflowExecution>> appendedTasks = new CopyOnWriteArrayList<>();
     private volatile @Nullable CheckpointWorkStateListener checkpointWorkStateListener;
+    private final @Nullable WorkflowState state;
 
     InspectionCountingWorkflowExecution(String workflowId) {
+        this(workflowId, null);
+    }
+
+    /**
+     * Creates an execution of the given workflow that answers with the given state, for a test that reads it.
+     */
+    InspectionCountingWorkflowExecution(String workflowId, @Nullable WorkflowState state) {
         this.workflowId = workflowId;
+        this.state = state;
     }
 
     /**
@@ -159,7 +168,10 @@ final class InspectionCountingWorkflowExecution implements WorkflowExecution {
 
     @Override
     public WorkflowState state() {
-        throw unexpected();
+        if (state == null) {
+            throw unexpected();
+        }
+        return state;
     }
 
     @Override

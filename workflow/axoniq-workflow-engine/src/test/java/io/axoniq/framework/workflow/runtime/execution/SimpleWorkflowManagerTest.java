@@ -9,6 +9,8 @@ package io.axoniq.framework.workflow.runtime.execution;
 
 import io.axoniq.framework.workflow.history.api.WorkflowHistory;
 import io.axoniq.framework.workflow.history.api.WorkflowHistoryRepository;
+import io.axoniq.framework.workflow.index.api.WorkflowIndex;
+import io.axoniq.framework.workflow.index.api.WorkflowIndex.HibernationHint;
 import io.axoniq.framework.workflow.query.api.WorkflowStateQuery;
 import io.axoniq.framework.workflow.query.utils.WorkflowStateQueryMatcher;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
@@ -23,21 +25,24 @@ import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.SimpleUnitOfWorkFactory;
 import org.axonframework.messaging.core.unitofwork.StubProcessingContext;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
-import org.jspecify.annotations.Nullable;
+import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 import org.junit.jupiter.api.*;
 import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscriber;
 import org.reactivestreams.Subscription;
 
+import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Supplier;
+import java.util.function.BooleanSupplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -111,16 +116,14 @@ class SimpleWorkflowManagerTest {
 
     @Test
     void forwardsCancellationRequestsForALiveSingleInstance() {
-        var executions = new InMemoryWorkflowExecutionRepository();
-        var liveWorkflows = new LiveWorkflows(executions);
+        var liveWorkflows = new LiveWorkflows(new InMemoryWorkflowExecutionRepository());
         var cancellation = mock(WorkflowCancellation.class);
         enterCancellable(liveWorkflows, execution("order-42", "PaymentWorkflow", cancellation));
-        var cancellations = new WorkflowCancellationService(liveWorkflows);
         when(cancellation.requestStepCancellation("reserve-funds", null))
                 .thenReturn(CompletableFuture.completedFuture(true));
         when(cancellation.requestCancellationOfAllSteps(null)).thenReturn(CompletableFuture.completedFuture(2));
         when(cancellation.requestWorkflowCancellation(null)).thenReturn(CompletableFuture.completedFuture(null));
-        var manager = manager(history(), executions, cancellations);
+        var manager = manager(history(), liveWorkflows);
 
         var instance = manager.findOne(WorkflowStateQuery.byWorkflowId("order-42"));
 
@@ -134,14 +137,12 @@ class SimpleWorkflowManagerTest {
 
     @Test
     void aggregatesCancellationRequestsForEveryMatchingLiveInstance() {
-        var executions = new InMemoryWorkflowExecutionRepository();
-        var liveWorkflows = new LiveWorkflows(executions);
+        var liveWorkflows = new LiveWorkflows(new InMemoryWorkflowExecutionRepository());
         var firstCancellation = cancellation(false, 2);
         var secondCancellation = cancellation(true, 3);
         enterCancellable(liveWorkflows, execution("order-42", "PaymentWorkflow", firstCancellation));
         enterCancellable(liveWorkflows, execution("order-43", "PaymentWorkflow", secondCancellation));
-        var cancellations = new WorkflowCancellationService(liveWorkflows);
-        var manager = manager(history(), executions, cancellations);
+        var manager = manager(history(), liveWorkflows);
 
         var instances = manager.findMany(WorkflowStateQuery.byWorkflowDefinitionId(
                 VersionedType.of("PaymentWorkflow", "1.0")
@@ -189,11 +190,10 @@ class SimpleWorkflowManagerTest {
                             null,
                             false,
                             StubProcessingContext.forMessage(liveEvent));
-        WorkflowExecution execution = mock(WorkflowExecution.class);
-        when(execution.state()).thenReturn(liveState);
-        var executions = new InMemoryWorkflowExecutionRepository();
-        executions.save("order-42", () -> execution);
-        var manager = manager(history(new WorkflowHistory("order-42", historicalState)), executions);
+        var execution = new InspectionCountingWorkflowExecution("order-42", liveState);
+        var liveWorkflows = new LiveWorkflows(new InMemoryWorkflowExecutionRepository());
+        liveWorkflows.enter("order-42", false, () -> execution);
+        var manager = manager(history(new WorkflowHistory("order-42", historicalState)), liveWorkflows);
 
         var detachedState = manager.findOne(WorkflowStateQuery.all().workflowId("order-42"))
                                    .singleState()
@@ -229,153 +229,240 @@ class SimpleWorkflowManagerTest {
         assertThat(instance.state().join().workflowId()).isEqualTo("order-42");
     }
 
+    @Test
+    void failsAQueryWhoseHistoryLookupFails() {
+        // given - a history whose lookup fails
+        var failingHistory = new WorkflowHistoryRepository() {
+            @Override
+            public CompletableFuture<List<WorkflowHistory>> findAll(WorkflowStateQuery query) {
+                return CompletableFuture.failedFuture(new IllegalStateException("history unavailable"));
+            }
+
+            @Override
+            public CompletableFuture<Optional<WorkflowHistory>> findById(String workflowId) {
+                return CompletableFuture.completedFuture(Optional.empty());
+            }
+        };
+        var manager = manager(failingHistory);
+
+        // when
+        var size = manager.findMany(WorkflowStateQuery.all()).size();
+
+        // then
+        assertThat(size).failsWithin(Duration.ofSeconds(5))
+                        .withThrowableThat()
+                        .withRootCauseInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    void failsEveryOperationOfAQueryWhoseLookupThrows() {
+        // given - a store of the executions in memory whose listing throws, rather than returning a failed future
+        var throwing = new InMemoryWorkflowExecutionRepository() {
+            @Override
+            public CompletableFuture<Set<WorkflowExecution>> findAll(WorkflowStateQuery query) {
+                throw new IllegalStateException("executions unavailable");
+            }
+        };
+        var instances = manager(history(), new LiveWorkflows(throwing)).findMany(WorkflowStateQuery.all());
+
+        // when
+        var size = instances.size();
+        var cancellation = instances.requestWorkflowCancellation(null);
+        var published = first(instances.instances());
+
+        // then - each fails, and a subscriber of the instances is told so
+        assertThat(size).failsWithin(Duration.ofSeconds(5))
+                        .withThrowableThat()
+                        .withRootCauseInstanceOf(IllegalStateException.class);
+        assertThat(cancellation).failsWithin(Duration.ofSeconds(5))
+                                .withThrowableThat()
+                                .withRootCauseInstanceOf(IllegalStateException.class);
+        assertThat(published).failsWithin(Duration.ofSeconds(5))
+                             .withThrowableThat()
+                             .withRootCauseInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    void asksTheHistoryForTheLiveWorkflowsOnlyWhenTheEngineMayHibernate() {
+        // given - a projected history that counts the queries it answers
+        var queries = new AtomicInteger();
+        var entries = history(new WorkflowHistory("order-42", state("order-42", "PaymentWorkflow")));
+        var countingHistory = new WorkflowHistoryRepository() {
+            @Override
+            public CompletableFuture<List<WorkflowHistory>> findAll(WorkflowStateQuery query) {
+                queries.incrementAndGet();
+                return entries.findAll(query);
+            }
+
+            @Override
+            public CompletableFuture<Optional<WorkflowHistory>> findById(String workflowId) {
+                return entries.findById(workflowId);
+            }
+        };
+        var liveWorkflows = new LiveWorkflows(new InMemoryWorkflowExecutionRepository());
+        var store = storeMirroring(entries, new CopyOnWriteArrayList<>());
+        var withoutHibernation = manager(countingHistory, liveWorkflows, store, () -> false, true);
+        var withHibernation = manager(countingHistory, liveWorkflows, store, () -> true, true);
+        var query = WorkflowStateQuery.byWorkflowDefinitionId(VersionedType.of("PaymentWorkflow", "1.0"));
+
+        // when - without hibernation, every live workflow is in memory
+        var cancelledWithout = withoutHibernation.findMany(query).requestWorkflowCancellation(null);
+
+        // then
+        assertThat(cancelledWithout).succeedsWithin(Duration.ofSeconds(5));
+        assertThat(queries).hasValue(0);
+
+        // when - with hibernation, the history finds the hibernated ones
+        var cancelledWith = withHibernation.findMany(query).requestWorkflowCancellation(null);
+
+        // then
+        assertThat(cancelledWith).succeedsWithin(Duration.ofSeconds(5));
+        assertThat(queries).hasValue(1);
+    }
+
     /**
-     * A query that names no workflow id, on a module that projects no history, listens for the workflows that wake
-     * while it looks up the hibernated workflows.
+     * A hibernated workflow is live, but has no execution in memory: a query sources its state from the store.
      */
     @Nested
-    class WakeListenerOfAQueryForEveryHibernatedWorkflow {
+    class HibernatedWorkflow {
 
-        private final AtomicInteger registrations = new AtomicInteger();
-        private final AtomicInteger registeredListeners = new AtomicInteger();
-        // The failure that removing a listener throws, if any.
-        private @Nullable RuntimeException removalFailure;
+        private final LiveWorkflows liveWorkflows = new LiveWorkflows(new InMemoryWorkflowExecutionRepository());
+        private final List<String> sourced = new CopyOnWriteArrayList<>();
+        private final SegmentClaim claim = claimOfEverySegment();
+        private final WorkflowEngineHibernationSupport support = new WorkflowEngineHibernationSupport(
+                new ControllableWorkflowScheduler(),
+                Clock.systemUTC(),
+                liveWorkflows,
+                new RunningWorkflowsProjection(WorkflowIndex.none(), "orders"),
+                (hibernated, beforeStart) -> {
+                    throw new UnsupportedOperationException("A query does not wake a workflow.");
+                },
+                Duration.ofMinutes(1),
+                Runnable::run
+        );
 
+        private static SegmentClaim claimOfEverySegment() {
+            var segmentClaims = new SegmentClaims((segment, phase) -> {
+            });
+            segmentClaims.initialize(null);
+            return segmentClaims.startClaim(Segment.ROOT_SEGMENT, new StubProcessingContext());
+        }
+
+        /**
+         * Leaves the given workflow hibernated, as a claim of its segment does with one it finds a hint of.
+         */
+        private void hibernated(String workflowId) {
+            var hint = new HibernationHint(Instant.now().plus(Duration.ofHours(1)), List.of());
+            var hibernated = support.hibernationOf(claim, workflowId, hint, CompletableFuture.completedFuture(null));
+            try (var ignored = liveWorkflows.lock(workflowId)) {
+                assertThat(liveWorkflows.adopt(hibernated)).isTrue();
+            }
+        }
+
+        /**
+         * Returns a manager whose store holds the given durable states, and records the workflows it sources.
+         */
         private SimpleWorkflowManager manager(WorkflowHistoryRepository history,
-                                              Supplier<Set<String>> hibernatedWorkflowIds) {
-            return new SimpleWorkflowManager(history,
-                                             new InMemoryWorkflowExecutionRepository(),
-                                             new WorkflowCancellationService(
-                                                     new LiveWorkflows(new InMemoryWorkflowExecutionRepository())
-                                             ),
-                                             storeMirroring(history),
-                                             new SimpleUnitOfWorkFactory(EmptyApplicationContext.INSTANCE),
-                                             Runnable::run,
-                                             hibernatedWorkflowIds,
-                                             listener -> {
-                                                 registrations.incrementAndGet();
-                                                 registeredListeners.incrementAndGet();
-                                                 return () -> {
-                                                     registeredListeners.decrementAndGet();
-                                                     if (removalFailure != null) {
-                                                         throw removalFailure;
-                                                     }
-                                                     return true;
-                                                 };
-                                             },
-                                             false);
+                                              WorkflowHistoryRepository durable,
+                                              boolean projectedHistory) {
+            return SimpleWorkflowManagerTest.manager(history,
+                                                     liveWorkflows,
+                                                     storeMirroring(durable, sourced),
+                                                     () -> true,
+                                                     projectedHistory);
         }
 
         @Test
-        void isRemovedOnceTheQuerySucceeded() {
+        void isSourcedWhenAQueryNamesItById() {
+            // given - a history that does not hold it yet
+            var durable = history(new WorkflowHistory("order-42", state("order-42", "PaymentWorkflow")));
+            hibernated("order-42");
+            var manager = manager(history(), durable, true);
+
+            // when
+            var state = manager.findOne(WorkflowStateQuery.byWorkflowId("order-42")).singleState();
+
+            // then
+            assertThat(state).succeedsWithin(Duration.ofSeconds(5))
+                             .extracting(WorkflowState::workflowId)
+                             .isEqualTo("order-42");
+            assertThat(sourced).containsExactly("order-42");
+        }
+
+        @Test
+        void isCountedAmongTheWorkflowsInMemoryByAQueryWithoutHistory() {
             // given
+            var durable = history(new WorkflowHistory("order-42", state("order-42", "PaymentWorkflow")),
+                                  new WorkflowHistory("order-43", state("order-43", "PaymentWorkflow")),
+                                  new WorkflowHistory("order-44", state("order-44", "ShippingWorkflow")));
+            hibernated("order-42");
+            hibernated("order-43");
+            hibernated("order-44");
+            var inMemory = new InspectionCountingWorkflowExecution("order-45", state("order-45", "PaymentWorkflow"));
+            liveWorkflows.enter("order-45", false, () -> inMemory);
+            var manager = manager(history(), durable, false);
+
+            // when
+            var count = manager.findMany(WorkflowStateQuery.byWorkflowDefinitionId(
+                    VersionedType.of("PaymentWorkflow", "1.0")
+            )).size();
+
+            // then - the workflow in memory answers for itself
+            assertThat(count).succeedsWithin(Duration.ofSeconds(5)).isEqualTo(3);
+            assertThat(sourced).containsExactlyInAnyOrder("order-42", "order-43", "order-44");
+        }
+
+        @Test
+        void isFoundByAQueryNamingNoIdOnlyOnceTheHistoryHoldsIt() {
+            // given - a history whose projection did not see the start of order-43 yet
+            var durable = history(new WorkflowHistory("order-42", state("order-42", "PaymentWorkflow")),
+                                  new WorkflowHistory("order-43", state("order-43", "PaymentWorkflow")));
+            hibernated("order-42");
+            hibernated("order-43");
             var manager = manager(history(new WorkflowHistory("order-42", state("order-42", "PaymentWorkflow"))),
-                                  Set::of);
+                                  durable,
+                                  true);
 
             // when
-            var size = manager.findMany(WorkflowStateQuery.all()).size();
+            var count = manager.findMany(WorkflowStateQuery.byWorkflowDefinitionId(
+                    VersionedType.of("PaymentWorkflow", "1.0")
+            )).size();
 
-            // then
-            assertThat(size).succeedsWithin(Duration.ofSeconds(5)).isEqualTo(1);
-            assertThat(registrations).hasValue(1);
-            assertThat(registeredListeners).hasValue(0);
-        }
-
-        @Test
-        void isRemovedOnceTheLookupsFailed() {
-            // given - a history whose lookup fails
-            var failingHistory = new WorkflowHistoryRepository() {
-                @Override
-                public CompletableFuture<List<WorkflowHistory>> findAll(WorkflowStateQuery query) {
-                    return CompletableFuture.failedFuture(new IllegalStateException("history unavailable"));
-                }
-
-                @Override
-                public CompletableFuture<Optional<WorkflowHistory>> findById(String workflowId) {
-                    return CompletableFuture.completedFuture(Optional.empty());
-                }
-            };
-            var manager = manager(failingHistory, Set::of);
-
-            // when
-            var size = manager.findMany(WorkflowStateQuery.all()).size();
-
-            // then
-            assertThat(size).failsWithin(Duration.ofSeconds(5));
-            assertThat(registrations).hasValue(1);
-            assertThat(registeredListeners).hasValue(0);
-        }
-
-        @Test
-        void isRemovedWhenStartingTheLookupsThrowsAnError() {
-            // given - reading the hibernated workflows, the first lookup, throws an error
-            var manager = manager(history(), () -> {
-                throw new AssertionError("cannot read the hibernated workflows");
-            });
-
-            // when
-            var size = manager.findMany(WorkflowStateQuery.all()).size();
-
-            // then - the error fails the query, rather than escaping it
-            assertThat(size).failsWithin(Duration.ofSeconds(5))
-                            .withThrowableThat()
-                            .withRootCauseInstanceOf(AssertionError.class);
-            assertThat(registrations).hasValue(1);
-            assertThat(registeredListeners).hasValue(0);
-        }
-
-        @Test
-        void keepsTheErrorOfStartingTheLookupsWhenRemovingItFails() {
-            // given - reading the hibernated workflows, the first lookup, throws an error, and so does removing the
-            // listener after that
-            var failedRemoval = new IllegalStateException("cannot remove the listener");
-            removalFailure = failedRemoval;
-            var manager = manager(history(), () -> {
-                throw new AssertionError("cannot read the hibernated workflows");
-            });
-
-            // when
-            var size = manager.findMany(WorkflowStateQuery.all()).size();
-
-            // then - the error fails the query, carrying the failed removal, rather than the removal escaping it
-            assertThat(size).failsWithin(Duration.ofSeconds(5))
-                            .withThrowableThat()
-                            .havingRootCause()
-                            .isInstanceOf(AssertionError.class)
-                            .satisfies(error -> assertThat(error.getSuppressed()).containsExactly(failedRemoval));
-            assertThat(registrations).hasValue(1);
-            assertThat(registeredListeners).hasValue(0);
+            // then - the query sources only the hibernated workflows the history finds
+            assertThat(count).succeedsWithin(Duration.ofSeconds(5)).isEqualTo(1);
+            assertThat(sourced).containsExactly("order-42");
         }
     }
 
     private static SimpleWorkflowManager manager(WorkflowHistoryRepository history) {
-        return manager(history, new InMemoryWorkflowExecutionRepository());
+        return manager(history, new LiveWorkflows(new InMemoryWorkflowExecutionRepository()));
+    }
+
+    private static SimpleWorkflowManager manager(WorkflowHistoryRepository history, LiveWorkflows liveWorkflows) {
+        return manager(history, liveWorkflows, storeMirroring(history, new CopyOnWriteArrayList<>()), () -> true, true);
     }
 
     private static SimpleWorkflowManager manager(WorkflowHistoryRepository history,
-                                                 WorkflowExecutionRepository executions) {
-        return manager(history, executions, new WorkflowCancellationService(new LiveWorkflows(executions)));
-    }
-
-    private static SimpleWorkflowManager manager(WorkflowHistoryRepository history,
-                                                 WorkflowExecutionRepository executions,
-                                                 WorkflowCancellationService cancellations) {
+                                                 LiveWorkflows liveWorkflows,
+                                                 WorkflowStore store,
+                                                 BooleanSupplier hibernationEnabled,
+                                                 boolean projectedHistory) {
         return new SimpleWorkflowManager(history,
-                                         executions,
-                                         cancellations,
-                                         storeMirroring(history),
+                                         liveWorkflows,
+                                         new WorkflowCancellationService(liveWorkflows),
+                                         store,
                                          new SimpleUnitOfWorkFactory(EmptyApplicationContext.INSTANCE),
                                          Runnable::run,
-                                         Set::of,
-                                         listener -> () -> true,
-                                         true);
+                                         hibernationEnabled,
+                                         projectedHistory);
     }
 
     /**
      * A store that answers what the history projection holds, and an empty state for anything else — the shape of a
      * store whose projection is fully caught up, so the tests keep judging the merge rules rather than the sourcing.
+     * Records the workflows it sources in the given list.
      */
-    private static WorkflowStore storeMirroring(WorkflowHistoryRepository history) {
+    private static WorkflowStore storeMirroring(WorkflowHistoryRepository history, List<String> sourced) {
         return new WorkflowStore() {
             @Override
             public CompletableFuture<RunningWorkflows> loadRunningWorkflows(ProcessingContext processingContext) {
@@ -392,6 +479,7 @@ class SimpleWorkflowManagerTest {
             @Override
             public CompletableFuture<Optional<WorkflowState>> findWorkflow(String workflowId,
                                                                            ProcessingContext processingContext) {
+                sourced.add(workflowId);
                 return history.findById(workflowId).thenApply(entry -> entry.map(WorkflowHistory::state));
             }
         };

@@ -20,6 +20,9 @@ import io.axoniq.framework.workflow.dsl.api.WorkflowState;
 import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
 import io.axoniq.framework.workflow.dsl.api.retry.BackoffStrategy;
 import io.axoniq.framework.workflow.dsl.api.retry.RetryPolicy;
+import io.axoniq.framework.workflow.history.api.WorkflowHistory;
+import io.axoniq.framework.workflow.history.inmemory.InMemoryWorkflowHistoryRepository;
+import io.axoniq.framework.workflow.history.inmemory.MutableWorkflowHistoryRepository;
 import io.axoniq.framework.workflow.index.api.WorkflowIndex;
 import io.axoniq.framework.workflow.index.inmemory.InMemoryWorkflowIndex;
 import io.axoniq.framework.workflow.query.api.WorkflowStateQuery;
@@ -92,10 +95,12 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiPredicate;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -699,13 +704,14 @@ class WorkflowConfigurerHibernationTest {
                     .executionRepository(c -> repository));
             var workflowId = startWorkflow(configuration, "wait", "order-1", WAIT_STEP);
             awaitHibernated(configuration, workflowId);
-            repository.afterNextSegmentListing(() -> wakeWithoutAnEvent(configuration, workflowId));
+            var hook = repository.afterNextSegmentListing(() -> wakeWithoutAnEvent(configuration, workflowId));
 
             // when
             publish(configuration, "paid", "order-1", "");
 
             // then: the payment, which is no event of the workflow and is never sourced, reached the woken workflow
             awaitWorkflowStatus(configuration, workflowId, WorkflowStatus.COMPLETED);
+            hook.assertFired();
         }
 
         @Test
@@ -719,14 +725,15 @@ class WorkflowConfigurerHibernationTest {
                     .processorConfiguration(pc -> pc.initialSegmentCount(1).tokenClaimInterval(500))
                     .executionRepository(c -> repository));
             var workflowId = startWorkflow(configuration, "wait", "order-1", WAIT_STEP);
-            repository.aroundNextSegmentListing(() -> hibernateNow(configuration, workflowId),
-                                                () -> wakeWithoutAnEvent(configuration, workflowId));
+            var hook = repository.aroundNextSegmentListing(() -> hibernateNow(configuration, workflowId),
+                                                           () -> wakeWithoutAnEvent(configuration, workflowId));
 
             // when
             publish(configuration, "paid", "order-1", "");
 
             // then: the payment, which is no event of the workflow and is never sourced, reached the woken workflow
             awaitWorkflowStatus(configuration, workflowId, WorkflowStatus.COMPLETED);
+            hook.assertFired();
         }
     }
 
@@ -1067,14 +1074,14 @@ class WorkflowConfigurerHibernationTest {
         }
 
         @Test
-        void cancelsAWorkflowThatWakesWhileTheQueryListsTheExecutionsInMemory() {
-            // given: a hibernated workflow, which wakes for another reason right after a query listed the executions
-            // in memory
-            var repository = new ListingInterceptingRepository();
-            var configuration = start(true, false, module -> module.executionRepository(c -> repository));
+        void cancelsAWorkflowThatWakesWhileTheQuerySourcesIt() {
+            // given: a hibernated workflow, which wakes for another reason while a query naming it sources its state
+            var configuration = start(true);
             var workflowId = startWorkflow(configuration, "wait", "order-1", WAIT_STEP);
             awaitHibernated(configuration, workflowId);
-            repository.afterNextQuery(() -> wakeWithoutAnEvent(configuration, workflowId));
+            var hook = storageEngine.duringNextSourcingOnThisThread(
+                    () -> wakeWithoutAnEvent(configuration, workflowId)
+            );
 
             // when
             manager(configuration).findMany(WorkflowStateQuery.byWorkflowId(workflowId))
@@ -1083,20 +1090,22 @@ class WorkflowConfigurerHibernationTest {
                                   .join();
 
             // then
+            hook.assertFired();
             awaitWorkflowStatus(configuration, workflowId, WorkflowStatus.CANCELLED);
         }
 
         @Test
-        void cancelsAWorkflowThatHibernatesAndWakesWhileTheQueryListsTheExecutionsInMemory() {
-            // given: a workflow in memory, which only hibernates when asked to, and which a query, after it looked up
-            // the hibernated workflows a first time, sees hibernate before it lists the executions in memory and wake
-            // for another reason before it looks them up again
+        void cancelsAWorkflowThatWakesAndHibernatesAgainWhileTheQuerySourcesIt() {
+            // given: a hibernated workflow, which only hibernates when asked to, and which wakes for another reason and
+            // hibernates again while a query naming it sources its state
             idleDelay = Duration.ofMinutes(1);
-            var repository = new ListingInterceptingRepository();
-            var configuration = start(true, false, module -> module.executionRepository(c -> repository));
+            var configuration = start(true);
             var workflowId = startWorkflow(configuration, "wait", "order-1", WAIT_STEP);
-            repository.aroundNextQuery(() -> hibernateNow(configuration, workflowId),
-                                       () -> wakeWithoutAnEvent(configuration, workflowId));
+            hibernateNow(configuration, workflowId);
+            var hook = storageEngine.duringNextSourcingOnThisThread(() -> {
+                wakeWithoutAnEvent(configuration, workflowId);
+                hibernateNow(configuration, workflowId);
+            });
 
             // when
             manager(configuration).findMany(WorkflowStateQuery.byWorkflowId(workflowId))
@@ -1105,21 +1114,22 @@ class WorkflowConfigurerHibernationTest {
                                   .join();
 
             // then
+            hook.assertFired();
             awaitWorkflowStatus(configuration, workflowId, WorkflowStatus.CANCELLED);
         }
 
         @Test
-        void countsAWorkflowThatHibernatesAndWakesWhileAQueryWithoutHistoryListsTheExecutionsInMemory() {
-            // given: no history, so a query naming no workflow id considers every hibernated workflow, and a workflow
-            // in memory, which only hibernates when asked to, and which the query sees hibernate before it lists the
-            // executions in memory and wake for another reason before it looks up the hibernated workflows again
+        void countsOnceAWorkflowThatWakesWhileAQueryWithoutHistorySourcesIt() {
+            // given: no history, so a query naming no workflow id visits every live workflow, and a hibernated
+            // workflow, which only hibernates when asked to, and which wakes for another reason while the query
+            // sources its state
             idleDelay = Duration.ofMinutes(1);
-            var repository = new ListingInterceptingRepository();
-            var configuration = start(true, false, module -> module.withoutHistory()
-                                                                   .executionRepository(c -> repository));
+            var configuration = start(true, false, module -> module.withoutHistory());
             var workflowId = startWorkflow(configuration, "wait", "order-1", WAIT_STEP);
-            repository.aroundNextQuery(() -> hibernateNow(configuration, workflowId),
-                                       () -> wakeWithoutAnEvent(configuration, workflowId));
+            hibernateNow(configuration, workflowId);
+            var hook = storageEngine.duringNextSourcingOnThisThread(
+                    () -> wakeWithoutAnEvent(configuration, workflowId)
+            );
 
             // when
             var running = manager(configuration).findMany(WorkflowStateQuery.byWorkflowStatus(WorkflowStatus.STARTED))
@@ -1128,7 +1138,60 @@ class WorkflowConfigurerHibernationTest {
                                                 .join();
 
             // then
+            hook.assertFired();
             assertThat(running).isEqualTo(1);
+            assertThat(inMemory(configuration, workflowId)).isTrue();
+        }
+
+        @Test
+        void cancelsAWorkflowThatHibernatesAndWakesWhileAQueryWithHistoryListsTheExecutionsInMemory() {
+            // given: a projected history, so a query naming no workflow id lists the executions in memory and finds
+            // the other live workflows through the history, and a workflow in memory, which only hibernates when asked
+            // to, and which the query sees hibernate before it lists the executions in memory and wake for another
+            // reason once it listed them
+            idleDelay = Duration.ofMinutes(1);
+            var repository = new ListingInterceptingRepository();
+            var configuration = start(true, false, module -> module.executionRepository(c -> repository));
+            var workflowId = startWorkflow(configuration, "wait", "order-1", WAIT_STEP);
+            var query = WorkflowStateQuery.byWorkflowStatus(WorkflowStatus.STARTED);
+            var history = find(configuration, MutableWorkflowHistoryRepository.class).orElseThrow();
+            await().atMost(5, TimeUnit.SECONDS)
+                   .until(() -> history.findAll(query).orTimeout(5, TimeUnit.SECONDS).join().size() == 1);
+            var hook = repository.aroundNextQuery(() -> hibernateNow(configuration, workflowId),
+                                                  () -> wakeWithoutAnEvent(configuration, workflowId));
+
+            // when
+            manager(configuration).findMany(query)
+                                  .requestWorkflowCancellation(null)
+                                  .orTimeout(10, TimeUnit.SECONDS)
+                                  .join();
+
+            // then
+            hook.assertFired();
+            awaitWorkflowStatus(configuration, workflowId, WorkflowStatus.CANCELLED);
+        }
+
+        @Test
+        void cancelsAWorkflowThatWakesWhileAQueryLooksUpAHistoryThatDoesNotHoldItYet() {
+            // given: a projected history, which does not hold the workflow yet as a query naming no workflow id looks
+            // it up, and a hibernated workflow, which only hibernates when asked to, and which wakes for another
+            // reason while the query looks up the history, after it listed the executions in memory
+            idleDelay = Duration.ofMinutes(1);
+            var history = new LaggingHistoryRepository();
+            var configuration = start(true, false, module -> module.withHistory(c -> history));
+            var workflowId = startWorkflow(configuration, "wait", "order-1", WAIT_STEP);
+            hibernateNow(configuration, workflowId);
+            var hook = history.duringNextLookUp(() -> wakeWithoutAnEvent(configuration, workflowId));
+
+            // when
+            manager(configuration).findMany(WorkflowStateQuery.byWorkflowStatus(WorkflowStatus.STARTED))
+                                  .requestWorkflowCancellation(null)
+                                  .orTimeout(10, TimeUnit.SECONDS)
+                                  .join();
+
+            // then: the query listed the executions in memory once more after the history, and found it there
+            hook.assertFired();
+            awaitWorkflowStatus(configuration, workflowId, WorkflowStatus.CANCELLED);
         }
     }
 
@@ -1852,6 +1915,8 @@ class WorkflowConfigurerHibernationTest {
         private volatile boolean failSourcing;
         private volatile boolean hangSourcing;
         private volatile @Nullable String holdStartOf;
+        // The action to run during the next sourcing on the given thread.
+        private final AtomicReference<Map.@Nullable Entry<Thread, Hook>> nextSourcing = new AtomicReference<>();
 
         private ControlledStorageEngine(EventStorageEngine delegate) {
             this.delegate = delegate;
@@ -1879,6 +1944,17 @@ class WorkflowConfigurerHibernationTest {
 
         private void resetSourcings() {
             sourcings.set(0);
+        }
+
+        /**
+         * Runs the given action once, before the next sourcing on the calling thread, such as the sourcing of a
+         * workflow manager query made on this thread.
+         */
+        private Hook duringNextSourcingOnThisThread(Runnable action) {
+            var hook = new Hook(action, () -> {
+            });
+            nextSourcing.set(Map.entry(Thread.currentThread(), hook));
+            return hook;
         }
 
         private void holdStartOf(String stepName) {
@@ -1912,6 +1988,11 @@ class WorkflowConfigurerHibernationTest {
         @Override
         public MessageStream<EventMessage> source(SourcingCondition condition,
                                                   @Nullable ProcessingContext processingContext) {
+            var hooked = nextSourcing.get();
+            if (hooked != null && hooked.getKey() == Thread.currentThread()
+                    && nextSourcing.compareAndSet(hooked, null)) {
+                return hooked.getValue().around(() -> source(condition, processingContext));
+            }
             sourcings.incrementAndGet();
             if (failSourcing || sourcingsToFail.getAndUpdate(left -> Math.max(0, left - 1)) > 0) {
                 failedSourcings.incrementAndGet();
@@ -1995,58 +2076,94 @@ class WorkflowConfigurerHibernationTest {
     /**
      * Keeps the executions in memory like the default repository, and runs given actions once around the next listing
      * of the executions of a segment, as a broadcast event does, which is the only one while no segment is claimed or
-     * released, or around the next listing for a query, as the workflow manager does: the moments between the lookups
-     * of the executions in memory and of the hibernated workflows, which a workflow that wakes or hibernates crosses
-     * unseen unless the lookups account for it.
+     * released, or around the next listing for a query, as the workflow manager does for a query that names no workflow
+     * id on a module that projects its history: the moments between the lookups of the executions in memory and of the
+     * hibernated workflows, which a workflow that wakes or hibernates crosses unseen unless the lookups account for it.
      */
     private static final class ListingInterceptingRepository extends InMemoryWorkflowExecutionRepository {
 
-        private final AtomicReference<@Nullable Runnable> beforeNextSegmentListing = new AtomicReference<>();
-        private final AtomicReference<@Nullable Runnable> afterNextSegmentListing = new AtomicReference<>();
-        private final AtomicReference<@Nullable Runnable> beforeNextQuery = new AtomicReference<>();
-        private final AtomicReference<@Nullable Runnable> afterNextQuery = new AtomicReference<>();
+        private final AtomicReference<@Nullable Hook> nextSegmentListing = new AtomicReference<>();
+        private final AtomicReference<@Nullable Hook> nextQuery = new AtomicReference<>();
 
-        private void aroundNextSegmentListing(Runnable before, Runnable after) {
-            afterNextSegmentListing.set(after);
-            beforeNextSegmentListing.set(before);
+        private Hook aroundNextSegmentListing(Runnable before, Runnable after) {
+            var hook = new Hook(before, after);
+            nextSegmentListing.set(hook);
+            return hook;
         }
 
-        private void afterNextSegmentListing(Runnable action) {
-            aroundNextSegmentListing(() -> {
+        private Hook afterNextSegmentListing(Runnable action) {
+            return aroundNextSegmentListing(() -> {
             }, action);
         }
 
-        private void aroundNextQuery(Runnable before, Runnable after) {
-            afterNextQuery.set(after);
-            beforeNextQuery.set(before);
-        }
-
-        private void afterNextQuery(Runnable action) {
-            aroundNextQuery(() -> {
-            }, action);
-        }
-
-        private static void runOnce(AtomicReference<@Nullable Runnable> hook) {
-            var action = hook.getAndSet(null);
-            if (action != null) {
-                action.run();
-            }
+        private Hook aroundNextQuery(Runnable before, Runnable after) {
+            var hook = new Hook(before, after);
+            nextQuery.set(hook);
+            return hook;
         }
 
         @Override
         public Set<WorkflowExecution> findAllOwnedBy(@Nullable Segment segment) {
-            runOnce(beforeNextSegmentListing);
-            var listing = super.findAllOwnedBy(segment);
-            runOnce(afterNextSegmentListing);
-            return listing;
+            var hook = nextSegmentListing.getAndSet(null);
+            return hook == null ? super.findAllOwnedBy(segment) : hook.around(() -> super.findAllOwnedBy(segment));
         }
 
         @Override
         public CompletableFuture<Set<WorkflowExecution>> findAll(WorkflowStateQuery query) {
-            runOnce(beforeNextQuery);
-            var listing = super.findAll(query);
-            runOnce(afterNextQuery);
-            return listing;
+            var hook = nextQuery.getAndSet(null);
+            return hook == null ? super.findAll(query) : hook.around(() -> super.findAll(query));
+        }
+    }
+
+    /**
+     * A history that does not hold the workflows yet when it is next looked up, as a projection that lags behind, and
+     * runs a given action as that lookup runs.
+     */
+    private static final class LaggingHistoryRepository extends InMemoryWorkflowHistoryRepository {
+
+        private final AtomicReference<@Nullable Hook> nextLookUp = new AtomicReference<>();
+
+        private Hook duringNextLookUp(Runnable action) {
+            var hook = new Hook(action, () -> {
+            });
+            nextLookUp.set(hook);
+            return hook;
+        }
+
+        @Override
+        public CompletableFuture<List<WorkflowHistory>> findAll(WorkflowStateQuery query) {
+            var hook = nextLookUp.getAndSet(null);
+            return hook == null
+                    ? super.findAll(query)
+                    : hook.around(() -> CompletableFuture.completedFuture(List.of()));
+        }
+    }
+
+    /**
+     * Actions that a test runs once around a step of the code under test, and which tell whether they ran, so a test
+     * notices when the step no longer runs at all.
+     */
+    private static final class Hook {
+
+        private final Runnable before;
+        private final Runnable after;
+        private final AtomicBoolean fired = new AtomicBoolean();
+
+        private Hook(Runnable before, Runnable after) {
+            this.before = before;
+            this.after = after;
+        }
+
+        private <T> T around(Supplier<T> step) {
+            before.run();
+            var result = step.get();
+            after.run();
+            fired.set(true);
+            return result;
+        }
+
+        private void assertFired() {
+            assertThat(fired).as("the actions around the step ran").isTrue();
         }
     }
 
