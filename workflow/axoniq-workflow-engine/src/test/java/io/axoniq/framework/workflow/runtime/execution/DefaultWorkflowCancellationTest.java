@@ -121,14 +121,14 @@ class DefaultWorkflowCancellationTest {
         liveWorkflows.markCancellable(execution);
         // and a workflow cancellation queued as its task, during which the start fails: after the failed start marked
         // the execution left, and before the request is pending, so only the check of the request itself can abort it
-        var requested = liveWorkflows.<Void>request("workflow-id", made -> {
-            try (var ignored = liveWorkflows.lock("workflow-id")) {
+        var route = liveWorkflows.entryOf(execution).orElseThrow().cancellationRoute();
+        CompletableFuture<Void> request;
+        try (var ignored = liveWorkflows.lock("workflow-id")) {
+            request = route.request(made -> {
                 liveWorkflows.failStart(execution, new IllegalStateException("The start failed."));
-            }
-            return made.requestWorkflowCancellation(null);
-        }, () -> CompletableFuture.failedFuture(new IllegalStateException("The request is not made again.")));
-        assertThat(requested).isInstanceOf(LiveWorkflows.Requested.Made.class);
-        var request = ((LiveWorkflows.Requested.Made<Void>) requested).outcome();
+                return made.requestWorkflowCancellation(null);
+            }, () -> CompletableFuture.failedFuture(new IllegalStateException("The request is not made again.")));
+        }
 
         // when - the body takes the task
         var task = execution.getNextTask();

@@ -20,7 +20,7 @@ import org.jspecify.annotations.Nullable;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
-import java.util.function.Function;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 /**
@@ -41,14 +41,14 @@ import java.util.function.Supplier;
  * <p>
  * The engine starts with {@link NoHibernation}, and replaces it once, before it starts, when its module enables
  * hibernation, see {@link WorkflowEngine#enableHibernation}. Public, as the workflow module hands the
- * {@link WorkflowEngine#hibernation() hibernation of its engine} to its {@link WorkflowCancellationService}; internal, as
- * only the engine creates it.
+ * {@link WorkflowEngine#hibernation() hibernation of its engine} to its {@link WorkflowCancellationService};
+ * internal, as only the engine creates it.
  * <p>
  * The {@link LiveWorkflows} registry never calls the hibernation: a {@link LiveWorkflows.Hibernated hibernated} entry
  * is data only. The engine hands the {@link #wakeForEvent(Hibernated, EventMessage, ProcessingContext) wake} of its
  * hibernation to the registry as it delivers an event, which runs it under the lock of the workflow, and the
- * {@link WorkflowCancellationService} hands a request that finds the workflow hibernated to the hibernation, see
- * {@link #requestWhileHibernated(String, Function, Supplier)}.
+ * {@link WorkflowCancellationService} has it wake a workflow that a request finds hibernated, see
+ * {@link #wakeForCancellation(String, Consumer)}.
  *
  * @author Allard Buijze
  * @since 5.5.0
@@ -169,19 +169,17 @@ public sealed interface Hibernation permits WorkflowEngineHibernationSupport, No
     void wakeForEvent(Hibernated hibernated, EventMessage event, ProcessingContext context);
 
     /**
-     * Makes a cancellation request of the given hibernated workflow once it woke for it. The
-     * {@link WorkflowCancellationService} calls this for a request the {@link LiveWorkflows} registry found the
-     * workflow hibernated for, once the registry released the lock of the workflow.
+     * Wakes the given hibernated workflow for a cancellation request, once the hibernation may wake, and hands the
+     * woken execution to the given action before its body starts, the way an event that wakes a workflow is handed to
+     * it. The {@link WorkflowCancellationService} calls this for a request that found the workflow hibernated, once it
+     * released the lock of the workflow, and queues the request on the woken execution in the given action.
      *
-     * @param workflowId the identifier of the hibernated workflow the request is for
-     * @param request    makes the request against the cancellation of the woken execution
-     * @param again      makes the request again, through the cancellation service, wherever the workflow is then
-     * @param <T>        the type of the outcome of the request
-     * @return the outcome of the request
+     * @param workflowId  the identifier of the hibernated workflow the request is for
+     * @param beforeStart receives the woken execution before its body starts
+     * @return a future completing once the wake ran, also when it failed and leaves the workflow hibernated, or once it
+     * turned out unnecessary, as the workflow is no longer hibernated
      */
-    <T> CompletableFuture<T> requestWhileHibernated(String workflowId,
-                                                    Function<WorkflowCancellation, CompletableFuture<T>> request,
-                                                    Supplier<CompletableFuture<T>> again);
+    CompletableFuture<Void> wakeForCancellation(String workflowId, Consumer<WorkflowExecution> beforeStart);
 
     /**
      * Brings the given execution, which the given claim restored, into memory in place of a hibernation of its workflow

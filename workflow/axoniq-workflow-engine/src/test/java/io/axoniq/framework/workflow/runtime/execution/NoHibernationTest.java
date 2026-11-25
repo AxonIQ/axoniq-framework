@@ -128,12 +128,9 @@ class NoHibernationTest {
 
         @Test
         void cannotBeWokenForACancellationRequestAsNoneExists() {
-            assertThatThrownBy(() -> hibernation.<Void>requestWhileHibernated(
-                    WORKFLOW_ID,
-                    cancellation -> cancellation.requestWorkflowCancellation(null),
-                    () -> CompletableFuture.completedFuture(null)
-            )).isInstanceOf(IllegalStateException.class)
-              .hasMessageContaining(WORKFLOW_ID);
+            assertThatThrownBy(() -> hibernation.wakeForCancellation(WORKFLOW_ID, woken -> {
+            })).isInstanceOf(IllegalStateException.class)
+               .hasMessageContaining(WORKFLOW_ID);
         }
     }
 

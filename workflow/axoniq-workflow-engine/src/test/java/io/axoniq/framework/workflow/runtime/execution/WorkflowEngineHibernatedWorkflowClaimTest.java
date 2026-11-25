@@ -57,8 +57,8 @@ import static org.mockito.Mockito.*;
  * Tests where a {@link WorkflowEngine} keeps a hibernated workflow when the claim of its segment changes while the
  * workflow is restored or woken: a restore by a claim of an overlapping segment takes the workflow over, and a wake
  * that fails once the claim of the hibernation ended leaves the workflow out of this node. Also tests what becomes of
- * the cancellation requests that wait for a woken workflow whose start fails, and that hibernation is enabled only once,
- * before the engine starts.
+ * the cancellation requests that wait for a woken workflow whose start fails, and that hibernation is enabled only
+ * once, before the engine starts.
  * <p>
  * The executions are the mocks of {@link WorkflowExecutionFixture}, as in the other restore tests of the engine; the
  * live workflows, the hibernation support and the claims are real.
@@ -372,7 +372,8 @@ class WorkflowEngineHibernatedWorkflowClaimTest {
      * Delivers the given event of the workflow to it, as the engine routes it.
      */
     private boolean deliver(EventMessage event) {
-        return liveWorkflows.deliver(WORKFLOW_ID, event, new StubProcessingContext(), engine.hibernation()::wakeForEvent);
+        var hibernation = engine.hibernation();
+        return liveWorkflows.deliver(WORKFLOW_ID, event, new StubProcessingContext(), hibernation::wakeForEvent);
     }
 
     /**

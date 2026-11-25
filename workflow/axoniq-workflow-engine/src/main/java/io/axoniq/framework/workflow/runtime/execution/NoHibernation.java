@@ -20,7 +20,7 @@ import org.jspecify.annotations.Nullable;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
-import java.util.function.Function;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 /**
@@ -141,9 +141,7 @@ public enum NoHibernation implements Hibernation {
      * @throws IllegalStateException always, as no workflow is hibernated without hibernation
      */
     @Override
-    public <T> CompletableFuture<T> requestWhileHibernated(String workflowId,
-                                                           Function<WorkflowCancellation, CompletableFuture<T>> request,
-                                                           Supplier<CompletableFuture<T>> again) {
+    public CompletableFuture<Void> wakeForCancellation(String workflowId, Consumer<WorkflowExecution> beforeStart) {
         throw notHibernating(workflowId);
     }
 

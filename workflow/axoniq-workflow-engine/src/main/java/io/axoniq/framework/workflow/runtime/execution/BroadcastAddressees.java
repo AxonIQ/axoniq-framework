@@ -32,8 +32,9 @@ import java.util.function.Supplier;
  * under the lock of that workflow, as the rows are keyed by its identifier.
  * <p>
  * <b>The guarantee.</b> The lookup never misses a workflow that hibernates, wakes, or hibernates and wakes while it
- * runs. Listing and matching at two moments could: a workflow listed before it hibernates and matched once it woke again
- * is in neither result, and as its wake restores it from its own events, it would never see the broadcast event. So:
+ * runs. Listing and matching at two moments could: a workflow listed before it hibernates and matched once it woke
+ * again is in neither result, and as its wake restores it from its own events, it would never see the broadcast event.
+ * So:
  * <ul>
  *     <li>every move of a workflow between memory and hibernation, which moves it between the repository and the
  *     rows, runs as one {@link #swap(Supplier) swap}, under the write lock of a {@link StampedLock}, the swap
