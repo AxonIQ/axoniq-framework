@@ -292,7 +292,9 @@ class WorkflowEngineHibernatedWorkflowClaimTest {
             assertThat(pending.get()).isCompletedExceptionally();
             assertThatThrownBy(() -> pending.get().join())
                     .isInstanceOf(CancellationException.class)
-                    .hasMessage("Workflow execution completed before cancellation was performed");
+                    .hasMessage("Workflow execution failed to start before cancellation was performed")
+                    .rootCause()
+                    .hasMessage(START_FAILURE);
             assertThat(engine.hibernatedWorkflowIds()).containsExactly(WORKFLOW_ID);
         }
     }

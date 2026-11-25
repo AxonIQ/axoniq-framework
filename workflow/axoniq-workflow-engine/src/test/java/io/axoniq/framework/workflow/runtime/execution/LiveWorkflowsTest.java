@@ -48,8 +48,9 @@ import static org.awaitility.Awaitility.await;
 
 /**
  * Tests the transitions of {@link LiveWorkflows} that bring a workflow into memory, take it out again, and move it
- * between memory and hibernation, the safe points they track, which only the execution in memory may report, and how
- * an event finds the live workflows, also those that hibernate or wake while it looks them up.
+ * between memory and hibernation, the safe points they track, which only the execution in memory may report, how an
+ * event finds the live workflows, also those that hibernate or wake while it looks them up, and how a cancellation
+ * request for a woken execution ends when that execution takes no task.
  * <p>
  * The hibernated workflows wake through a real {@link WorkflowEngineHibernationSupport}, whose loader records the wake
  * and brings a stand-in execution into memory in place of the hibernation, as the engine does.
@@ -968,6 +969,32 @@ class LiveWorkflowsTest {
 
             // then
             assertThat(delivered).isFalse();
+        }
+    }
+
+    @Nested
+    class CancellationRequests {
+
+        private final WorkflowCancellationService service = new WorkflowCancellationService(liveWorkflows);
+
+        @Test
+        void failARequestThatAWokenExecutionTakesNoTaskForAndLeaveNothingQueuedOnIt() {
+            // given - a woken execution whose task queue is full
+            var hibernated = awaitingPayment(WORKFLOW_ID, "1");
+            adopt(hibernated);
+            var execution = new InspectionCountingWorkflowExecution(WORKFLOW_ID);
+            var queueFull = new IllegalStateException("The task queue is full.");
+            execution.rejectTasksWith(queueFull);
+            assertThat(wake(hibernated, execution)).isTrue();
+
+            // when
+            var request = service.requestStepCancellation(WORKFLOW_ID, "step", null);
+
+            // then - the request fails with the reason it could not be queued
+            assertThat(request).failsWithin(TIMEOUT).withThrowableThat().havingRootCause().isSameAs(queueFull);
+            // and is not made again once the execution swaps back for its hibernation, which would wake the workflow
+            assertThat(hibernate(execution, awaitingPayment(WORKFLOW_ID, "1"))).isTrue();
+            assertThat(loads).isEmpty();
         }
     }
 

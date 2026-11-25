@@ -957,9 +957,10 @@ public class WorkflowEngine implements
             });
         } catch (RuntimeException e) {
             // Partly woken: this execution swaps back for the hibernation, or only leaves memory once the claim ended.
-            // First, the requests that waited for this execution fail, so they do not wake the workflow once more.
+            // First, it takes no requests any more, and those that waited for it fail, so they do not wake the
+            // workflow once more.
             execution.stopForShutdown();
-            liveWorkflows.failRequests(execution, e);
+            liveWorkflows.failStart(execution, e);
             // Only while the claim is current: a claim that ended dropped the hibernated workflows of its segment, and
             // must not find this one hibernated again once it no longer looks.
             boolean[] returned = new boolean[1];

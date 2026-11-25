@@ -28,8 +28,9 @@ import java.util.function.Predicate;
 /**
  * A running {@link WorkflowExecution} that only knows its workflow id, and its state when given one, counts every time
  * anyone inspects it, and records the events delivered to it and the checkpoint work state listener registered on it.
- * Any other interaction fails, so a test notices when the code under test does more with it than inspecting it, reading
- * the state it was given, delivering an event, or listening to its safe points.
+ * It records the tasks appended to it, which it never runs, or rejects them when a test tells it to. Any other
+ * interaction fails, so a test notices when the code under test does more with it than inspecting it, reading the state
+ * it was given, delivering an event, appending a task, or listening to its safe points.
  *
  * @author Allard Buijze
  */
@@ -40,6 +41,7 @@ final class InspectionCountingWorkflowExecution implements WorkflowExecution {
     private final List<EventMessage> deliveredEvents = new CopyOnWriteArrayList<>();
     private final List<Consumer<WorkflowExecution>> appendedTasks = new CopyOnWriteArrayList<>();
     private volatile @Nullable CheckpointWorkStateListener checkpointWorkStateListener;
+    private volatile @Nullable RuntimeException taskRejection;
     private final @Nullable WorkflowState state;
 
     InspectionCountingWorkflowExecution(String workflowId) {
@@ -78,6 +80,14 @@ final class InspectionCountingWorkflowExecution implements WorkflowExecution {
      */
     List<Consumer<WorkflowExecution>> appendedTasks() {
         return List.copyOf(appendedTasks);
+    }
+
+    /**
+     * Makes every later {@link #appendTask(Consumer) appended task} fail with the given failure, as an execution whose
+     * task queue is full does.
+     */
+    void rejectTasksWith(RuntimeException failure) {
+        taskRejection = failure;
     }
 
     /**
@@ -123,6 +133,10 @@ final class InspectionCountingWorkflowExecution implements WorkflowExecution {
 
     @Override
     public void appendTask(Consumer<WorkflowExecution> task) {
+        var rejection = taskRejection;
+        if (rejection != null) {
+            throw rejection;
+        }
         appendedTasks.add(task);
     }
 
