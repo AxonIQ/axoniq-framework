@@ -1032,7 +1032,9 @@ class LiveWorkflowsTest {
     /**
      * Keeps the executions like the default repository, and runs given actions once: right before it removes the next
      * execution, which is the moment a leave or a hibernation of the registry is in progress, and around the next, or a
-     * given, listing of the executions of a segment, which is the moment a broadcast looks up its addressees.
+     * given, listing of the executions of a segment, which is the moment a broadcast looks up its addressees, see
+     * {@link LiveWorkflows#broadcast}. The tests of the registry list the executions of a segment only through a
+     * broadcast, so every listing this counts is one of a broadcast.
      */
     private static final class HookRepository extends InMemoryWorkflowExecutionRepository {
 

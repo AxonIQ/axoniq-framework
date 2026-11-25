@@ -704,6 +704,7 @@ class WorkflowConfigurerHibernationTest {
                     .executionRepository(c -> repository));
             var workflowId = startWorkflow(configuration, "wait", "order-1", WAIT_STEP);
             awaitHibernated(configuration, workflowId);
+            awaitTheClaimOfTheOnlySegmentActivated(configuration);
             var hook = repository.afterNextSegmentListing(() -> wakeWithoutAnEvent(configuration, workflowId));
 
             // when
@@ -725,6 +726,7 @@ class WorkflowConfigurerHibernationTest {
                     .processorConfiguration(pc -> pc.initialSegmentCount(1).tokenClaimInterval(500))
                     .executionRepository(c -> repository));
             var workflowId = startWorkflow(configuration, "wait", "order-1", WAIT_STEP);
+            awaitTheClaimOfTheOnlySegmentActivated(configuration);
             var hook = repository.aroundNextSegmentListing(() -> hibernateNow(configuration, workflowId),
                                                            () -> wakeWithoutAnEvent(configuration, workflowId));
 
@@ -1119,7 +1121,7 @@ class WorkflowConfigurerHibernationTest {
         }
 
         @Test
-        void countsOnceAWorkflowThatWakesWhileAQueryWithoutHistorySourcesIt() {
+        void findsAWorkflowThatWakesWhileAQueryWithoutHistorySourcesIt() {
             // given: no history, so a query naming no workflow id visits every live workflow, and a hibernated
             // workflow, which only hibernates when asked to, and which wakes for another reason while the query
             // sources its state
@@ -1635,6 +1637,18 @@ class WorkflowConfigurerHibernationTest {
     }
 
     /**
+     * Waits until the claim of the only segment of the given configuration activated, after which, while the claim
+     * holds the segment, only a broadcast event lists the executions of the segment, see
+     * {@link ListingInterceptingRepository}. The activation runs under the lock of the claim, which this check takes,
+     * so it finished once the claim reports it caught up.
+     */
+    private static void awaitTheClaimOfTheOnlySegmentActivated(AxonConfiguration configuration) {
+        await().atMost(5, TimeUnit.SECONDS).until(
+                () -> WorkflowEngineHibernation.isCaughtUp(engine(configuration), Segment.ROOT_SEGMENT)
+        );
+    }
+
+    /**
      * Waits until the workflow left memory, which the engine's own passes do once it made no progress for the idle
      * delay.
      */
@@ -2075,10 +2089,15 @@ class WorkflowConfigurerHibernationTest {
 
     /**
      * Keeps the executions in memory like the default repository, and runs given actions once around the next listing
-     * of the executions of a segment, as a broadcast event does, which is the only one while no segment is claimed or
-     * released, or around the next listing for a query, as the workflow manager does for a query that names no workflow
-     * id on a module that projects its history: the moments between the lookups of the executions in memory and of the
-     * hibernated workflows, which a workflow that wakes or hibernates crosses unseen unless the lookups account for it.
+     * of the executions of a segment, or around the next listing for a query, as the workflow manager does for a query
+     * that names no workflow id on a module that projects its history: the moments between the lookups of the
+     * executions in memory and of the hibernated workflows, which a workflow that wakes or hibernates crosses unseen
+     * unless the lookups account for it.
+     * <p>
+     * A claim lists the executions of its segment as well, as it starts, activates, or is released. Once the claim of a
+     * segment activated, and while it holds the segment, only a broadcast event lists them, see
+     * {@code LiveWorkflows.broadcast}: a test arms the hook for the listing of a segment only after that activation,
+     * see {@link #awaitTheClaimOfTheOnlySegmentActivated(AxonConfiguration)}.
      */
     private static final class ListingInterceptingRepository extends InMemoryWorkflowExecutionRepository {
 
