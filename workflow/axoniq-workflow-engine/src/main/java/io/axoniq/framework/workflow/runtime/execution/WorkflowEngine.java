@@ -956,10 +956,8 @@ public class WorkflowEngine implements
         }
         var execution = executionOf(workflowId, sourced.state(), executionContext);
         execution.restoreAppendPosition(sourced.position());
-        boolean[] woken = new boolean[1];
         // Only while the claim is current, like a restore.
-        claim.runIfCurrent(() -> woken[0] = liveWorkflows.wake(hibernated, execution, wakeExecutor));
-        if (!woken[0]) {
+        if (!claim.applyIfCurrent(() -> liveWorkflows.wake(hibernated, execution, wakeExecutor))) {
             logger.debug("Not waking workflow '{}': the claim of segment {} failed or ended meanwhile.",
                          workflowId, segment.getSegmentId());
             return false;
@@ -983,9 +981,7 @@ public class WorkflowEngine implements
             liveWorkflows.failStart(execution, e);
             // Only while the claim is current: a claim that ended dropped the hibernated workflows of its segment, and
             // must not find this one hibernated again once it no longer looks.
-            boolean[] returned = new boolean[1];
-            claim.runIfCurrent(() -> returned[0] = liveWorkflows.hibernate(execution, hibernated));
-            if (!returned[0]) {
+            if (!claim.applyIfCurrent(() -> liveWorkflows.hibernate(execution, hibernated))) {
                 liveWorkflows.leave(execution);
             }
             throw e;

@@ -457,17 +457,16 @@ final class WorkflowEngineHibernationSupport implements Hibernation {
                                 .min(Instant::compareTo)
                                 .orElseThrow();
             var hint = hintOf(waits.get(), deadline);
-            var parked = new AtomicBoolean();
-            claim.runIfCurrent(() -> {
+            boolean parked = claim.applyIfCurrent(() -> {
                 projection.recordHibernated(claim.segment(), workflowId, hint);
-                parked.set(park(hibernationOf(claim, workflowId, hint, CompletableFuture.completedFuture(null)),
-                                hibernated -> liveWorkflows.hibernate(execution, hibernated)));
+                return park(hibernationOf(claim, workflowId, hint, CompletableFuture.completedFuture(null)),
+                            hibernated -> liveWorkflows.hibernate(execution, hibernated));
             });
-            if (parked.get()) {
+            if (parked) {
                 logger.debug("Workflow [{}] hibernated until an awaited event or its deadline at {}.",
                              workflowId, deadline);
             }
-            return parked.get();
+            return parked;
         }
     }
 

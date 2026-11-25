@@ -14,6 +14,7 @@ import org.axonframework.messaging.eventhandling.processing.streaming.token.Trac
 import org.jspecify.annotations.Nullable;
 
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
@@ -161,6 +162,23 @@ final class SegmentClaim {
             }
             action.run();
             return true;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /**
+     * Applies the given {@code transition} under the lock of this claim, but only while this claim is current: neither
+     * ended nor failed.
+     *
+     * @param transition the transition to apply, which tells whether it took place
+     * @return {@code true} when the claim is current and the transition took place, {@code false} when the claim ended
+     * or failed, so the transition was not applied, or when it did not take place
+     */
+    boolean applyIfCurrent(BooleanSupplier transition) {
+        lock.lock();
+        try {
+            return state.isCurrent() && transition.getAsBoolean();
         } finally {
             lock.unlock();
         }

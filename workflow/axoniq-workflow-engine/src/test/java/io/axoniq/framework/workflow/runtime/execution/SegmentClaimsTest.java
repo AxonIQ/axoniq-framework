@@ -538,6 +538,33 @@ class SegmentClaimsTest {
         }
     }
 
+    @Nested
+    class ApplyIfCurrent {
+
+        @Test
+        void tellsWhetherTheTransitionTookPlaceWhileTheClaimIsCurrent() {
+            // given
+            var claim = testSubject.startClaim(SEGMENT, new StubProcessingContext());
+
+            // when / then
+            assertThat(claim.applyIfCurrent(() -> true)).isTrue();
+            assertThat(claim.applyIfCurrent(() -> false)).isFalse();
+        }
+
+        @Test
+        void appliesNothingOnceTheClaimEnded() {
+            // given
+            var ended = testSubject.startClaim(SEGMENT, new StubProcessingContext());
+            testSubject.release(SEGMENT);
+
+            // when
+            boolean applied = ended.applyIfCurrent(() -> fail("Applied on an ended claim."));
+
+            // then
+            assertThat(applied).isFalse();
+        }
+    }
+
     private static int carrierThreadCount() {
         return Integer.getInteger("jdk.virtualThreadScheduler.parallelism", Runtime.getRuntime().availableProcessors());
     }

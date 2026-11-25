@@ -27,6 +27,8 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -159,40 +161,34 @@ public final class LiveWorkflows {
      */
     WorkflowExecution enter(String workflowId, boolean mayHibernate, Supplier<WorkflowExecution> factory) {
         Objects.requireNonNull(factory, "The factory must not be null.");
-        @Nullable InMemory[] created = new InMemory[1];
-        boolean[] conflict = new boolean[1];
-        // A compute rather than a computeIfAbsent, which may return a present entry without taking the lock of its
-        // bin, and so the entry of an execution whose leave is in progress.
-        var entry = live.compute(workflowId, (id, current) -> {
+        Entering entering = transition(workflowId, current -> {
             if (current != null) {
-                return current;
+                return new Transition<>(current, new Entering.Present(current));
             }
             var execution = factory.get();
             var candidate = new InMemory(execution, mayHibernate, CancellationRoute.toStarted(execution));
-            if (repository.save(id, candidate::execution) != candidate.execution()) {
-                conflict[0] = true;
-                return null;
+            if (repository.save(workflowId, candidate::execution) != execution) {
+                return new Transition<>(null, new Entering.Conflict());
             }
-            created[0] = candidate;
-            return candidate;
+            return new Transition<>(candidate, new Entering.Entered(candidate));
         });
-        if (conflict[0]) {
-            throw new IllegalStateException(
-                    "Workflow '%s' already has an execution on this node.".formatted(workflowId)
-            );
-        }
-        if (!(entry instanceof InMemory entered)) {
+        return switch (entering) {
+            case Entering.Entered(var entered) -> {
+                // Outside the lock of the bin: the listener reports the current safe point right away, and that report
+                // checks that this entry is the workflow's entry.
+                entered.execution().registerCheckpointWorkStateListener(safePoints.listenerOf(entered));
+                yield entered.execution();
+            }
+            case Entering.Present(InMemory present) -> present.execution();
             // A guard: no caller gets here. A start checks under the lock of the workflow that it is not hibernated,
             // and a restore, under that lock as well, takes over a hibernation of the workflow instead of entering,
             // see restoreOver.
-            throw new IllegalStateException("Workflow '%s' is hibernated on this node.".formatted(workflowId));
-        }
-        if (entered == created[0]) {
-            // Outside the lock of the bin: the listener reports the current safe point right away, and that report
-            // checks that this entry is the workflow's entry.
-            entered.execution().registerCheckpointWorkStateListener(safePoints.listenerOf(entered));
-        }
-        return entered.execution();
+            case Entering.Present(Hibernated hibernated) ->
+                    throw new IllegalStateException("Workflow '%s' is hibernated on this node.".formatted(workflowId));
+            case Entering.Conflict() -> throw new IllegalStateException(
+                    "Workflow '%s' already has an execution on this node.".formatted(workflowId)
+            );
+        };
     }
 
     /**
@@ -209,19 +205,15 @@ public final class LiveWorkflows {
      */
     boolean leave(WorkflowExecution execution) {
         var workflowId = execution.workflowId();
-        @Nullable InMemory[] left = new InMemory[1];
         // Removes the execution from the repository and its entry under the lock of the bin of the entry, so an enter
         // of the workflow waits until both are gone. The repository removal is scoped to the execution, and runs also
         // when the execution has no entry, so an execution in the repository is never stuck there.
-        live.compute(workflowId, (id, current) -> {
-            repository.remove(id, execution);
-            if (current instanceof InMemory entry && entry.execution() == execution) {
-                left[0] = entry;
-                return null;
-            }
-            return current;
+        @Nullable InMemory entry = transition(workflowId, current -> {
+            repository.remove(workflowId, execution);
+            return current instanceof InMemory left && left.execution() == execution
+                    ? new Transition<@Nullable InMemory>(null, left)
+                    : new Transition<@Nullable InMemory>(current, null);
         });
-        var entry = left[0];
         if (entry == null) {
             return false;
         }
@@ -337,35 +329,47 @@ public final class LiveWorkflows {
     private boolean swapIn(Hibernated hibernated, InMemory entry) {
         var workflowId = hibernated.workflowId();
         var execution = entry.execution();
-        boolean[] swapped = new boolean[1];
-        boolean[] conflict = new boolean[1];
-        addressees.swap(() -> {
-            live.compute(workflowId, (id, current) -> {
+        SwapIn swappingIn = addressees.swap(() -> {
+            SwapIn swap = transition(workflowId, current -> {
                 if (current != hibernated) {
-                    return current;
+                    return new Transition<>(current, SwapIn.REPLACED_MEANWHILE);
                 }
-                if (repository.save(id, entry::execution) != execution) {
-                    conflict[0] = true;
-                    return current;
+                if (repository.save(workflowId, entry::execution) != execution) {
+                    return new Transition<>(current, SwapIn.CONFLICT);
                 }
-                swapped[0] = true;
-                return entry;
+                return new Transition<>(entry, SwapIn.SWAPPED);
             });
-            if (swapped[0]) {
+            if (swap == SwapIn.SWAPPED) {
                 addressees.remove(workflowId);
             }
-            return swapped[0];
+            return swap;
         });
-        if (conflict[0]) {
-            throw new IllegalStateException(
+        return switch (swappingIn) {
+            case CONFLICT -> throw new IllegalStateException(
                     "Workflow '%s' already has an execution on this node.".formatted(workflowId)
             );
-        }
-        if (!swapped[0]) {
-            return false;
-        }
-        execution.registerCheckpointWorkStateListener(safePoints.listenerOf(entry));
-        return true;
+            case REPLACED_MEANWHILE -> false;
+            case SWAPPED -> {
+                execution.registerCheckpointWorkStateListener(safePoints.listenerOf(entry));
+                yield true;
+            }
+        };
+    }
+
+    /**
+     * Applies the given transition to the entry of the given workflow, under the lock of the bin of that entry, so no
+     * other transition of the workflow interleaves, and returns its outcome. The transition gets the entry of the
+     * workflow, or {@code null} when it has none, and returns the entry it leaves, with its outcome.
+     */
+    private <R> R transition(String workflowId, Function<@Nullable LiveWorkflow, Transition<R>> transition) {
+        // The holder of the outcome, as a compute only returns the entry it leaves.
+        var outcome = new AtomicReference<R>();
+        live.compute(workflowId, (id, current) -> {
+            var applied = transition.apply(current);
+            outcome.set(applied.outcome());
+            return applied.entry();
+        });
+        return outcome.get();
     }
 
     /**
@@ -778,6 +782,67 @@ public final class LiveWorkflows {
         Hibernated withWakeTimer(WorkflowScheduler.ScheduledTask newWakeTimer) {
             return new Hibernated(workflowId, claim, hint, rows, newWakeTimer, armed);
         }
+    }
+
+    /**
+     * What a transition makes of the entry of a workflow, see {@link #transition(String, Function)}.
+     *
+     * @param entry   the entry the transition leaves for the workflow, or {@code null} for none
+     * @param outcome what the transition tells its caller
+     * @param <R>     the type of the outcome
+     */
+    private record Transition<R>(@Nullable LiveWorkflow entry, R outcome) {
+
+    }
+
+    /**
+     * The outcome of {@link #enter(String, boolean, Supplier) entering} memory.
+     */
+    private sealed interface Entering {
+
+        /**
+         * The execution of the given entry entered memory, and is saved in the repository.
+         *
+         * @param entry the entry of the execution that entered
+         */
+        record Entered(InMemory entry) implements Entering {
+
+        }
+
+        /**
+         * The workflow was live already, with the given entry, so nothing entered.
+         *
+         * @param entry the entry of the workflow
+         */
+        record Present(LiveWorkflow entry) implements Entering {
+
+        }
+
+        /**
+         * The repository holds another execution of the workflow, so nothing entered.
+         */
+        record Conflict() implements Entering {
+
+        }
+    }
+
+    /**
+     * The outcome of a swap of a hibernation for an execution in memory, see {@link #swapIn(Hibernated, InMemory)}.
+     */
+    private enum SwapIn {
+
+        /**
+         * The execution took the place of the hibernation.
+         */
+        SWAPPED,
+        /**
+         * Another entry replaced the hibernation meanwhile, so nothing changed.
+         */
+        REPLACED_MEANWHILE,
+        /**
+         * The repository holds another execution of the workflow, so nothing changed.
+         */
+        CONFLICT
     }
 
     /**
