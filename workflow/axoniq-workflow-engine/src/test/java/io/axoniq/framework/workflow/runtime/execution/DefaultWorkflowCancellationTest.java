@@ -125,10 +125,11 @@ class DefaultWorkflowCancellationTest {
         var route = liveWorkflows.entryOf(execution).orElseThrow().cancellationRoute();
         CompletableFuture<Void> request;
         try (var ignored = liveWorkflows.lock("workflow-id")) {
-            request = route.request(made -> {
+            request = route.request(new CancellationRequest<Void>(made -> {
                 liveWorkflows.failStart(execution, new IllegalStateException("The start failed."));
                 return made.requestWorkflowCancellation(null);
-            }, () -> CompletableFuture.failedFuture(new IllegalStateException("The request is not made again.")));
+            }, () -> CompletableFuture.failedFuture(new IllegalStateException("The request is not made again."))))
+                           .orElseThrow();
         }
 
         // when - the body takes the task

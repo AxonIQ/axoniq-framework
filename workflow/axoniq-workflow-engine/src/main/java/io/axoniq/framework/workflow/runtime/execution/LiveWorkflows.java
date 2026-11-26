@@ -166,7 +166,7 @@ public final class LiveWorkflows {
                 return new Transition<>(current, new Entering.Present(current));
             }
             var execution = factory.get();
-            var candidate = new InMemory(execution, mayHibernate, CancellationRoute.toStarted(execution));
+            var candidate = new InMemory(execution, mayHibernate, CancellationRoute.direct());
             if (repository.save(workflowId, candidate::execution) != execution) {
                 return new Transition<>(null, new Entering.Conflict());
             }
@@ -290,9 +290,10 @@ public final class LiveWorkflows {
      * and the lock of the claim of the hibernation, and starts the execution once this returned. The execution may
      * hibernate again.
      * <p>
-     * Every cancellation request for the woken workflow is queued as a task of the woken execution. When the execution
-     * leaves memory before its body took such a request, the request is answered on the given executor, never on the
-     * thread on which the execution leaves memory, see {@link CancellationRoute}.
+     * Every cancellation request for the woken workflow is queued as a task of the woken execution, see
+     * {@link CancellationRoute#queued(WorkflowExecution, Executor)}. When the execution leaves memory before its body
+     * took such a request, the request is answered on the given executor, never on the thread on which the execution
+     * leaves memory.
      *
      * @param hibernated the hibernation of the workflow
      * @param execution  the execution restored from the event store
@@ -302,7 +303,7 @@ public final class LiveWorkflows {
      * @throws IllegalStateException when the repository returns another execution of the workflow than the given one
      */
     boolean wake(Hibernated hibernated, WorkflowExecution execution, Executor answerOn) {
-        return swapIn(hibernated, new InMemory(execution, true, CancellationRoute.toWoken(execution, answerOn)));
+        return swapIn(hibernated, new InMemory(execution, true, CancellationRoute.queued(execution, answerOn)));
     }
 
     /**
@@ -319,7 +320,7 @@ public final class LiveWorkflows {
      * @throws IllegalStateException when the repository returns another execution of the workflow than the given one
      */
     boolean restoreOver(Hibernated hibernated, WorkflowExecution execution, boolean mayHibernate) {
-        return swapIn(hibernated, new InMemory(execution, mayHibernate, CancellationRoute.toStarted(execution)));
+        return swapIn(hibernated, new InMemory(execution, mayHibernate, CancellationRoute.direct()));
     }
 
     /**
