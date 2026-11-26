@@ -12,6 +12,7 @@ io.axoniq.framework.springboot.autoconfig.DistributedTracingAutoConfiguration
 io.axoniq.framework.springboot.autoconfig.JdbcDeadLetterQueueAutoConfiguration
 io.axoniq.framework.springboot.autoconfig.JpaDeadLetterQueueAutoConfiguration
 io.axoniq.framework.springboot.autoconfig.JpaWorkflowIndexAutoConfiguration
+io.axoniq.framework.springboot.autoconfig.JdbcWorkflowIndexAutoConfiguration
 io.axoniq.framework.springboot.autoconfig.MicrometerTracingAutoConfiguration
 io.axoniq.framework.springboot.autoconfig.MultiTenancyAutoConfiguration
 io.axoniq.framework.springboot.autoconfig.MultiTenancyPersistentStreamAutoConfiguration

@@ -296,7 +296,8 @@ public class WorkflowProperties {
 
         /**
          * Sets whether the rows of the workflow index are written in the transaction of the token. When unset, it is
-         * {@code true} only for a {@code JpaTokenStore}. Set {@code false} when the token store uses another database.
+         * {@code true} when the token store has the type of the index: a {@code JpaTokenStore} for the JPA index, a
+         * {@code JdbcTokenStore} for the JDBC index. Set {@code false} when the token store uses another database.
          *
          * @param storesWithToken whether the rows are written with the token, or {@code null} to follow the token store
          */

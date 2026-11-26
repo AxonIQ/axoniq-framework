@@ -17,6 +17,7 @@ import org.axonframework.conversion.GeneralConverter;
 import org.axonframework.extension.springboot.util.RegisterDefaultEntities;
 import org.axonframework.messaging.core.unitofwork.transaction.jpa.JpaTransactionalExecutorProvider;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.store.TokenStore;
+import org.axonframework.messaging.eventhandling.processing.streaming.token.store.jdbc.JdbcTokenStore;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.store.jpa.JpaTokenStore;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.beans.factory.ObjectProvider;
@@ -32,7 +33,8 @@ import org.springframework.context.annotation.Bean;
  * {@code EntityManagerFactory}, and adds its entities to the persistence unit.
  * <p>
  * Set {@code axon.workflow.index.enabled=false} to turn it off, or declare your own {@link WorkflowIndex} bean to
- * replace it. When the token store uses another database, set {@code axon.workflow.index.stores-with-token=false}.
+ * replace it. When the token store uses another database, set {@code axon.workflow.index.stores-with-token=false}. A
+ * {@link JdbcTokenStore} bean gets the {@link JdbcWorkflowIndexAutoConfiguration JDBC index} instead.
  *
  * @author Stefan Dragisic
  * @since 5.5.0
@@ -63,7 +65,7 @@ public class JpaWorkflowIndexAutoConfiguration {
      * @return a {@link WorkflowIndex} backed by JPA
      */
     @Bean
-    @ConditionalOnMissingBean
+    @ConditionalOnMissingBean({WorkflowIndex.class, JdbcTokenStore.class})
     @ConditionalOnBean(GeneralConverter.class)
     public WorkflowIndex jpaWorkflowIndex(EntityManagerFactory entityManagerFactory,
                                           GeneralConverter converter,

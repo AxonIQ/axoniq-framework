@@ -148,5 +148,7 @@ of the segment, as it does without a workflow index.
 - A workflow module with an index refuses to start when its processor could store a token past changes the rows do
   not hold.
 - `Checkpointing` has one more default method. It does nothing unless a component overrides it.
-- An application chooses `JpaWorkflowIndex` or `InMemoryWorkflowIndex`. `WorkflowIndex` and the types of its methods
-  are `@Internal`: they are a storage detail of the engine and may change with it.
+- An application chooses `JpaWorkflowIndex`, `JdbcWorkflowIndex` or `InMemoryWorkflowIndex`. The JPA and the JDBC index
+  share their tables. Spring Boot picks the index of the type of the token store, and JPA when the token store does not
+  tell. `WorkflowIndex` and the types of its methods are `@Internal`: they are a storage detail of the engine and may
+  change with it.
