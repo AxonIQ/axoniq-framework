@@ -145,6 +145,8 @@ final class WorkflowEngineHibernationSupport implements Hibernation {
         this.wakeExecutor = Objects.requireNonNull(wakeExecutor, "The wake Executor must not be null.");
     }
 
+    // Lifecycle and queries.
+
     @Override
     public boolean isEnabled() {
         return true;
@@ -198,6 +200,8 @@ final class WorkflowEngineHibernationSupport implements Hibernation {
         }
     }
 
+    // Residency guards: as an execution enters memory.
+
     /**
      * {@inheritDoc}
      * <p>
@@ -229,30 +233,47 @@ final class WorkflowEngineHibernationSupport implements Hibernation {
     /**
      * {@inheritDoc}
      * <p>
-     * A failure fails the event, so the event processor hands it to the workflow again.
+     * Runs the restore under the lock of the workflow, which every hibernation, wake and adoption of it takes.
      */
     @Override
-    public void wakeForEvent(Hibernated hibernated, EventMessage event, ProcessingContext context) {
-        try {
-            wake(hibernated, restored -> restored.onEvent(event, context));
-        } catch (RuntimeException e) {
-            logger.warn("Could not wake hibernated workflow [{}] for event [{}]; failing the event so it is delivered "
-                                + "again.",
-                        hibernated.workflowId(), event.type(), e);
-            throw e;
+    public <T> T restoreGuarded(String workflowId, Supplier<T> restore) {
+        try (var ignored = liveWorkflows.lock(workflowId)) {
+            return restore.get();
         }
     }
 
     /**
      * {@inheritDoc}
      * <p>
-     * Wakes the workflow on the wake executor, like a wake for its deadline. A failed wake is tried again after the
-     * idle delay.
+     * The restore wins, and the hibernation is forgotten like one of a released segment, see
+     * {@link LiveWorkflows#restoreOver(Hibernated, WorkflowExecution, boolean)}.
+     *
+     * @throws IllegalStateException when the workflow is hibernated under the restoring claim itself, which restores
+     *                               only the workflows it did not adopt
      */
     @Override
-    public CompletableFuture<Void> wakeForCancellation(String workflowId, Consumer<WorkflowExecution> beforeStart) {
-        return wakeWhenArmed(workflowId, beforeStart);
+    public boolean restoreOverHibernation(SegmentClaim claim,
+                                          String workflowId,
+                                          WorkflowExecution execution,
+                                          boolean mayHibernate) {
+        if (!(liveWorkflows.get(workflowId) instanceof Hibernated hibernated)) {
+            return false;
+        }
+        if (hibernated.claim() == claim) {
+            throw new IllegalStateException(
+                    "Workflow '%s' is hibernated under the claim that restores it.".formatted(workflowId)
+            );
+        }
+        if (!liveWorkflows.restoreOver(hibernated, execution, mayHibernate)) {
+            return false;
+        }
+        release(hibernated);
+        logger.debug("Forgot hibernated workflow [{}] of segment {}, as a claim of segment {} restored it.",
+                     workflowId, hibernated.claim().segment().getSegmentId(), claim.segment().getSegmentId());
+        return true;
     }
+
+    // Claim lifecycle hooks: as a claim restores, catches up, fails or ends.
 
     /**
      * {@inheritDoc}
@@ -263,18 +284,6 @@ final class WorkflowEngineHibernationSupport implements Hibernation {
     @Override
     public ClaimedIndex withAcceptedHints(ClaimedIndex claimed) {
         return claimed;
-    }
-
-    /**
-     * {@inheritDoc}
-     * <p>
-     * Runs the restore under the lock of the workflow, which every hibernation, wake and adoption of it takes.
-     */
-    @Override
-    public <T> T restoreGuarded(String workflowId, Supplier<T> restore) {
-        try (var ignored = liveWorkflows.lock(workflowId)) {
-            return restore.get();
-        }
     }
 
     /**
@@ -370,36 +379,37 @@ final class WorkflowEngineHibernationSupport implements Hibernation {
                           .toList());
     }
 
+    // Wakes: what a hibernated workflow is woken for.
+
     /**
      * {@inheritDoc}
      * <p>
-     * The restore wins, and the hibernation is forgotten like one of a released segment, see
-     * {@link LiveWorkflows#restoreOver(Hibernated, WorkflowExecution, boolean)}.
-     *
-     * @throws IllegalStateException when the workflow is hibernated under the restoring claim itself, which restores
-     *                               only the workflows it did not adopt
+     * A failure fails the event, so the event processor hands it to the workflow again.
      */
     @Override
-    public boolean restoreOverHibernation(SegmentClaim claim,
-                                          String workflowId,
-                                          WorkflowExecution execution,
-                                          boolean mayHibernate) {
-        if (!(liveWorkflows.get(workflowId) instanceof Hibernated hibernated)) {
-            return false;
+    public void wakeForEvent(Hibernated hibernated, EventMessage event, ProcessingContext context) {
+        try {
+            wake(hibernated, restored -> restored.onEvent(event, context));
+        } catch (RuntimeException e) {
+            logger.warn("Could not wake hibernated workflow [{}] for event [{}]; failing the event so it is delivered "
+                                + "again.",
+                        hibernated.workflowId(), event.type(), e);
+            throw e;
         }
-        if (hibernated.claim() == claim) {
-            throw new IllegalStateException(
-                    "Workflow '%s' is hibernated under the claim that restores it.".formatted(workflowId)
-            );
-        }
-        if (!liveWorkflows.restoreOver(hibernated, execution, mayHibernate)) {
-            return false;
-        }
-        release(hibernated);
-        logger.debug("Forgot hibernated workflow [{}] of segment {}, as a claim of segment {} restored it.",
-                     workflowId, hibernated.claim().segment().getSegmentId(), claim.segment().getSegmentId());
-        return true;
     }
+
+    /**
+     * {@inheritDoc}
+     * <p>
+     * Wakes the workflow on the wake executor, like a wake for its deadline. A failed wake is tried again after the
+     * idle delay.
+     */
+    @Override
+    public CompletableFuture<Void> wakeForCancellation(String workflowId, Consumer<WorkflowExecution> beforeStart) {
+        return wakeWhenArmed(workflowId, beforeStart);
+    }
+
+    // Helpers.
 
     /**
      * Forgets the given hibernated workflows and cancels their deadlines. Takes the lock of each workflow, so a wake

@@ -39,6 +39,23 @@ import java.util.function.Supplier;
  *     the lock a restore takes, are skipped.</li>
  * </ul>
  * <p>
+ * The methods fall into four roles, in this order:
+ * <ul>
+ *     <li><b>lifecycle and queries</b>, as the engine starts and stops: {@link #isEnabled()},
+ *     {@link #hibernatedWorkflowIds()}, {@link #start()}, {@link #stop()};</li>
+ *     <li><b>residency guards</b>, as an execution enters memory: whether it {@link #mayHibernate(SegmentClaim) may
+ *     hibernate} and is {@link #allow(WorkflowExecution, SegmentClaim) allowed} to, and how a restore is
+ *     {@link #restoreGuarded(String, Supplier) guarded} against a hibernation of its workflow and
+ *     {@link #restoreOverHibernation(SegmentClaim, String, WorkflowExecution, boolean) takes its place};</li>
+ *     <li><b>claim lifecycle hooks</b>, as a claim of a segment restores, catches up, fails or ends:
+ *     {@link #withAcceptedHints(ClaimedIndex)}, {@link #adopt(SegmentClaim, Map)}, {@link #arm(Segment)},
+ *     {@link #dropOf(SegmentClaim)}, {@link #dropOverlapping(Segment)};</li>
+ *     <li><b>wakes</b>, for what a hibernated workflow is woken for:
+ *     {@link #wakeForEvent(Hibernated, EventMessage, ProcessingContext)} and
+ *     {@link #wakeForCancellation(String, Consumer)}.</li>
+ * </ul>
+ * The engine calls every role on the one hibernation it holds, so they stay one interface.
+ * <p>
  * The engine starts with {@link NoHibernation}, and replaces it once, before it starts, when its module enables
  * hibernation, see {@link WorkflowEngine#enableHibernation}. Public, as the workflow module hands the
  * {@link WorkflowEngine#hibernation() hibernation of its engine} to its {@link WorkflowCancellationService};
@@ -55,6 +72,8 @@ import java.util.function.Supplier;
  */
 @Internal
 public sealed interface Hibernation permits WorkflowEngineHibernationSupport, NoHibernation {
+
+    // Lifecycle and queries.
 
     /**
      * Returns whether workflows may hibernate. The engine never asks: it exists for the
@@ -83,6 +102,8 @@ public sealed interface Hibernation permits WorkflowEngineHibernationSupport, No
      */
     void stop();
 
+    // Residency guards: as an execution enters memory.
+
     /**
      * Returns whether an execution started or restored under the given claim may hibernate. Such an execution gets its
      * events under the lock of its workflow, see {@link LiveWorkflows#deliver}; an execution that never hibernates gets
@@ -101,6 +122,37 @@ public sealed interface Hibernation permits WorkflowEngineHibernationSupport, No
      * @param claim     the claim it was started or restored under, or {@code null} outside a segmented processor
      */
     void allow(WorkflowExecution execution, @Nullable SegmentClaim claim);
+
+    /**
+     * Runs the given {@code restore}, which brings a restored execution of the given workflow into memory, guarded
+     * against the hibernations, wakes and adoptions of that workflow: none of them runs while the restore does.
+     *
+     * @param workflowId the identifier of the restored workflow
+     * @param restore    brings the restored execution into memory
+     * @param <T>        the type of the result of the restore
+     * @return the result of the restore
+     */
+    <T> T restoreGuarded(String workflowId, Supplier<T> restore);
+
+    /**
+     * Brings the given execution, which the given claim restored, into memory in place of a hibernation of its workflow
+     * under another claim, if the workflow is hibernated. Only a claim of an overlapping segment, while a split or a
+     * merge is in progress, holds a workflow hibernated that another claim restores. The caller holds the lock of the
+     * workflow, see {@link #restoreGuarded(String, Supplier)}, and the lock of the restoring claim while it is current.
+     *
+     * @param claim        the claim restoring the workflow
+     * @param workflowId   the identifier of the restored workflow
+     * @param execution    the execution the claim restored
+     * @param mayHibernate whether the execution may hibernate
+     * @return {@code true} when the execution took the place of a hibernation of the workflow, {@code false} when the
+     * workflow is not hibernated, so the caller brings the execution into memory itself
+     */
+    boolean restoreOverHibernation(SegmentClaim claim,
+                                   String workflowId,
+                                   WorkflowExecution execution,
+                                   boolean mayHibernate);
+
+    // Claim lifecycle hooks: as a claim restores, catches up, fails or ends.
 
     /**
      * Returns the given running workflows a claim loaded, with only the hibernation hints this hibernation accepts: a
@@ -146,16 +198,7 @@ public sealed interface Hibernation permits WorkflowEngineHibernationSupport, No
      */
     void dropOverlapping(Segment segment);
 
-    /**
-     * Runs the given {@code restore}, which brings a restored execution of the given workflow into memory, guarded
-     * against the hibernations, wakes and adoptions of that workflow: none of them runs while the restore does.
-     *
-     * @param workflowId the identifier of the restored workflow
-     * @param restore    brings the restored execution into memory
-     * @param <T>        the type of the result of the restore
-     * @return the result of the restore
-     */
-    <T> T restoreGuarded(String workflowId, Supplier<T> restore);
+    // Wakes: what a hibernated workflow is woken for.
 
     /**
      * Wakes the given hibernated workflow for an event, on the thread handling the event, and hands it the event before
@@ -180,22 +223,4 @@ public sealed interface Hibernation permits WorkflowEngineHibernationSupport, No
      * turned out unnecessary, as the workflow is no longer hibernated
      */
     CompletableFuture<Void> wakeForCancellation(String workflowId, Consumer<WorkflowExecution> beforeStart);
-
-    /**
-     * Brings the given execution, which the given claim restored, into memory in place of a hibernation of its workflow
-     * under another claim, if the workflow is hibernated. Only a claim of an overlapping segment, while a split or a
-     * merge is in progress, holds a workflow hibernated that another claim restores. The caller holds the lock of the
-     * workflow, see {@link #restoreGuarded(String, Supplier)}, and the lock of the restoring claim while it is current.
-     *
-     * @param claim        the claim restoring the workflow
-     * @param workflowId   the identifier of the restored workflow
-     * @param execution    the execution the claim restored
-     * @param mayHibernate whether the execution may hibernate
-     * @return {@code true} when the execution took the place of a hibernation of the workflow, {@code false} when the
-     * workflow is not hibernated, so the caller brings the execution into memory itself
-     */
-    boolean restoreOverHibernation(SegmentClaim claim,
-                                   String workflowId,
-                                   WorkflowExecution execution,
-                                   boolean mayHibernate);
 }

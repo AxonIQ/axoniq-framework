@@ -50,6 +50,8 @@ public enum NoHibernation implements Hibernation {
      */
     INSTANCE;
 
+    // Lifecycle and queries.
+
     @Override
     public boolean isEnabled() {
         return false;
@@ -70,6 +72,8 @@ public enum NoHibernation implements Hibernation {
         // Nothing hibernated to forget.
     }
 
+    // Residency guards: as an execution enters memory.
+
     @Override
     public boolean mayHibernate(@Nullable SegmentClaim claim) {
         return false;
@@ -79,6 +83,31 @@ public enum NoHibernation implements Hibernation {
     public void allow(WorkflowExecution execution, @Nullable SegmentClaim claim) {
         // Never hibernates.
     }
+
+    /**
+     * {@inheritDoc}
+     * <p>
+     * Runs the restore without the lock of the workflow: no workflow hibernates, wakes or is adopted.
+     */
+    @Override
+    public <T> T restoreGuarded(String workflowId, Supplier<T> restore) {
+        return restore.get();
+    }
+
+    /**
+     * {@inheritDoc}
+     * <p>
+     * Never restores over a hibernation, as no workflow is hibernated without hibernation.
+     */
+    @Override
+    public boolean restoreOverHibernation(SegmentClaim claim,
+                                          String workflowId,
+                                          WorkflowExecution execution,
+                                          boolean mayHibernate) {
+        return false;
+    }
+
+    // Claim lifecycle hooks: as a claim restores, catches up, fails or ends.
 
     /**
      * {@inheritDoc}
@@ -115,15 +144,7 @@ public enum NoHibernation implements Hibernation {
         // Nothing hibernated to forget.
     }
 
-    /**
-     * {@inheritDoc}
-     * <p>
-     * Runs the restore without the lock of the workflow: no workflow hibernates, wakes or is adopted.
-     */
-    @Override
-    public <T> T restoreGuarded(String workflowId, Supplier<T> restore) {
-        return restore.get();
-    }
+    // Wakes: what a hibernated workflow is woken for.
 
     /**
      * {@inheritDoc}
@@ -143,19 +164,6 @@ public enum NoHibernation implements Hibernation {
     @Override
     public CompletableFuture<Void> wakeForCancellation(String workflowId, Consumer<WorkflowExecution> beforeStart) {
         throw notHibernating(workflowId);
-    }
-
-    /**
-     * {@inheritDoc}
-     * <p>
-     * Never restores over a hibernation, as no workflow is hibernated without hibernation.
-     */
-    @Override
-    public boolean restoreOverHibernation(SegmentClaim claim,
-                                          String workflowId,
-                                          WorkflowExecution execution,
-                                          boolean mayHibernate) {
-        return false;
     }
 
     private static IllegalStateException notHibernating(String workflowId) {
