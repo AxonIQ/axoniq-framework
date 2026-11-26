@@ -24,11 +24,13 @@ import org.axonframework.messaging.eventhandling.processing.streaming.segmenting
 import org.jspecify.annotations.Nullable;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.OptionalLong;
+import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -61,12 +63,15 @@ public class InMemoryWorkflowIndex implements WorkflowIndex {
     }
 
     @Override
-    public CompletableFuture<WorkflowIndexRows> load(String module,
-                                                     Segment segment,
-                                                     @Nullable ProcessingContext context) {
+    public CompletableFuture<Optional<WorkflowIndexRows>> load(String module,
+                                                               Segment segment,
+                                                               @Nullable ProcessingContext context) {
         var range = SegmentKeyRange.of(segment);
         var rows = rowsOf(module);
         synchronized (rows) {
+            if (!rows.initialized) {
+                return CompletableFuture.completedFuture(Optional.empty());
+            }
             var running = new HashSet<String>();
             var wakesAt = new HashMap<String, Instant>();
             rows.workflows.forEach((workflowId, wakes) -> {
@@ -81,10 +86,7 @@ public class InMemoryWorkflowIndex implements WorkflowIndex {
                                   .stream()
                                   .filter(wait -> range.contains(SegmentKeyRange.keyOf(wait.workflowId())))
                                   .toList();
-            var position = rows.positions.get(range);
-            return CompletableFuture.completedFuture(new WorkflowIndexRows(
-                    running, wakesAt, waits, position == null ? OptionalLong.empty() : OptionalLong.of(position)
-            ));
+            return CompletableFuture.completedFuture(Optional.of(new WorkflowIndexRows(running, wakesAt, waits)));
         }
     }
 
@@ -105,13 +107,22 @@ public class InMemoryWorkflowIndex implements WorkflowIndex {
         var rows = rowsOf(module);
         synchronized (rows) {
             changes.changes().forEach(rows::apply);
-            var position = changes.position();
-            if (position != null) {
-                // A split or a merge replaced the segments whose range overlaps this one.
-                rows.positions.keySet().removeIf(range -> range.overlaps(position.range()));
-                rows.positions.put(position.range(), position.position());
-            }
         }
+    }
+
+    @Override
+    public CompletableFuture<Void> initialize(String module,
+                                              Set<String> runningWorkflowIds,
+                                              Collection<WaitAssociation> waits) {
+        var rows = rowsOf(module);
+        synchronized (rows) {
+            runningWorkflowIds.forEach(workflowId -> rows.workflows.putIfAbsent(workflowId, null));
+            waits.stream()
+                 .filter(wait -> runningWorkflowIds.contains(wait.workflowId()))
+                 .forEach(wait -> rows.waits.putIfAbsent(new WaitKey(wait.workflowId(), wait.stepName()), wait));
+            rows.initialized = true;
+        }
+        return CompletableFuture.completedFuture(null);
     }
 
     @Override
@@ -129,7 +140,7 @@ public class InMemoryWorkflowIndex implements WorkflowIndex {
         // The time each running workflow wakes at, or null when it is not hibernated.
         private final Map<String, @Nullable Instant> workflows = new HashMap<>();
         private final Map<WaitKey, WaitAssociation> waits = new LinkedHashMap<>();
-        private final Map<SegmentKeyRange, Long> positions = new HashMap<>();
+        private boolean initialized;
 
         private void apply(WorkflowIndexChange change) {
             switch (change) {

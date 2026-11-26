@@ -38,7 +38,9 @@ import static org.assertj.core.api.Assertions.assertThat;
         webEnvironment = SpringBootTest.WebEnvironment.NONE,
         properties = {
                 "axon.axonserver.enabled=false",
-                "axon.postgresql.enabled=false"
+                "axon.postgresql.enabled=false",
+                // The tokens stay in memory, which a workflow index that survives a restart does not allow.
+                "axon.workflow.index.enabled=false"
         }
 )
 class WorkflowRecoverableExceptionPolicyBeanIT {

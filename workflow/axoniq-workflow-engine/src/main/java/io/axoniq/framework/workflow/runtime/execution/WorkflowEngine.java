@@ -523,24 +523,25 @@ public class WorkflowEngine implements
 
     /**
      * Sources what the claim of the given segment restores from, with no workflow hibernated: only index rows know when
-     * one wakes. With a {@link WorkflowIndex}, the result becomes the rows of the segment.
+     * one wakes. With a {@link WorkflowIndex}, the result becomes the rows of the segment, and initializes the index
+     * when it was not initialized.
      */
     private CompletableFuture<ClaimedWorkflows> sourceClaimedWorkflows(Segment segment,
                                                                        ProcessingContext sourcingContext) {
         var support = index;
         return workflowStore.loadWaitAssociations(sourcingContext).thenCompose(
-                waits -> workflowStore.loadRunningWorkflows(sourcingContext).thenApply(running -> {
-                    if (support != null) {
-                        support.sourced(segment, running.workflowIds(), waits.waitAssociations());
-                    }
-                    return new ClaimedWorkflows(
+                waits -> workflowStore.loadRunningWorkflows(sourcingContext).thenCompose(running -> {
+                    var sourced = support == null
+                            ? CompletableFuture.<Void>completedFuture(null)
+                            : support.sourced(segment, running.workflowIds(), waits.waitAssociations());
+                    return sourced.thenApply(ignored -> new ClaimedWorkflows(
                             running.workflowIds(),
                             waits.waitAssociations()
                                  .stream()
                                  .filter(wait -> WorkflowSegmentOwnership.ownedBy(segment, wait.workflowId()))
                                  .toList(),
                             HibernatedWorkflows.NONE
-                    );
+                    ));
                 })
         );
     }

@@ -39,7 +39,7 @@ module.
 
 - one row per running workflow: module, workflow id, segment key, and a nullable `wakesAt`
 - one row per open wait: module, workflow id, step name, segment key, event name, associations
-- one position per segment: the position in the event store the rows of that segment are correct at
+- one mark per initialized workflow module
 
 Every change to a row has the same outcome when it is stored twice. A workflow starts once and ends once, and a wait
 opens once and closes once, so a change that arrives late or again never hides a workflow or a wait.
@@ -55,7 +55,9 @@ of keys. A split halves the range and a merge joins two neighboring ranges, so t
 `Checkpointing.onCheckpointStore(segment, token, processingContext)` is a hook the processor invokes right before it
 stores a token, inside the transaction that stores it. The engine notes row changes while it handles events. At the
 hook it writes the changes that the token covers. Rows and token are committed together, or neither is, so the token is
-the position of the rows.
+the position of the rows. The index keeps no position of its own. Rows ahead of the token, as after a crash between a
+write in a transaction of its own and the token, are harmless: applying the events after the token again gives the same
+rows.
 
 Only the node that owns a segment commits rows:
 
@@ -68,20 +70,34 @@ Only the node that owns a segment commits rows:
 
 ```
 claim of segment S, stored token T
-  -> read the rows of S and its position P    one range query per table on the segment key
-  -> read the events after min(P, T)         only those tagged workflowEvent=waitForStep or workflowEvent=lifecycle
+  -> read the rows of S                      one range query per table on the segment key
+  -> read the events after T                 only those tagged workflowEvent=waitForStep or workflowEvent=lifecycle
   -> apply the events to the rows, and note what they change
   => the running workflows and the open waits of S, as of the claim
 ```
 
-The engine moves the position of a segment with every stored token that changes a row, with the first token after a
-claim, and at least every 10 seconds otherwise. A node without the workflow index moves the token and writes no row, so
-the claim reads from the position and applies what that node handled. The claim notes those changes, and they are
-stored with the next token.
+A split gives both new segments the token of the old segment, and a merge stores
+`MergedTrackingToken.merged(lower, upper)`, which resumes from the lower token. So a claim after a split or a merge
+reads every event its rows may miss, without a step of its own.
 
-A segment claim sources the two lists instead when no position is stored for the segment, or when the segment has no
-stored token. The sourced workflows and waits of the segment then become its rows, and are stored with the next token,
-under its owner check.
+A segment claim sources the two lists instead when the module is not initialized, or when the segment has no stored
+token. The sourced workflows and waits of the segment then become its rows, and are stored with the next token, under
+its owner check.
+
+### Initialization
+
+An index introduced while the processor already stored tokens, or one that was emptied, misses the workflows that
+started before those tokens. So `load` reports nothing for a module until `initialize` marked it. A claim that finds
+the module not initialized sources the two lists, and initializes the index with every running workflow and open wait
+of the module, in one transaction. An initialization never removes a row, as another claim may already have stored a
+later change.
+
+### Start checks
+
+The token can only be the position of the rows while the engine decides when the processor stores a token, and while
+the tokens survive a restart whenever the index does. A workflow module with an index therefore refuses to start when
+its processor has event handling components of its own, uses another progress strategy, or keeps its tokens in an
+`InMemoryTokenStore` while the index is not an `InMemoryWorkflowIndex`.
 
 ### Hibernation
 
@@ -103,6 +119,9 @@ of the segment, as it does without a workflow index.
   segment claim sources the full list of open waits.
 - **Reading every event after the token.** Rejected. A segment claim reads only wait and lifecycle events, selected by
   tag. No other event changes a row, and the number of other events grows with the business load.
+- **A position per segment, kept apart from the token.** Rejected. It let nodes with and without the index run
+  together, at the cost of a third table, a position store every 10 seconds, and a claim rule across a split or a
+  merge. Every node runs with the index instead.
 - **Keeping the hibernation snapshot per segment next to the rows.** Rejected. It holds the same fact as `wakesAt` in a
   second place, it needs a `SnapshotStore`, and it is missing after a crash. `wakesAt` in the row is stored with the
   token, so it is there after a crash too.
@@ -117,14 +136,17 @@ of the segment, as it does without a workflow index.
 - A hibernated workflow stays out of memory across a segment claim on any node, also after a crash, and after a split
   or a merge.
 - The workflow index must be in the database of the token store to keep hibernated workflows out of memory.
-- `JpaWorkflowIndex` adds three tables. Each stored token also writes the rows that changed, and the position of the
-  segment when a row changed or 10 seconds passed.
+- `JpaWorkflowIndex` adds three tables. Each stored token also writes the rows that changed.
 - A row holds a workflow id of at most 255 characters, a step name of at most 1024 characters, and at most 10,000 bytes
   of associations per wait.
-- The first claim of each segment with an empty workflow index sources the two lists, as does the first claim after a
-  split or a merge. Its rows carry no `wakesAt`, so the segment claims of that start load every running workflow.
-- Nodes with and without the workflow index can run together, so it can be turned on in a rolling restart, and turned
-  off and on again without a step of its own.
+- The first claim with an empty workflow index sources the two lists and initializes the index for the whole module.
+  Its rows carry no `wakesAt`, so the segment claims of that start load every running workflow. A split or a merge
+  does not source.
+- Every node of a workflow module must run with the same index. A rolling upgrade from a version without it is not
+  supported: stop every node of the old version first. Turning the index off and on again, or resetting the tokens of
+  the workflow processor, means emptying the index, its initialization included.
+- A workflow module with an index refuses to start when its processor could store a token past changes the rows do
+  not hold.
 - `Checkpointing` has one more default method. It does nothing unless a component overrides it.
 - An application chooses `JpaWorkflowIndex` or `InMemoryWorkflowIndex`. `WorkflowIndex` and the types of its methods
   are `@Internal`: they are a storage detail of the engine and may change with it.

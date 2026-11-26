@@ -31,10 +31,11 @@ import org.jspecify.annotations.Nullable;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
-import java.util.OptionalLong;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 
@@ -42,7 +43,7 @@ import static java.util.Objects.requireNonNull;
 
 /**
  * JPA implementation of {@link WorkflowIndex}, on the entities {@link WorkflowIndexEntry},
- * {@link WorkflowIndexWaitEntry} and {@link WorkflowIndexSegmentEntry}. Give it the
+ * {@link WorkflowIndexWaitEntry} and {@link WorkflowIndexInitialization}. Give it the
  * {@link TransactionalExecutorProvider} of the token store, so the rows and the token commit together. When the index
  * lives in another database, use {@link JpaWorkflowIndexConfiguration#storesWithToken(boolean) storesWithToken(false)}.
  * <p>
@@ -86,11 +87,14 @@ public class JpaWorkflowIndex implements WorkflowIndex {
     }
 
     @Override
-    public CompletableFuture<WorkflowIndexRows> load(String module,
-                                                     Segment segment,
-                                                     @Nullable ProcessingContext context) {
+    public CompletableFuture<Optional<WorkflowIndexRows>> load(String module,
+                                                               Segment segment,
+                                                               @Nullable ProcessingContext context) {
         var range = SegmentKeyRange.of(segment);
         return executor(context).apply(entityManager -> {
+            if (!isInitialized(entityManager, module)) {
+                return Optional.<WorkflowIndexRows>empty();
+            }
             var running = new HashSet<String>();
             var wakesAt = new HashMap<String, Instant>();
             entityManager.createQuery(
@@ -121,20 +125,7 @@ public class JpaWorkflowIndex implements WorkflowIndex {
                          .setParameter("to", range.to())
                          .getResultList()
                          .forEach(entry -> waits.add(waitOf(entry)));
-            var position = entityManager.createQuery(
-                                                "select e.segmentPosition from WorkflowIndexSegmentEntry e "
-                                                        + "where e.workflowModule = :workflowModule "
-                                                        + "and e.segmentFrom = :from and e.segmentTo = :to",
-                                                Long.class
-                                        )
-                                        .setParameter(MODULE_PARAM, module)
-                                        .setParameter("from", range.from())
-                                        .setParameter("to", range.to())
-                                        .getResultList();
-            return new WorkflowIndexRows(
-                    running, wakesAt, waits,
-                    position.isEmpty() ? OptionalLong.empty() : OptionalLong.of(position.getFirst())
-            );
+            return Optional.of(new WorkflowIndexRows(running, wakesAt, waits));
         });
     }
 
@@ -148,13 +139,51 @@ public class JpaWorkflowIndex implements WorkflowIndex {
             for (WorkflowIndexChange change : changes.changes()) {
                 apply(entityManager, module, change, added);
             }
-            var position = changes.position();
-            if (position != null) {
-                movePosition(entityManager, module, position, added);
+            entityManager.flush();
+            added.forEach(entityManager::detach);
+        });
+    }
+
+    @Override
+    public CompletableFuture<Void> initialize(String module,
+                                              Set<String> runningWorkflowIds,
+                                              Collection<WaitAssociation> waits) {
+        return executor(null).accept(entityManager -> {
+            List<Object> added = new ArrayList<>();
+            var storedWorkflows = new HashSet<>(
+                    entityManager.createQuery("select e.workflowId from WorkflowIndexEntry e "
+                                                      + "where e.workflowModule = :workflowModule", String.class)
+                                 .setParameter(MODULE_PARAM, module)
+                                 .getResultList()
+            );
+            runningWorkflowIds.stream()
+                              .filter(workflowId -> !storedWorkflows.contains(workflowId))
+                              .forEach(workflowId -> add(entityManager, added, new WorkflowIndexEntry(
+                                      module, workflowId, SegmentKeyRange.keyOf(workflowId), null
+                              )));
+            var storedWaits = new HashSet<List<String>>();
+            entityManager.createQuery("select e.workflowId, e.stepName from WorkflowIndexWaitEntry e "
+                                              + "where e.workflowModule = :workflowModule", Object[].class)
+                         .setParameter(MODULE_PARAM, module)
+                         .getResultList()
+                         .forEach(row -> storedWaits.add(List.of((String) row[0], (String) row[1])));
+            waits.stream()
+                 .filter(wait -> runningWorkflowIds.contains(wait.workflowId()))
+                 .filter(wait -> !storedWaits.contains(List.of(wait.workflowId(), wait.stepName())))
+                 .forEach(wait -> add(entityManager, added, waitEntry(module, wait)));
+            if (!isInitialized(entityManager, module)) {
+                add(entityManager, added, new WorkflowIndexInitialization(module));
             }
             entityManager.flush();
             added.forEach(entityManager::detach);
         });
+    }
+
+    private static boolean isInitialized(EntityManager entityManager, String module) {
+        return entityManager.createQuery("select count(e) from WorkflowIndexInitialization e "
+                                                 + "where e.workflowModule = :workflowModule", Long.class)
+                            .setParameter(MODULE_PARAM, module)
+                            .getSingleResult() > 0;
     }
 
     @Override
@@ -188,16 +217,7 @@ public class JpaWorkflowIndex implements WorkflowIndex {
             case WaitOpened opened -> {
                 var wait = opened.association();
                 removeWait(entityManager, module, wait.workflowId(), wait.stepName());
-                var eventName = wait.eventName();
-                add(entityManager, added, new WorkflowIndexWaitEntry(
-                        module,
-                        wait.workflowId(),
-                        wait.stepName(),
-                        SegmentKeyRange.keyOf(wait.workflowId()),
-                        eventName == null ? null : eventName.name(),
-                        requireNonNull(converter.convert(new HashSet<>(wait.associations()), byte[].class),
-                                       "The associations must convert to bytes.")
-                ));
+                add(entityManager, added, waitEntry(module, wait));
             }
             case WaitClosed closed -> removeWait(entityManager, module, closed.workflowId(), closed.stepName());
             case WakesAtSet set -> {
@@ -218,34 +238,17 @@ public class JpaWorkflowIndex implements WorkflowIndex {
         added.add(entry);
     }
 
-    private static void movePosition(EntityManager entityManager,
-                                     String module,
-                                     WorkflowIndexChanges.SegmentPosition position,
-                                     List<Object> added) {
-        var range = position.range();
-        // Removes the positions of the segments a split or a merge replaced: those that overlap this range.
-        entityManager.createQuery("delete from WorkflowIndexSegmentEntry e "
-                                          + "where e.workflowModule = :workflowModule "
-                                          + "and e.segmentFrom <= :to and e.segmentTo >= :from "
-                                          + "and (e.segmentFrom <> :from or e.segmentTo <> :to)")
-                     .setParameter(MODULE_PARAM, module)
-                     .setParameter("from", range.from())
-                     .setParameter("to", range.to())
-                     .executeUpdate();
-        int updated = entityManager.createQuery("update WorkflowIndexSegmentEntry e "
-                                                        + "set e.segmentPosition = :position "
-                                                        + "where e.workflowModule = :workflowModule "
-                                                        + "and e.segmentFrom = :from and e.segmentTo = :to")
-                                   .setParameter("position", position.position())
-                                   .setParameter(MODULE_PARAM, module)
-                                   .setParameter("from", range.from())
-                                   .setParameter("to", range.to())
-                                   .executeUpdate();
-        if (updated == 0) {
-            add(entityManager, added, new WorkflowIndexSegmentEntry(
-                    module, range.from(), range.to(), position.position()
-            ));
-        }
+    private WorkflowIndexWaitEntry waitEntry(String module, WaitAssociation wait) {
+        var eventName = wait.eventName();
+        return new WorkflowIndexWaitEntry(
+                module,
+                wait.workflowId(),
+                wait.stepName(),
+                SegmentKeyRange.keyOf(wait.workflowId()),
+                eventName == null ? null : eventName.name(),
+                requireNonNull(converter.convert(new HashSet<>(wait.associations()), byte[].class),
+                               "The associations must convert to bytes.")
+        );
     }
 
     private static boolean hasWorkflow(EntityManager entityManager, String module, String workflowId) {

@@ -62,9 +62,9 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
-import java.util.OptionalLong;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import java.util.stream.IntStream;
@@ -185,11 +185,12 @@ abstract class JpaWorkflowIndexProcessorTransactionTestSuite {
             var workflowIds = IntStream.range(0, 200).mapToObj(i -> "order-" + i).toList();
             List<WorkflowIndexChange> changes = new ArrayList<>();
             workflowIds.forEach(workflowId -> changes.add(new WorkflowStarted(workflowId)));
-            index.store(MODULE, new WorkflowIndexChanges(changes, null), null).orTimeout(20, TimeUnit.SECONDS).join();
+            index.initialize(MODULE, Set.of(), List.of()).orTimeout(20, TimeUnit.SECONDS).join();
+            index.store(MODULE, new WorkflowIndexChanges(changes), null).orTimeout(20, TimeUnit.SECONDS).join();
 
             for (Segment segment : Segment.splitBalanced(Segment.ROOT_SEGMENT, SEGMENT_COUNT - 1)) {
                 // when
-                var rows = index.load(MODULE, segment, null).orTimeout(20, TimeUnit.SECONDS).join();
+                var rows = index.load(MODULE, segment, null).orTimeout(20, TimeUnit.SECONDS).join().orElseThrow();
 
                 // then
                 assertThat(rows.runningWorkflowIds()).containsExactlyInAnyOrderElementsOf(
@@ -306,12 +307,13 @@ abstract class JpaWorkflowIndexProcessorTransactionTestSuite {
         var wakesAt = new HashMap<String, Instant>();
         var waits = new ArrayList<WaitAssociation>();
         for (Segment segment : Segment.splitBalanced(Segment.ROOT_SEGMENT, SEGMENT_COUNT - 1)) {
-            var rows = index.load(MODULE, segment, null).orTimeout(10, TimeUnit.SECONDS).join();
-            running.addAll(rows.runningWorkflowIds());
-            wakesAt.putAll(rows.wakesAt());
-            waits.addAll(rows.waits());
+            index.load(MODULE, segment, null).orTimeout(10, TimeUnit.SECONDS).join().ifPresent(rows -> {
+                running.addAll(rows.runningWorkflowIds());
+                wakesAt.putAll(rows.wakesAt());
+                waits.addAll(rows.waits());
+            });
         }
-        return new WorkflowIndexRows(running, wakesAt, waits, OptionalLong.empty());
+        return new WorkflowIndexRows(running, wakesAt, waits);
     }
 
     /**

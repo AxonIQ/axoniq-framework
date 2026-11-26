@@ -8,7 +8,6 @@
 package io.axoniq.framework.workflow.index.jpa;
 
 import io.axoniq.framework.workflow.runtime.execution.WaitAssociation;
-import io.axoniq.framework.workflow.runtime.execution.SegmentKeyRange;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowIndexChange;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowIndexChange.WaitClosed;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowIndexChange.WaitOpened;
@@ -30,16 +29,19 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 
 /**
- * Tests the {@link JpaWorkflowIndex} against an in-memory database: which rows a segment loads, and what each
- * {@link WorkflowIndexChange} does to the rows.
+ * Tests the {@link JpaWorkflowIndex} against an in-memory database: which rows a segment loads, what each
+ * {@link WorkflowIndexChange} does to the rows, and what an initialization adds.
  *
  * @author Stefan Dragisic
  */
@@ -58,6 +60,7 @@ class JpaWorkflowIndexTest {
         testSubject = new JpaWorkflowIndex(new JpaTransactionalExecutorProvider(entityManagerFactory),
                                            new JacksonConverter(),
                                            JpaWorkflowIndexConfiguration.DEFAULT);
+        testSubject.initialize(MODULE, Set.of(), List.of()).orTimeout(5, TimeUnit.SECONDS).join();
     }
 
     @AfterEach
@@ -110,9 +113,13 @@ class JpaWorkflowIndexTest {
         void holdNoRowOfAnotherModule() {
             // given
             store(startedAndWaiting("order-1").toList());
+            testSubject.initialize("payments", Set.of(), List.of()).orTimeout(5, TimeUnit.SECONDS).join();
 
             // when
-            var rows = testSubject.load("payments", Segment.ROOT_SEGMENT, null).orTimeout(5, TimeUnit.SECONDS).join();
+            var rows = testSubject.load("payments", Segment.ROOT_SEGMENT, null)
+                                  .orTimeout(5, TimeUnit.SECONDS)
+                                  .join()
+                                  .orElseThrow();
 
             // then
             assertThat(rows.runningWorkflowIds()).isEmpty();
@@ -224,56 +231,71 @@ class JpaWorkflowIndexTest {
     }
 
     @Nested
-    class StoredPosition {
+    class Initialization {
 
         @Test
-        void isLoadedForExactlyItsSegmentAndModule() {
+        void isWhatLetsAModuleLoadItsRows() {
             // given
-            var halves = Segment.ROOT_SEGMENT.split();
-
-            // when
-            storePosition(halves[0], 42L);
-
-            // then
-            assertThat(load(halves[0]).position()).hasValue(42L);
-            assertThat(load(halves[1]).position()).isEmpty();
-            assertThat(load(Segment.ROOT_SEGMENT).position()).isEmpty();
-            assertThat(testSubject.load("payments", halves[0], null).orTimeout(5, TimeUnit.SECONDS).join().position())
-                    .isEmpty();
-        }
-
-        @Test
-        void replacesThePositionsOfTheSegmentsAMergeOrASplitReplaced() {
-            // given
-            var halves = Segment.ROOT_SEGMENT.split();
-            storePosition(halves[0], 42L);
-            storePosition(halves[1], 43L);
-
-            // when: the halves are merged
-            storePosition(Segment.ROOT_SEGMENT, 44L);
-
-            // then
-            assertThat(load(Segment.ROOT_SEGMENT).position()).hasValue(44L);
-            assertThat(load(halves[0]).position()).isEmpty();
-            assertThat(load(halves[1]).position()).isEmpty();
-
-            // when: the root is split again, and the same half moves on
-            storePosition(halves[0], 45L);
-            storePosition(halves[0], 46L);
-
-            // then
-            assertThat(load(halves[0]).position()).hasValue(46L);
-            assertThat(load(Segment.ROOT_SEGMENT).position()).isEmpty();
-        }
-
-        private void storePosition(Segment segment, long position) {
-            testSubject.store(MODULE,
-                              new WorkflowIndexChanges(List.of(), new WorkflowIndexChanges.SegmentPosition(
-                                      SegmentKeyRange.of(segment), position
-                              )),
-                              null)
+            testSubject.store("payments", new WorkflowIndexChanges(startedAndWaiting("order-1").toList()), null)
                        .orTimeout(5, TimeUnit.SECONDS)
                        .join();
+
+            // when
+            var beforeInitialization = loadPayments();
+            testSubject.initialize("payments", Set.of(), List.of()).orTimeout(5, TimeUnit.SECONDS).join();
+
+            // then
+            assertThat(beforeInitialization).isEmpty();
+            assertThat(loadPayments()).hasValueSatisfying(
+                    rows -> assertThat(rows.runningWorkflowIds()).containsExactly("order-1")
+            );
+        }
+
+        @Test
+        void addsTheGivenWorkflowsAndTheirWaitsWhileKeepingTheStoredRows() {
+            // given: a stored row with a wake time, and a stored wait
+            testSubject.store("payments", new WorkflowIndexChanges(List.of(
+                    new WakesAtSet("order-1", WAKES_AT),
+                    new WaitOpened(wait("order-1", "payload:orderId=order-1"))
+            )), null).orTimeout(5, TimeUnit.SECONDS).join();
+
+            // when: an initialization with another wait of the same step, and a wait of a workflow that does not run
+            testSubject.initialize("payments",
+                                   Set.of("order-1", "order-2"),
+                                   List.of(wait("order-1", "other"), wait("order-2", "payload:orderId=order-2"),
+                                           wait("order-3", "payload:orderId=order-3")))
+                       .orTimeout(5, TimeUnit.SECONDS)
+                       .join();
+
+            // then
+            var rows = loadPayments().orElseThrow();
+            assertThat(rows.runningWorkflowIds()).containsExactlyInAnyOrder("order-1", "order-2");
+            assertThat(rows.wakesAt()).containsExactly(Map.entry("order-1", WAKES_AT));
+            assertThat(rows.waits()).extracting(WaitAssociation::workflowId, WaitAssociation::associations)
+                                    .containsExactlyInAnyOrder(
+                                            tuple("order-1", Set.of("payload:orderId=order-1")),
+                                            tuple("order-2", Set.of("payload:orderId=order-2"))
+                                    );
+        }
+
+        @Test
+        void canRunTwice() {
+            // when
+            testSubject.initialize("payments", Set.of("order-1"), List.of()).orTimeout(5, TimeUnit.SECONDS).join();
+            testSubject.initialize("payments", Set.of("order-1"), List.of()).orTimeout(5, TimeUnit.SECONDS).join();
+
+            // then
+            assertThat(loadPayments()).hasValueSatisfying(
+                    rows -> assertThat(rows.runningWorkflowIds()).containsExactly("order-1")
+            );
+        }
+
+        private static WaitAssociation wait(String workflowId, String association) {
+            return new WaitAssociation(workflowId, "awaitPaid", new QualifiedName("paid"), Set.of(association));
+        }
+
+        private Optional<WorkflowIndexRows> loadPayments() {
+            return testSubject.load("payments", Segment.ROOT_SEGMENT, null).orTimeout(5, TimeUnit.SECONDS).join();
         }
     }
 
@@ -286,12 +308,12 @@ class JpaWorkflowIndexTest {
     }
 
     private void store(List<? extends WorkflowIndexChange> changes) {
-        testSubject.store(MODULE, new WorkflowIndexChanges(new ArrayList<>(changes), null), null)
+        testSubject.store(MODULE, new WorkflowIndexChanges(new ArrayList<>(changes)), null)
                    .orTimeout(5, TimeUnit.SECONDS)
                    .join();
     }
 
     private WorkflowIndexRows load(Segment segment) {
-        return testSubject.load(MODULE, segment, null).orTimeout(5, TimeUnit.SECONDS).join();
+        return testSubject.load(MODULE, segment, null).orTimeout(5, TimeUnit.SECONDS).join().orElseThrow();
     }
 }

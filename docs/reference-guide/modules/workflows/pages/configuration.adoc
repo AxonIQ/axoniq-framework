@@ -337,9 +337,9 @@ Add the three entities to the persistence unit that the `JpaWorkflowIndex` uses.
 |Open wait
 |The name of the workflow module, the workflow id, the step name, the segment key, the event name, and the associations of the wait.
 
-|`WorkflowIndexSegmentEntry`
-|Segment
-|The name of the workflow module, the range of segment keys of the segment, and the position in the event store its rows are correct at.
+|`WorkflowIndexInitialization`
+|Initialized workflow module
+|The name of the workflow module. Without this row, the segment claims of the module source both lists, see <<workflow-index-initialization,Initialization>>.
 |===
 
 A row holds a module name and a workflow id of at most 255 characters, a step name of at most 1024 characters, and at most 10,000 bytes of associations per wait.
@@ -365,25 +365,33 @@ The engine then writes the rows in a transaction of their own, before the proces
 A segment claim still reads its running workflows and open waits from the rows.
 The rows hold no wake time, so a segment claim replays the hibernated workflows of the segment, as it does without a workflow index.
 
-=== First segment claim
+[[workflow-index-initialization]]
+=== Initialization
 
 A workflow index starts empty, while workflows may be running already.
-A segment without a stored position is claimed as without a workflow index: the segment claim sources both lists.
-The running workflows and the open waits of the segment then become its rows, and the engine stores them, and the position of the segment, with the next token.
-From then on, a segment claim reads the rows of its segment.
+Until a workflow module is initialized, the workflow index loads nothing for it, and a segment claim sources both lists as without a workflow index.
+That segment claim then initializes the workflow index for the whole module: it adds the rows of every running workflow and open wait, and marks the module initialized.
+From then on, a segment claim reads the rows of its segment, and the events after the token of the segment.
 
 The rows of that first segment claim hold no wake times.
 So the segment claims of that first start load every running workflow into memory, including the hibernated ones.
 Those workflows hibernate again, and the engine then stores their wake times.
 
-=== Rollout
+[[workflow-index-upgrades]]
+=== Upgrades and token resets
 
-The workflow index can be turned on during a rolling restart, and nodes with and without it can run together.
-A node without the workflow index writes no rows, and moves the token of a segment past events the rows do not hold.
-A segment claim with the workflow index reads the events from the position the rows are correct at, not from the token.
-So it also applies what a node without the workflow index handled, and the rows catch up with the next stored token.
+The token of a segment is the position of its rows: the engine writes the rows an event changes before the processor stores a token past that event.
+A node without the workflow index would move the token past events whose changes the rows do not hold.
+So every node that runs a workflow module must use the same workflow index:
 
-Turning the workflow index off and on again needs no step of its own either.
+* A rolling upgrade from a version without the workflow index is not supported.
+Stop every node of the old version first, then start the nodes with the workflow index.
+Their first segment claims initialize it.
+* To turn the workflow index off and on again, empty its tables before you turn it on.
+* An application that resets the tokens of the workflow processor must empty the tables of the workflow index too, its initialization included.
+
+A workflow module with a workflow index refuses to start when its processor could store a token past changes the rows do not hold.
+That is the case when the processor has event handling components of its own, uses another progress strategy, or keeps its tokens in an `InMemoryTokenStore` while the workflow index survives a restart.
 
 See xref:workflow-internals.adoc#segment-claims[Segment claims] for how a segment claim reads the rows, and how the engine writes them.
 
@@ -473,7 +481,7 @@ The <<workflow-index,workflow index>> is configured with `axon.workflow.index.*`
 
 The `JpaWorkflowIndex` bean uses the `EntityManagerFactory` of the application.
 An application that defines its own `WorkflowIndex` bean replaces the default.
-The rollout of the <<workflow-index,workflow index>> needs no step of its own, also when it is turned on through these properties.
+Turning the <<workflow-index,workflow index>> on through these properties follows the rules of <<workflow-index-upgrades,Upgrades and token resets>>.
 
 See <<running-on-several-nodes,Running on several nodes>> for the token store, failover and snapshots, and <<performance-tuning,Performance tuning>> for choosing the processor values.
 

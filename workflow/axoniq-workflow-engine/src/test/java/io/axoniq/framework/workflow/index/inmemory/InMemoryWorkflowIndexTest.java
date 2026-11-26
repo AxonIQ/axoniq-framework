@@ -7,16 +7,22 @@
  */
 package io.axoniq.framework.workflow.index.inmemory;
 
+import io.axoniq.framework.workflow.runtime.execution.WaitAssociation;
+import io.axoniq.framework.workflow.runtime.execution.WorkflowIndexChange.WakesAtSet;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowIndexChange.WorkflowStarted;
-import io.axoniq.framework.workflow.runtime.execution.SegmentKeyRange;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowIndexChanges;
+import io.axoniq.framework.workflow.runtime.execution.WorkflowIndexRows;
 import org.axonframework.messaging.core.EmptyApplicationContext;
+import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.SimpleUnitOfWorkFactory;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 import org.junit.jupiter.api.*;
 
+import java.time.Instant;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
@@ -25,6 +31,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Tests when the {@link InMemoryWorkflowIndex} applies a stored change: with the commit of the context it is stored in.
+ * Also tests what an initialization adds, and that a module loads nothing before it.
  *
  * @author Stefan Dragisic
  */
@@ -32,10 +39,15 @@ class InMemoryWorkflowIndexTest {
 
     private static final String MODULE = "orders";
     private static final WorkflowIndexChanges STARTED =
-            new WorkflowIndexChanges(List.of(new WorkflowStarted("order-1")), null);
+            new WorkflowIndexChanges(List.of(new WorkflowStarted("order-1")));
 
     private final UnitOfWorkFactory unitOfWorkFactory = new SimpleUnitOfWorkFactory(EmptyApplicationContext.INSTANCE);
     private final InMemoryWorkflowIndex testSubject = new InMemoryWorkflowIndex();
+
+    @BeforeEach
+    void setUp() {
+        testSubject.initialize(MODULE, Set.of(), List.of()).orTimeout(5, TimeUnit.SECONDS).join();
+    }
 
     @Nested
     class StoredChange {
@@ -77,57 +89,52 @@ class InMemoryWorkflowIndexTest {
     }
 
     @Nested
-    class StoredPosition {
+    class Initialization {
 
         @Test
-        void isLoadedForExactlyItsSegment() {
+        void isWhatLetsAModuleLoadItsRows() {
             // given
-            var halves = Segment.ROOT_SEGMENT.split();
+            testSubject.store("payments", STARTED, null).orTimeout(5, TimeUnit.SECONDS).join();
 
             // when
-            storePosition(halves[0], 42L);
+            var beforeInitialization = load("payments");
+            testSubject.initialize("payments", Set.of(), List.of()).orTimeout(5, TimeUnit.SECONDS).join();
 
             // then
-            assertThat(positionOf(halves[0])).hasValue(42L);
-            assertThat(positionOf(halves[1])).isEmpty();
-            assertThat(positionOf(Segment.ROOT_SEGMENT)).isEmpty();
+            assertThat(beforeInitialization).isEmpty();
+            assertThat(load("payments")).hasValueSatisfying(
+                    rows -> assertThat(rows.runningWorkflowIds()).containsExactly("order-1")
+            );
         }
 
         @Test
-        void replacesThePositionsOfTheSegmentsAMergeOrASplitReplaced() {
+        void addsTheGivenWorkflowsAndTheirWaitsWhileKeepingTheStoredRows() {
             // given
-            var halves = Segment.ROOT_SEGMENT.split();
-            storePosition(halves[0], 42L);
-            storePosition(halves[1], 43L);
-
-            // when: the halves are merged
-            storePosition(Segment.ROOT_SEGMENT, 44L);
-
-            // then
-            assertThat(positionOf(Segment.ROOT_SEGMENT)).hasValue(44L);
-            assertThat(positionOf(halves[0])).isEmpty();
-            assertThat(positionOf(halves[1])).isEmpty();
-
-            // when: the root is split again
-            storePosition(halves[0], 45L);
-
-            // then
-            assertThat(positionOf(halves[0])).hasValue(45L);
-            assertThat(positionOf(Segment.ROOT_SEGMENT)).isEmpty();
-        }
-
-        private void storePosition(Segment segment, long position) {
-            testSubject.store(MODULE,
-                              new WorkflowIndexChanges(List.of(), new WorkflowIndexChanges.SegmentPosition(
-                                      SegmentKeyRange.of(segment), position
-                              )),
-                              null)
+            var wakesAt = Instant.parse("2026-12-24T18:00:00Z");
+            testSubject.store("payments", new WorkflowIndexChanges(List.of(new WakesAtSet("order-1", wakesAt))), null)
                        .orTimeout(5, TimeUnit.SECONDS)
                        .join();
+
+            // when
+            testSubject.initialize("payments",
+                                   Set.of("order-1", "order-2"),
+                                   List.of(wait("order-2"), wait("order-3")))
+                       .orTimeout(5, TimeUnit.SECONDS)
+                       .join();
+
+            // then: the wait of a workflow that does not run is left out
+            var rows = load("payments").orElseThrow();
+            assertThat(rows.runningWorkflowIds()).containsExactlyInAnyOrder("order-1", "order-2");
+            assertThat(rows.wakesAt()).containsExactly(Map.entry("order-1", wakesAt));
+            assertThat(rows.waits()).extracting(WaitAssociation::workflowId).containsExactly("order-2");
         }
 
-        private java.util.OptionalLong positionOf(Segment segment) {
-            return testSubject.load(MODULE, segment, null).orTimeout(5, TimeUnit.SECONDS).join().position();
+        private static WaitAssociation wait(String workflowId) {
+            return new WaitAssociation(workflowId, "awaitPaid", new QualifiedName("paid"), Set.of());
+        }
+
+        private Optional<WorkflowIndexRows> load(String module) {
+            return testSubject.load(module, Segment.ROOT_SEGMENT, null).orTimeout(5, TimeUnit.SECONDS).join();
         }
     }
 
@@ -135,6 +142,7 @@ class InMemoryWorkflowIndexTest {
         return testSubject.load(MODULE, Segment.ROOT_SEGMENT, null)
                           .orTimeout(5, TimeUnit.SECONDS)
                           .join()
+                          .orElseThrow()
                           .runningWorkflowIds();
     }
 }

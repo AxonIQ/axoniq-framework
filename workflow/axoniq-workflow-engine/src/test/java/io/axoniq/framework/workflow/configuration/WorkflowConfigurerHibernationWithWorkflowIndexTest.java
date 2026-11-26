@@ -10,7 +10,6 @@ package io.axoniq.framework.workflow.configuration;
 import io.axoniq.framework.workflow.dsl.api.StepStatus;
 import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
 import io.axoniq.framework.workflow.index.inmemory.InMemoryWorkflowIndex;
-import io.axoniq.framework.workflow.runtime.execution.SegmentKeyRange;
 import io.axoniq.framework.workflow.runtime.execution.WaitAssociation;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowIndex;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowIndexChange;
@@ -28,7 +27,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
-import java.util.OptionalLong;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
@@ -292,7 +290,7 @@ class WorkflowConfigurerHibernationWithWorkflowIndexTest extends WorkflowConfigu
             withoutIndex.shutdown();
             assertThat(rows().runningWorkflowIds()).isEmpty();
 
-            // when: the next node has an index, which holds no row and no position yet
+            // when: the next node has an index, which holds no row and is not initialized yet
             indexed = true;
             var withIndex = start(false);
 
@@ -302,68 +300,35 @@ class WorkflowConfigurerHibernationWithWorkflowIndexTest extends WorkflowConfigu
             // and: they stored what they sourced as rows, with the token they stored when the node stopped
             withIndex.shutdown();
             awaitRowsOfWaitingWorkflow(workflowId);
-            assertThat(everySegmentHasAPosition()).isTrue();
+            assertThat(isInitialized()).isTrue();
         }
 
         @Test
-        void replacesTheRowsOfItsSegmentWithWhatItSourced() {
-            // given: a waiting workflow, started on a node without an index
-            indexed = false;
-            var withoutIndex = start(false);
-            var workflowId = startWorkflow(withoutIndex, "wait", "order-1", WAIT_STEP);
-            withoutIndex.shutdown();
-
-            // and: rows without a position that also hold a wait the workflow does not have
+        void replacesTheRowsOfItsSegmentWithWhatItSourcedWhenTheyCannotBeRead() {
+            // given: a waiting workflow on a node that stops, and rows that also hold a wait the workflow does not have
+            var stopped = start(false);
+            var workflowId = startWorkflow(stopped, "wait", "order-1", WAIT_STEP);
+            awaitRowsOfWaitingWorkflow(workflowId);
+            stopped.shutdown();
             index.store(MODULE,
-                        new WorkflowIndexChanges(List.of(
-                                new WorkflowIndexChange.WorkflowStarted(workflowId),
-                                new WorkflowIndexChange.WaitOpened(new WaitAssociation(
-                                        workflowId, "closedStep", new QualifiedName("paid"), Set.of()
-                                ))
-                        ), null),
+                        new WorkflowIndexChanges(List.of(new WorkflowIndexChange.WaitOpened(new WaitAssociation(
+                                workflowId, "closedStep", new QualifiedName("paid"), Set.of()
+                        )))),
                         null)
                  .orTimeout(5, TimeUnit.SECONDS)
                  .join();
 
-            // when: a node with the index claims every segment, so each claim sources
-            indexed = true;
-            var withIndex = start(false);
-            await().atMost(10, TimeUnit.SECONDS).until(() -> inMemory(withIndex, workflowId));
-            withIndex.shutdown();
+            // when: the next node cannot read the rows, so its claims source, and it stops
+            var readable = index;
+            index = spy(readable);
+            doReturn(CompletableFuture.failedFuture(new IllegalStateException("The rows cannot be read.")))
+                    .when(index).load(any(), any(), any());
+            var restarted = start(false);
+            await().atMost(10, TimeUnit.SECONDS).until(() -> inMemory(restarted, workflowId));
+            restarted.shutdown();
+            index = readable;
 
             // then: the rows hold the open wait of the workflow, and no other
-            awaitRowsOfWaitingWorkflow(workflowId);
-        }
-
-        @Test
-        void findsAWorkflowThatStartedWhileANodeWithoutTheIndexHeldItsSegment() {
-            // given: the position of every segment, as a node with the index stored it before any workflow started
-            for (Segment segment : Segment.splitBalanced(Segment.ROOT_SEGMENT, SEGMENT_COUNT - 1)) {
-                index.store(MODULE,
-                            new WorkflowIndexChanges(List.of(), new WorkflowIndexChanges.SegmentPosition(
-                                    SegmentKeyRange.of(segment), 0L
-                            )),
-                            null)
-                     .orTimeout(5, TimeUnit.SECONDS)
-                     .join();
-            }
-
-            // and: a node without the index that started a waiting workflow, and stopped
-            indexed = false;
-            var withoutIndex = start(false);
-            var workflowId = startWorkflow(withoutIndex, "wait", "order-1", WAIT_STEP);
-            withoutIndex.shutdown();
-            assertThat(rows().runningWorkflowIds()).isEmpty();
-
-            // when: a node with the index claims every segment again
-            indexed = true;
-            var withIndex = start(false);
-
-            // then: its claim read the events from the position of the rows and restored the workflow
-            await().atMost(10, TimeUnit.SECONDS).until(() -> inMemory(withIndex, workflowId));
-
-            // and: the rows caught up with it, with the token stored when the node stopped
-            withIndex.shutdown();
             awaitRowsOfWaitingWorkflow(workflowId);
         }
     }
@@ -377,14 +342,8 @@ class WorkflowConfigurerHibernationWithWorkflowIndexTest extends WorkflowConfigu
         });
     }
 
-    private boolean everySegmentHasAPosition() {
-        return Segment.splitBalanced(Segment.ROOT_SEGMENT, SEGMENT_COUNT - 1)
-                      .stream()
-                      .allMatch(segment -> index.load(MODULE, segment, null)
-                                                .orTimeout(5, TimeUnit.SECONDS)
-                                                .join()
-                                                .position()
-                                                .isPresent());
+    private boolean isInitialized() {
+        return index.load(MODULE, Segment.ROOT_SEGMENT, null).orTimeout(5, TimeUnit.SECONDS).join().isPresent();
     }
 
     /**
@@ -395,11 +354,12 @@ class WorkflowConfigurerHibernationWithWorkflowIndexTest extends WorkflowConfigu
         var wakesAt = new HashMap<String, Instant>();
         var waits = new ArrayList<WaitAssociation>();
         for (Segment segment : Segment.splitBalanced(Segment.ROOT_SEGMENT, SEGMENT_COUNT - 1)) {
-            var rows = index.load(MODULE, segment, null).orTimeout(5, TimeUnit.SECONDS).join();
-            running.addAll(rows.runningWorkflowIds());
-            wakesAt.putAll(rows.wakesAt());
-            waits.addAll(rows.waits());
+            index.load(MODULE, segment, null).orTimeout(5, TimeUnit.SECONDS).join().ifPresent(rows -> {
+                running.addAll(rows.runningWorkflowIds());
+                wakesAt.putAll(rows.wakesAt());
+                waits.addAll(rows.waits());
+            });
         }
-        return new WorkflowIndexRows(running, wakesAt, waits, OptionalLong.empty());
+        return new WorkflowIndexRows(running, wakesAt, waits);
     }
 }

@@ -140,6 +140,16 @@ public final class CheckpointingProgressStrategyFactory implements SegmentProgre
         };
     }
 
+    /**
+     * Returns whether the processor runs fully-deferred: every component is self-checkpointing, so the stored token
+     * only advances on their requests, never at the end of a batch on its own.
+     *
+     * @return {@code true} when the processor runs fully-deferred, {@code false} when it runs in auto mode
+     */
+    public boolean isFullyDeferred() {
+        return !autoCheckpointing;
+    }
+
     @Override
     public SegmentProgressStrategy create(SegmentProgressContext context) {
         return new CheckpointingProgressStrategy(context, participants, autoCheckpointing, tokenStore, processorName);

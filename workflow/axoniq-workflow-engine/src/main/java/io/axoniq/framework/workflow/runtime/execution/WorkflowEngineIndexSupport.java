@@ -32,7 +32,6 @@ import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -55,9 +54,9 @@ import java.util.concurrent.locks.ReentrantLock;
  * Keeps the {@link WorkflowIndex} of a {@link WorkflowEngine} current, and answers a segment claim from it.
  * <p>
  * Row changes are noted while the engine handles events, and stored with the token that covers them. A claim reads
- * the rows of its segment, then the tail: the lifecycle and wait events from the lower of the segment position and the
- * resume token. Rows plus tail equal sourcing the {@link RunningWorkflows} and {@link WaitAssociations}, and the claim
- * notes the tail, so the rows also catch up with a node without the index. Storing a change twice has no effect.
+ * the rows of its segment, then the tail: the lifecycle and wait events from the token the segment resumes from. Rows
+ * plus tail equal sourcing the {@link RunningWorkflows} and {@link WaitAssociations}. Storing a change twice has no
+ * effect. Until the module is initialized, a claim sources both lists and initializes the index with them.
  *
  * @author Stefan Dragisic
  * @since 5.5.0
@@ -65,11 +64,6 @@ import java.util.concurrent.locks.ReentrantLock;
 final class WorkflowEngineIndexSupport {
 
     private static final Logger logger = LoggerFactory.getLogger(WorkflowEngineIndexSupport.class);
-
-    /**
-     * The longest time between 2 position stores of a segment whose rows do not change. It bounds the tail of a claim.
-     */
-    static final Duration POSITION_INTERVAL = Duration.ofSeconds(10);
 
     private final WorkflowIndex index;
     private final String module;
@@ -193,11 +187,10 @@ final class WorkflowEngineIndexSupport {
     }
 
     /**
-     * Stores the noted changes the given token covers, right before the processor stores that token. The segment
-     * position moves to the token with every change, and at least every {@link #POSITION_INTERVAL}.
+     * Stores the noted changes the given token covers, right before the processor stores that token.
      *
      * @param segment the segment the token is stored for
-     * @param token   the position about to be stored
+     * @param token   the token about to be stored
      * @param context the context of the transaction that stores the token
      * @return a future completing once the changes are stored
      */
@@ -213,23 +206,18 @@ final class WorkflowEngineIndexSupport {
                 wakes.<WorkflowIndexChange>map(time -> new WakesAtSet(workflowId, time))
                      .orElseGet(() -> new WakesAtCleared(workflowId))
         ));
-        var tokenPosition = tailStart(token);
-        boolean movePosition = tokenPosition.isPresent() && (!changes.isEmpty() || pendingChanges.positionDue());
-        if (changes.isEmpty() && !movePosition) {
+        if (changes.isEmpty()) {
             return CompletableFuture.completedFuture(null);
         }
-        var position = movePosition
-                ? new WorkflowIndexChanges.SegmentPosition(SegmentKeyRange.of(segment), tokenPosition.getAsLong())
-                : null;
-        var stored = new WorkflowIndexChanges(changes, position);
+        var stored = new WorkflowIndexChanges(changes);
         logger.debug("Storing {} index change(s) of segment {} with token [{}].",
                      changes.size(), segment.getSegmentId(), token);
         if (!index.storesWithToken()) {
             return index.store(module, stored, null)
-                        .thenRun(() -> pendingChanges.forget(covered, wakesAt, movePosition));
+                        .thenRun(() -> pendingChanges.forget(covered, wakesAt));
         }
         // Registered before the store, on the thread of the transaction. A rolled back transaction forgets nothing.
-        context.runOnAfterCommit(committed -> pendingChanges.forget(covered, wakesAt, movePosition));
+        context.runOnAfterCommit(committed -> pendingChanges.forget(covered, wakesAt));
         return index.store(module, stored, context);
     }
 
@@ -265,7 +253,7 @@ final class WorkflowEngineIndexSupport {
      * carries a wake time and the tail holds none of its events: a workflow that progressed closed a wait or ended.
      *
      * @param segment         the claimed segment
-     * @param claimedFrom     the stored position the segment resumes from, or {@code null} when it has consumed nothing
+     * @param claimedFrom     the stored token the segment resumes from, or {@code null} when it has consumed nothing
      * @param sourcingContext the context of the claim, whose resources the tail is read with
      * @return a future with the rows of the claim, or empty when the rows cannot answer it and the claim must source,
      * see {@link #sourced(Segment, Collection, Collection)}
@@ -275,22 +263,23 @@ final class WorkflowEngineIndexSupport {
                                                    ProcessingContext sourcingContext) {
         // Changes noted while this node held the segment before are covered by the rows and the tail read now.
         pending.remove(segment.getSegmentId());
-        var tailStart = claimedFrom == null ? OptionalLong.empty() : tailStart(claimedFrom);
-        if (tailStart.isEmpty()) {
-            return CompletableFuture.completedFuture(sourced(segment));
-        }
-        EventStore eventStore;
-        try {
-            eventStore = sourcingContext.component(EventStore.class);
-        } catch (ComponentNotFoundException e) {
-            return CompletableFuture.completedFuture(sourced(segment));
-        }
-        return index.load(module, segment, null).thenCompose(rows -> {
-            if (rows.position().isEmpty()) {
-                // The index started empty, or a split or a merge replaced the segment: its rows have no position.
+        return index.load(module, segment, null).thenCompose(loaded -> {
+            if (loaded.isEmpty()) {
+                pendingOf(segment).initializing();
+                return CompletableFuture.completedFuture(sourced(segment));
+            }
+            var rows = loaded.get();
+            var tailStart = claimedFrom == null ? OptionalLong.empty() : tailStart(claimedFrom);
+            EventStore eventStore;
+            try {
+                eventStore = sourcingContext.component(EventStore.class);
+            } catch (ComponentNotFoundException e) {
                 return CompletableFuture.completedFuture(sourced(segment, rows.runningWorkflowIds()));
             }
-            long from = Math.min(tailStart.getAsLong(), rows.position().getAsLong());
+            if (tailStart.isEmpty()) {
+                return CompletableFuture.completedFuture(sourced(segment, rows.runningWorkflowIds()));
+            }
+            long from = tailStart.getAsLong();
             return readTail(new Claim(segment, rows), from, eventStore, sourcingContext).thenApply(claim -> {
                 var claimed = claim.rows(keepsWakeTimes());
                 var pendingChanges = pendingOf(segment);
@@ -351,12 +340,16 @@ final class WorkflowEngineIndexSupport {
 
     /**
      * Notes the running workflows and open waits a claim sourced as the rows of the segment, replacing all others.
+     * When the claim found the module not initialized, also initializes the index with them.
      *
      * @param segment            the claimed segment
      * @param runningWorkflowIds the identifiers of the sourced running workflows, of any segment
      * @param waits              the sourced open waits, of any segment
+     * @return a future completing once the index is initialized, or at once when it needs no initialization
      */
-    void sourced(Segment segment, Collection<String> runningWorkflowIds, Collection<WaitAssociation> waits) {
+    CompletableFuture<Void> sourced(Segment segment,
+                                    Collection<String> runningWorkflowIds,
+                                    Collection<WaitAssociation> waits) {
         var pendingChanges = pendingOf(segment);
         var changes = new ArrayList<WorkflowIndexChange>();
         var running = new HashSet<String>();
@@ -378,6 +371,19 @@ final class WorkflowEngineIndexSupport {
         logger.debug("Sourced segment {} of module [{}]: {} running workflow(s) become its rows.",
                      segment.getSegmentId(), module, running.size());
         pendingChanges.note(null, changes);
+        if (!pendingChanges.initializes()) {
+            return CompletableFuture.completedFuture(null);
+        }
+        return index.initialize(module, Set.copyOf(runningWorkflowIds), waits).handle((initialized, failure) -> {
+            if (failure != null) {
+                // The rows of this segment are still stored with the next token. A later claim initializes again.
+                logger.warn("Could not initialize the workflow index for module [{}].", module, failure);
+            } else {
+                logger.debug("Initialized the workflow index for module [{}] with {} running workflow(s).",
+                             module, runningWorkflowIds.size());
+            }
+            return null;
+        });
     }
 
     void clear() {
@@ -413,9 +419,8 @@ final class WorkflowEngineIndexSupport {
         // The workflows whose row carried a wake time when the segment was claimed.
         private final Set<String> hinted = new HashSet<>();
         private boolean sourced;
+        private boolean initializes;
         private Set<String> rowsAtClaim = Set.of();
-        private boolean positionStored;
-        private long positionStoredAt;
 
         private void note(@Nullable TrackingToken token, List<WorkflowIndexChange> noted) {
             lock.lock();
@@ -454,19 +459,28 @@ final class WorkflowEngineIndexSupport {
             }
         }
 
-        private Set<String> rowsAtClaim() {
+        private void initializing() {
             lock.lock();
             try {
-                return rowsAtClaim;
+                initializes = true;
             } finally {
                 lock.unlock();
             }
         }
 
-        private boolean positionDue() {
+        private boolean initializes() {
             lock.lock();
             try {
-                return !positionStored || System.nanoTime() - positionStoredAt > POSITION_INTERVAL.toNanos();
+                return initializes;
+            } finally {
+                lock.unlock();
+            }
+        }
+
+        private Set<String> rowsAtClaim() {
+            lock.lock();
+            try {
+                return rowsAtClaim;
             } finally {
                 lock.unlock();
             }
@@ -499,9 +513,7 @@ final class WorkflowEngineIndexSupport {
             }
         }
 
-        private void forget(List<PendingChange> stored,
-                            Map<String, Optional<Instant>> storedWakesAt,
-                            boolean positionStored) {
+        private void forget(List<PendingChange> stored, Map<String, Optional<Instant>> storedWakesAt) {
             Set<PendingChange> storedChanges = Collections.newSetFromMap(new IdentityHashMap<>());
             storedChanges.addAll(stored);
             lock.lock();
@@ -509,10 +521,6 @@ final class WorkflowEngineIndexSupport {
                 changes.removeIf(storedChanges::contains);
                 // Removes only the stored value, so a wake time noted since the store stays.
                 storedWakesAt.forEach(wakesAt::remove);
-                if (positionStored) {
-                    this.positionStored = true;
-                    positionStoredAt = System.nanoTime();
-                }
             } finally {
                 lock.unlock();
             }

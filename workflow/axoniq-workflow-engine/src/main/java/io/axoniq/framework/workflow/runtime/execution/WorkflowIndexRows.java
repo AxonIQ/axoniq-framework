@@ -14,25 +14,22 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.OptionalLong;
 import java.util.Set;
 
 /**
- * The rows of one segment in a {@link WorkflowIndex}, and the position they are correct at. Internal, because the
- * {@link WorkflowEngine} uses it to restore the workflows of a claimed segment.
+ * The rows of one segment in a {@link WorkflowIndex}. Internal, because the {@link WorkflowEngine} uses it to restore
+ * the workflows of a claimed segment.
  *
  * @param runningWorkflowIds the identifiers of the running workflows of the segment
  * @param wakesAt            the time each hibernated workflow wakes at, by workflow identifier
  * @param waits              the open waits of the segment
- * @param position           the position the rows are correct at, or empty when this exact segment has none
  * @author Stefan Dragisic
  * @since 5.5.0
  */
 @Internal
 public record WorkflowIndexRows(Set<String> runningWorkflowIds,
                                 Map<String, Instant> wakesAt,
-                                Collection<WaitAssociation> waits,
-                                OptionalLong position) {
+                                Collection<WaitAssociation> waits) {
 
     /**
      * Creates the rows of a segment, copying the given collections.
@@ -40,7 +37,6 @@ public record WorkflowIndexRows(Set<String> runningWorkflowIds,
      * @param runningWorkflowIds the identifiers of the running workflows of the segment
      * @param wakesAt            the time each hibernated workflow wakes at, by workflow identifier
      * @param waits              the open waits of the segment
-     * @param position           the position the rows are correct at, or empty when this exact segment has none
      */
     public WorkflowIndexRows {
         runningWorkflowIds = Set.copyOf(
@@ -48,6 +44,5 @@ public record WorkflowIndexRows(Set<String> runningWorkflowIds,
         );
         wakesAt = Map.copyOf(Objects.requireNonNull(wakesAt, "The wake times must not be null."));
         waits = List.copyOf(Objects.requireNonNull(waits, "The waits must not be null."));
-        Objects.requireNonNull(position, "The position must not be null.");
     }
 }

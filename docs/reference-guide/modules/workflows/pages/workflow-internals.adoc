@@ -96,24 +96,23 @@ It keeps no workflow hibernated, see <<hibernation-claims,Restarts and segment c
 === With a workflow index
 
 The xref:configuration.adoc#workflow-index[workflow index] holds one row per running workflow and one row per open wait.
-It also holds, per segment, the position in the event store the rows of that segment are correct at.
+It also marks each workflow module that was initialized.
 A segment claim takes three steps:
 
-. It reads the rows of the claimed segment with one range query per table on the segment key, and the position of the segment.
-. It reads the events published after the lower of that position and the stored token of the segment. It reads only the events tagged `workflowEvent=waitForStep` or `workflowEvent=lifecycle`.
+. It reads the rows of the claimed segment with one range query per table on the segment key.
+. It reads the events published after the stored token of the segment. It reads only the events tagged `workflowEvent=waitForStep` or `workflowEvent=lifecycle`.
 . It applies those events to the rows. A started workflow is added. An ended workflow is removed with its waits. An opened wait is added. A closed wait is removed.
 
 The rows plus those events are the running workflows and the open waits as of the segment claim.
 Applying an event twice changes nothing, because a workflow starts once and ends once, and a wait opens once and closes once.
 
-The position and the token are the same, except after a node without the workflow index held the segment.
-Such a node moves the token and writes no row.
-The segment claim then reads the events from the position, so it also applies the events that node handled.
-It stores what those events change in the rows with the next token, so the rows catch up.
+After a split, both new segments resume from the token of the old segment.
+After a merge, the new segment resumes from the lower token of the two.
+So a segment claim reads every event its rows may miss after a split or a merge too.
 
 A segment claim sources both lists instead, as without a workflow index, in three cases:
 
-* no position is stored for the segment: the workflow index started empty, or a split or a merge replaced the segment,
+* the workflow module is not initialized: the workflow index started empty or was emptied. That segment claim initializes the workflow index with both lists, for every segment of the module,
 * the segment has no stored token to read the events from,
 * reading the rows or the events after the token fails.
 
@@ -122,7 +121,6 @@ So every workflow it loads into memory loses the wake time in its row, and a lat
 
 A segment claim that sources stores the sourced workflows and waits of its segment as the rows of that segment, with the next token.
 A row of the segment whose workflow it did not source is removed.
-The engine then also stores the position of the segment.
 
 === The segment key
 
@@ -137,7 +135,9 @@ So the segment key of a row never changes, and the rows of a segment survive a s
 While a segment handles events, the engine notes what changes in its rows: a workflow started or ended, a wait opened or closed, a workflow hibernated or woke up.
 Each time the processor stores the token of the segment, the engine first writes the noted changes that this token covers.
 With a workflow index in the database of the token store, the rows and the token are committed in one transaction, or neither is.
-The token is therefore the position of the rows.
+In another database, the rows are committed before the token.
+Either way, the rows hold every change up to the stored token, so the token is the position of the rows.
+Rows ahead of the token, as after a crash between the two commits, are harmless: applying the events after the token again gives the same rows.
 
 A node that lost its segment claim writes nothing:
 
