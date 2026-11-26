@@ -27,6 +27,7 @@ import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.StubProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventMessage;
+import org.axonframework.messaging.eventhandling.GenericEventMessage;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.GlobalSequenceTrackingToken;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
@@ -215,16 +216,11 @@ class NewInstanceCandidateRoutingTest {
      * The wait-step STARTED event of a workflow waiting for an event of the given name, without associations.
      */
     private static EventMessage startedWait(String workflowId, QualifiedName awaited) {
-        var eventMessage = mock(EventMessage.class);
-        when(eventMessage.identifier()).thenReturn(UUID.randomUUID().toString());
-        when(eventMessage.metadata()).thenReturn(MetadataUtils.markWaitForEventStep(
-                MetadataUtils.create(workflowId, "await", StepStatus.STARTED)
-        ));
-        when(eventMessage.type()).thenReturn(new MessageType(new QualifiedName("AwaitStarted")));
-        when(eventMessage.payloadAs(StepWaitInfo.class)).thenReturn(
-                new StepWaitInfo(Instant.EPOCH, awaited.toString(), Set.of(), Instant.EPOCH)
+        return new GenericEventMessage(
+                new MessageType(new QualifiedName("AwaitStarted")),
+                new StepWaitInfo(Instant.EPOCH, awaited.toString(), Set.of(), Instant.EPOCH),
+                MetadataUtils.markWaitForEventStep(MetadataUtils.create(workflowId, "await", StepStatus.STARTED))
         );
-        return eventMessage;
     }
 
     /**

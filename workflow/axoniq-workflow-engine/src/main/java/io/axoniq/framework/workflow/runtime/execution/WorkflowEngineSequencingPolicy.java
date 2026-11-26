@@ -62,7 +62,7 @@ import java.util.stream.Collectors;
 
     /**
      * Determines the identifier by which the given event must be sequenced so that the streaming processor delivers it
-     * to the segment owning the affected workflow instance. There are three routing cases:
+     * to the segment owning the affected workflow instance. There are four routing cases:
      * <ul>
      *   <li>Events published by a workflow through the publish primitive ({@code stepPrimitive=PUBLISH}) carry
      *   {@code workflowId} metadata, but are business events for every other instance: they may start or wake

@@ -37,15 +37,16 @@ import java.util.regex.Pattern;
  * In-memory index of the open waits of the workflows on the segments this node claimed, so an event is routed only to
  * the workflows waiting for it.
  * <p>
- * Rows are loaded by {@link #segmentLoaded(Segment, Collection)} when a segment is claimed, and kept current by
- * {@link #evolve(EventMessage)} as the processor schedules events. A row may match more events than its wait accepts,
- * never fewer: the waiting workflow still checks its full condition. Routing narrows only while every claimed segment is
- * loaded; otherwise it broadcasts.
+ * Open waits are loaded by {@link #segmentLoaded(Segment, Collection)} when a segment is claimed, and kept current by
+ * {@link #evolve(EventMessage)} as the processor schedules events. An open wait may match more events than the wait
+ * accepts, never fewer: the waiting workflow still checks its full condition. Routing narrows only while every claimed
+ * segment is loaded; otherwise it broadcasts.
  * <p>
- * A row is kept under its event name and the value of one of its {@code =} associations, like the association values of
- * a saga; a lookup reads that value from the event and finds the rows by it, so its cost does not grow with the number
- * of such rows. Rows without such an association are kept under their event name only and checked one by one, and rows
- * without an event name match every event. Every row a lookup finds is still checked against all its associations.
+ * An open wait is kept under its event name and the value of one of its {@code =} associations; a lookup reads that
+ * value from the event and finds the open waits by it, so its cost does not grow with the number of such waits. Open
+ * waits without such an association are kept under their event name only and checked one by one, and open waits
+ * without an event name match every event. Every open wait a lookup finds is still checked against all its
+ * associations.
  *
  * @author Stefan Dragisic
  * @since 5.5.0
@@ -54,19 +55,20 @@ final class WaitAssociationIndex {
 
     private static final Logger logger = LoggerFactory.getLogger(WaitAssociationIndex.class);
     private static final Pattern PLAIN_PATH = Pattern.compile("[\\w.$-]+");
-    private static final Object WILDCARD = new Object();
 
     private final Predicate<String> isMember;
     private final ValueComparisonOperatorRegistry registry = new ValueComparisonOperatorRegistry();
-    private final ConcurrentHashMap<WaitAssociationKey, IndexedWait> waitAssociations = new ConcurrentHashMap<>();
-    // Rows by place: a LookupKey, an event name alone, or WILDCARD. A changed row is placed anew before it leaves its
-    // old place.
-    private final ConcurrentHashMap<Object, Set<WaitAssociationKey>> places = new ConcurrentHashMap<>();
-    // The association paths keyed rows of an event name use. Never shrinks: a definition uses only a few paths.
+    private final ConcurrentHashMap<WaitAssociationKey, IndexedWait> openWaits = new ConcurrentHashMap<>();
+    // A changed open wait is added under its new placement before it leaves its old one.
+    private final ConcurrentHashMap<Placement, Set<WaitAssociationKey>> openWaitKeysByPlacement =
+            new ConcurrentHashMap<>();
+    // The association paths that open waits of an event name are placed by. Never shrinks: a definition uses only a
+    // few paths.
     private final ConcurrentHashMap<QualifiedName, Set<KeyPath>> keyPaths = new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<String, Set<WaitAssociationKey>> rowsByWorkflow = new ConcurrentHashMap<>();
-    // Counts rows that moved to another place. A lookup that overlaps a move may miss the row, so it tries again.
-    private final AtomicLong moves = new AtomicLong();
+    private final ConcurrentHashMap<String, Set<WaitAssociationKey>> openWaitKeysByWorkflow = new ConcurrentHashMap<>();
+    // Counts open waits whose placement changed. A lookup that runs during such a change may miss the wait, so it
+    // tries again.
+    private final AtomicLong placementChanges = new AtomicLong();
     private final ConcurrentHashMap<Integer, ClaimedSegment> claimedSegments = new ConcurrentHashMap<>();
 
     /**
@@ -80,7 +82,7 @@ final class WaitAssociationIndex {
     }
 
     /**
-     * Records that this node claimed the given segment and is loading its rows.
+     * Records that this node claimed the given segment and is loading its open waits.
      *
      * @param segment the claimed segment
      */
@@ -89,7 +91,7 @@ final class WaitAssociationIndex {
     }
 
     /**
-     * Adds the given rows of a claimed segment and marks the segment loaded.
+     * Adds the given open waits of a claimed segment and marks the segment loaded.
      *
      * @param segment the claimed segment
      * @param waits   the open waits of the workflows the segment owns
@@ -100,29 +102,29 @@ final class WaitAssociationIndex {
     }
 
     /**
-     * Forgets the given segment and drops the rows of the workflows it owns.
+     * Forgets the given segment and drops the open waits of the workflows it owns.
      *
      * @param segment the released segment
      */
     void segmentReleased(Segment segment) {
         claimedSegments.computeIfPresent(segment.getSegmentId(),
                                          (id, claimed) -> claimed.segment().equals(segment) ? null : claimed);
-        rowsByWorkflow.keySet()
-                      .stream()
-                      .filter(workflowId -> WorkflowSegmentOwnership.ownedBy(segment, workflowId))
-                      .toList()
-                      .forEach(this::removeWorkflow);
+        openWaitKeysByWorkflow.keySet()
+                              .stream()
+                              .filter(workflowId -> WorkflowSegmentOwnership.ownedBy(segment, workflowId))
+                              .toList()
+                              .forEach(this::removeWorkflow);
     }
 
     /**
-     * Forgets every segment and row.
+     * Forgets every segment and open wait.
      */
     void clear() {
         claimedSegments.clear();
-        waitAssociations.clear();
-        places.clear();
+        openWaits.clear();
+        openWaitKeysByPlacement.clear();
         keyPaths.clear();
-        rowsByWorkflow.clear();
+        openWaitKeysByWorkflow.clear();
     }
 
     /**
@@ -168,27 +170,25 @@ final class WaitAssociationIndex {
 
     /**
      * Returns the workflows that may be waiting for the given event. Reads the event's value at each association path
-     * that rows of its name are keyed by, and checks only the rows found by those values, by the name alone, or without a
-     * name.
+     * that open waits of its name are placed by, and checks only the open waits found by those values, by the name
+     * alone, or without a name.
      *
      * @param event   the event to route
      * @param context the context the event is routed in
-     * @return the identifiers of the workflows with a row matching the event
+     * @return the identifiers of the workflows with an open wait matching the event
      * @throws RuntimeException when a value of the event cannot be read, in which case the caller must not narrow
      *                          delivery
      */
     Set<String> match(EventMessage event, ProcessingContext context) {
         for (int attempt = 0; attempt < 3; attempt++) {
-            long movesBefore = moves.get();
+            long placementChangesBefore = placementChanges.get();
             var matches = lookup(event, context);
-            if (moves.get() == movesBefore) {
+            if (placementChanges.get() == placementChangesBefore) {
                 return matches;
             }
         }
-        // Rows keep moving: check every row, which a move cannot hide.
-        var matches = new HashSet<String>();
-        addMatching(waitAssociations.keySet(), event, context, matches);
-        return matches;
+        // Placements keep changing: check every open wait, which a placement change cannot hide.
+        return findMatching(openWaits.keySet(), event, context);
     }
 
     private Set<String> lookup(EventMessage event, ProcessingContext context) {
@@ -197,27 +197,31 @@ final class WaitAssociationIndex {
         for (var path : keyPaths.getOrDefault(eventName, Set.of())) {
             var value = path.read(event, context);
             if (value != null) {
-                addMatching(places.get(new LookupKey(eventName, path, String.valueOf(value))), event, context, matches);
+                var placement = new Placement.ByValue(eventName, path, String.valueOf(value));
+                matches.addAll(findMatching(openWaitKeysByPlacement.get(placement), event, context));
             }
         }
-        addMatching(places.get(eventName), event, context, matches);
-        addMatching(places.get(WILDCARD), event, context, matches);
+        matches.addAll(findMatching(openWaitKeysByPlacement.get(new Placement.ByEventName(eventName)),
+                                    event,
+                                    context));
+        matches.addAll(findMatching(openWaitKeysByPlacement.get(Placement.ANY_EVENT), event, context));
         return matches;
     }
 
-    private void addMatching(@Nullable Set<WaitAssociationKey> candidates,
-                             EventMessage event,
-                             ProcessingContext context,
-                             Set<String> matches) {
+    private Set<String> findMatching(@Nullable Set<WaitAssociationKey> candidates,
+                                     EventMessage event,
+                                     ProcessingContext context) {
+        var matches = new HashSet<String>();
         if (candidates == null) {
-            return;
+            return matches;
         }
         for (var key : candidates) {
-            var indexed = waitAssociations.get(key);
-            if (indexed != null && indexed.matches(event, context)) {
+            var openWait = openWaits.get(key);
+            if (openWait != null && openWait.matches(event, context)) {
                 matches.add(key.workflowId());
             }
         }
+        return matches;
     }
 
     private void put(WaitAssociation wait) {
@@ -236,48 +240,48 @@ final class WaitAssociationIndex {
             }
         }
         var key = new WaitAssociationKey(wait.workflowId(), wait.stepName());
-        var indexed = new IndexedWait(wait.eventName(), List.copyOf(checks), lookupKeyOf(wait, checkable));
-        if (indexed.lookupKey() instanceof LookupKey lookupKey) {
-            keyPaths.computeIfAbsent(lookupKey.eventName(), name -> ConcurrentHashMap.newKeySet()).add(lookupKey.path());
+        var openWait = new IndexedWait(wait.eventName(), List.copyOf(checks), placementOf(wait, checkable));
+        if (openWait.placement() instanceof Placement.ByValue byValue) {
+            keyPaths.computeIfAbsent(byValue.eventName(), name -> ConcurrentHashMap.newKeySet()).add(byValue.path());
         }
-        rowsByWorkflow.compute(key.workflowId(), (ignored, keys) -> addTo(keys, key));
-        places.compute(indexed.place(), (ignored, keys) -> addTo(keys, key));
-        var previous = waitAssociations.put(key, indexed);
-        if (previous != null && !previous.place().equals(indexed.place())) {
-            moves.incrementAndGet();
-            places.computeIfPresent(previous.place(), (ignored, keys) -> removeFrom(keys, key));
+        openWaitKeysByWorkflow.compute(key.workflowId(), (ignored, keys) -> addTo(keys, key));
+        openWaitKeysByPlacement.compute(openWait.placement(), (ignored, keys) -> addTo(keys, key));
+        var previous = openWaits.put(key, openWait);
+        if (previous != null && !previous.placement().equals(openWait.placement())) {
+            placementChanges.incrementAndGet();
+            openWaitKeysByPlacement.computeIfPresent(previous.placement(), (ignored, keys) -> removeFrom(keys, key));
         }
     }
 
     /**
-     * Keys a row by its first {@code =} association in serialized order, so the same wait always gets the same key. Any
-     * of them would do: a lookup checks all associations of every row it finds.
+     * Places an open wait by its first {@code =} association in serialized order, so the same wait always gets the
+     * same placement. Any of them would do: a lookup checks all associations of every open wait it finds.
      */
-    private static @Nullable LookupKey lookupKeyOf(WaitAssociation wait, List<SerializedAssociation> checkable) {
+    private static Placement placementOf(WaitAssociation wait, List<SerializedAssociation> checkable) {
         var eventName = wait.eventName();
         if (eventName == null) {
-            return null;
+            return Placement.ANY_EVENT;
         }
         return checkable.stream()
                         .min(Comparator.comparing(SerializedAssociation::serialize))
-                        .map(association -> new LookupKey(
+                        .<Placement>map(association -> new Placement.ByValue(
                                 eventName,
                                 new KeyPath(association.qualifier(), association.path()),
                                 association.value()
                         ))
-                        .orElse(null);
+                        .orElse(new Placement.ByEventName(eventName));
     }
 
     private void remove(WaitAssociationKey key) {
-        var indexed = waitAssociations.remove(key);
-        if (indexed != null) {
-            places.computeIfPresent(indexed.place(), (ignored, keys) -> removeFrom(keys, key));
+        var openWait = openWaits.remove(key);
+        if (openWait != null) {
+            openWaitKeysByPlacement.computeIfPresent(openWait.placement(), (ignored, keys) -> removeFrom(keys, key));
         }
-        rowsByWorkflow.computeIfPresent(key.workflowId(), (ignored, keys) -> removeFrom(keys, key));
+        openWaitKeysByWorkflow.computeIfPresent(key.workflowId(), (ignored, keys) -> removeFrom(keys, key));
     }
 
     private void removeWorkflow(String workflowId) {
-        var keys = rowsByWorkflow.get(workflowId);
+        var keys = openWaitKeysByWorkflow.get(workflowId);
         if (keys != null) {
             List.copyOf(keys).forEach(this::remove);
         }
@@ -328,11 +332,37 @@ final class WaitAssociationIndex {
     }
 
     /**
-     * The event name, path and value a keyed row waits for. The value is text, because {@code =} compares the text of
-     * the event's value, so a lookup by it finds exactly the rows that association accepts.
+     * Where the index keeps an open wait, so a lookup for an event finds it.
      */
-    private record LookupKey(QualifiedName eventName, KeyPath path, String value) {
+    private sealed interface Placement {
 
+        /**
+         * The placement of every open wait without an event name, which matches every event.
+         */
+        Placement ANY_EVENT = new AnyEvent();
+
+        /**
+         * An open wait with an {@code =} association, found by the event's value at that association's path. The value
+         * is text, because {@code =} compares the text of the event's value, so a lookup by it finds exactly the open
+         * waits that association accepts.
+         */
+        record ByValue(QualifiedName eventName, KeyPath path, String value) implements Placement {
+
+        }
+
+        /**
+         * An open wait without an {@code =} association, found by its event name alone and checked one by one.
+         */
+        record ByEventName(QualifiedName eventName) implements Placement {
+
+        }
+
+        /**
+         * An open wait whose STARTED payload could not be read, found for every event.
+         */
+        record AnyEvent() implements Placement {
+
+        }
     }
 
     /**
@@ -340,14 +370,7 @@ final class WaitAssociationIndex {
      */
     private record IndexedWait(@Nullable QualifiedName eventName,
                                List<BiPredicate<EventMessage, ProcessingContext>> checks,
-                               @Nullable LookupKey lookupKey) {
-
-        Object place() {
-            if (eventName == null) {
-                return WILDCARD;
-            }
-            return lookupKey != null ? lookupKey : eventName;
-        }
+                               Placement placement) {
 
         boolean matches(EventMessage event, ProcessingContext context) {
             if (eventName == null) {
