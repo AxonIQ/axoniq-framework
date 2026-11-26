@@ -13,12 +13,8 @@ import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowConfig
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.framework.workflow.runtime.execution.SegmentClaim.BodyStart;
 import io.axoniq.framework.workflow.runtime.util.MetadataUtils;
-import io.axoniq.framework.workflow.runtime.util.ProcessingContextUtils;
 import io.axoniq.license.entitlement.EntitlementManager;
 import org.axonframework.common.annotation.Internal;
-import org.axonframework.common.configuration.ComponentNotFoundException;
-import org.axonframework.eventsourcing.eventstore.ConsistencyMarker;
-import org.axonframework.eventsourcing.eventstore.EventStore;
 import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.sequencing.SequencingPolicy;
@@ -80,8 +76,7 @@ public class WorkflowEngine implements
     private static final Logger logger = LoggerFactory.getLogger(WorkflowEngine.class);
     private final WorkflowConfigurationRegistry<?> workflowConfigurationRegistry;
     private final LiveWorkflows liveWorkflows;
-    private final WorkflowStore workflowStore;
-    private final UnitOfWorkFactory unitOfWorkFactory;
+    private final WorkflowRestorer restorer;
     // Package-private so a test can start a new claim of a segment without stopping the executions of the current one,
     // and run the catch-up polls itself.
     final SegmentClaims segmentClaims = new SegmentClaims();
@@ -129,8 +124,8 @@ public class WorkflowEngine implements
      * @param workflowIndex                 the index persisting the running workflows per segment
      * @param indexName                     the name scoping this engine's entries in the {@code workflowIndex},
      *                                      unique per engine sharing the index
-     * @param unitOfWorkFactory             a unit of work factory dedicated to construct a unit of work during
-     *                                      {@link #start(TrackingToken)} of this engine
+     * @param unitOfWorkFactory             creates the unit of work each restored workflow is sourced in, see
+     *                                      {@link DefaultWorkflowRestorer}
      */
     @Internal
     public WorkflowEngine(
@@ -145,32 +140,11 @@ public class WorkflowEngine implements
                 workflowConfigurationRegistry, "The WorkflowConfigurationRegistry must not be null."
         );
         this.liveWorkflows = requireNonNull(liveWorkflows, "The LiveWorkflows must not be null.");
-        this.workflowStore = requireNonNull(workflowStore, "The WorkflowStore must not be null.");
-        this.unitOfWorkFactory = requireNonNull(unitOfWorkFactory, "The UnitOfWorkFactory must not be null.");
+        this.restorer = new DefaultWorkflowRestorer(workflowConfigurationRegistry, workflowStore, unitOfWorkFactory);
         this.segmentedRouting = new WorkflowEngineSequencingPolicy(workflowConfigurationRegistry);
         this.runningWorkflows = new RunningWorkflowsProjection(workflowIndex, indexName);
         this.claimLoader = new RunningWorkflowsClaimLoader(workflowIndex, indexName, workflowStore);
         EntitlementManager.INSTANCE.registerAddon(WorkflowAxoniqAddon.class);
-    }
-
-    /**
-     * Returns the position the given context's sourcing ended at.
-     * <p>
-     * The current Event Store does not add its append position to the processing context when sourcing. Retrieve it
-     * from the context-bound transaction until {@link ConsistencyMarker} provides a corresponding context accessor. The
-     * missing-component path keeps focused engine tests that construct an engine without a full workflow configuration
-     * independent of the Event Store.
-     *
-     * @param sourcingContext context used to source the workflow state
-     * @return the marker at which sourcing ended
-     */
-    @Nullable
-    private static ConsistencyMarker sourcedAt(ProcessingContext sourcingContext) {
-        try {
-            return sourcingContext.component(EventStore.class).transaction(sourcingContext).appendPosition();
-        } catch (ComponentNotFoundException e) {
-            return null;
-        }
     }
 
     /**
@@ -515,8 +489,9 @@ public class WorkflowEngine implements
      * <p>
      * Decides to write the changes to the index of running workflows pending now. A flush within the processor's
      * context also writes the hibernation hints recorded while the checkpoint waits for its workflows, see
-     * {@link RunningWorkflowsProjection#decideCheckpoint(Segment)}. Fails right away when the claim of the segment did not finish restoring, and the flush fails
-     * when the changes cannot be written in time; either fails the checkpoint.
+     * {@link RunningWorkflowsProjection#decideCheckpoint(Segment)}. Fails right away when the claim of the segment did
+     * not finish restoring, and the flush fails when the changes cannot be written in time; either fails the
+     * checkpoint.
      */
     @Override
     public WorkflowEngineCheckpointingSupport.CheckpointFlush decideCheckpointFlush(Segment segment) {
@@ -783,63 +758,30 @@ public class WorkflowEngine implements
     }
 
     /**
-     * Sources one instance in a unit of work of its own and restores it at the position that read ended at.
-     * <p>
-     * The position has to be the instance's own: a transaction shared by every instance of the claim ends at the lowest
-     * of its reads, and a previous owner appending while the claim is still reading leaves that position before an
-     * event the claim itself sourced. The restored execution would then be rejected by its own history and stop, even
-     * though its state is current. Reading one instance per transaction leaves each position at or after that
-     * instance's last event, so only a write that lands after this read rejects the execution, which is a foreign
-     * writer and exactly what should stop it.
+     * Restores one instance of the claimed segment through the {@link WorkflowRestorer restorer}, which sources it in a
+     * unit of work of its own, so the position the restored execution resumes appending from is its own, and brings
+     * the restored execution into memory under the given claim, unless that claim is no longer current.
      *
      * @param claim            the claim restoring the instance
      * @param workflowId       id of the instance to restore
      * @param claimContext     the context of the claim, whose resources the instance is sourced with
      * @param executionContext the context the restored execution runs on
-     * @return a future completing with {@code true} once the instance is restored, or with {@code false} when its
-     * sourced state is terminal, so there is nothing to restore
+     * @return a future completing with {@code false} when the sourced state of the instance is terminal, so there is
+     * nothing to restore, and with {@code true} otherwise: once the instance entered memory, or when the claim failed
+     * or ended before it could
      */
     private CompletableFuture<Boolean> restoreWorkflow(SegmentClaim claim,
                                                        String workflowId,
                                                        ProcessingContext claimContext,
                                                        ProcessingContext executionContext) {
-        return unitOfWorkFactory
-                .create("restore-" + workflowId)
-                .executeWithResult(sourcingContext -> {
-                    // Everything the claim reads with, except its event store transaction: that is what makes this
-                    // read, and the position it ends at, this instance's own.
-                    ProcessingContextUtils.copyResources(claimContext, sourcingContext);
-                    return workflowStore
-                            .loadWorkflow(workflowId, sourcingContext)
-                            .thenApply(state -> {
-                                var status = state.workflowStatus();
-                                if (status.isTerminal()) {
-                                    logger.debug("Not restoring workflow '{}': its state is {}.", workflowId, status);
-                                    return false;
-                                }
-                                restoreWorkflow(claim, workflowId, state, executionContext,
-                                                sourcedAt(sourcingContext));
-                                return true;
-                            });
-                });
-    }
-
-    /**
-     * Restores the given state of a workflow into an execution of the given claim, unless that claim is no longer
-     * current.
-     *
-     * @return the restored execution, or empty when the claim failed or ended meanwhile
-     */
-    private Optional<WorkflowExecution> restoreWorkflow(SegmentClaim claim,
-                                                        String workflowId,
-                                                        WorkflowState state,
-                                                        ProcessingContext executionContext,
-                                                        @Nullable ConsistencyMarker restoredAt) {
-        var execution = executionOf(workflowId, state, executionContext);
-        // Guarded, so the workflow cannot hibernate, wake or be adopted while it enters memory.
-        return hibernation.restoreGuarded(
-                workflowId, () -> enterRestored(claim, workflowId, execution, restoredAt)
-        );
+        return restorer.restore(workflowId, claimContext, executionContext)
+                       .thenApply(restored -> {
+                           // Guarded, so the workflow cannot hibernate, wake or be adopted while it enters memory.
+                           restored.ifPresent(execution -> hibernation.restoreGuarded(
+                                   workflowId, () -> enterRestored(claim, workflowId, execution)
+                           ));
+                           return restored.isPresent();
+                       });
     }
 
     /**
@@ -849,12 +791,9 @@ public class WorkflowEngine implements
      * against the hibernations, wakes and adoptions of the workflow, see
      * {@link Hibernation#restoreGuarded(String, java.util.function.Supplier)}.
      *
-     * @return the restored execution, or empty when the claim failed or ended meanwhile
+     * @return {@code true} when the execution entered memory, {@code false} when the claim failed or ended meanwhile
      */
-    private Optional<WorkflowExecution> enterRestored(SegmentClaim claim,
-                                                      String workflowId,
-                                                      WorkflowExecution execution,
-                                                      @Nullable ConsistencyMarker restoredAt) {
+    private boolean enterRestored(SegmentClaim claim, String workflowId, WorkflowExecution execution) {
         // Only while the claim is current: an instance that finishes restoring after its claim failed or the segment
         // was released would otherwise stay behind, and run from the state it sourced back then. A restore that
         // outlives its claim also leaves a hibernation of the workflow under another claim alone.
@@ -870,50 +809,13 @@ public class WorkflowEngine implements
                         "Workflow '%s' already has an execution on this node.".formatted(workflowId)
                 );
             }
-            execution.restoreAppendPosition(restoredAt);
             hibernation.allow(execution, claim);
         });
         if (!added) {
             logger.debug("Not restoring workflow '{}': the claim of segment {} failed or ended meanwhile.",
                          workflowId, claim.segment().getSegmentId());
-            return Optional.empty();
         }
-        return Optional.of(execution);
-    }
-
-    /**
-     * Creates the execution of the given workflow from its given state, which has not entered memory yet.
-     */
-    private WorkflowExecution executionOf(String workflowId,
-                                          WorkflowState state,
-                                          ProcessingContext executionContext) {
-        var definitionId = state.workflowDefinitionId();
-        var workflowName = definitionId.qualifiedName().toString();
-        // Same routing as the replay path: a body may have moved its recorded version forward with
-        // ctx.migrateVersion(...) to a version no definition is statically registered under, so an exact lookup alone
-        // cannot restore it.
-        var workflowConfiguration = workflowConfigurationRegistry
-                .getWorkflowConfiguration(definitionId)
-                .or(() -> workflowConfigurationRegistry.findClosestRegisteredVersion(
-                        workflowName, definitionId.version()
-                ))
-                .or(() -> workflowConfigurationRegistry.findClosestHigherRegisteredVersion(
-                        workflowName, definitionId.version()
-                ))
-                .orElseThrow(() -> new UnrecognizedWorkflowDefinitionException(
-                        "No workflow configuration found for workflow '%s' with definition %s."
-                                .formatted(workflowId, definitionId)
-                ));
-        executionContext.putResource(WorkflowConfigurationRegistry.RESOURCE_KEY, workflowConfigurationRegistry);
-        var workflowContext = workflowConfiguration.workflowContextFactory().createContext(
-                state.payload(),
-                workflowId,
-                executionContext,
-                workflowConfiguration
-        );
-        var execution = workflowConfiguration.workflowExecutionFactory().create(workflowContext);
-        execution.initializeState(state);
-        return execution;
+        return added;
     }
 
     /**
@@ -921,9 +823,9 @@ public class WorkflowEngine implements
      * that claim caught up, as the hibernation support's {@link WorkflowEngineHibernationSupport.WorkflowLoader}. The
      * load fails once it takes longer than the given {@code wakeTimeout}.
      * <p>
-     * The workflow is sourced in a unit of work of its own, like a restore on a claim, so the position its read ended
-     * at is its own. That unit of work holds the resources of the execution context of the claim, except its event
-     * store transaction, the way a restore on a claim holds those of the claim's context. The loaded execution takes
+     * The workflow is restored through the {@link WorkflowRestorer restorer}, like a restore on a claim, with the
+     * resources of the execution context of the claim, the way a restore on a claim reads with those of the claim's
+     * context. The loaded execution takes
      * the place of the hibernation in the live workflows while the claim is current, and runs on the execution context
      * of the claim. The given action runs on the loaded execution before its body starts. When that action or the start
      * fails, the loaded execution swaps back for the hibernation while the claim is current, so the workflow stays only
@@ -940,22 +842,15 @@ public class WorkflowEngine implements
         var workflowId = hibernated.workflowId();
         var segment = claim.segment();
         var executionContext = requireNonNull(claim.executionContext(), "A claim without execution context.");
-        var sourced = unitOfWorkFactory
-                .create("wake-" + workflowId)
-                .executeWithResult(sourcingContext -> {
-                    ProcessingContextUtils.copyResources(executionContext, sourcingContext);
-                    return workflowStore.loadWorkflow(workflowId, sourcingContext)
-                                        .thenApply(state -> new SourcedWorkflow(state, sourcedAt(sourcingContext)));
-                })
-                .orTimeout(wakeTimeout.toMillis(), TimeUnit.MILLISECONDS)
-                .join();
-        if (sourced.state().workflowStatus().isTerminal()) {
+        var restored = restorer.restore(workflowId, executionContext, executionContext)
+                               .orTimeout(wakeTimeout.toMillis(), TimeUnit.MILLISECONDS)
+                               .join();
+        if (restored.isEmpty()) {
             // It ended elsewhere, so its entry in the index, if any, is stale.
             runningWorkflows.recordRemoved(segment, workflowId);
             return false;
         }
-        var execution = executionOf(workflowId, sourced.state(), executionContext);
-        execution.restoreAppendPosition(sourced.position());
+        var execution = restored.get();
         // Only while the claim is current, like a restore.
         if (!claim.applyIfCurrent(() -> liveWorkflows.wake(hibernated, execution, wakeExecutor))) {
             logger.debug("Not waking workflow '{}': the claim of segment {} failed or ended meanwhile.",
@@ -987,13 +882,6 @@ public class WorkflowEngine implements
             throw e;
         }
         return true;
-    }
-
-    /**
-     * The state of a workflow sourced on its own, and the position that read ended at.
-     */
-    private record SourcedWorkflow(WorkflowState state, @Nullable ConsistencyMarker position) {
-
     }
 
     /**
