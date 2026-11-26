@@ -62,6 +62,7 @@ import org.hibernate.tool.schema.Action;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.*;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.HashMap;
@@ -99,6 +100,9 @@ class JpaWorkflowIndexHibernationRestartTest {
 
     private static final String MODULE = "jpa-index-hibernation";
     private static final int SEGMENTS = 2;
+    // Of a workflow that waits for its payment until a deadline. Longer than any test, so no deadline passes while a
+    // node runs: a test lets the deadlines pass by starting the next node with a clock that far ahead.
+    private static final Duration DEADLINE = Duration.ofHours(1);
     private static final Duration AWAIT = Duration.ofSeconds(30);
     private static final Duration IDLE_DELAY = Duration.ofMillis(200);
     // Longer than any test, so no hibernation pass asks a workflow to hibernate: the test hibernates it itself.
@@ -133,6 +137,8 @@ class JpaWorkflowIndexHibernationRestartTest {
     private final Map<String, List<Boolean>> bodyStartsCaughtUp = new ConcurrentHashMap<>();
     private final Map<AxonConfiguration, DisconnectableStorageEngine> configurations = new ConcurrentHashMap<>();
     private volatile @Nullable AxonConfiguration current;
+    // The clock of the nodes started from now on.
+    private volatile Clock clock = Clock.systemUTC();
 
     private static HikariDataSource dataSource() {
         var config = new HikariConfig();
@@ -193,9 +199,10 @@ class JpaWorkflowIndexHibernationRestartTest {
         resetCounters();
         // and - a backlog to catch up with
         appendDirectly("tick", "none");
-        // and - their deadlines passed
-        await().atMost(AWAIT).until(() -> entries().stream().allMatch(
-                entry -> entry.hint() != null && !entry.hint().wakeAt().isAfter(Instant.now())
+        // and - their deadlines passed: the next node runs a deadline later than the first
+        clock = Clock.offset(Clock.systemUTC(), DEADLINE);
+        assertThat(entries()).allSatisfy(entry -> assertThat(entry.hint()).isNotNull().satisfies(
+                hint -> assertThat(hint.wakeAt()).isBefore(clock.instant())
         ));
 
         // when
@@ -451,8 +458,8 @@ class JpaWorkflowIndexHibernationRestartTest {
     }
 
     /**
-     * Waits for the payment of its order, the payment and then the shipment, or the payment with a deadline of 3
-     * seconds, which it handles by ending.
+     * Waits for the payment of its order, the payment and then the shipment, or the payment until the
+     * {@link #DEADLINE deadline}, which it handles by ending.
      */
     private void body(TestContext ctx) {
         recordBodyStart(ctx.workflowId());
@@ -460,7 +467,7 @@ class JpaWorkflowIndexHibernationRestartTest {
         switch (String.valueOf(ctx.workflowPayload().get("kind"))) {
             case "deadline" -> {
                 try {
-                    ctx.awaitEvent(waitFor("awaitPaid", "paid", orderId, Duration.ofSeconds(3)));
+                    ctx.awaitEvent(waitFor("awaitPaid", "paid", orderId, DEADLINE));
                 } catch (StepFailedException e) {
                     timedOut.add(ctx.workflowId());
                 }
@@ -527,6 +534,7 @@ class JpaWorkflowIndexHibernationRestartTest {
         var transactions = new JpaTransactionalExecutorProvider(entityManagerFactory);
         // Its own connection to the shared event store, so a stopped node no longer hears of appended events.
         var nodeStorageEngine = new DisconnectableStorageEngine(storageEngine);
+        var nodeClock = clock;
         var configuration = WorkflowConfigurer.create()
                 .hibernation(h -> h.enabled(hibernation).idleDelay(idleDelay).wakeTimeout(Duration.ofSeconds(10)))
                 .registerWorkflowIndex(cfg -> new ObservedWorkflowIndex(JpaWorkflowIndex.builder()
@@ -536,6 +544,7 @@ class JpaWorkflowIndexHibernationRestartTest {
                                                                                          .build()))
                 .componentRegistry(cr -> cr
                         .registerComponent(EventStorageEngine.class, cfg -> nodeStorageEngine)
+                        .registerComponent(Clock.class, cfg -> nodeClock)
                         .registerComponent(TokenStore.class, cfg -> new ReleaseCountingTokenStore(new JpaTokenStore(
                                 joined ? transactions : context -> transactions.findTransactionalExecutor(null),
                                 cfg.getComponent(GeneralConverter.class),
