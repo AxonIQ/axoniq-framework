@@ -77,6 +77,7 @@ public class WorkflowEngine implements
     private final WorkflowConfigurationRegistry<?> workflowConfigurationRegistry;
     private final LiveWorkflows liveWorkflows;
     private final WorkflowRestorer restorer;
+    private final WorkflowStarter starter;
     // Package-private so a test can start a new claim of a segment without stopping the executions of the current one,
     // and run the catch-up polls itself.
     final SegmentClaims segmentClaims = new SegmentClaims();
@@ -141,6 +142,7 @@ public class WorkflowEngine implements
         );
         this.liveWorkflows = requireNonNull(liveWorkflows, "The LiveWorkflows must not be null.");
         this.restorer = new DefaultWorkflowRestorer(workflowConfigurationRegistry, workflowStore, unitOfWorkFactory);
+        this.starter = new WorkflowStarter(liveWorkflows);
         this.segmentedRouting = new WorkflowEngineSequencingPolicy(workflowConfigurationRegistry);
         this.runningWorkflows = new RunningWorkflowsProjection(workflowIndex, indexName);
         this.claimLoader = new RunningWorkflowsClaimLoader(workflowIndex, indexName, workflowStore);
@@ -224,7 +226,8 @@ public class WorkflowEngine implements
      * @param scheduler    schedules the passes and the deadlines of hibernated workflows
      * @param clock        the clock the scheduler measures deadlines and idle time with
      * @param idleDelay    the time a workflow must make no progress before it hibernates
-     * @param wakeTimeout  the time a wake may take to load a workflow from the event store
+     * @param wakeTimeout  the time a wake may take to restore a workflow: to source it from the event store and to
+     *                     create its execution
      * @param wakeExecutor runs the wakes for a deadline or a cancellation
      * @throws IllegalStateException when hibernation is enabled already, or this engine started
      */
@@ -244,9 +247,8 @@ public class WorkflowEngine implements
             throw new IllegalStateException("Hibernation can only be enabled before the engine starts.");
         }
         this.hibernation = new WorkflowEngineHibernationSupport(
-                scheduler, clock, liveWorkflows, runningWorkflows,
-                (hibernated, beforeStart) -> wakeWorkflow(hibernated, beforeStart, wakeTimeout, wakeExecutor),
-                idleDelay, wakeExecutor
+                scheduler, clock, liveWorkflows, runningWorkflows, restorer, starter, idleDelay, wakeTimeout,
+                wakeExecutor
         );
     }
 
@@ -458,10 +460,11 @@ public class WorkflowEngine implements
                 logger.debug("Creating a new workflow '{}' with payload '{}'", workflowId, eventMessage.payload());
                 return workflowConfiguration.workflowExecutionFactory().create(workflowContext);
             });
+            // Takes cancellation requests as it enters, also while its claim catches up and its body does not start.
             liveWorkflows.markCancellable(execution);
             hibernation.allow(execution, claim);
             if (bodyStart == BodyStart.NOW) {
-                execute(execution);
+                starter.start(execution);
             }
         });
     }
@@ -819,72 +822,6 @@ public class WorkflowEngine implements
     }
 
     /**
-     * Loads a hibernated workflow back from the event store under the claim it hibernated under, and starts it once
-     * that claim caught up, as the hibernation support's {@link WorkflowEngineHibernationSupport.WorkflowLoader}. The
-     * load fails once it takes longer than the given {@code wakeTimeout}.
-     * <p>
-     * The workflow is restored through the {@link WorkflowRestorer restorer}, like a restore on a claim, with the
-     * resources of the execution context of the claim, the way a restore on a claim reads with those of the claim's
-     * context. The loaded execution takes
-     * the place of the hibernation in the live workflows while the claim is current, and runs on the execution context
-     * of the claim. The given action runs on the loaded execution before its body starts. When that action or the start
-     * fails, the loaded execution swaps back for the hibernation while the claim is current, so the workflow stays only
-     * hibernated, and only leaves memory once the claim ended. The cancellation requests queued on the loaded
-     * execution are answered on the given {@code wakeExecutor} when it leaves memory before its body took them.
-     *
-     * @return {@code false} when the workflow ended elsewhere, or the claim ended meanwhile
-     */
-    private boolean wakeWorkflow(LiveWorkflows.Hibernated hibernated,
-                                 Consumer<WorkflowExecution> beforeStart,
-                                 Duration wakeTimeout,
-                                 Executor wakeExecutor) {
-        var claim = hibernated.claim();
-        var workflowId = hibernated.workflowId();
-        var segment = claim.segment();
-        var executionContext = requireNonNull(claim.executionContext(), "A claim without execution context.");
-        var restored = restorer.restore(workflowId, executionContext, executionContext)
-                               .orTimeout(wakeTimeout.toMillis(), TimeUnit.MILLISECONDS)
-                               .join();
-        if (restored.isEmpty()) {
-            // It ended elsewhere, so its entry in the index, if any, is stale.
-            runningWorkflows.recordRemoved(segment, workflowId);
-            return false;
-        }
-        var execution = restored.get();
-        // Only while the claim is current, like a restore.
-        if (!claim.applyIfCurrent(() -> liveWorkflows.wake(hibernated, execution, wakeExecutor))) {
-            logger.debug("Not waking workflow '{}': the claim of segment {} failed or ended meanwhile.",
-                         workflowId, segment.getSegmentId());
-            return false;
-        }
-        try {
-            hibernation.allow(execution, claim);
-            beforeStart.accept(execution);
-            // Started here only once the claim caught up; before that, its activation starts it with the restored
-            // ones.
-            claim.runIfCurrentWithBodyStart(bodyStart -> {
-                if (bodyStart == BodyStart.NOW && !execution.isRunning()) {
-                    liveWorkflows.markCancellable(execution);
-                    execute(execution);
-                }
-            });
-        } catch (RuntimeException e) {
-            // Partly woken: this execution swaps back for the hibernation, or only leaves memory once the claim ended.
-            // First, it takes no requests any more, and those that waited for it fail, so they do not wake the
-            // workflow once more.
-            execution.stopForShutdown();
-            liveWorkflows.failStart(execution, e);
-            // Only while the claim is current: a claim that ended dropped the hibernated workflows of its segment, and
-            // must not find this one hibernated again once it no longer looks.
-            if (!claim.applyIfCurrent(() -> liveWorkflows.hibernate(execution, hibernated))) {
-                liveWorkflows.leave(execution);
-            }
-            throw e;
-        }
-        return true;
-    }
-
-    /**
      * Removes terminal workflow executions and starts the remaining restored executions of the given segment: the
      * {@link SegmentClaims.Activation activation} of a claim that caught up with the startup head, which this engine
      * hands to every call of its {@link SegmentClaims} that may activate a claim.
@@ -915,36 +852,8 @@ public class WorkflowEngine implements
             return;
         }
         logger.debug("Starting {} restored workflow execution(s) {}.", executionsToStart.size(), phase);
-        for (var execution : executionsToStart) {
-            liveWorkflows.markCancellable(execution);
-            execute(execution);
-        }
+        executionsToStart.forEach(starter::start);
         logger.debug("Started {} restored workflow execution(s) {}.", executionsToStart.size(), phase);
-    }
-
-    private void execute(WorkflowExecution execution) {
-        execution.workflowExecutionOperations()
-                 .processingContext()
-                 .whenComplete(context -> {
-                     try {
-                         logger.debug("Executing workflow execution with id: {}", execution.workflowId());
-                         execution.execute(
-                                 finished -> {
-                                     logger.debug("Workflow {} finished with status {}, removing it from repository",
-                                                  execution.workflowId(),
-                                                  finished.state().workflowStatus());
-                                     liveWorkflows.leave(execution);
-                                 }
-                         ).whenComplete((ignored, failure) -> {
-                             if (failure != null) {
-                                 logger.error("Workflow {} stopped with an unhandled execution failure",
-                                              execution.workflowId(), failure);
-                             }
-                         });
-                     } catch (Throwable t) {
-                         throw new RuntimeException("Error during workflow execution", t);
-                     }
-                 });
     }
 
     /**

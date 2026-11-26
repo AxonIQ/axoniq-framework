@@ -254,8 +254,8 @@ public final class LiveWorkflows {
      * <p>
      * Answers the cancellation requests queued on the execution, so they are made again and reach the hibernated
      * workflow. Aborts no workflow cancellation: an execution that hibernates has none pending, as one keeps it from a
-     * safe point, and before an execution whose start failed swaps back, the engine marks it left, which aborts its
-     * pending one and fails the requests queued on it, see {@link #failStart(WorkflowExecution, Throwable)}.
+     * safe point, and before an execution whose start failed swaps back, the engine's hibernation marks it left, which
+     * aborts its pending one and fails the requests queued on it, see {@link #failStart(WorkflowExecution, Throwable)}.
      *
      * @param execution  the execution that hibernates
      * @param hibernated the hibernation the workflow moves into
@@ -285,9 +285,10 @@ public final class LiveWorkflows {
     }
 
     /**
-     * Swaps the given hibernation for the given execution, which the engine restored from the event store to wake the
-     * workflow, see {@link #swapIn(Hibernated, InMemory)}. The caller holds the lock of the workflow and the lock of
-     * the claim of the hibernation, and starts the execution once this returned. The execution may hibernate again.
+     * Swaps the given hibernation for the given execution, which the engine's hibernation restored from the event
+     * store to wake the workflow, see {@link #swapIn(Hibernated, InMemory)}. The caller holds the lock of the workflow
+     * and the lock of the claim of the hibernation, and starts the execution once this returned. The execution may
+     * hibernate again.
      * <p>
      * Every cancellation request for the woken workflow is queued as a task of the woken execution. When the execution
      * leaves memory before its body took such a request, the request is answered on the given executor, never on the

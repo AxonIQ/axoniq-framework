@@ -7,6 +7,7 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
+import io.axoniq.framework.workflow.dsl.api.WorkflowState;
 import io.axoniq.framework.workflow.index.api.WorkflowIndex.Entry;
 import io.axoniq.framework.workflow.index.api.WorkflowIndex.HibernationHint;
 import io.axoniq.framework.workflow.index.api.WorkflowIndex.IndexDelta;
@@ -28,8 +29,10 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executor;
@@ -44,6 +47,7 @@ import java.util.stream.IntStream;
 
 import static io.axoniq.framework.workflow.runtime.execution.SegmentTestFixtures.token;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.awaitility.Awaitility.await;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
@@ -53,9 +57,8 @@ import static org.mockito.Mockito.*;
  * when they wake, and what they record in the {@link RunningWorkflowsProjection}. Which hibernated workflows a
  * broadcast event addresses is up to the {@link LiveWorkflows}, see {@code LiveWorkflowsTest}.
  * <p>
- * Every collaborator is a real one, except the loader, which records the wakes and brings a stand-in execution into
- * memory in place of the hibernation: loading and starting a workflow is the engine's part, see
- * {@link WorkflowEngineHibernationSupport.WorkflowLoader}.
+ * Every collaborator is a real one, except the restorer, which records the wakes and restores a stand-in execution:
+ * sourcing a workflow from the event store is the part of the engine's {@link DefaultWorkflowRestorer}.
  *
  * @author Allard Buijze
  */
@@ -97,33 +100,21 @@ class WorkflowEngineHibernationSupportAdoptionTest {
     };
     private final List<String> loads = new CopyOnWriteArrayList<>();
     private final LiveWorkflows liveWorkflows = new LiveWorkflows(new InMemoryWorkflowExecutionRepository());
-    // Records the wake, and brings an execution into memory in place of the hibernation, as the engine does,
-    // swapping it back for the hibernation when the action before its start fails.
-    private final WorkflowEngineHibernationSupport.WorkflowLoader wakeInMemory = (hibernated, beforeStart) -> {
-        loads.add(hibernated.workflowId());
-        var execution = new InspectionCountingWorkflowExecution(hibernated.workflowId());
-        var woken = new AtomicBoolean();
-        hibernated.claim().runIfCurrent(
-                () -> woken.set(liveWorkflows.wake(hibernated, execution, wakeExecutor))
-        );
-        if (woken.get()) {
-            try {
-                beforeStart.accept(execution);
-            } catch (RuntimeException e) {
-                hibernated.claim().runIfCurrent(() -> liveWorkflows.hibernate(execution, hibernated));
-                throw e;
-            }
-        }
-        return woken.get();
+    // Records the wake, and restores a stand-in execution, which reports that it runs, so no body starts.
+    private final WorkflowRestorer standIn = (workflowId, resources, executionContext) -> {
+        loads.add(workflowId);
+        return CompletableFuture.completedFuture(Optional.of(new InspectionCountingWorkflowExecution(workflowId)));
     };
-    private volatile WorkflowEngineHibernationSupport.WorkflowLoader loader = wakeInMemory;
+    private volatile WorkflowRestorer restorer = standIn;
     private final WorkflowEngineHibernationSupport support = new WorkflowEngineHibernationSupport(
             new DefaultWorkflowScheduler(Clock.systemUTC(), timer),
             Clock.systemUTC(),
             liveWorkflows,
             projection,
-            (hibernated, beforeStart) -> loader.load(hibernated, beforeStart),
+            (workflowId, resources, executionContext) -> restorer.restore(workflowId, resources, executionContext),
+            new WorkflowStarter(liveWorkflows),
             Duration.ofSeconds(30),
+            Duration.ofSeconds(10),
             wakeExecutor
     );
     private final WorkflowCancellationService cancellationService =
@@ -223,7 +214,7 @@ class WorkflowEngineHibernationSupportAdoptionTest {
             var running = new AtomicInteger();
             var mostAtOnce = new AtomicInteger();
             var finish = new CountDownLatch(1);
-            loader = (hibernated, beforeStart) -> {
+            restorer = (workflowId, resources, executionContext) -> {
                 mostAtOnce.accumulateAndGet(running.incrementAndGet(), Math::max);
                 try {
                     finish.await(10, TimeUnit.SECONDS);
@@ -231,7 +222,7 @@ class WorkflowEngineHibernationSupportAdoptionTest {
                     Thread.currentThread().interrupt();
                 }
                 running.decrementAndGet();
-                return wakeInMemory.load(hibernated, beforeStart);
+                return standIn.restore(workflowId, resources, executionContext);
             };
             var hints = new HashMap<String, HibernationHint>();
             IntStream.range(0, 3 * WorkflowEngineHibernationSupport.MAX_CONCURRENT_DETACHED_WAKES)
@@ -275,19 +266,18 @@ class WorkflowEngineHibernationSupportAdoptionTest {
         void keepsTheHintOfAnAdoptedWorkflowWhoseWakeFailed() {
             // given
             adopt(Map.of("wf-1", futureDeadline("1")));
-            loader = (hibernated, beforeStart) -> {
-                throw new IllegalStateException("event store down");
-            };
+            restorer = (workflowId, resources, executionContext) -> CompletableFuture.failedFuture(
+                    new IllegalStateException("event store down")
+            );
 
             // when
-            try {
-                liveWorkflows.broadcast(SEGMENT, paid("1"), new StubProcessingContext(), support::wakeForEvent);
-            } catch (IllegalStateException expected) {
-                // fails the event, so the processor delivers it again
-            }
+            var failure = catchThrowable(() -> liveWorkflows.broadcast(
+                    SEGMENT, paid("1"), new StubProcessingContext(), support::wakeForEvent
+            ));
             projection.decideCheckpoint(SEGMENT).write(null).orTimeout(5, TimeUnit.SECONDS).join();
 
-            // then
+            // then - the failed wake fails the event, so the processor delivers it again
+            assertThat(failure).isInstanceOf(CompletionException.class).hasRootCauseMessage("event store down");
             assertThat(liveWorkflows.hibernatedWorkflowIds()).containsExactly("wf-1");
             assertThat(workflowIndex.issuedWrites()).isEmpty();
         }
@@ -434,8 +424,8 @@ class WorkflowEngineHibernationSupportAdoptionTest {
 
     /**
      * A woken execution that registers its running steps only once its body replayed them, as a restored execution
-     * does, and that the loader of this test wakes in place of its hibernation and starts right away, as the engine
-     * does once the claim caught up.
+     * does, and that the restorer of this test restores, so the support starts it right away once the claim caught up.
+     * Its body never ends.
      */
     private final class ReplayingExecution {
 
@@ -448,22 +438,12 @@ class WorkflowEngineHibernationSupportAdoptionTest {
             when(cancellation.requestCancellationOfAllSteps(null)).thenAnswer(
                     invocation -> CompletableFuture.completedFuture(stepsReplayed.get() ? 2 : 0)
             );
-            var mocked = mock(WorkflowExecutionFixture.CancellationCapableExecution.class);
-            when(mocked.workflowId()).thenReturn(workflowId);
-            when(mocked.workflowCancellation()).thenReturn(cancellation);
+            // An execution whose body starts, and never ends.
+            var mocked = WorkflowExecutionFixture.mockExecution(workflowId, mock(WorkflowState.class), false);
+            when(((WorkflowCancellationProvider) mocked).workflowCancellation()).thenReturn(cancellation);
             doAnswer(invocation -> tasks.add(invocation.getArgument(0))).when(mocked).appendTask(any());
             execution = mocked;
-            loader = (hibernated, beforeStart) -> {
-                var woken = new AtomicBoolean();
-                hibernated.claim().runIfCurrent(
-                        () -> woken.set(liveWorkflows.wake(hibernated, execution, wakeExecutor))
-                );
-                if (woken.get()) {
-                    beforeStart.accept(execution);
-                    liveWorkflows.markCancellable(execution);
-                }
-                return woken.get();
-            };
+            restorer = (id, resources, executionContext) -> CompletableFuture.completedFuture(Optional.of(execution));
         }
 
         /**

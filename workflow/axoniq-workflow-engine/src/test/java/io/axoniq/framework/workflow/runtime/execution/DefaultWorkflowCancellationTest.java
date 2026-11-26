@@ -30,6 +30,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.Optional;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
@@ -182,14 +183,18 @@ class DefaultWorkflowCancellationTest {
         var segmentClaims = new SegmentClaims();
         segmentClaims.initialize(null);
         var claim = segmentClaims.startClaim(Segment.ROOT_SEGMENT, new StubProcessingContext());
-        var support = new WorkflowEngineHibernationSupport(new ControllableWorkflowScheduler(),
-                                                           Clock.systemUTC(),
-                                                           liveWorkflows,
-                                                           new RunningWorkflowsProjection(WorkflowIndex.none(),
-                                                                                          "orders"),
-                                                           (toWake, beforeStart) -> false,
-                                                           Duration.ofMinutes(1),
-                                                           Runnable::run);
+        var support = new WorkflowEngineHibernationSupport(
+                new ControllableWorkflowScheduler(),
+                Clock.systemUTC(),
+                liveWorkflows,
+                new RunningWorkflowsProjection(WorkflowIndex.none(), "orders"),
+                // Restores nothing, as no test wakes a workflow.
+                (toRestore, resources, executionContext) -> CompletableFuture.completedFuture(Optional.empty()),
+                new WorkflowStarter(liveWorkflows),
+                Duration.ofMinutes(1),
+                Duration.ofSeconds(10),
+                Runnable::run
+        );
         var hint = new HibernationHint(Instant.now().plus(Duration.ofHours(1)), List.of());
         return support.hibernationOf(claim, workflowId, hint, CompletableFuture.completedFuture(null));
     }

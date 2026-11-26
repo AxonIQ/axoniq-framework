@@ -28,6 +28,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -52,8 +53,9 @@ import static org.awaitility.Awaitility.await;
  * event finds the live workflows, also those that hibernate or wake while it looks them up, and how a cancellation
  * request for a woken execution ends when that execution takes no task.
  * <p>
- * The hibernated workflows wake through a real {@link WorkflowEngineHibernationSupport}, whose loader records the wake
- * and brings a stand-in execution into memory in place of the hibernation, as the engine does.
+ * The hibernated workflows wake through a real {@link WorkflowEngineHibernationSupport}, whose restorer is replaced by
+ * one that records the wake and restores a stand-in execution, which the support swaps into memory in place of the
+ * hibernation.
  *
  * @author Allard Buijze
  */
@@ -81,19 +83,16 @@ class LiveWorkflowsTest {
             Clock.systemUTC(),
             liveWorkflows,
             new RunningWorkflowsProjection(WorkflowIndex.none(), "orders"),
-            (hibernated, beforeStart) -> {
-                loads.add(hibernated.workflowId());
-                var execution = new InspectionCountingWorkflowExecution(hibernated.workflowId());
-                var woken = new AtomicBoolean();
-                hibernated.claim().runIfCurrent(
-                        () -> woken.set(liveWorkflows.wake(hibernated, execution, Runnable::run))
+            // Records the wake, and restores a stand-in execution, which reports that it runs, so no body starts.
+            (workflowId, resources, executionContext) -> {
+                loads.add(workflowId);
+                return CompletableFuture.completedFuture(
+                        Optional.of(new InspectionCountingWorkflowExecution(workflowId))
                 );
-                if (woken.get()) {
-                    beforeStart.accept(execution);
-                }
-                return woken.get();
             },
+            new WorkflowStarter(liveWorkflows),
             Duration.ofMinutes(1),
+            Duration.ofSeconds(10),
             Runnable::run
     );
 

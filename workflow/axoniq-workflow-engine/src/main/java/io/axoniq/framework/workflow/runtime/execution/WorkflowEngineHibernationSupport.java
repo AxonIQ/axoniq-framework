@@ -35,6 +35,7 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
@@ -69,13 +70,15 @@ import java.util.function.Supplier;
  * {@link #adopt(SegmentClaim, String, HibernationHint) adopts} those as hibernated workflows instead, which wake for an
  * event like any other, but for their deadline or a cancellation only once the claim caught up.
  * <p>
- * A wake restores the workflow from the event store in a unit of work of its own, on the execution context of the
- * claim that holds its segment, and hands it what woke it before its body starts. A wake by an event runs on the
- * thread handling the event, bounded by the wake timeout. A failed wake by an event fails the event: the engine stores
- * no position past it and asks the event processor to release the segment, so the next claim restores the workflow and
- * handles the event again. A wake by a deadline or a cancellation runs on the wake executor, at most
- * {@value #MAX_CONCURRENT_DETACHED_WAKES} at a time, so the deadlines that passed while a segment was not processed do
- * not all load at once, and is tried again after the idle delay when it fails.
+ * This support runs every wake from start to end, under the lock of the workflow, see
+ * {@link #wake(Hibernated, Consumer)}: it restores the workflow from the event store through the engine's
+ * {@link WorkflowRestorer}, on the execution context of the claim that holds its segment, swaps the restored execution
+ * in for the hibernation, hands it what woke it, and has the engine's {@link WorkflowStarter} start its body once the
+ * claim caught up. A wake by an event runs on the thread handling the event, bounded by the wake timeout. A failed wake
+ * by an event fails the event: the engine stores no position past it and asks the event processor to release the
+ * segment, so the next claim restores the workflow and handles the event again. A wake by a deadline or a cancellation
+ * runs on the wake executor, at most {@value #MAX_CONCURRENT_DETACHED_WAKES} at a time, so the deadlines that passed
+ * while a segment was not processed do not all load at once, and is tried again after the idle delay when it fails.
  * <p>
  * The {@link WorkflowEngine} creates it as its {@link Hibernation} when hibernation is enabled for its workflow module,
  * starts it with the engine and stops it on shutdown.
@@ -97,8 +100,10 @@ final class WorkflowEngineHibernationSupport implements Hibernation {
     private final Clock clock;
     private final LiveWorkflows liveWorkflows;
     private final RunningWorkflowsProjection projection;
-    private final WorkflowLoader loader;
+    private final WorkflowRestorer restorer;
+    private final WorkflowStarter starter;
     private final Duration idleDelay;
+    private final Duration wakeTimeout;
     private final Executor wakeExecutor;
     private final Semaphore detachedWakes = new Semaphore(MAX_CONCURRENT_DETACHED_WAKES);
     // Cleared on stop, so no workflow hibernates after the hibernated ones are dropped.
@@ -112,9 +117,12 @@ final class WorkflowEngineHibernationSupport implements Hibernation {
      * @param clock         the clock the scheduler measures deadlines with
      * @param liveWorkflows the live workflows, which apply the transitions between memory and hibernation
      * @param projection    records the hints of hibernated workflows for the workflow index
-     * @param loader        loads a hibernated workflow back into the engine and starts it
+     * @param restorer      restores a hibernated workflow from the event store as it wakes
+     * @param starter       starts the body of a woken workflow
      * @param idleDelay     the time a workflow must make no progress before it hibernates, and before a failed wake by
      *                      a deadline or a cancellation is tried again
+     * @param wakeTimeout   the time a wake may take to restore a workflow: to source it from the event store and to
+     *                      create its execution
      * @param wakeExecutor  runs the wakes for a deadline or a cancellation, which load from the store, so they never
      *                      run on the timer thread
      */
@@ -122,15 +130,19 @@ final class WorkflowEngineHibernationSupport implements Hibernation {
                                      Clock clock,
                                      LiveWorkflows liveWorkflows,
                                      RunningWorkflowsProjection projection,
-                                     WorkflowLoader loader,
+                                     WorkflowRestorer restorer,
+                                     WorkflowStarter starter,
                                      Duration idleDelay,
+                                     Duration wakeTimeout,
                                      Executor wakeExecutor) {
         this.scheduler = Objects.requireNonNull(scheduler, "The WorkflowScheduler must not be null.");
         this.clock = Objects.requireNonNull(clock, "The Clock must not be null.");
         this.liveWorkflows = Objects.requireNonNull(liveWorkflows, "The LiveWorkflows must not be null.");
         this.projection = Objects.requireNonNull(projection, "The RunningWorkflowsProjection must not be null.");
-        this.loader = Objects.requireNonNull(loader, "The WorkflowLoader must not be null.");
+        this.restorer = Objects.requireNonNull(restorer, "The WorkflowRestorer must not be null.");
+        this.starter = Objects.requireNonNull(starter, "The WorkflowStarter must not be null.");
         this.idleDelay = Objects.requireNonNull(idleDelay, "The idle delay must not be null.");
+        this.wakeTimeout = Objects.requireNonNull(wakeTimeout, "The wake timeout must not be null.");
         this.wakeExecutor = Objects.requireNonNull(wakeExecutor, "The wake Executor must not be null.");
     }
 
@@ -538,16 +550,32 @@ final class WorkflowEngineHibernationSupport implements Hibernation {
     }
 
     /**
-     * Restores a hibernated workflow from the event store and starts it. The caller holds the lock of the workflow.
+     * Wakes a hibernated workflow: restores it from the event store, swaps it in for its hibernation, hands it what
+     * woke it, and starts its body once its claim caught up. The caller holds the lock of the workflow, so no other
+     * transition of the workflow interleaves with the wake.
      * <p>
      * The given action runs on the restored execution before its body starts, so the body cannot hibernate again
      * before it sees what woke it.
+     * <table>
+     *     <caption>How a wake ends</caption>
+     *     <tr><th>Outcome</th><th>The workflow</th><th>Its hibernation</th></tr>
+     *     <tr><td>woken</td><td>in memory, started once its claim caught up</td><td>its timer cancelled, its hint
+     *     cleared</td></tr>
+     *     <tr><td>its state is terminal, as it ended elsewhere</td><td>not live here</td><td>forgotten, its stale
+     *     entry in the index removed</td></tr>
+     *     <tr><td>its claim ended before the swap</td><td>not live here</td><td>forgotten</td></tr>
+     *     <tr><td>failed before the swap</td><td>hibernated</td><td>kept</td></tr>
+     *     <tr><td>failed after the swap: the action or the start failed</td><td>hibernated again while its claim is
+     *     current, else not live here</td><td>kept while its claim is current, else released</td></tr>
+     * </table>
+     * A failure is rethrown, to fail the event that woke the workflow, or to have a wake for a deadline or a
+     * cancellation tried again.
      */
     private void wake(Hibernated hibernated, Consumer<WorkflowExecution> beforeStart) {
         var workflowId = hibernated.workflowId();
-        boolean loaded;
+        boolean woken;
         try {
-            loaded = loader.load(hibernated, beforeStart);
+            woken = restoreAndStart(hibernated, beforeStart);
         } catch (RuntimeException e) {
             if (liveWorkflows.get(workflowId) != hibernated) {
                 // Its claim ended while it woke, so it left this node.
@@ -555,7 +583,7 @@ final class WorkflowEngineHibernationSupport implements Hibernation {
             }
             throw e;
         }
-        if (loaded) {
+        if (woken) {
             hibernated.wakeTimer().cancel();
             hibernated.armed().complete(null);
             projection.recordWoken(hibernated.claim().segment(), workflowId);
@@ -564,6 +592,77 @@ final class WorkflowEngineHibernationSupport implements Hibernation {
             // It ended elsewhere, or its claim ended meanwhile.
             forget(hibernated);
             logger.debug("Workflow [{}] did not need waking: it ended, or the claim of its segment did.", workflowId);
+        }
+    }
+
+    /**
+     * Restores the workflow of the given hibernation, within the wake timeout, swaps the restored execution in for the
+     * hibernation while the claim of the hibernation is current, see
+     * {@link LiveWorkflows#wake(Hibernated, WorkflowExecution, Executor)}, and starts it, see
+     * {@link #startWoken(Hibernated, WorkflowExecution, Consumer)}. The caller holds the lock of the workflow. The wake
+     * timeout bounds the whole restore: sourcing the workflow from the event store, and creating its execution.
+     * <p>
+     * The workflow is read with the resources of the execution context of its claim, the way a restore on a claim
+     * reads with those of the claim's context, and runs on that execution context. The
+     * cancellation requests queued on the woken execution are answered on the wake executor when it leaves memory
+     * before its body took them.
+     *
+     * @return {@code false} when the workflow ended elsewhere, or the claim ended meanwhile
+     */
+    private boolean restoreAndStart(Hibernated hibernated, Consumer<WorkflowExecution> beforeStart) {
+        var claim = hibernated.claim();
+        var workflowId = hibernated.workflowId();
+        var executionContext = Objects.requireNonNull(claim.executionContext(), "A claim without execution context.");
+        var restored = restorer.restore(workflowId, executionContext, executionContext)
+                               .orTimeout(wakeTimeout.toMillis(), TimeUnit.MILLISECONDS)
+                               .join();
+        if (restored.isEmpty()) {
+            // It ended elsewhere, so its entry in the index, if any, is stale.
+            projection.recordRemoved(claim.segment(), workflowId);
+            return false;
+        }
+        var execution = restored.get();
+        // Only while the claim is current, like a restore.
+        if (!claim.applyIfCurrent(() -> liveWorkflows.wake(hibernated, execution, wakeExecutor))) {
+            logger.debug("Not waking workflow '{}': the claim of segment {} failed or ended meanwhile.",
+                         workflowId, claim.segment().getSegmentId());
+            return false;
+        }
+        startWoken(hibernated, execution, beforeStart);
+        return true;
+    }
+
+    /**
+     * Lets the given execution, which just woke from the given hibernation, hibernate again, hands it to the given
+     * action, and starts its body once its claim caught up; before that, the activation of the claim starts it with the
+     * restored executions. The caller holds the lock of the workflow.
+     * <p>
+     * When the action or the start fails, the execution is partly woken: it swaps back for the hibernation while the
+     * claim is current, so the workflow stays only hibernated, and only leaves memory once the claim ended.
+     */
+    private void startWoken(Hibernated hibernated,
+                            WorkflowExecution execution,
+                            Consumer<WorkflowExecution> beforeStart) {
+        var claim = hibernated.claim();
+        try {
+            allow(execution, claim);
+            beforeStart.accept(execution);
+            claim.runIfCurrentWithBodyStart(bodyStart -> {
+                if (bodyStart == BodyStart.NOW && !execution.isRunning()) {
+                    starter.start(execution);
+                }
+            });
+        } catch (RuntimeException e) {
+            // First, it takes no requests any more, and those that waited for it fail, so they do not wake the
+            // workflow once more.
+            execution.stopForShutdown();
+            liveWorkflows.failStart(execution, e);
+            // Only while the claim is current: a claim that ended dropped the hibernated workflows of its segment, and
+            // must not find this one hibernated again once it no longer looks.
+            if (!claim.applyIfCurrent(() -> liveWorkflows.hibernate(execution, hibernated))) {
+                liveWorkflows.leave(execution);
+            }
+            throw e;
         }
     }
 
@@ -653,26 +752,5 @@ final class WorkflowEngineHibernationSupport implements Hibernation {
                 scheduleNextPass();
             }
         });
-    }
-
-    /**
-     * Loads a hibernated workflow back into the engine and starts it, on behalf of this support.
-     */
-    @FunctionalInterface
-    interface WorkflowLoader {
-
-        /**
-         * Loads the workflow of the given hibernation from the event store into memory under the claim it hibernated
-         * under, in its place, see {@link LiveWorkflows#wake(Hibernated, WorkflowExecution, Executor)}, and starts it
-         * once the claim caught up, after handing the loaded execution to the given action. Fails when the workflow
-         * cannot be loaded in time. When the action or the start fails, the loaded execution swaps back for the
-         * hibernation while the claim is current, see {@link LiveWorkflows#hibernate(WorkflowExecution, Hibernated)},
-         * and only leaves memory once the claim ended.
-         *
-         * @param hibernated  the hibernation of the workflow
-         * @param beforeStart receives the loaded execution before its body starts
-         * @return {@code false} when there was nothing to load: the workflow ended elsewhere, or the claim ended
-         */
-        boolean load(Hibernated hibernated, Consumer<WorkflowExecution> beforeStart);
     }
 }

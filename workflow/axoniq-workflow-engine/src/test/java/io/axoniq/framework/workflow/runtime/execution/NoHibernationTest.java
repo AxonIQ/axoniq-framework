@@ -22,6 +22,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
@@ -103,14 +104,18 @@ class NoHibernationTest {
 
         private Hibernated hibernation() {
             var liveWorkflows = new LiveWorkflows(new InMemoryWorkflowExecutionRepository());
-            var support = new WorkflowEngineHibernationSupport(new ControllableWorkflowScheduler(),
-                                                               Clock.systemUTC(),
-                                                               liveWorkflows,
-                                                               new RunningWorkflowsProjection(WorkflowIndex.none(),
-                                                                                              "orders"),
-                                                               (hibernated, beforeStart) -> false,
-                                                               Duration.ofMinutes(1),
-                                                               Runnable::run);
+            var support = new WorkflowEngineHibernationSupport(
+                    new ControllableWorkflowScheduler(),
+                    Clock.systemUTC(),
+                    liveWorkflows,
+                    new RunningWorkflowsProjection(WorkflowIndex.none(), "orders"),
+                    // Restores nothing, as no test wakes a workflow.
+                    (toRestore, resources, executionContext) -> CompletableFuture.completedFuture(Optional.empty()),
+                    new WorkflowStarter(liveWorkflows),
+                    Duration.ofMinutes(1),
+                    Duration.ofSeconds(10),
+                    Runnable::run
+            );
             return support.hibernationOf(claimWithAnExecutionContext(), WORKFLOW_ID, hint(),
                                          CompletableFuture.completedFuture(null));
         }

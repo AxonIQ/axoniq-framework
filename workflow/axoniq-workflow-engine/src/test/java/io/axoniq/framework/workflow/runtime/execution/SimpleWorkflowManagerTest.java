@@ -334,10 +334,12 @@ class SimpleWorkflowManagerTest {
                 Clock.systemUTC(),
                 liveWorkflows,
                 new RunningWorkflowsProjection(WorkflowIndex.none(), "orders"),
-                (hibernated, beforeStart) -> {
+                (workflowId, resources, executionContext) -> {
                     throw new UnsupportedOperationException("A query does not wake a workflow.");
                 },
+                new WorkflowStarter(liveWorkflows),
                 Duration.ofMinutes(1),
+                Duration.ofSeconds(10),
                 Runnable::run
         );
 

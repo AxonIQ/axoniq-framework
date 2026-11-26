@@ -57,8 +57,8 @@ import java.util.function.Supplier;
  *     hibernated or swapped back for its hibernation (the lock of the workflow), or the engine shut down (no lock); or,
  *     see {@link #failStart(Throwable)}, the start of a woken execution failed, which leaves memory next (the lock of
  *     the workflow). The {@link LiveWorkflows} registry removes the entry from its entries before every leave but the
- *     last, so an entry in the entries is {@link Left} only while the engine handles the failed start of a woken
- *     execution under the lock of its workflow, which every request takes.</li>
+ *     last, so an entry in the entries is {@link Left} only while the engine's hibernation handles the failed start of
+ *     a woken execution under the lock of its workflow, which every request takes.</li>
  * </ul>
  * <b>Leaving takes no lock.</b> So a request that reached a started execution checks the phase once more after it was
  * made, and aborts a workflow cancellation it made pending once the execution left, see
@@ -189,8 +189,8 @@ final class CancellationRoute {
                                      Supplier<CompletableFuture<T>> again) {
         return switch (phase.get()) {
             // It left memory after the caller found its entry, as leaving memory takes no lock; or it is a woken
-            // execution whose start failed, whose entry stays until the engine, under the lock of the workflow, takes
-            // it out of memory.
+            // execution whose start failed, whose entry stays until the engine's hibernation, under the lock of the
+            // workflow, takes it out of memory.
             case Left left -> throw noRunningWorkflow(execution.workflowId());
             case Phase woken when answerOn != null -> {
                 var queued = new QueuedRequest<>(request, again);
