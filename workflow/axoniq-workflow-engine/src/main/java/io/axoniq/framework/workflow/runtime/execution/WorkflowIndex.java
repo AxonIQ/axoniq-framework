@@ -24,12 +24,16 @@ import java.util.concurrent.CompletableFuture;
  * token the segment resumes from, instead of sourcing every segment from the {@link WorkflowStore}.
  *
  * <h2>The index position is the token of the event processor</h2>
- * The index keeps no position of its own. The engine stores the row changes of an event before the processor stores a
+ * A claim uses no position of the index. The engine stores the row changes of an event before the processor stores a
  * token past that event, so the rows hold every change up to any stored token. Rows ahead of the token are harmless,
  * as applying the events after the token again gives the same rows. This holds only while every node that processes a
  * workflow module keeps the same index, and only the engine decides when the processor stores a token. So a module
  * with an index refuses to start when its processor has ordinary event handling components, stores its tokens in
  * another way, or keeps them in memory while the index survives a restart.
+ * <p>
+ * The workflow manager cannot read the tokens without claiming them, so the index keeps a copy of the position of each
+ * stored token, written with it. A query for live workflows reads the rows of its candidates and the events after the
+ * lowest of those positions, see {@link #loadWorkflows(String, Collection, ProcessingContext) loadWorkflows}.
  *
  * <h2>Initialization</h2>
  * An index introduced while the processor already stored tokens, or one that was emptied, misses the workflows that
@@ -75,7 +79,23 @@ public interface WorkflowIndex {
                                                         @Nullable ProcessingContext context);
 
     /**
-     * Stores the given changes in their order.
+     * Loads the rows of the given workflows in the given module, by workflow id, and the token position of every
+     * segment of the module, or nothing when the module is not initialized. The workflow manager uses it; a claim does
+     * not.
+     *
+     * @param module      the name of the workflow module
+     * @param workflowIds the identifiers of the workflows to load the rows of
+     * @param context     the context to read in, or {@code null} to read in a transaction of its own
+     * @return a future with those of the given workflows that have a row and the positions of the module, empty when
+     * the module is not initialized
+     */
+    CompletableFuture<Optional<WorkflowIndexRows>> loadWorkflows(String module,
+                                                                 Collection<String> workflowIds,
+                                                                 @Nullable ProcessingContext context);
+
+    /**
+     * Stores the given changes in their order, then their {@link WorkflowIndexChanges#position() position}, which
+     * replaces the position of every segment whose range overlaps it, as after a split or a merge.
      *
      * @param module  the name of the workflow module
      * @param changes the changes to store

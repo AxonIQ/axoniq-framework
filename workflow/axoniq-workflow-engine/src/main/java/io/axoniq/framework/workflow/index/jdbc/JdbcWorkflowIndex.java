@@ -18,6 +18,7 @@ import io.axoniq.framework.workflow.runtime.execution.WorkflowIndexChange.WakesA
 import io.axoniq.framework.workflow.runtime.execution.WorkflowIndexChange.WorkflowEnded;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowIndexChange.WorkflowStarted;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowIndexChanges;
+import io.axoniq.framework.workflow.runtime.execution.WorkflowIndexChanges.SegmentPosition;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowIndexRows;
 import org.axonframework.common.IdentifierFactory;
 import org.axonframework.common.TypeReference;
@@ -38,6 +39,7 @@ import java.sql.Types;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -71,6 +73,7 @@ public class JdbcWorkflowIndex implements WorkflowIndex {
 
     private static final TypeReference<HashSet<String>> ASSOCIATIONS_TYPE_REF = new TypeReference<>() {
     };
+    private static final int IDS_PER_QUERY = 1000;
 
     private final TransactionalExecutorProvider<Connection> transactionalExecutorProvider;
     private final Converter converter;
@@ -171,7 +174,91 @@ public class JdbcWorkflowIndex implements WorkflowIndex {
             for (WorkflowIndexChange change : changes.changes()) {
                 apply(connection, module, change);
             }
+            var position = changes.position();
+            if (position != null) {
+                movePosition(connection, module, position);
+            }
         });
+    }
+
+    @Override
+    public CompletableFuture<Optional<WorkflowIndexRows>> loadWorkflows(String module,
+                                                                        Collection<String> workflowIds,
+                                                                        @Nullable ProcessingContext context) {
+        var ids = List.copyOf(workflowIds);
+        return executor(context).apply(connection -> {
+            if (!isInitialized(connection, module)) {
+                return Optional.<WorkflowIndexRows>empty();
+            }
+            var running = new HashSet<String>();
+            var wakesAt = new HashMap<String, Instant>();
+            // In chunks, as a database limits the number of parameters of one statement.
+            for (int first = 0; first < ids.size(); first += IDS_PER_QUERY) {
+                var chunk = ids.subList(first, Math.min(first + IDS_PER_QUERY, ids.size()));
+                try (var statement = prepare(connection,
+                                             "SELECT " + schema.workflowIdColumn() + ", " + schema.wakesAtColumn()
+                                                     + " FROM " + schema.workflowTable() + " WHERE "
+                                                     + schema.workflowModuleColumn() + " = ? AND "
+                                                     + schema.workflowIdColumn() + " IN ("
+                                                     + String.join(", ", Collections.nCopies(chunk.size(), "?"))
+                                                     + ")",
+                                             parameters(module, chunk));
+                     var result = statement.executeQuery()) {
+                    while (result.next()) {
+                        var workflowId = result.getString(1);
+                        running.add(workflowId);
+                        var wakes = result.getString(2);
+                        if (wakes != null) {
+                            wakesAt.put(workflowId, Instant.parse(wakes));
+                        }
+                    }
+                }
+            }
+            var positions = new ArrayList<SegmentPosition>();
+            try (var statement = prepare(connection,
+                                         "SELECT " + schema.segmentFromColumn() + ", " + schema.segmentToColumn() + ", "
+                                                 + schema.segmentPositionColumn() + " FROM " + schema.positionTable()
+                                                 + " WHERE " + schema.workflowModuleColumn() + " = ?",
+                                         module);
+                 var result = statement.executeQuery()) {
+                while (result.next()) {
+                    positions.add(new SegmentPosition(new SegmentKeyRange(result.getLong(1), result.getLong(2)),
+                                                      result.getLong(3)));
+                }
+            }
+            return Optional.of(new WorkflowIndexRows(running, wakesAt, List.of(), positions));
+        });
+    }
+
+    private void movePosition(Connection connection, String module, SegmentPosition position) throws SQLException {
+        var range = position.range();
+        // Removes the positions of the segments a split or a merge replaced: those that overlap this range.
+        update(connection,
+               "DELETE FROM " + schema.positionTable() + " WHERE " + schema.workflowModuleColumn() + " = ? AND "
+                       + schema.segmentFromColumn() + " <= ? AND " + schema.segmentToColumn() + " >= ? AND ("
+                       + schema.segmentFromColumn() + " <> ? OR " + schema.segmentToColumn() + " <> ?)",
+               module, range.to(), range.from(), range.from(), range.to());
+        int updated = update(connection,
+                             "UPDATE " + schema.positionTable() + " SET " + schema.segmentPositionColumn() + " = ? "
+                                     + "WHERE " + schema.workflowModuleColumn() + " = ? AND "
+                                     + schema.segmentFromColumn() + " = ? AND " + schema.segmentToColumn() + " = ?",
+                             position.position(), module, range.from(), range.to());
+        if (updated == 0) {
+            update(connection,
+                   "INSERT INTO " + schema.positionTable() + " (" + schema.workflowModuleColumn() + ", "
+                           + schema.segmentFromColumn() + ", " + schema.segmentToColumn() + ", "
+                           + schema.segmentPositionColumn() + ") VALUES (?, ?, ?, ?)",
+                   module, range.from(), range.to(), position.position());
+        }
+    }
+
+    private static Object[] parameters(String module, List<String> workflowIds) {
+        var parameters = new Object[workflowIds.size() + 1];
+        parameters[0] = module;
+        for (int i = 0; i < workflowIds.size(); i++) {
+            parameters[i + 1] = workflowIds.get(i);
+        }
+        return parameters;
     }
 
     @Override

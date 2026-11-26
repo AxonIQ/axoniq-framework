@@ -18,6 +18,7 @@ import io.axoniq.framework.workflow.runtime.execution.WorkflowIndexChange.WakesA
 import io.axoniq.framework.workflow.runtime.execution.WorkflowIndexChange.WorkflowEnded;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowIndexChange.WorkflowStarted;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowIndexChanges;
+import io.axoniq.framework.workflow.runtime.execution.WorkflowIndexChanges.SegmentPosition;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowIndexRows;
 import jakarta.persistence.EntityManager;
 import org.axonframework.common.TypeReference;
@@ -35,6 +36,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
@@ -43,9 +45,10 @@ import static java.util.Objects.requireNonNull;
 
 /**
  * JPA implementation of {@link WorkflowIndex}, on the entities {@link WorkflowIndexEntry},
- * {@link WorkflowIndexWaitEntry} and {@link WorkflowIndexInitialization}. Give it the
- * {@link TransactionalExecutorProvider} of the token store, so the rows and the token commit together. When the index
- * lives in another database, use {@link JpaWorkflowIndexConfiguration#storesWithToken(boolean) storesWithToken(false)}.
+ * {@link WorkflowIndexWaitEntry}, {@link WorkflowIndexInitialization} and {@link WorkflowIndexSegmentEntry}. Give it
+ * the {@link TransactionalExecutorProvider} of the token store, so the rows and the token commit together. When the
+ * index lives in another database, use
+ * {@link JpaWorkflowIndexConfiguration#storesWithToken(boolean) storesWithToken(false)}.
  * <p>
  * Example usage:
  * <pre>{@code
@@ -64,6 +67,7 @@ public class JpaWorkflowIndex implements WorkflowIndex {
     private static final String MODULE_PARAM = "workflowModule";
     private static final String WORKFLOW_ID_PARAM = "workflowId";
     private static final String STEP_NAME_PARAM = "stepName";
+    private static final int IDS_PER_QUERY = 1000;
 
     private final TransactionalExecutorProvider<EntityManager> transactionalExecutorProvider;
     private final Converter converter;
@@ -107,12 +111,7 @@ public class JpaWorkflowIndex implements WorkflowIndex {
                          .setParameter("from", range.from())
                          .setParameter("to", range.to())
                          .getResultList()
-                         .forEach(entry -> {
-                             running.add(entry.getWorkflowId());
-                             if (entry.getWakesAt() != null) {
-                                 wakesAt.put(entry.getWorkflowId(), Instant.parse(entry.getWakesAt()));
-                             }
-                         });
+                         .forEach(entry -> addRunning(entry, running, wakesAt));
             List<WaitAssociation> waits = new ArrayList<>();
             entityManager.createQuery(
                                  "select e from WorkflowIndexWaitEntry e "
@@ -139,9 +138,85 @@ public class JpaWorkflowIndex implements WorkflowIndex {
             for (WorkflowIndexChange change : changes.changes()) {
                 apply(entityManager, module, change, added);
             }
+            var position = changes.position();
+            if (position != null) {
+                movePosition(entityManager, module, position, added);
+            }
             entityManager.flush();
             added.forEach(entityManager::detach);
         });
+    }
+
+    @Override
+    public CompletableFuture<Optional<WorkflowIndexRows>> loadWorkflows(String module,
+                                                                        Collection<String> workflowIds,
+                                                                        @Nullable ProcessingContext context) {
+        var ids = List.copyOf(workflowIds);
+        return executor(context).apply(entityManager -> {
+            if (!isInitialized(entityManager, module)) {
+                return Optional.<WorkflowIndexRows>empty();
+            }
+            var running = new HashSet<String>();
+            var wakesAt = new HashMap<String, Instant>();
+            // In chunks, as a database limits the number of parameters of one statement.
+            for (int first = 0; first < ids.size(); first += IDS_PER_QUERY) {
+                var chunk = ids.subList(first, Math.min(first + IDS_PER_QUERY, ids.size()));
+                entityManager.createQuery(
+                                     "select e from WorkflowIndexEntry e "
+                                             + "where e.workflowModule = :workflowModule "
+                                             + "and e.workflowId in :workflowIds",
+                                     WorkflowIndexEntry.class
+                             )
+                             .setParameter(MODULE_PARAM, module)
+                             .setParameter("workflowIds", chunk)
+                             .getResultList()
+                             .forEach(entry -> addRunning(entry, running, wakesAt));
+            }
+            var positions = entityManager.createQuery(
+                                                 "select e from WorkflowIndexSegmentEntry e "
+                                                         + "where e.workflowModule = :workflowModule",
+                                                 WorkflowIndexSegmentEntry.class
+                                         )
+                                         .setParameter(MODULE_PARAM, module)
+                                         .getResultList()
+                                         .stream()
+                                         .map(entry -> new SegmentPosition(
+                                                 new SegmentKeyRange(entry.getSegmentFrom(), entry.getSegmentTo()),
+                                                 entry.getSegmentPosition()
+                                         ))
+                                         .toList();
+            return Optional.of(new WorkflowIndexRows(running, wakesAt, List.of(), positions));
+        });
+    }
+
+    private static void movePosition(EntityManager entityManager,
+                                     String module,
+                                     SegmentPosition position,
+                                     List<Object> added) {
+        var range = position.range();
+        // Removes the positions of the segments a split or a merge replaced: those that overlap this range.
+        entityManager.createQuery("delete from WorkflowIndexSegmentEntry e "
+                                          + "where e.workflowModule = :workflowModule "
+                                          + "and e.segmentFrom <= :to and e.segmentTo >= :from "
+                                          + "and (e.segmentFrom <> :from or e.segmentTo <> :to)")
+                     .setParameter(MODULE_PARAM, module)
+                     .setParameter("from", range.from())
+                     .setParameter("to", range.to())
+                     .executeUpdate();
+        int updated = entityManager.createQuery("update WorkflowIndexSegmentEntry e "
+                                                        + "set e.segmentPosition = :position "
+                                                        + "where e.workflowModule = :workflowModule "
+                                                        + "and e.segmentFrom = :from and e.segmentTo = :to")
+                                   .setParameter("position", position.position())
+                                   .setParameter(MODULE_PARAM, module)
+                                   .setParameter("from", range.from())
+                                   .setParameter("to", range.to())
+                                   .executeUpdate();
+        if (updated == 0) {
+            add(entityManager, added, new WorkflowIndexSegmentEntry(
+                    module, range.from(), range.to(), position.position()
+            ));
+        }
     }
 
     @Override
@@ -236,6 +311,13 @@ public class JpaWorkflowIndex implements WorkflowIndex {
     private static void add(EntityManager entityManager, List<Object> added, Object entry) {
         entityManager.persist(entry);
         added.add(entry);
+    }
+
+    private static void addRunning(WorkflowIndexEntry entry, Set<String> running, Map<String, Instant> wakesAt) {
+        running.add(entry.getWorkflowId());
+        if (entry.getWakesAt() != null) {
+            wakesAt.put(entry.getWorkflowId(), Instant.parse(entry.getWakesAt()));
+        }
     }
 
     private WorkflowIndexWaitEntry waitEntry(String module, WaitAssociation wait) {

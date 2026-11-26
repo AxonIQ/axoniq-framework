@@ -23,6 +23,7 @@ public class WorkflowIndexSchema {
     private final String workflowTable;
     private final String waitTable;
     private final String initializationTable;
+    private final String positionTable;
     private final String workflowModuleColumn;
     private final String workflowIdColumn;
     private final String segmentKeyColumn;
@@ -31,6 +32,9 @@ public class WorkflowIndexSchema {
     private final String stepNameColumn;
     private final String eventNameColumn;
     private final String associationsColumn;
+    private final String segmentFromColumn;
+    private final String segmentToColumn;
+    private final String segmentPositionColumn;
 
     /**
      * Creates a schema from the given builder.
@@ -41,6 +45,7 @@ public class WorkflowIndexSchema {
         this.workflowTable = builder.workflowTable;
         this.waitTable = builder.waitTable;
         this.initializationTable = builder.initializationTable;
+        this.positionTable = builder.positionTable;
         this.workflowModuleColumn = builder.workflowModuleColumn;
         this.workflowIdColumn = builder.workflowIdColumn;
         this.segmentKeyColumn = builder.segmentKeyColumn;
@@ -49,6 +54,9 @@ public class WorkflowIndexSchema {
         this.stepNameColumn = builder.stepNameColumn;
         this.eventNameColumn = builder.eventNameColumn;
         this.associationsColumn = builder.associationsColumn;
+        this.segmentFromColumn = builder.segmentFromColumn;
+        this.segmentToColumn = builder.segmentToColumn;
+        this.segmentPositionColumn = builder.segmentPositionColumn;
     }
 
     /**
@@ -94,6 +102,15 @@ public class WorkflowIndexSchema {
      */
     public String initializationTable() {
         return initializationTable;
+    }
+
+    /**
+     * Returns the name of the table with the token position of each segment.
+     *
+     * @return the configured name, {@code WorkflowIndexSegmentEntry} by default
+     */
+    public String positionTable() {
+        return positionTable;
     }
 
     /**
@@ -169,6 +186,33 @@ public class WorkflowIndexSchema {
     }
 
     /**
+     * Returns the name of the column with the lowest segment key of a segment, in the position table.
+     *
+     * @return the configured name, {@code segmentFrom} by default
+     */
+    public String segmentFromColumn() {
+        return segmentFromColumn;
+    }
+
+    /**
+     * Returns the name of the column with the highest segment key of a segment, in the position table.
+     *
+     * @return the configured name, {@code segmentTo} by default
+     */
+    public String segmentToColumn() {
+        return segmentToColumn;
+    }
+
+    /**
+     * Returns the name of the column with the token position of a segment.
+     *
+     * @return the configured name, {@code segmentPosition} by default
+     */
+    public String segmentPositionColumn() {
+        return segmentPositionColumn;
+    }
+
+    /**
      * Builds a {@link WorkflowIndexSchema}. Every name defaults to that of the JPA mapping.
      */
     public static class Builder {
@@ -176,6 +220,7 @@ public class WorkflowIndexSchema {
         private String workflowTable = "WorkflowIndexEntry";
         private String waitTable = "WorkflowIndexWaitEntry";
         private String initializationTable = "WorkflowIndexInitialization";
+        private String positionTable = "WorkflowIndexSegmentEntry";
         private String workflowModuleColumn = "workflowModule";
         private String workflowIdColumn = "workflowId";
         private String segmentKeyColumn = "segmentKey";
@@ -184,6 +229,9 @@ public class WorkflowIndexSchema {
         private String stepNameColumn = "stepName";
         private String eventNameColumn = "eventName";
         private String associationsColumn = "associations";
+        private String segmentFromColumn = "segmentFrom";
+        private String segmentToColumn = "segmentTo";
+        private String segmentPositionColumn = "segmentPosition";
 
         /**
          * Sets the name of the table with a row per running workflow. Defaults to {@code WorkflowIndexEntry}.
@@ -216,6 +264,18 @@ public class WorkflowIndexSchema {
          */
         public Builder initializationTable(String initializationTable) {
             this.initializationTable = Objects.requireNonNull(initializationTable, "The name must not be null.");
+            return this;
+        }
+
+        /**
+         * Sets the name of the table with the token position of each segment.
+         * Defaults to {@code WorkflowIndexSegmentEntry}.
+         *
+         * @param positionTable the name to use
+         * @return this builder, for fluent interfacing
+         */
+        public Builder positionTable(String positionTable) {
+            this.positionTable = Objects.requireNonNull(positionTable, "The name must not be null.");
             return this;
         }
 
@@ -307,6 +367,41 @@ public class WorkflowIndexSchema {
          */
         public Builder associationsColumn(String associationsColumn) {
             this.associationsColumn = Objects.requireNonNull(associationsColumn, "The name must not be null.");
+            return this;
+        }
+
+        /**
+         * Sets the name of the column with the lowest segment key of a segment, in the position table.
+         * Defaults to {@code segmentFrom}.
+         *
+         * @param segmentFromColumn the name to use
+         * @return this builder, for fluent interfacing
+         */
+        public Builder segmentFromColumn(String segmentFromColumn) {
+            this.segmentFromColumn = Objects.requireNonNull(segmentFromColumn, "The name must not be null.");
+            return this;
+        }
+
+        /**
+         * Sets the name of the column with the highest segment key of a segment, in the position table.
+         * Defaults to {@code segmentTo}.
+         *
+         * @param segmentToColumn the name to use
+         * @return this builder, for fluent interfacing
+         */
+        public Builder segmentToColumn(String segmentToColumn) {
+            this.segmentToColumn = Objects.requireNonNull(segmentToColumn, "The name must not be null.");
+            return this;
+        }
+
+        /**
+         * Sets the name of the column with the token position of a segment. Defaults to {@code segmentPosition}.
+         *
+         * @param segmentPositionColumn the name to use
+         * @return this builder, for fluent interfacing
+         */
+        public Builder segmentPositionColumn(String segmentPositionColumn) {
+            this.segmentPositionColumn = Objects.requireNonNull(segmentPositionColumn, "The name must not be null.");
             return this;
         }
 

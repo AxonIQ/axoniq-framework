@@ -355,7 +355,7 @@ class SimpleWorkflowModule<C extends WorkflowContext>
 
     private ComponentDefinition<WorkflowManager> workflowManager() {
         return ComponentDefinition.ofTypeAndName(WorkflowManager.class, managerName())
-                                  .withBuilder(c -> new SimpleWorkflowManager(
+                                  .withBuilder(c -> withIndex(c, new SimpleWorkflowManager(
                                           c.getComponent(
                                                   MutableWorkflowHistoryRepository.class, historyRepositoryName()
                                           ),
@@ -367,7 +367,12 @@ class SimpleWorkflowModule<C extends WorkflowContext>
                                                   ExecutorService.class,
                                                   WorkflowConfigurationDefaults.WORKFLOW_ENGINE_EXECUTOR
                                           )
-                                  ));
+                                  )));
+    }
+
+    private SimpleWorkflowManager withIndex(Configuration config, SimpleWorkflowManager manager) {
+        config.getOptionalComponent(WorkflowIndex.class).ifPresent(index -> manager.enableIndex(index, name));
+        return manager;
     }
 
     private String managerName() {

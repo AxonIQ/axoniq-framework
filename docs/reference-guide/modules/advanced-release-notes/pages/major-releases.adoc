@@ -8,12 +8,12 @@ All the enhancements and features which have been introduced to our major releas
 
 === Features
 
-- Workflow index: an optional store of rows per segment for the workflow engine. A segment claim reads only the running workflows, the open waits and the hibernated workflows of its own segment, instead of sourcing them for all segments. With the workflow index in the database of the token store, a hibernated workflow stays out of memory across a segment claim, also after a crash. It comes as a JPA, a JDBC and an in-memory workflow index; the JPA and the JDBC one share their tables. In a Spring Boot application with JPA or JDBC, the workflow index is on by default. See xref:workflows:configuration.adoc#workflow-index[Workflow index].
+- Workflow index: an optional store of rows per segment for the workflow engine. A segment claim reads only the running workflows, the open waits and the hibernated workflows of its own segment, instead of sourcing them for all segments. A query of the workflow manager for live workflows, such as a cancellation, reads the rows of its candidates instead of sourcing every running workflow. With the workflow index in the database of the token store, a hibernated workflow stays out of memory across a segment claim, also after a crash. It comes as a JPA, a JDBC and an in-memory workflow index; the JPA and the JDBC one share their tables. In a Spring Boot application with JPA or JDBC, the workflow index is on by default. See xref:workflows:configuration.adoc#workflow-index[Workflow index].
 
 === Upgrade notes
 
 A Spring Boot application with JPA or JDBC gets the workflow index after the upgrade, without any setting.
-With JPA, the persistence provider creates its three tables, like the token table; with JDBC, or with Flyway or Liquibase, create them yourself.
+With JPA, the persistence provider creates its four tables, like the token table; with JDBC, or with Flyway or Liquibase, create them yourself.
 To keep it off, set `axon.workflow.index.enabled=false`.
 
 The workflow index is built once, by the first segment claim after the upgrade, from the events.

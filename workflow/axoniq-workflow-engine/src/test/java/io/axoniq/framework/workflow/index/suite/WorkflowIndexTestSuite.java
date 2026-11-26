@@ -7,6 +7,7 @@
  */
 package io.axoniq.framework.workflow.index.suite;
 
+import io.axoniq.framework.workflow.runtime.execution.SegmentKeyRange;
 import io.axoniq.framework.workflow.runtime.execution.WaitAssociation;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowIndex;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowIndexChange;
@@ -17,6 +18,7 @@ import io.axoniq.framework.workflow.runtime.execution.WorkflowIndexChange.WakesA
 import io.axoniq.framework.workflow.runtime.execution.WorkflowIndexChange.WorkflowEnded;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowIndexChange.WorkflowStarted;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowIndexChanges;
+import io.axoniq.framework.workflow.runtime.execution.WorkflowIndexChanges.SegmentPosition;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowIndexRows;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
@@ -37,8 +39,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.tuple;
 
 /**
- * Tests a {@link WorkflowIndex} that keeps its rows in a database: which rows a segment loads, what each
- * {@link WorkflowIndexChange} does to the rows, and what an initialization adds. The JPA and the JDBC index run it.
+ * Tests a {@link WorkflowIndex} that keeps its rows in a database: which rows a segment and the workflow manager load,
+ * what each {@link WorkflowIndexChange} and stored position do to the rows, and what an initialization adds. The JPA
+ * and the JDBC index run it.
  *
  * @author Stefan Dragisic
  */
@@ -303,6 +306,123 @@ public abstract class WorkflowIndexTestSuite {
         }
     }
 
+    @Nested
+    class RowsOfWorkflows {
+
+        @Test
+        void areTheRowsOfTheGivenRunningWorkflowsInTheModuleWithEveryPositionOfTheModule() {
+            // given
+            var halves = Segment.ROOT_SEGMENT.split();
+            testSubject.store(MODULE,
+                              new WorkflowIndexChanges(List.of(new WorkflowStarted("order-1"),
+                                                               new WakesAtSet("order-1", WAKES_AT),
+                                                               new WorkflowStarted("order-2"),
+                                                               new WorkflowEnded("order-2")),
+                                                       position(halves[0], 42L)),
+                              null)
+                       .orTimeout(5, TimeUnit.SECONDS)
+                       .join();
+            storePosition(halves[1], 43L);
+            testSubject.initialize("payments", Set.of("order-3"), List.of()).orTimeout(5, TimeUnit.SECONDS).join();
+
+            // when
+            var rows = loadWorkflows(List.of("order-1", "order-2", "order-3"));
+
+            // then
+            assertThat(rows.runningWorkflowIds()).containsExactly("order-1");
+            assertThat(rows.wakesAt()).containsEntry("order-1", WAKES_AT);
+            assertThat(rows.waits()).isEmpty();
+            assertThat(rows.positions())
+                    .containsExactlyInAnyOrder(position(halves[0], 42L), position(halves[1], 43L));
+        }
+
+        @Test
+        void areFoundForMoreWorkflowsThanOneQueryTakes() {
+            // given
+            var workflowIds = IntStream.rangeClosed(1, 1_001).mapToObj(i -> "order-" + i).toList();
+            store(workflowIds.stream().map(WorkflowStarted::new).toList());
+
+            // when
+            var rows = loadWorkflows(workflowIds);
+
+            // then
+            assertThat(rows.runningWorkflowIds()).containsExactlyInAnyOrderElementsOf(workflowIds);
+        }
+
+        @Test
+        void areNotReportedForAModuleThatIsNotInitialized() {
+            // when
+            var rows = testSubject.loadWorkflows("payments", List.of("order-1"), null)
+                                  .orTimeout(5, TimeUnit.SECONDS)
+                                  .join();
+
+            // then
+            assertThat(rows).isEmpty();
+        }
+    }
+
+    @Nested
+    class StoredPosition {
+
+        @Test
+        void isKeptApartPerModule() {
+            // given
+            testSubject.initialize("payments", Set.of(), List.of()).orTimeout(5, TimeUnit.SECONDS).join();
+
+            // when
+            storePosition(Segment.ROOT_SEGMENT, 42L);
+
+            // then
+            assertThat(loadWorkflows(List.of()).positions()).containsExactly(position(Segment.ROOT_SEGMENT, 42L));
+            assertThat(testSubject.loadWorkflows("payments", List.of(), null)
+                                  .orTimeout(5, TimeUnit.SECONDS)
+                                  .join()
+                                  .orElseThrow()
+                                  .positions()).isEmpty();
+        }
+
+        @Test
+        void replacesTheStoredPositionOfTheSameSegmentEvenWithALowerOne() {
+            // given
+            storePosition(Segment.ROOT_SEGMENT, 46L);
+
+            // when
+            storePosition(Segment.ROOT_SEGMENT, 40L);
+
+            // then
+            assertThat(loadWorkflows(List.of()).positions()).containsExactly(position(Segment.ROOT_SEGMENT, 40L));
+        }
+
+        @Test
+        void replacesThePositionsOfTheSegmentsAMergeReplaced() {
+            // given
+            var halves = Segment.ROOT_SEGMENT.split();
+            storePosition(halves[0], 42L);
+            storePosition(halves[1], 43L);
+
+            // when
+            storePosition(Segment.ROOT_SEGMENT, 44L);
+
+            // then
+            assertThat(loadWorkflows(List.of()).positions()).containsExactly(position(Segment.ROOT_SEGMENT, 44L));
+        }
+
+        @Test
+        void replacesThePositionOfTheSegmentASplitReplaced() {
+            // given
+            var halves = Segment.ROOT_SEGMENT.split();
+            storePosition(Segment.ROOT_SEGMENT, 44L);
+
+            // when
+            storePosition(halves[0], 45L);
+
+            // then: the other half has no position until it stores one
+            var rows = loadWorkflows(List.of());
+            assertThat(rows.positions()).containsExactly(position(halves[0], 45L));
+            assertThat(rows.positionOf(Segment.ROOT_SEGMENT)).isEmpty();
+        }
+    }
+
     private static Stream<WorkflowIndexChange> startedAndWaiting(String workflowId) {
         return Stream.of(new WorkflowStarted(workflowId),
                          new WaitOpened(new WaitAssociation(workflowId,
@@ -319,5 +439,19 @@ public abstract class WorkflowIndexTestSuite {
 
     private WorkflowIndexRows load(Segment segment) {
         return testSubject.load(MODULE, segment, null).orTimeout(5, TimeUnit.SECONDS).join().orElseThrow();
+    }
+
+    private WorkflowIndexRows loadWorkflows(List<String> workflowIds) {
+        return testSubject.loadWorkflows(MODULE, workflowIds, null).orTimeout(5, TimeUnit.SECONDS).join().orElseThrow();
+    }
+
+    private void storePosition(Segment segment, long position) {
+        testSubject.store(MODULE, new WorkflowIndexChanges(List.of(), position(segment, position)), null)
+                   .orTimeout(5, TimeUnit.SECONDS)
+                   .join();
+    }
+
+    private static SegmentPosition position(Segment segment, long position) {
+        return new SegmentPosition(SegmentKeyRange.of(segment), position);
     }
 }

@@ -99,7 +99,7 @@ It keeps no workflow hibernated, see <<hibernation-claims,Restarts and segment c
 === With a workflow index
 
 The xref:configuration.adoc#workflow-index[workflow index] holds one row per running workflow and one row per open wait.
-It also marks each workflow module that was initialized.
+It also marks each workflow module that was initialized, and keeps the token position of each segment for the <<workflow-manager-index,workflow manager>>.
 A segment claim takes three steps:
 
 . It reads the rows of the claimed segment with one range query per table on the segment key.
@@ -151,3 +151,17 @@ A node that lost its segment claim writes nothing:
 With a workflow index in another database than the token store, the engine writes the rows in a transaction of their own, before the processor stores the token.
 The rows are then never behind the token.
 They can be ahead of it, and the events a segment claim reads correct that.
+
+[[workflow-manager-index]]
+=== Workflow manager
+
+The workflow manager uses the same rows when a query targets live workflows, for example to cancel them.
+It cannot read the tokens of the workflow processor without claiming their segments.
+So with each token, the engine also writes the position of that token: one row per segment, with the range of segment keys of the segment.
+A merged token gives its lower position.
+A new position replaces every stored position whose range overlaps it, as after a split or a merge.
+While a segment changes no row, its position moves at most every 10 seconds.
+
+The workflow manager reads the rows of its candidates by workflow id, and the lifecycle events after the lowest position of the module.
+While a segment key has no position, as right after a split, or when the read fails, it sources the list of running workflows instead.
+A segment claim never reads these positions.

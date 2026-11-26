@@ -55,6 +55,13 @@ public class GenericWorkflowIndexTableFactory implements WorkflowIndexTableFacto
         statement.addBatch("CREATE TABLE IF NOT EXISTS " + schema.initializationTable() + " (\n"
                                    + schema.workflowModuleColumn() + " VARCHAR(255) NOT NULL,\n"
                                    + "PRIMARY KEY (" + schema.workflowModuleColumn() + ")\n)");
+        statement.addBatch("CREATE TABLE IF NOT EXISTS " + schema.positionTable() + " (\n"
+                                   + schema.workflowModuleColumn() + " VARCHAR(255) NOT NULL,\n"
+                                   + schema.segmentFromColumn() + " BIGINT NOT NULL,\n"
+                                   + schema.segmentToColumn() + " BIGINT NOT NULL,\n"
+                                   + schema.segmentPositionColumn() + " BIGINT NOT NULL,\n"
+                                   + "PRIMARY KEY (" + schema.workflowModuleColumn() + ","
+                                   + schema.segmentFromColumn() + "," + schema.segmentToColumn() + ")\n)");
         statement.addBatch("CREATE INDEX " + schema.workflowTable() + "_segment ON " + schema.workflowTable()
                                    + " (" + schema.workflowModuleColumn() + "," + schema.segmentKeyColumn() + ")");
         statement.addBatch("CREATE INDEX " + schema.waitTable() + "_segment ON " + schema.waitTable()

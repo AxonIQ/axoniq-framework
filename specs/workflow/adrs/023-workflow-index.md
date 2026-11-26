@@ -40,6 +40,7 @@ module.
 - one row per running workflow: module, workflow id, segment key, and a nullable `wakesAt`
 - one row per open wait: module, workflow id, step name, segment key, event name, associations
 - one mark per initialized workflow module
+- one position per segment, a copy of its stored token for the workflow manager
 
 Every change to a row has the same outcome when it is stored twice. A workflow starts once and ends once, and a wait
 opens once and closes once, so a change that arrives late or again never hides a workflow or a wait.
@@ -55,7 +56,7 @@ of keys. A split halves the range and a merge joins two neighboring ranges, so t
 `Checkpointing.onCheckpointStore(segment, token, processingContext)` is a hook the processor invokes right before it
 stores a token, inside the transaction that stores it. The engine notes row changes while it handles events. At the
 hook it writes the changes that the token covers. Rows and token are committed together, or neither is, so the token is
-the position of the rows. The index keeps no position of its own. Rows ahead of the token, as after a crash between a
+the position of the rows. A segment claim reads no other position. Rows ahead of the token, as after a crash between a
 write in a transaction of its own and the token, are harmless: applying the events after the token again gives the same
 rows.
 
@@ -65,6 +66,18 @@ Only the node that owns a segment commits rows:
 - A token that did not advance is not stored. The processor then extends the claim in the same transaction, which
   makes the same check.
 - On a release, a failed store does not roll back. So the processor checks the claim before it invokes the hook.
+
+### Workflow manager
+
+A query of the workflow manager for live workflows, such as a cancellation, needs to know which of its candidates run.
+`TokenStore.fetchToken` claims the segment, so the manager cannot read the tokens. At the same hook, the engine
+therefore writes the position of the token to one more table: one row per segment key range. A merged token gives its
+lower position. A new position replaces every stored range that overlaps it, as after a split or a merge. While a
+segment changes no row, its position moves at most every 10 seconds.
+
+The manager reads the rows of its candidates by workflow id, and the lifecycle events after the lowest position of the
+module, the way a claim of every segment at once would. While a segment key has no position, as right after a split, or
+when the read fails, it sources the running workflows instead. A segment claim never reads this table.
 
 ### Segment claim
 
@@ -119,9 +132,10 @@ of the segment, as it does without a workflow index.
   segment claim sources the full list of open waits.
 - **Reading every event after the token.** Rejected. A segment claim reads only wait and lifecycle events, selected by
   tag. No other event changes a row, and the number of other events grows with the business load.
-- **A position per segment, kept apart from the token.** Rejected. It let nodes with and without the index run
-  together, at the cost of a third table, a position store every 10 seconds, and a claim rule across a split or a
-  merge. Every node runs with the index instead.
+- **A claim position per segment, kept apart from the token.** Rejected. It let nodes with and without the index run
+  together, at the cost of a claim rule across a split or a merge. Every node runs with the index instead.
+- **A token query for the workflow manager.** Not available: Axon Framework has no read-only token query. A copy of the
+  token position in the index needs no change to Axon Framework.
 - **Keeping the hibernation snapshot per segment next to the rows.** Rejected. It holds the same fact as `wakesAt` in a
   second place, it needs a `SnapshotStore`, and it is missing after a crash. `wakesAt` in the row is stored with the
   token, so it is there after a crash too.
@@ -136,7 +150,10 @@ of the segment, as it does without a workflow index.
 - A hibernated workflow stays out of memory across a segment claim on any node, also after a crash, and after a split
   or a merge.
 - The workflow index must be in the database of the token store to keep hibernated workflows out of memory.
-- `JpaWorkflowIndex` adds three tables. Each stored token also writes the rows that changed.
+- The JPA and the JDBC workflow index add four tables. Each stored token also writes the rows that changed and, at
+  least every 10 seconds, its position.
+- A query of the workflow manager for live workflows reads the rows of its candidates and the events after the lowest
+  position, instead of sourcing every running workflow.
 - A row holds a workflow id of at most 255 characters, a step name of at most 1024 characters, and at most 10,000 bytes
   of associations per wait.
 - The first claim with an empty workflow index sources the two lists and initializes the index for the whole module.

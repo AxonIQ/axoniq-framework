@@ -7,10 +7,12 @@
  */
 package io.axoniq.framework.workflow.index.inmemory;
 
+import io.axoniq.framework.workflow.runtime.execution.SegmentKeyRange;
 import io.axoniq.framework.workflow.runtime.execution.WaitAssociation;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowIndexChange.WakesAtSet;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowIndexChange.WorkflowStarted;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowIndexChanges;
+import io.axoniq.framework.workflow.runtime.execution.WorkflowIndexChanges.SegmentPosition;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowIndexRows;
 import org.axonframework.messaging.core.EmptyApplicationContext;
 import org.axonframework.messaging.core.QualifiedName;
@@ -31,7 +33,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Tests when the {@link InMemoryWorkflowIndex} applies a stored change: with the commit of the context it is stored in.
- * Also tests what an initialization adds, and that a module loads nothing before it.
+ * Also tests what an initialization adds, that a module loads nothing before it, and which positions it keeps.
  *
  * @author Stefan Dragisic
  */
@@ -135,6 +137,55 @@ class InMemoryWorkflowIndexTest {
 
         private Optional<WorkflowIndexRows> load(String module) {
             return testSubject.load(module, Segment.ROOT_SEGMENT, null).orTimeout(5, TimeUnit.SECONDS).join();
+        }
+    }
+
+    @Nested
+    class RowsOfWorkflows {
+
+        @Test
+        void areTheGivenRunningWorkflowsWithThePositionsThatReplacedEveryOverlappingOne() {
+            // given
+            var halves = Segment.ROOT_SEGMENT.split();
+            storePosition(halves[0], 42L);
+            storePosition(halves[1], 43L);
+            // a merge replaces both halves, and a later split replaces the merged segment
+            storePosition(Segment.ROOT_SEGMENT, 44L);
+            testSubject.store(MODULE, new WorkflowIndexChanges(List.of(new WorkflowStarted("order-1")),
+                                                               position(halves[1], 45L)), null)
+                       .orTimeout(5, TimeUnit.SECONDS)
+                       .join();
+
+            // when
+            var rows = testSubject.loadWorkflows(MODULE, List.of("order-1", "order-2"), null)
+                                  .orTimeout(5, TimeUnit.SECONDS)
+                                  .join()
+                                  .orElseThrow();
+
+            // then
+            assertThat(rows.runningWorkflowIds()).containsExactly("order-1");
+            assertThat(rows.positions()).containsExactly(position(halves[1], 45L));
+        }
+
+        @Test
+        void areNotReportedForAModuleThatIsNotInitialized() {
+            // when
+            var rows = testSubject.loadWorkflows("payments", List.of("order-1"), null)
+                                  .orTimeout(5, TimeUnit.SECONDS)
+                                  .join();
+
+            // then
+            assertThat(rows).isEmpty();
+        }
+
+        private void storePosition(Segment segment, long position) {
+            testSubject.store(MODULE, new WorkflowIndexChanges(List.of(), position(segment, position)), null)
+                       .orTimeout(5, TimeUnit.SECONDS)
+                       .join();
+        }
+
+        private static SegmentPosition position(Segment segment, long position) {
+            return new SegmentPosition(SegmentKeyRange.of(segment), position);
         }
     }
 
