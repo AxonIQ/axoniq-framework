@@ -147,6 +147,9 @@ of the segment, as it does without a workflow index.
   the workflow processor, means emptying the index, its initialization included.
 - A workflow module with an index refuses to start when its processor could store a token past changes the rows do
   not hold.
+- The engine no longer snapshots the running-workflow list and the open-wait list: one snapshot of every running
+  workflow or open wait does not scale, and the index replaces both. The lists remain for the initialization of the
+  index and for an engine without one. The snapshot of each workflow state stays.
 - `Checkpointing` has one more default method. It does nothing unless a component overrides it.
 - An application chooses `JpaWorkflowIndex`, `JdbcWorkflowIndex` or `InMemoryWorkflowIndex`. The JPA and the JDBC index
   share their tables. Spring Boot picks the index of the type of the token store, and JPA when the token store does not

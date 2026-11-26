@@ -222,9 +222,8 @@ With a <<workflow-index,workflow index>>, it reads only the rows of the claimed 
 [[snapshots]]
 === Snapshots
 
-The engine sources three event-sourced entities: the list of running workflows, the state of each workflow instance, and the list of open waits.
-Without snapshots, a node that takes over replays the full event history of each.
-A node loads both lists on every segment claim, so a node that claims many segments replays that history once per segment.
+The engine sources the state of each workflow instance from its events.
+Without snapshots, a node that takes over replays the full event history of each instance it restores.
 Snapshots are off by default.
 Enable them on the `WorkflowConfigurer`:
 
@@ -232,12 +231,13 @@ Enable them on the `WorkflowConfigurer`:
 ----
 include::example$workflows/configuration/ConfigurationExamples.java[tag=snapshots,indent=0]
 ----
-<.> The policy for the list of running workflows. There is one list, so there is one snapshot of it.
 <.> The policy for the workflow state. Each workflow instance has a snapshot of its own, stored under its workflow id.
-<.> The policy for the list of open waits, see xref:workflow-internals.adoc#event-routing[Event routing]. There is one list, so there is one snapshot of it.
 
-All three policies default to a snapshot after 50 sourced events.
-The setting applies to every `WorkflowModule` of the application, because all modules share these entities.
+The policy defaults to a snapshot after 50 sourced events.
+The setting applies to every `WorkflowModule` of the application.
+
+The list of running workflows and the list of open waits are never snapshotted.
+A segment claim reads them from the <<workflow-index,workflow index>> instead; without a workflow index, it sources them from the events.
 The history projector does not source these entities, so snapshots do not affect it.
 
 Snapshots need a `SnapshotStore` component.
@@ -499,17 +499,17 @@ The history processor uses the same properties under `axon.workflow.history.*`.
 |`false`
 |Whether snapshots are taken.
 
-|`running-workflows.after-events`
-|`50`
-|Number of sourced events after which the list of running workflows is snapshotted.
-
 |`workflow-state.after-events`
 |`50`
 |Number of sourced events after which the state of a workflow instance is snapshotted.
 
+|`running-workflows.after-events`
+|`50`
+|Deprecated, has no effect: the list of running workflows is not snapshotted.
+
 |`wait-associations.after-events`
 |`50`
-|Number of sourced events after which the list of open waits is snapshotted.
+|Deprecated, has no effect: the list of open waits is not snapshotted.
 |===
 
 The <<workflow-index,workflow index>> is configured with `axon.workflow.index.*` properties.

@@ -129,22 +129,11 @@ public class WorkflowConfigurer implements ApplicationConfigurer {
         var snapshots = requireNonNull(snapshotConfiguration, "The snapshot configuration function must not be null.")
                 .apply(new WorkflowSnapshotConfiguration());
         if (snapshots.enabled()) {
-            delegate.componentRegistry(cr -> cr
-                    .registerComponent(
-                            SnapshotPolicy.class,
-                            WorkflowConfigurationDefaults.RUNNING_WORKFLOWS_SNAPSHOT_POLICY,
-                            c -> snapshots.runningWorkflows()
-                    )
-                    .registerComponent(
-                            SnapshotPolicy.class,
-                            WorkflowConfigurationDefaults.WORKFLOW_STATE_SNAPSHOT_POLICY,
-                            c -> snapshots.workflowState()
-                    )
-                    .registerComponent(
-                            SnapshotPolicy.class,
-                            WorkflowConfigurationDefaults.WAIT_ASSOCIATIONS_SNAPSHOT_POLICY,
-                            c -> snapshots.waitAssociations()
-                    ));
+            delegate.componentRegistry(cr -> cr.registerComponent(
+                    SnapshotPolicy.class,
+                    WorkflowConfigurationDefaults.WORKFLOW_STATE_SNAPSHOT_POLICY,
+                    c -> snapshots.workflowState()
+            ));
         }
         return this;
     }

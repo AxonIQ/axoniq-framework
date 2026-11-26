@@ -9,6 +9,7 @@ package io.axoniq.framework.springboot;
 
 import org.jspecify.annotations.Nullable;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.boot.context.properties.DeprecatedConfigurationProperty;
 
 /**
  * The workflow properties exposed to Spring Boot applications under the {@code axon.workflow} prefix.
@@ -338,10 +339,14 @@ public class WorkflowProperties {
 
         /**
          * The snapshot properties of the running-workflow list, under the
-         * {@code axon.workflow.snapshots.running-workflows} prefix.
+         * {@code axon.workflow.snapshots.running-workflows} prefix. They have no effect.
          *
          * @return the snapshot properties of the running-workflow list
+         * @deprecated the running-workflow list is no longer snapshotted; the workflow index replaces it
          */
+        @Deprecated(forRemoval = true, since = "5.5.0")
+        @DeprecatedConfigurationProperty(reason = "The running-workflow list is no longer snapshotted.",
+                since = "5.5.0")
         public SnapshotPolicyProperties getRunningWorkflows() {
             return runningWorkflows;
         }
@@ -358,10 +363,13 @@ public class WorkflowProperties {
 
         /**
          * The snapshot properties of the open-wait list, under the
-         * {@code axon.workflow.snapshots.wait-associations} prefix.
+         * {@code axon.workflow.snapshots.wait-associations} prefix. They have no effect.
          *
          * @return the snapshot properties of the open-wait list
+         * @deprecated the open-wait list is no longer snapshotted; the workflow index replaces it
          */
+        @Deprecated(forRemoval = true, since = "5.5.0")
+        @DeprecatedConfigurationProperty(reason = "The open-wait list is no longer snapshotted.", since = "5.5.0")
         public SnapshotPolicyProperties getWaitAssociations() {
             return waitAssociations;
         }
