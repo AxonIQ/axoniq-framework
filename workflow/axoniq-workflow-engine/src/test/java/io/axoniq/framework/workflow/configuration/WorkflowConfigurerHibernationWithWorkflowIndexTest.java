@@ -7,15 +7,16 @@
  */
 package io.axoniq.framework.workflow.configuration;
 
-import io.axoniq.framework.workflow.dsl.api.StepStatus;
 import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
 import io.axoniq.framework.workflow.index.inmemory.InMemoryWorkflowIndex;
 import io.axoniq.framework.workflow.runtime.execution.WaitAssociation;
+import io.axoniq.framework.workflow.runtime.execution.WorkflowEngineHibernationPasses;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowIndex;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowIndexChange;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowIndexChanges;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowIndexRows;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowStore;
+import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 import org.jspecify.annotations.Nullable;
@@ -173,75 +174,6 @@ class WorkflowConfigurerHibernationWithWorkflowIndexTest extends WorkflowConfigu
     }
 
     @Nested
-    class HibernatedWorkflowOfAClaimedSegment {
-
-        @Test
-        void isAdoptedByTheNextNodeAfterARestart() {
-            // given: a hibernated workflow on a node that stops, which releases its segments
-            var stopped = start(true);
-            var workflowId = startWorkflow(stopped, "wait", "order-1", WAIT_STEP);
-            awaitHibernated(stopped, workflowId);
-            stopped.shutdown();
-
-            // when: a new node starts on the same stores
-            var restarted = start(true);
-
-            // then: it keeps the workflow out of memory, from the row the stopping node stored
-            awaitAdopted(restarted, workflowId);
-        }
-
-        @Test
-        void isWokenByTheAwaitedEventAfterTheClaim() {
-            // given: the claim adopted it from its row, instead of loading it
-            var configuration = start(true);
-            var workflowId = startWorkflow(configuration, "wait", "order-1", WAIT_STEP);
-            awaitHibernated(configuration, workflowId);
-            releaseAllSegments(configuration);
-            awaitAdopted(configuration, workflowId);
-
-            // when
-            publish(configuration, "paid", "order-1", "");
-
-            // then
-            awaitWorkflowStatus(configuration, workflowId, WorkflowStatus.COMPLETED);
-        }
-
-        @Test
-        void isWokenByAWorkflowCancellationAfterTheClaim() {
-            // given
-            var configuration = start(true);
-            var workflowId = startWorkflow(configuration, "wait", "order-1", WAIT_STEP);
-            awaitHibernated(configuration, workflowId);
-            releaseAllSegments(configuration);
-            awaitAdopted(configuration, workflowId);
-
-            // when
-            cancellationService(configuration).requestWorkflowCancellation(workflowId, null)
-                                              .orTimeout(10, TimeUnit.SECONDS)
-                                              .join();
-
-            // then
-            awaitWorkflowStatus(configuration, workflowId, WorkflowStatus.CANCELLED);
-        }
-
-        @Test
-        void isWokenAtItsDeadlineAfterTheClaim() {
-            // given: a sleep of 2 seconds
-            var configuration = start(true);
-            var workflowId = startWorkflow(configuration, "sleep", "order-1", SLEEP_STEP);
-            awaitHibernated(configuration, workflowId);
-
-            // when
-            releaseAllSegments(configuration);
-
-            // then
-            awaitWorkflowStatus(configuration, workflowId, WorkflowStatus.COMPLETED);
-            assertThat(durableState(configuration, workflowId).getStep(SLEEP_STEP).status())
-                    .isEqualTo(StepStatus.TIMED_OUT);
-        }
-    }
-
-    @Nested
     class ClaimOfASegment {
 
         @Test
@@ -331,6 +263,18 @@ class WorkflowConfigurerHibernationWithWorkflowIndexTest extends WorkflowConfigu
             // then: the rows hold the open wait of the workflow, and no other
             awaitRowsOfWaitingWorkflow(workflowId);
         }
+    }
+
+    /**
+     * Waits until the claim of the workflow's segment adopted it from its row, and fails as soon as the workflow is in
+     * memory, which a claim that loads it would show.
+     */
+    @Override
+    void awaitHibernatedAfterTheClaim(AxonConfiguration configuration, String workflowId) {
+        await().atMost(5, TimeUnit.SECONDS)
+               .pollInterval(Duration.ofMillis(10))
+               .failFast("The claim loaded the workflow into memory.", () -> inMemory(configuration, workflowId))
+               .until(() -> WorkflowEngineHibernationPasses.isHibernated(engine(configuration), workflowId));
     }
 
     private void awaitRowsOfWaitingWorkflow(String workflowId) {

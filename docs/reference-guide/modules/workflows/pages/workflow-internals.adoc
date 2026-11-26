@@ -63,6 +63,9 @@ A lock per workflow keeps a wake, an event and a cancellation of the same workfl
 [[hibernation-claims]]
 === Restarts and segment claims
 
+When a node releases a segment, also when the application stops, it forgets the hibernated workflows of that segment.
+A workflow does not hibernate while its segment is being released.
+
 A segment claim keeps a hibernated workflow out of memory when it can tell that the workflow hibernated.
 How it can tell depends on the xref:configuration.adoc#workflow-index[workflow index].
 

@@ -332,6 +332,75 @@ class WorkflowConfigurerHibernationTest {
     }
 
     @Nested
+    class HibernatedWorkflowOfAClaimedSegment {
+
+        @Test
+        void isHibernatedOnTheNextNodeAfterARestart() {
+            // given: a hibernated workflow on a node that stops, which releases its segments
+            var stopped = start(true);
+            var workflowId = startWorkflow(stopped, "wait", "order-1", WAIT_STEP);
+            awaitHibernated(stopped, workflowId);
+            stopped.shutdown();
+
+            // when: a new node starts on the same stores
+            var restarted = start(true);
+
+            // then: the workflow is out of memory on the new node
+            awaitHibernatedAfterTheClaim(restarted, workflowId);
+        }
+
+        @Test
+        void isWokenByTheAwaitedEventAfterTheClaim() {
+            // given: the workflow is out of memory again after the claim of its segment
+            var configuration = start(true);
+            var workflowId = startWorkflow(configuration, "wait", "order-1", WAIT_STEP);
+            awaitHibernated(configuration, workflowId);
+            releaseAllSegments(configuration);
+            awaitHibernatedAfterTheClaim(configuration, workflowId);
+
+            // when
+            publish(configuration, "paid", "order-1", "");
+
+            // then
+            awaitWorkflowStatus(configuration, workflowId, WorkflowStatus.COMPLETED);
+        }
+
+        @Test
+        void isWokenByAWorkflowCancellationAfterTheClaim() {
+            // given
+            var configuration = start(true);
+            var workflowId = startWorkflow(configuration, "wait", "order-1", WAIT_STEP);
+            awaitHibernated(configuration, workflowId);
+            releaseAllSegments(configuration);
+            awaitHibernatedAfterTheClaim(configuration, workflowId);
+
+            // when
+            cancellationService(configuration).requestWorkflowCancellation(workflowId, null)
+                                              .orTimeout(10, TimeUnit.SECONDS)
+                                              .join();
+
+            // then
+            awaitWorkflowStatus(configuration, workflowId, WorkflowStatus.CANCELLED);
+        }
+
+        @Test
+        void timesOutAtItsDeadlineAfterTheClaim() {
+            // given: a sleep of 2 seconds
+            var configuration = start(true);
+            var workflowId = startWorkflow(configuration, "sleep", "order-1", SLEEP_STEP);
+            awaitHibernated(configuration, workflowId);
+
+            // when
+            releaseAllSegments(configuration);
+
+            // then
+            awaitWorkflowStatus(configuration, workflowId, WorkflowStatus.COMPLETED);
+            assertThat(durableState(configuration, workflowId).getStep(SLEEP_STEP).status())
+                    .isEqualTo(StepStatus.TIMED_OUT);
+        }
+    }
+
+    @Nested
     class HibernatedWorkflowOfAResizedSegment {
 
         @Test
@@ -637,14 +706,15 @@ class WorkflowConfigurerHibernationTest {
     }
 
     /**
-     * Waits until the claim of the workflow's segment adopted it as hibernated, and fails as soon as the workflow is in
-     * memory, which a claim that loads it would show.
+     * Waits until the claim of the workflow's segment loaded it into memory, then runs hibernation passes until it
+     * hibernated again. A subclass whose claim keeps the workflow out of memory overrides it.
      */
-    static void awaitAdopted(AxonConfiguration configuration, String workflowId) {
+    void awaitHibernatedAfterTheClaim(AxonConfiguration configuration, String workflowId) {
         await().atMost(5, TimeUnit.SECONDS)
                .pollInterval(Duration.ofMillis(10))
-               .failFast("The claim loaded the workflow into memory.", () -> inMemory(configuration, workflowId))
-               .until(() -> WorkflowEngineHibernationPasses.isHibernated(engine(configuration), workflowId));
+               .until(() -> inMemory(configuration, workflowId));
+        awaitHibernated(configuration, workflowId);
+        assertThat(WorkflowEngineHibernationPasses.isHibernated(engine(configuration), workflowId)).isTrue();
     }
 
     void awaitWorkflowStatus(AxonConfiguration configuration, String workflowId, WorkflowStatus status) {
@@ -672,7 +742,7 @@ class WorkflowConfigurerHibernationTest {
         return event.identifier();
     }
 
-    private static WorkflowEngine engine(Configuration configuration) {
+    static WorkflowEngine engine(Configuration configuration) {
         return find(configuration, WorkflowEngine.class).orElseThrow();
     }
 
