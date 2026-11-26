@@ -9,6 +9,7 @@
 package io.axoniq.framework.messaging.eventstreaming.checkpoint;
 
 import io.axoniq.license.entitlement.EntitlementManager;
+import org.axonframework.common.FutureUtils;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.processing.streaming.progress.SegmentProgressContext;
@@ -22,10 +23,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.lang.invoke.MethodHandles;
+import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
@@ -61,6 +64,11 @@ import static org.axonframework.common.FutureUtils.joinAndUnwrap;
 public final class CheckpointingProgressStrategy implements SegmentProgressStrategy {
 
     private static final Logger logger = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
+    /**
+     * How long a fully-deferred agreement may stay open before a warning is logged. Matches the default timeout that
+     * {@link FutureUtils#joinAndUnwrap(CompletableFuture)} gives an agreement awaited on the worker thread.
+     */
+    private static final Duration DEFAULT_AGREEMENT_WARNING_THRESHOLD = Duration.ofSeconds(30);
 
     private final SegmentProgressContext context;
     private final List<Checkpointing> participants;
@@ -77,6 +85,23 @@ public final class CheckpointingProgressStrategy implements SegmentProgressStrat
      * checkpoint request is a no-op (a late async-write acknowledgement has no safe point left to record).
      */
     private final AtomicBoolean checkpointsReleased = new AtomicBoolean();
+    /**
+     * Fully-deferred mode only: the agreement the participants did not reach at once. While it is not done, requests
+     * wait in {@link #requestedCheckpoint}, so a participant is not asked again while it still works toward the
+     * previous request. It completes once its outcome is recorded.
+     */
+    private final AtomicReference<CompletableFuture<?>> awaitedAgreement =
+            new AtomicReference<>(emptyCompletedFuture());
+    /**
+     * Fully-deferred mode only: a position the participants agreed to off the worker thread, stored by the next cycle
+     * without asking them again.
+     */
+    private final AtomicReference<@Nullable TrackingToken> agreedCheckpoint = new AtomicReference<>();
+    /**
+     * Fully-deferred mode only: the failure of an agreement awaited off the worker thread, which fails the next cycle.
+     */
+    private final AtomicReference<@Nullable Throwable> failedAgreement = new AtomicReference<>();
+    private final Duration agreementWarningThreshold;
     private final CheckpointTrigger trigger = this::onCheckpointRequested;
 
     /**
@@ -90,12 +115,32 @@ public final class CheckpointingProgressStrategy implements SegmentProgressStrat
     public CheckpointingProgressStrategy(SegmentProgressContext context,
                                          List<Checkpointing> participants,
                                          boolean autoCheckpointing) {
+        this(context, participants, autoCheckpointing, DEFAULT_AGREEMENT_WARNING_THRESHOLD);
+    }
+
+    /**
+     * Constructs a {@code CheckpointingProgressStrategy} that warns once an agreement awaited off the worker thread
+     * stays open longer than the given {@code agreementWarningThreshold}. Package-private, so tests can use a short
+     * threshold.
+     *
+     * @param context                   the work package's progress context to persist progress through
+     * @param participants              the self-checkpointing units on this segment; must not be empty
+     * @param autoCheckpointing         {@code true} when an ordinary handler is co-located (auto mode), {@code false}
+     *                                  when every handler is self-checkpointing (fully-deferred)
+     * @param agreementWarningThreshold how long an agreement may stay open before a warning is logged
+     */
+    CheckpointingProgressStrategy(SegmentProgressContext context,
+                                  List<Checkpointing> participants,
+                                  boolean autoCheckpointing,
+                                  Duration agreementWarningThreshold) {
         this.context = requireNonNull(context, "The SegmentProgressContext may not be null.");
         this.participants = List.copyOf(requireNonNull(participants, "The participants may not be null."));
         if (this.participants.isEmpty()) {
             throw new IllegalArgumentException("The participants may not be empty.");
         }
         this.autoCheckpointing = autoCheckpointing;
+        this.agreementWarningThreshold =
+                requireNonNull(agreementWarningThreshold, "The agreement warning threshold may not be null.");
         EntitlementManager.INSTANCE.registerAddon(CheckpointingAxoniqAddon.class);
     }
 
@@ -111,8 +156,13 @@ public final class CheckpointingProgressStrategy implements SegmentProgressStrat
      *     <li><b>Auto mode</b> checkpoints at the batch-end token ({@code lastConsumedToken}); a participant is
      *     therefore forced to cover it.</li>
      *     <li><b>Fully-deferred mode</b> stores the requested position when a participant explicitly requested a
-     *     checkpoint. Without a request, it stores the consumed position when the stored token already covers every
-     *     event handed to the participants, so the segment only moved past skipped events.</li>
+     *     checkpoint, once the participants agree to it. When they cannot agree at once, the agreement is awaited off
+     *     the worker thread, so the worker keeps handing over events: a participant may only agree once its work up to
+     *     that position is safe, and that work may wait for events this very worker still has to hand over. Nothing is
+     *     stored meanwhile, and requests wait until the agreement is done. The next cycle then stores the agreed
+     *     position, or fails when the agreement failed, exactly like an agreement that fails at once. Without a
+     *     request, it stores the consumed position when the stored token already covers every event handed to the
+     *     participants, so the segment only moved past skipped events.</li>
      * </ul>
      * A requested or batch-end position is stored only after the participants are {@link #reconcile(Map) reconciled}
      * to a single agreed position, so no participant is left ahead of the stored token. The skipped-events position
@@ -120,6 +170,17 @@ public final class CheckpointingProgressStrategy implements SegmentProgressStrat
      */
     @Override
     public CompletableFuture<Void> onBatchCommit(ProcessingContext processingContext) {
+        Throwable failure = failedAgreement.getAndSet(null);
+        if (failure != null) {
+            return CompletableFuture.failedFuture(failure);
+        }
+        TrackingToken agreedEarlier = agreedCheckpoint.getAndSet(null);
+        if (agreedEarlier != null) {
+            return context.persistProgress(agreedEarlier, processingContext);
+        }
+        if (!awaitedAgreement.get().isDone()) {
+            return emptyCompletedFuture();
+        }
         TrackingToken pending = requestedCheckpoint.getAndSet(null);
         if (!autoCheckpointing && pending == null) {
             return context.persistProgress(skippedEventsPosition(), processingContext);
@@ -132,9 +193,41 @@ public final class CheckpointingProgressStrategy implements SegmentProgressStrat
         if (requested == null) {
             return emptyCompletedFuture();
         }
-        return persistOnCallingThread(requestEach(participant -> requestAdvance(participant, requested))
-                                              .thenCompose(this::reconcile),
-                                      processingContext);
+        var agreement = requestEach(participant -> requestAdvance(participant, requested)).thenCompose(this::reconcile);
+        // In auto mode, the co-located handlers commit with this batch, so its token must be stored with it.
+        if (autoCheckpointing || agreement.isDone()) {
+            return persistOnCallingThread(agreement, processingContext);
+        }
+        awaitOffWorkerThread(requested, agreement);
+        return emptyCompletedFuture();
+    }
+
+    /**
+     * Awaits the given fully-deferred {@code agreement} off the worker thread and records its outcome for the next
+     * cycle: the agreed position to store, or the failure that fails that cycle. A released segment runs no further
+     * cycle, so its final checkpoint comes from {@link #onSegmentReleased(ProcessingContext)} alone. Logs a warning
+     * when the agreement stays open longer than the {@code agreementWarningThreshold}, as the stored token does not
+     * advance meanwhile.
+     */
+    private void awaitOffWorkerThread(TrackingToken requested, CompletableFuture<@Nullable TrackingToken> agreement) {
+        var recorded = agreement.whenComplete((agreed, error) -> {
+            if (error != null) {
+                failedAgreement.set(FutureUtils.unwrap(error));
+            } else {
+                agreedCheckpoint.set(agreed);
+            }
+        });
+        awaitedAgreement.set(recorded);
+        // Wake the worker only once the agreement counts as done, so the requests that waited for it are seen.
+        recorded.whenComplete((ignored, error) -> context.scheduleWorker());
+        CompletableFuture.delayedExecutor(agreementWarningThreshold.toMillis(), TimeUnit.MILLISECONDS).execute(() -> {
+            if (!agreement.isDone() && !checkpointsReleased.get()) {
+                logger.warn("The checkpointing components of {} have not agreed on checkpoint {} for {}. The stored "
+                                    + "token does not advance until they do. A component that cannot reach it should "
+                                    + "complete its future exceptionally.",
+                            context.segment(), requested, agreementWarningThreshold);
+            }
+        });
     }
 
     /**
@@ -152,8 +245,10 @@ public final class CheckpointingProgressStrategy implements SegmentProgressStrat
 
     @Override
     public boolean hasPendingWork() {
-        // Out-of-band request signal only: a checkpoint requested between worker cycles needs a cycle to be stored.
-        return requestedCheckpoint.get() != null;
+        // Out-of-band signal only: an agreement outcome, or a request no awaited agreement holds back, needs a cycle.
+        return failedAgreement.get() != null
+                || agreedCheckpoint.get() != null
+                || (requestedCheckpoint.get() != null && awaitedAgreement.get().isDone());
     }
 
     @Override

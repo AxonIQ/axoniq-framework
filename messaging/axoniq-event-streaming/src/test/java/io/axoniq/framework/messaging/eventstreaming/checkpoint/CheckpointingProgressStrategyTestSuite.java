@@ -8,6 +8,7 @@
 
 package io.axoniq.framework.messaging.eventstreaming.checkpoint;
 
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkTestUtils;
 import org.axonframework.messaging.eventhandling.processing.streaming.pooled.SegmentProgressStrategyTestSupport;
 import org.axonframework.messaging.eventhandling.processing.streaming.progress.SegmentProgressStrategyFactory;
@@ -39,8 +40,10 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 /**
@@ -129,6 +132,133 @@ public abstract class CheckpointingProgressStrategyTestSuite extends SegmentProg
             ));
             assertThat(stored.getValue()).isEqualTo(new GlobalSequenceTrackingToken(5L));
             assertThat(participant.advanced).containsExactly(new GlobalSequenceTrackingToken(5L));
+        }
+
+        @Test
+        void aCheckpointNotAgreedYetDoesNotHoldTheWorkerAndIsStoredOnceAgreed() {
+            // given -- a participant whose work up to the requested position is not safe yet
+            CompletableFuture<TrackingToken> safe = new CompletableFuture<>();
+            RecordingCheckpointing participant = new RecordingCheckpointing();
+            participant.advanceResult = requested -> safe;
+            WorkPackageHarness testSubject = deferred(participant);
+            testSubject.onSegmentClaimed();
+            participant.trigger.requestCheckpoint(new GlobalSequenceTrackingToken(5L));
+            await().atMost(TIMEOUT).untilAsserted(() -> assertThat(participant.advanced).hasSize(1));
+
+            // when -- an event arrives while the participant works toward its safe point
+            testSubject.scheduleEvent(eventAt(6L));
+
+            // then -- the worker still hands it over, and nothing is stored yet
+            await().atMost(TIMEOUT).untilAsserted(() -> assertThat(testSubject.batchProcessor().processed()).hasSize(1));
+            verify(tokenStore(), never()).storeToken(any(), anyString(), anyInt(), any());
+
+            // when -- the participant reaches its safe point
+            safe.complete(new GlobalSequenceTrackingToken(5L));
+
+            // then -- the agreed position is stored
+            await().atMost(TIMEOUT).untilAsserted(() -> verify(tokenStore()).storeToken(
+                    eq(new GlobalSequenceTrackingToken(5L)), anyString(), anyInt(), any()
+            ));
+        }
+
+        @Test
+        void requestsMadeWhileAnAgreementIsAwaitedFollowItInsteadOfAskingAgain() {
+            // given -- an agreement on position 5 that the participant has not reached yet
+            CompletableFuture<TrackingToken> safeAtFive = new CompletableFuture<>();
+            RecordingCheckpointing participant = new RecordingCheckpointing();
+            participant.advanceResult = requested -> new GlobalSequenceTrackingToken(5L).equals(requested)
+                    ? safeAtFive
+                    : CompletableFuture.completedFuture(requested);
+            WorkPackageHarness testSubject = deferred(participant);
+            testSubject.onSegmentClaimed();
+            participant.trigger.requestCheckpoint(new GlobalSequenceTrackingToken(5L));
+            await().atMost(TIMEOUT).untilAsserted(() -> assertThat(participant.advanced).hasSize(1));
+
+            // when -- a later request arrives meanwhile
+            participant.trigger.requestCheckpoint(new GlobalSequenceTrackingToken(7L));
+
+            // then -- the participant is not asked again while it still works toward 5
+            await().during(Duration.ofMillis(300)).atMost(TIMEOUT)
+                   .untilAsserted(() -> assertThat(participant.advanced).hasSize(1));
+
+            // when
+            safeAtFive.complete(new GlobalSequenceTrackingToken(5L));
+
+            // then -- the later request follows, and its position is stored
+            await().atMost(TIMEOUT).untilAsserted(() -> verify(tokenStore()).storeToken(
+                    eq(new GlobalSequenceTrackingToken(7L)), anyString(), anyInt(), any()
+            ));
+        }
+
+        @Test
+        void anAgreementReachedAtOnceIsStoredWithTheBatchThatRequestedIt() {
+            // given -- a handler requests a checkpoint at the event it handles, which the participant agrees to at once
+            RecordingCheckpointing participant = new RecordingCheckpointing();
+            WorkPackageHarness testSubject = deferred(participant);
+            AtomicReference<ProcessingContext> batchContext = new AtomicReference<>();
+            testSubject.batchProcessor().observeContext(ctx -> {
+                batchContext.set(ctx);
+                CheckpointTrigger.fromContext(ctx).ifPresent(trigger -> trigger.requestCheckpoint());
+            });
+            testSubject.onSegmentClaimed();
+
+            // when
+            testSubject.scheduleEvent(eventAt(1L));
+
+            // then -- the token is stored in the transaction of that same batch, not by a later cycle
+            await().atMost(TIMEOUT).untilAsserted(() -> verify(tokenStore()).storeToken(
+                    eq(new GlobalSequenceTrackingToken(1L)), anyString(), anyInt(), same(batchContext.get())
+            ));
+        }
+
+        @Test
+        void anAgreementThatFailsAfterTheWorkerMovedOnAbortsThePackageLikeOneThatFailsAtOnce() {
+            // given -- an agreement on position 5 that the participant has not reached yet
+            CompletableFuture<TrackingToken> safeAtFive = new CompletableFuture<>();
+            RecordingCheckpointing participant = new RecordingCheckpointing();
+            participant.advanceResult = requested -> new GlobalSequenceTrackingToken(5L).equals(requested)
+                    ? safeAtFive
+                    : CompletableFuture.completedFuture(requested);
+            WorkPackageHarness testSubject = deferred(participant);
+            testSubject.onSegmentClaimed();
+            participant.trigger.requestCheckpoint(new GlobalSequenceTrackingToken(5L));
+            await().atMost(TIMEOUT).untilAsserted(() -> assertThat(participant.advanced).hasSize(1));
+
+            // when -- the participant cannot reach 5 after all, and a later request arrives
+            IllegalStateException failure = new IllegalStateException("durable write failed");
+            safeAtFive.completeExceptionally(failure);
+            participant.trigger.requestCheckpoint(new GlobalSequenceTrackingToken(7L));
+
+            // then -- the next cycle fails, so the later request is neither asked nor stored, and the package aborts
+            // with that failure
+            await().during(Duration.ofMillis(300)).atMost(TIMEOUT)
+                   .untilAsserted(() -> assertThat(participant.advanced).hasSize(1));
+            verify(tokenStore(), never()).storeToken(any(), anyString(), anyInt(), any());
+            assertThat(testSubject.abort(null)).succeedsWithin(TIMEOUT).isSameAs(failure);
+        }
+
+        @Test
+        void anAgreementReachedAfterTheSegmentIsReleasedIsNotStored() {
+            // given -- one event handled, and an agreement on it that the participant has not reached yet
+            CompletableFuture<TrackingToken> safe = new CompletableFuture<>();
+            RecordingCheckpointing participant = new RecordingCheckpointing();
+            participant.advanceResult = requested -> safe;
+            WorkPackageHarness testSubject = deferred(participant);
+            testSubject.onSegmentClaimed();
+            testSubject.scheduleEvent(eventAt(1L));
+            await().atMost(TIMEOUT).untilAsserted(() -> assertThat(testSubject.batchProcessor().processed()).hasSize(1));
+            participant.trigger.requestCheckpoint(new GlobalSequenceTrackingToken(1L));
+            await().atMost(TIMEOUT).untilAsserted(() -> assertThat(participant.advanced).hasSize(1));
+
+            // when -- the segment is released while the agreement is open, and the participant agrees afterwards
+            assertThat(testSubject.abort(null)).succeedsWithin(TIMEOUT);
+            assertThat(testSubject.release()).succeedsWithin(TIMEOUT);
+            safe.complete(new GlobalSequenceTrackingToken(1L));
+
+            // then -- only the release stores the final checkpoint
+            await().during(Duration.ofMillis(300)).atMost(TIMEOUT).untilAsserted(() -> verify(tokenStore(), times(1))
+                    .storeToken(any(), anyString(), anyInt(), any()));
+            verify(tokenStore()).storeToken(eq(new GlobalSequenceTrackingToken(1L)), anyString(), anyInt(), any());
         }
 
         @Test

@@ -323,9 +323,9 @@ public interface WorkflowModule<C extends WorkflowContext> extends Module {
          * Sets the minimum time, in milliseconds, between two checkpoint requests of one segment of this module's
          * event processor.
          * <p>
-         * The engine requests a checkpoint after every event it handles, and every request makes the event processor
-         * wait, at its next batch commit, until all workflows of the segment reached a safe point. A positive interval
-         * forwards at most one request per segment within that time, so the processor waits less often under load.
+         * The engine requests a checkpoint after every event it handles, and every request asks all workflows of the
+         * segment to reach a safe point before the event processor stores the position. A positive interval forwards
+         * at most one request per segment within that time, so the workflows are asked less often under load.
          * The stored position then lags further behind, and events after it are processed again after a restart.
          * <p>
          * Defaults to {@code 0}, which forwards every request.
