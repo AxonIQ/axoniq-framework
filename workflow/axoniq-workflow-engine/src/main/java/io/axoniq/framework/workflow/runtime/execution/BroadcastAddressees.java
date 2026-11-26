@@ -55,13 +55,13 @@ import java.util.function.Supplier;
  * stops or drops it, and a claim handles the events of its segment from the position it resumes from, so an event
  * routed while the claim changes is handled again by the next claim.
  * <p>
- * <b>Locks.</b> The write lock of the swap lock is a leaf of the locks of the engine: under it, a swap only touches the
- * entries of the registry, the rows and the repository; nothing takes the lock of a workflow, of a claim or of the
- * {@link RunningWorkflowsProjection projection}, and nothing runs or loads a workflow. Only a repeated lookup holds the
- * read lock, and takes no other lock of the registry under it. A lookup never makes its first attempt under the read
- * lock: a repository may, while it lists, wait for a workflow to hibernate or wake on another thread, and a read lock
- * held by the listing thread would keep that swap from ever finishing. When a swap holds the write lock as the lookup
- * starts, the lookup first waits for that swap to finish, and then makes its attempt on an optimistic stamp.
+ * <b>Locks.</b> The write lock of the swap lock is a leaf in the lock order of the
+ * {@link io.axoniq.framework.workflow.runtime.execution package}: under it, a swap only touches the entries of the
+ * registry, the rows and the repository. Only a repeated lookup holds the read lock, and takes no other lock of the
+ * registry under it. A lookup never makes its first attempt under the read lock: a repository may, while it lists, wait
+ * for a workflow to hibernate or wake on another thread, and a read lock held by the listing thread would keep that
+ * swap from ever finishing. When a swap holds the write lock as the lookup starts, the lookup first waits for that swap
+ * to finish, and then makes its attempt on an optimistic stamp.
  * <p>
  * <b>Cost.</b> One listing of the executions of the segment in memory, and one match of the rows, which finds the keyed
  * rows by the values the event carries and checks only those, the rows of the event's name without key, and the rows

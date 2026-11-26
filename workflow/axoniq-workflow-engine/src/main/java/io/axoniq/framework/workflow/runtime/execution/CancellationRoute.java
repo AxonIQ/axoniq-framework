@@ -66,10 +66,10 @@ import java.util.concurrent.atomic.AtomicReference;
  *     <tr><td>{@link Started}</td><td>made now</td><td>queued</td></tr>
  *     <tr><td>{@link Left}</td><td>refused</td><td>refused</td></tr>
  * </table>
- * <b>Leaving takes no lock.</b> So a request made now checks the phase once more after it was made, and aborts a
- * workflow cancellation it made pending once the execution left, see
- * {@link #makeNow(WorkflowCancellation, CancellationRequest)}; the leave aborts the one pending as it leaves. A queued
- * request checks the phase once it is queued, see {@link Queued#add(QueuedRequest)}.
+ * <b>Leaving takes no lock</b>, see the {@link io.axoniq.framework.workflow.runtime.execution package}. So a request
+ * made now checks the phase once more after it was made, and aborts a workflow cancellation it made pending once the
+ * execution left, see {@link #makeNow(WorkflowCancellation, CancellationRequest)}; the leave aborts the one pending as
+ * it leaves. A queued request checks the phase once it is queued, see {@link Queued#add(QueuedRequest)}.
  * <p>
  * The {@link WorkflowCancellationService} routes a request through the route of the workflow's entry, under the lock
  * of the workflow. The {@link LiveWorkflows} registry creates the route of each entry, and moves it through its phases
@@ -272,8 +272,9 @@ final class CancellationRoute {
      * request, the leave answers it: made again, wherever the workflow is then, or, when the start of the woken
      * execution failed, failed with that failure. It is answered on the executor of this route, never on the thread on
      * which the execution leaves memory: that thread may hold the lock of a claim, and a request made again takes the
-     * lock of its workflow, which the engine takes before the lock of a claim. Only when the executor no longer
-     * accepts tasks, on shutdown, is the request answered on the calling thread.
+     * lock of its workflow, which comes first in the lock order of the
+     * {@link io.axoniq.framework.workflow.runtime.execution package}. Only when the executor no longer accepts tasks,
+     * on shutdown, is the request answered on the calling thread.
      */
     private final class Queued implements Delivery {
 

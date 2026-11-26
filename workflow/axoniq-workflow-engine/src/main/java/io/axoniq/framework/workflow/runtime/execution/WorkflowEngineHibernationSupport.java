@@ -46,39 +46,30 @@ import java.util.function.Supplier;
  * cancellation is requested for it.
  * <p>
  * This support is the hibernation of an engine whose module enables it: it decides when a workflow hibernates and
- * wakes, builds the {@link HibernationHint hint} and the timer of a hibernation, and throttles the wakes that do not
- * run for an event. It keeps no residency of its own. The {@link LiveWorkflows} registry keeps every live workflow, in
- * memory or hibernated, with the rows of the open waits of the hibernated ones, and applies the transitions this
- * support decides on: a workflow hibernates by swapping its execution in memory for a {@link Hibernated hibernation},
- * and wakes by swapping it back. The lock of each workflow, from the registry, keeps hibernation, event delivery,
- * cancellation and wakes of one workflow apart, so an event or a cancellation either reaches the execution in memory or
- * finds the workflow hibernated, never neither. The execution itself only reports whether it is at a safe point,
- * through its {@link WorkflowExecutionHibernationSupport}.
- * <p>
- * Every half idle delay, a pass asks the running executions in memory that made no progress for the idle delay to
- * hibernate. A hibernated workflow keeps a timer for its nearest deadline, and the registry keeps the rows of its open
- * waits, which route broadcast events to it, and finds it for a cancellation request, which the
- * {@link WorkflowCancellationService} has this support wake it for, see
- * {@link #wakeForCancellation(String, Consumer)}. The registry never calls this support: the engine hands
- * it the {@link #wakeForEvent(Hibernated, EventMessage, ProcessingContext) wake for an event} as it delivers one. No
- * event is written: a hibernating workflow records its {@link HibernationHint hint}, its open waits and nearest
- * deadline, in the {@link RunningWorkflowsProjection}, which writes it to the workflow index with a checkpoint that
- * joins the processor's transaction, and clears it again when the workflow wakes. Releasing or claiming a segment
- * forgets the hibernated workflows of that segment. A claim of the segment, here or on another node, restores every
- * running workflow of the segment, except those whose hint it accepts: it
- * {@link #adopt(SegmentClaim, String, HibernationHint) adopts} those as hibernated workflows instead, which wake for an
- * event like any other, but for their deadline or a cancellation only once the claim caught up.
- * <p>
- * This support runs every wake from start to end, under the lock of the workflow, see
- * {@link #wake(Hibernated, Consumer)}: it restores the workflow from the event store through the engine's
- * {@link WorkflowRestorer}, on the execution context of the claim that holds its segment, swaps the restored execution
- * in for the hibernation, hands it what woke it, and has the engine's {@link WorkflowStarter} start its body once the
- * claim caught up. A wake by an event runs on the thread handling the event, bounded by the wake timeout. A failed wake
- * by an event fails the event: the engine stores no position past it and asks the event processor to release the
- * segment, so the next claim restores the workflow and handles the event again. A wake by a deadline or a cancellation
- * runs on the wake executor, at most {@value #MAX_CONCURRENT_DETACHED_WAKES} at a time, so the deadlines that passed
- * while a segment was not processed do not all load at once, and is tried again after the idle delay when it fails.
- * <p>
+ * wakes, builds the {@link HibernationHint hint} and the timer of a hibernation, and runs every wake from start to end,
+ * see {@link #wake(Hibernated, Consumer)}. It keeps no residency of its own: the {@link LiveWorkflows} registry applies
+ * the transitions it decides on, swapping the execution of a workflow in memory for a {@link Hibernated hibernation}
+ * and back. How an event or a cancellation request reaches a hibernated workflow, and how a workflow hibernates, is
+ * sketched in the documentation of the {@link io.axoniq.framework.workflow.runtime.execution package}. Its own rules:
+ * <ul>
+ *     <li><b>Passes.</b> Every half idle delay, a pass asks the running executions in memory that made no progress for
+ *     the idle delay to hibernate. The execution itself only reports whether it is at a safe point, through its
+ *     {@link WorkflowExecutionHibernationSupport}.</li>
+ *     <li><b>No event is written.</b> A hibernating workflow records its hint, its open waits and nearest deadline, in
+ *     the {@link RunningWorkflowsProjection}, which writes it to the workflow index with a checkpoint that joins the
+ *     processor's transaction, and clears it again when the workflow wakes.</li>
+ *     <li><b>Claims.</b> Releasing or claiming a segment forgets the hibernated workflows of that segment. A claim of
+ *     the segment, here or on another node, restores every running workflow of the segment, except those whose hint it
+ *     accepts: it {@link #adopt(SegmentClaim, String, HibernationHint) adopts} those as hibernated workflows instead,
+ *     which wake for an event like any other, but for their deadline or a cancellation only once the claim caught
+ *     up.</li>
+ *     <li><b>Wakes.</b> A wake by an event runs on the thread handling the event, bounded by the wake timeout. When it
+ *     fails, the event fails: the engine stores no position past it and asks the event processor to release the
+ *     segment, so the next claim restores the workflow and handles the event again. A wake by a deadline or a
+ *     cancellation runs on the wake executor, at most {@value #MAX_CONCURRENT_DETACHED_WAKES} at a time, so the
+ *     deadlines that passed while a segment was not processed do not all load at once, and is tried again after the
+ *     idle delay when it fails.</li>
+ * </ul>
  * The {@link WorkflowEngine} creates it as its {@link Hibernation} when hibernation is enabled for its workflow module,
  * starts it with the engine and stops it on shutdown.
  *

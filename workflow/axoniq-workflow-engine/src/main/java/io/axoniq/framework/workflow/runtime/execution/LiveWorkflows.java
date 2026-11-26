@@ -63,23 +63,11 @@ import java.util.stream.Stream;
  *     <tr><td>{@link #clear clear}: the engine shuts down</td><td>any to none</td><td>nothing</td>
  *     <td>the bins</td></tr>
  * </table>
- * <b>Locks.</b> Where several are held, they are taken in this order, never the other way:
- * <ol>
- *     <li>the lock of a workflow, see {@link #lock(String)}, which serializes the decisions about one workflow:
- *     starting, adopting, hibernating, waking and dropping it, delivering an event to it when it may hibernate or is
- *     hibernated, and routing a cancellation request to it;</li>
- *     <li>the lock of a {@link SegmentClaim claim}, so a workflow never enters memory, hibernates or wakes under a
- *     claim that ended;</li>
- *     <li>the write lock of the swap lock of the {@link BroadcastAddressees}, for every move between memory and
- *     hibernation, so the lookup of the addressees of a broadcast event misses no workflow that moves while it runs;
- *     under it, only the entries, the rows of the open waits and the repository are touched;</li>
- *     <li>the lock of a bin of the entries, under which only the factory of an entering execution and the repository
- *     run. As that lock is a monitor, a custom repository that blocks while it saves or removes an execution keeps the
- *     transitions of the other workflows of that bin waiting.</li>
- * </ol>
- * Leaving memory takes no lock of a workflow: it runs on threads that hold the lock of a claim, such as the cleanup of
- * a failed claim and the activation of a claim that removes the executions whose restored state is terminal.
- * Compare-and-remove on the entry makes that lock unnecessary.
+ * <b>Locks.</b> The locks in the table follow the lock order of the
+ * {@link io.axoniq.framework.workflow.runtime.execution package}: workflow, claim, swap, bin. Leaving memory takes no
+ * lock of a workflow, as it runs on threads that hold the lock of a claim; a compare-and-remove on the entry makes that
+ * lock unnecessary. As the lock of a bin is a monitor, a custom repository that blocks while it saves or removes an
+ * execution keeps the transitions of the other workflows of that bin waiting.
  * <p>
  * <b>The repository.</b> The {@link WorkflowExecutionRepository} stays the store of the executions in memory, which a
  * user may replace, and which the parameter resolver of a workflow's state reads. Only this registry writes it, in step
@@ -129,9 +117,10 @@ public final class LiveWorkflows {
     }
 
     /**
-     * Obtains the lock of the given workflow, which serializes the decisions about it, see the class documentation:
-     * every transition of the workflow but leaving memory, a delivery of an event to it when it may hibernate or is
-     * hibernated, and the routing of a cancellation request to it.
+     * Obtains the lock of the given workflow, which serializes the decisions about it: every transition of the workflow
+     * but leaving memory, a delivery of an event to it when it may hibernate or is hibernated, and the routing of a
+     * cancellation request to it. It comes first in the lock order of the
+     * {@link io.axoniq.framework.workflow.runtime.execution package}.
      *
      * @param workflowId the identifier of the workflow
      * @return the held lock, which the caller releases
