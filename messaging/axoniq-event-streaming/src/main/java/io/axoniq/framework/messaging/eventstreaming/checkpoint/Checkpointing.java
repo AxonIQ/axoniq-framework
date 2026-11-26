@@ -57,19 +57,23 @@ import java.util.concurrent.CompletableFuture;
  *     is taken it snapshots that state to durable storage and completes the future once the snapshot is durable,
  *     reporting the snapshotted position. Event handling resumes as soon as the future completes; the future merely gates
  *     storing the token on the snapshot becoming durable.</li>
- *     <li><b>Truly asynchronous handlers</b>: the unit dispatches work that runs independently of event handling and does
- *     <em>not</em> block the next event, so it may fall behind the stream. Ordering across that work is then the unit's
- *     own responsibility, but it has full control over it. At checkpoint time the unit returns a future that completes
- *     only once the in-flight work has caught up far enough to cover the requested position. Because the processor awaits
- *     that future before resuming the segment's worker, the checkpoint effectively becomes a barrier: event handling is
- *     "blocked" until the asynchronous work has reached the checkpoint.</li>
+ *     <li><b>Truly asynchronous handlers</b>: the unit dispatches work that runs independently of event handling and
+ *     does <em>not</em> block the next event, so it may fall behind the stream. Ordering across that work is then the
+ *     unit's own responsibility, but it has full control over it. At checkpoint time the unit returns a future that
+ *     completes only once the in-flight work has caught up far enough to cover the requested position. In auto mode,
+ *     the processor awaits that future before resuming the segment's worker, so the checkpoint becomes a barrier: event
+ *     handling is "blocked" until the asynchronous work has reached the checkpoint. In fully-deferred mode, the
+ *     processor awaits a future that is not done at once off the worker, so event handling continues and the checkpoint
+ *     is no barrier: a unit that needs back-pressure applies it itself.</li>
  * </ul>
  * <p>
- * <b>The processor awaits the returned future without a timeout</b>: it stores the checkpoint (and, on release, frees
- * the claim) only once the future completes. A future that never completes therefore stalls progress for that segment
- * indefinitely. The framework deliberately does not impose a timeout: a unit that confirms durability out of band may
- * legitimately take a long time. If a unit's asynchronous work could hang, it should bound its <em>own</em> future, for
- * example:
+ * <b>In fully-deferred mode, the processor awaits the returned future without a timeout</b>: it stores the checkpoint
+ * only once the future completes, and logs a warning once the future stays open longer than 30 seconds. A future that
+ * never completes therefore stops the stored token for that segment from advancing, while events are still handled.
+ * Where the processor awaits the future on the segment's worker, in auto mode and on release, the checkpoint fails
+ * after 30 seconds instead. The framework deliberately does not fail a fully-deferred checkpoint on time: a unit that
+ * confirms durability out of band may legitimately take a long time. If a unit's asynchronous work could hang, it
+ * should bound its <em>own</em> future, for example:
  * <pre>{@code
  * public CompletableFuture<TrackingToken> onCheckpointAdvanced(Segment segment, TrackingToken requested) {
  *     return flushToStore(requested)            // returns CompletableFuture<TrackingToken>
@@ -79,11 +83,13 @@ import java.util.concurrent.CompletableFuture;
  * A future completed exceptionally (whether from such a timeout or any other failure) fails the checkpoint without
  * storing, leaving the stored token where it is; the segment retries on the next cycle.
  * <p>
- * <b>Transactional coupling within a batch.</b> The checkpoint is taken on the commit of the <em>same</em> transaction
- * that processed the batch: the processor awaits the returned future while that transaction is still open. Two
- * consequences follow. First, a slow or never-completing future does not merely stall progress: it holds the batch's
- * transaction open for the duration of the await. Second, if the checkpoint fails (the future completes exceptionally),
- * the batch transaction rolls back, undoing the work of <em>every</em> handler in that batch, including ordinary
+ * <b>Transactional coupling within a batch.</b> In auto mode, the checkpoint is taken on the commit of the
+ * <em>same</em> transaction that processed the batch: the processor awaits the returned future while that transaction
+ * is still open. In fully-deferred mode, only a future that is done at once is stored within that transaction; a later
+ * cycle stores the position of any other future, or fails when that future failed. Two consequences follow for auto
+ * mode. First, a slow or never-completing future does not merely stall progress: it holds the batch's transaction open
+ * for the duration of the await. Second, if the checkpoint fails (the future completes exceptionally), the batch
+ * transaction rolls back, undoing the work of <em>every</em> handler in that batch, including ordinary
  * (non-checkpointing) handlers and other checkpointing components sharing the segment. A misbehaving checkpointing
  * component can therefore affect co-located handlers. For this reason, <b>a checkpointing component is best isolated in
  * its own pooled streaming event processor</b> (one whose every handler is {@code Checkpointing}, so it runs
@@ -147,17 +153,20 @@ public interface Checkpointing {
      * <p>
      * <b>Exceptional completion.</b> A unit that cannot reach {@code requested} must complete its future exceptionally
      * (returning a token that does not cover {@code requested} is treated the same way). The checkpoint then fails and
-     * nothing is stored. The processor handles this as a processing error: it aborts the segment's worker and releases
-     * the segment, so the coordinator re-claims it (after a back-off) and resumes from the <em>last stored
-     * checkpoint</em>; the events since are redelivered. The stored token therefore never advances on a failed
-     * checkpoint, and no progress is lost; an isolated failure costs a segment re-claim and some redelivery.
+     * nothing is stored. The processor handles this as a processing error, also when the future fails after the worker
+     * moved on in fully-deferred mode: it aborts the segment's worker and releases the segment, so the coordinator
+     * re-claims it (after a back-off) and resumes from the <em>last stored checkpoint</em>; the events since are
+     * redelivered. The stored token therefore never advances on a failed checkpoint, and no progress is lost; an
+     * isolated failure costs a segment re-claim and some redelivery.
      * <p>
      * The returned future is the lever for the two workloads described on this type. For an
      * <b>in-memory projection with asynchronous persistence</b>, complete the future once the snapshot of the in-memory
      * state has become durable, reporting the snapshotted position; the processing thread then resumes immediately. For
      * a <b>truly asynchronous handler</b>, complete the future only once the in-flight work has caught up far enough to
-     * cover {@code requested}; the processor awaits it before resuming the segment's worker, so the checkpoint acts as
-     * a barrier that holds event handling until the asynchronous work has reached this position.
+     * cover {@code requested}. In auto mode, the processor awaits it before resuming the segment's worker, so the
+     * checkpoint acts as a barrier that holds event handling until the asynchronous work has reached this position. In
+     * fully-deferred mode, the worker keeps handing over events meanwhile, and the processor stores the position once
+     * the future completes.
      *
      * @param segment   the segment being checkpointed
      * @param requested the segment-scoped position this checkpoint must cover (the highest anyone requested, or the

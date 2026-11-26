@@ -43,8 +43,8 @@ import static org.axonframework.common.BuilderUtils.assertPositive;
  * {@link WorkflowExecution} latches (attached by the {@link CheckpointLatchCoordinator}) have been crossed.
  * <p>
  * A positive checkpoint interval forwards at most one checkpoint request per segment within that interval, so the
- * processor waits for safe points less often under load. The stored token then lags by at most the events of one
- * interval, and those events are processed again after a crash.
+ * workflows are asked to reach a safe point less often under load. The stored token then lags by at most the events of
+ * one interval, and those events are processed again after a crash.
  *
  * @author Simon Zambrovski
  * @author Steven van Beelen
@@ -62,11 +62,11 @@ public class WorkflowEngineCheckpointingSupport implements Checkpointing {
      * Creates checkpointing support for a {@link WorkflowEngine} that forwards at most one checkpoint request per
      * segment within the given {@code checkpointInterval}.
      * <p>
-     * Every forwarded request makes the event processor wait, at its next batch commit, until all workflows of the
-     * segment reached a safe point. A request that is not forwarded is dropped, not deferred: the stored token stays
-     * at the last forwarded request until the next one or the release of the segment. So the stored token lags by at
-     * most the events of one interval, also on a segment that goes idle, and those events are processed again after a
-     * crash.
+     * Every forwarded request asks all workflows of the segment to reach a safe point, and the event processor stores
+     * the position once they all have, while it keeps handing over events. A request that is not forwarded is
+     * dropped, not deferred: the stored token stays at the last forwarded request until the next one or the release of
+     * the segment. So the stored token lags by at most the events of one interval, also on a segment that goes idle,
+     * and those events are processed again after a crash.
      *
      * @param checkpointLatchCoordinator adds a latch to coordinated {@link WorkflowExecution WorkflowExecutions} to
      *                                   ensure all have reached a safe point to advance the checkpoint

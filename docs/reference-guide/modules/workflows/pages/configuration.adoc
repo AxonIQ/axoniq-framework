@@ -305,8 +305,9 @@ See <<running-on-several-nodes,Running on several nodes>> for the token store, f
 == Performance tuning
 
 The engine processor handles each segment on one thread at a time.
-After every batch it waits until every workflow of the segment is at a safe point, and only then stores its position.
-Throughput therefore grows with the number of segments processed in parallel, and with fewer of these waits.
+It stores the position of a segment once every workflow of that segment is at a safe point.
+It keeps handling events while the workflows get there, so a workflow that waits for a later event does not hold up its segment.
+Throughput therefore grows with the number of segments processed in parallel.
 The event store usually sets the limit, so change one setting at a time and measure.
 
 === Segments and threads
@@ -329,13 +330,13 @@ Size the connection pool above the thread count, with room for those steps, so t
 === Batch size
 
 The batch size sets how many events the processor handles before it commits and checkpoints.
-A larger batch means fewer commits and fewer waits for a safe point.
-Each wait can take longer, because a batch touches more workflows.
+A larger batch means fewer commits and fewer checkpoints.
+Each checkpoint can take longer to reach a safe point, because a batch touches more workflows.
 
 === Checkpoint interval
 
 The engine requests a checkpoint after every event it handles.
-A positive checkpoint interval forwards at most one request per segment within that interval, so the processor waits less often under load.
+A positive checkpoint interval forwards at most one request per segment within that interval, so the workflows are asked to reach a safe point less often under load.
 The stored position then lags by at most the events of one interval, and those events are processed again after a crash.
 The interval is in milliseconds. It defaults to `0`, which forwards every request.
 
