@@ -112,6 +112,25 @@ class WorkflowConfigurerHibernationWithWorkflowIndexTest extends WorkflowConfigu
         }
 
         @Test
+        void carryTheNearestDeadlineOfTheOpenWaitsAsWakeTime() {
+            // given: a wait of 5 minutes and a sleep of 2 minutes, both open
+            var configuration = start(true);
+            var startedAfter = Instant.now();
+            var workflowId = startWorkflow(configuration, "allMatchWaitAndShortSleep", "order-1", SLEEP_STEP);
+            awaitHibernated(configuration, workflowId);
+
+            // when: an event of another order moves the stored tokens
+            publish(configuration, "paid", "order-2", "");
+
+            // then: the wake time is the deadline of the sleep, the nearer of the 2
+            var sleep = Duration.ofMinutes(2);
+            await().atMost(20, TimeUnit.SECONDS).untilAsserted(
+                    () -> assertThat(rows().wakesAt().get(workflowId))
+                            .isBetween(startedAfter.plus(sleep), Instant.now().plus(sleep))
+            );
+        }
+
+        @Test
         void loseTheWakeTimeOfAWorkflowThatAClaimLoaded() {
             // given: a hibernated workflow whose row carries its wake time, on a node that stops
             var stopped = start(true);

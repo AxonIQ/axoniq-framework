@@ -525,6 +525,10 @@ class WorkflowConfigurerHibernationTest {
                                                         ctx.waitForEvent(paidOrder(orderId)),
                                                         ctx.waitForEvent(sleep(Duration.ofMinutes(5))))
                                               .await();
+            case "allMatchWaitAndShortSleep" -> ctx.allMatch(result -> true,
+                                                             ctx.waitForEvent(paidOrder(orderId)),
+                                                             ctx.waitForEvent(sleep(Duration.ofMinutes(2))))
+                                                   .await();
             case "waitThenWait" -> {
                 var paid = ctx.waitForEvent(paidOrder(orderId));
                 var shipped = ctx.waitForEvent(waitFor(SHIP_STEP,
