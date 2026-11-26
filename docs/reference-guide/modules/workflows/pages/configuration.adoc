@@ -267,12 +267,12 @@ A wake that failed, for example because the event store was unreachable, is trie
 Hibernation trades memory for load time, because every wake replays the history of the workflow.
 Enable it for workflows that wait for days or months.
 Keep it disabled for many short-lived workflows, or for workflows with short timeouts, because they would load again and again.
-With a `SnapshotStore` configured, a restart or a segment claim keeps hibernated workflows out of memory instead of replaying them.
+After a restart, or when a node claims a segment, the engine replays every unfinished workflow of that segment, which then hibernates again at the same wait.
 
 Hibernation relies on the workflow body being deterministic, like every replay does.
 The engine stops a hibernating body the way it stops the workflows of a released segment, so a body that catches exceptions around a step result must rethrow the `StepInterruptedException`.
 
-See xref:workflow-internals.adoc#hibernation[Hibernation internals] for how the engine decides when a workflow hibernates, and how it records and wakes hibernated workflows.
+See xref:workflow-internals.adoc#hibernation[Hibernation internals] for how the engine decides when a workflow hibernates, and how it wakes and restores hibernated workflows.
 
 [[spring-boot]]
 == Spring Boot

@@ -60,10 +60,12 @@ A lock per workflow keeps a wake, an event and a cancellation of the same workfl
 
 === Restarts and segment claims
 
-With a `SnapshotStore` configured, the engine records the hibernated workflows of a segment when it releases that segment, also when the application stops.
-The next claim of the segment, on any node, keeps a recorded workflow out of memory, as long as its open waits are the ones it hibernated with.
-It replays only the other workflows.
-Without a `SnapshotStore`, a claim replays every unfinished workflow of the segment, which then hibernates again at the same wait.
+Hibernated workflows live only in the memory of the node that holds their segment.
+When a node releases a segment, also when the application stops, it forgets the hibernated workflows of that segment.
+A workflow does not hibernate while its segment is being released.
+
+The next claim of the segment, on any node, replays every unfinished workflow of the segment, also the ones that were hibernated.
+The next hibernation pass sends the idle ones out of memory again, at the same wait.
 
 A segment split or merge replaces segments without releasing them.
-The claim of a new segment first forgets the hibernated workflows it owns that were kept for the old segment, and then restores them or keeps them out of memory again.
+The claim of a new segment first forgets the hibernated workflows it owns that were kept for the old segment, and then restores them.

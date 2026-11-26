@@ -31,12 +31,10 @@ import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.axonframework.common.configuration.DecoratorDefinition;
 import org.axonframework.common.lifecycle.Phase;
-import org.axonframework.conversion.GeneralConverter;
 import org.axonframework.eventsourcing.configuration.EventSourcingConfigurationDefaults;
 import org.axonframework.eventsourcing.eventstore.MultiTagResolver;
 import org.axonframework.eventsourcing.eventstore.TagResolver;
 import org.axonframework.eventsourcing.snapshot.api.SnapshotPolicy;
-import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
 import org.axonframework.messaging.core.Metadata;
 import org.axonframework.modelling.repository.Repository;
 import org.jspecify.annotations.Nullable;
@@ -290,10 +288,7 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
                                     )));
                     return new EventSourcedWorkflowStore(runningWorkflowsRepository,
                                                          waitAssociationsRepository,
-                                                         workflowStateRepository,
-                                                         cfg.getOptionalComponent(SnapshotStore.class).orElse(null),
-                                                         // The converter an entity's snapshot is converted with.
-                                                         cfg.getComponent(GeneralConverter.class));
+                                                         workflowStateRepository);
                 });
     }
 

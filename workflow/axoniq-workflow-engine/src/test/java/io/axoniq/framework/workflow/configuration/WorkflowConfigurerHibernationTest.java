@@ -36,15 +36,12 @@ import io.axoniq.framework.workflow.runtime.util.MetadataUtils;
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.common.infra.ComponentDescriptor;
-import org.axonframework.conversion.GeneralConverter;
 import org.axonframework.eventsourcing.eventstore.AppendCondition;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
 import org.axonframework.eventsourcing.eventstore.EventStore;
 import org.axonframework.eventsourcing.eventstore.SourcingCondition;
 import org.axonframework.eventsourcing.eventstore.TaggedEventMessage;
 import org.axonframework.eventsourcing.eventstore.inmemory.InMemoryEventStorageEngine;
-import org.axonframework.eventsourcing.snapshot.inmemory.InMemorySnapshotStore;
-import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
@@ -102,8 +99,6 @@ class WorkflowConfigurerHibernationTest {
     private final ControlledStorageEngine storageEngine =
             new ControlledStorageEngine(new InMemoryEventStorageEngine());
     private final List<AxonConfiguration> configurations = new ArrayList<>();
-    // Shared by the configurations of one test, so a restarted node reads the records of the stopped one.
-    private @Nullable SnapshotStore snapshotStore;
     // The hibernation interval of the next configuration, in milliseconds; 0 keeps the default.
     private long hibernationInterval;
     private final CountDownLatch chargeDone = new CountDownLatch(1);
@@ -340,28 +335,28 @@ class WorkflowConfigurerHibernationTest {
     class HibernatedWorkflowOfAClaimedSegment {
 
         @Test
-        void isAdoptedByTheNextNodeAfterARestart() {
+        void isRestoredByTheNextNodeAfterARestartAndHibernatesAgain() {
             // given: a hibernated workflow on a node that stops, which releases its segments
-            var stopped = startRecordingHibernatedWorkflows();
+            var stopped = start(true);
             var workflowId = startWorkflow(stopped, "wait", "order-1", WAIT_STEP);
             awaitHibernated(stopped, workflowId);
             stopped.shutdown();
 
             // when: a new node starts on the same stores
-            var restarted = startRecordingHibernatedWorkflows();
+            var restarted = start(true);
 
-            // then: it keeps the workflow out of memory, from the record the stopping node stored
-            awaitAdopted(restarted, workflowId);
+            // then: its claim loads the workflow into memory, and a pass sends it out again
+            awaitRestoredAndHibernated(restarted, workflowId);
         }
 
         @Test
         void isWokenByTheAwaitedEventAfterTheClaim() {
-            // given: the claim adopted it from the record the release stored, instead of loading it
-            var configuration = startRecordingHibernatedWorkflows();
+            // given: the claim restored it, and it hibernated again
+            var configuration = start(true);
             var workflowId = startWorkflow(configuration, "wait", "order-1", WAIT_STEP);
             awaitHibernated(configuration, workflowId);
             releaseAllSegments(configuration);
-            awaitAdopted(configuration, workflowId);
+            awaitRestoredAndHibernated(configuration, workflowId);
 
             // when
             publish(configuration, "paid", "order-1", "");
@@ -373,11 +368,11 @@ class WorkflowConfigurerHibernationTest {
         @Test
         void isWokenByAWorkflowCancellationAfterTheClaim() {
             // given
-            var configuration = startRecordingHibernatedWorkflows();
+            var configuration = start(true);
             var workflowId = startWorkflow(configuration, "wait", "order-1", WAIT_STEP);
             awaitHibernated(configuration, workflowId);
             releaseAllSegments(configuration);
-            awaitAdopted(configuration, workflowId);
+            awaitRestoredAndHibernated(configuration, workflowId);
 
             // when
             cancellationService(configuration).requestWorkflowCancellation(workflowId, null)
@@ -389,9 +384,9 @@ class WorkflowConfigurerHibernationTest {
         }
 
         @Test
-        void isWokenAtItsDeadlineAfterTheClaim() {
+        void timesOutAtItsDeadlineAfterTheClaim() {
             // given: a sleep of 2 seconds
-            var configuration = startRecordingHibernatedWorkflows();
+            var configuration = start(true);
             var workflowId = startWorkflow(configuration, "sleep", "order-1", SLEEP_STEP);
             awaitHibernated(configuration, workflowId);
 
@@ -411,7 +406,7 @@ class WorkflowConfigurerHibernationTest {
         @Test
         void isCompletedByItsEventAndListedNowhereAfterItsSegmentSplits() {
             // given
-            var configuration = start(true, true, true);
+            var configuration = start(true, true);
             var workflowIds = startHibernatedWorkflows(configuration);
 
             // when: segment 0 splits into segments 0 and 2, and every workflow then receives its payment
@@ -427,7 +422,7 @@ class WorkflowConfigurerHibernationTest {
         @Test
         void isCompletedByItsEventAndListedNowhereAfterItsSegmentMerges() {
             // given
-            var configuration = start(true, true, true);
+            var configuration = start(true, true);
             var workflowIds = startHibernatedWorkflows(configuration);
 
             // when: segments 0 and 1 merge into segment 0, and every workflow then receives its payment
@@ -474,7 +469,7 @@ class WorkflowConfigurerHibernationTest {
         @Test
         void wakesItWhenItAwaitsThatEventInsteadOfStartingADuplicate() {
             // given: the workflow id is the order id, and the workflow waits for the next start event of its order
-            var configuration = start(true, true, false);
+            var configuration = start(true, true);
             publish(configuration, "start", "order-1", "waitNextStart");
             awaitStepStarted(configuration, "order-1", WAIT_STEP);
             awaitHibernated(configuration, "order-1");
@@ -489,7 +484,7 @@ class WorkflowConfigurerHibernationTest {
         @Test
         void isIgnoredSoTheWorkflowStaysCancellable() {
             // given: the workflow id is the order id, so a second start event of the order is a duplicate
-            var configuration = start(true, true, false);
+            var configuration = start(true, true);
             publish(configuration, "start", "order-1", "wait");
             awaitStepStarted(configuration, "order-1", WAIT_STEP);
             awaitHibernated(configuration, "order-1");
@@ -610,22 +605,14 @@ class WorkflowConfigurerHibernationTest {
     }
 
     private AxonConfiguration start(boolean hibernation) {
-        return start(hibernation, false, false);
-    }
-
-    /**
-     * Starts a configuration with hibernation and a snapshot store, which keeps the hibernated workflows the engine
-     * records.
-     */
-    private AxonConfiguration startRecordingHibernatedWorkflows() {
-        return start(true, false, true);
+        return start(hibernation, false);
     }
 
     /**
      * Starts a configuration. The workflow id is the identifier of the start event, or its order id when
-     * {@code idFromOrder} is set. With {@code snapshots}, a snapshot store keeps the recorded hibernated workflows.
+     * {@code idFromOrder} is set.
      */
-    private AxonConfiguration start(boolean hibernation, boolean idFromOrder, boolean snapshots) {
+    private AxonConfiguration start(boolean hibernation, boolean idFromOrder) {
         var module = WorkflowModule.configure(MODULE, HibernationContext.class)
                                    .definition(d -> {
                                        var definition = d.declarative(c -> this::body)
@@ -654,21 +641,10 @@ class WorkflowConfigurerHibernationTest {
                 .registerComponent(EventStorageEngine.class, cfg -> storageEngine)
                 .registerComponent(TokenStore.class, cfg -> tokenStore)
                 .registerModule(module));
-        if (snapshots) {
-            // Serializes each record, as a store backed by a database does.
-            configurer.componentRegistry(cr -> cr.registerComponent(SnapshotStore.class, this::snapshotStore));
-        }
         var configuration = configurer.build();
         configurations.add(configuration);
         configuration.start();
         return configuration;
-    }
-
-    private SnapshotStore snapshotStore(Configuration configuration) {
-        if (snapshotStore == null) {
-            snapshotStore = new InMemorySnapshotStore(configuration.getComponent(GeneralConverter.class));
-        }
-        return snapshotStore;
     }
 
     /**
@@ -721,14 +697,15 @@ class WorkflowConfigurerHibernationTest {
     }
 
     /**
-     * Waits until the claim of the workflow's segment adopted it as hibernated, and fails as soon as the workflow is in
-     * memory, which a claim that loads it would show.
+     * Waits until the claim of the workflow's segment loaded it into memory, then runs hibernation passes until it
+     * hibernated again.
      */
-    private static void awaitAdopted(AxonConfiguration configuration, String workflowId) {
+    private void awaitRestoredAndHibernated(AxonConfiguration configuration, String workflowId) {
         await().atMost(5, TimeUnit.SECONDS)
                .pollInterval(Duration.ofMillis(10))
-               .failFast("The claim loaded the workflow into memory.", () -> inMemory(configuration, workflowId))
-               .until(() -> WorkflowEngineHibernationPasses.isHibernated(engine(configuration), workflowId));
+               .until(() -> inMemory(configuration, workflowId));
+        awaitHibernated(configuration, workflowId);
+        assertThat(WorkflowEngineHibernationPasses.isHibernated(engine(configuration), workflowId)).isTrue();
     }
 
     private void awaitWorkflowStatus(AxonConfiguration configuration, String workflowId, WorkflowStatus status) {

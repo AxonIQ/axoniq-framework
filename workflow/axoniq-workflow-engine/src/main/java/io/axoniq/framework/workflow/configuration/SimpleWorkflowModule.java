@@ -325,7 +325,6 @@ class SimpleWorkflowModule<C extends WorkflowContext>
                                           engine.enableHibernation(
                                                   c.getComponent(WorkflowScheduler.class),
                                                   c.getComponent(Clock.class),
-                                                  name,
                                                   Duration.ofMillis(hibernationInterval),
                                                   c.getComponent(ExecutorService.class,
                                                                  WorkflowConfigurationDefaults.WORKFLOW_ENGINE_EXECUTOR)
