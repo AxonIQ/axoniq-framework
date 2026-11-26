@@ -36,7 +36,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
@@ -319,15 +318,13 @@ final class WorkflowEngineHibernationSupport implements Hibernation {
             if (!running || liveWorkflows.get(workflowId) != null) {
                 return false;
             }
-            var adopted = new AtomicBoolean();
             // Armed right away when bodies start now; else by the activation of the claim, see arm(Segment).
-            claim.runIfCurrentWithBodyStart(bodyStart -> adopted.set(park(
+            return claim.runIfCurrent(bodyStart -> park(
                     hibernationOf(claim, workflowId, hint, bodyStart == BodyStart.NOW
                             ? CompletableFuture.completedFuture(null)
                             : new CompletableFuture<>()),
                     liveWorkflows::adopt
-            )));
-            return adopted.get();
+            ));
         }
     }
 
@@ -469,7 +466,7 @@ final class WorkflowEngineHibernationSupport implements Hibernation {
                                 .min(Instant::compareTo)
                                 .orElseThrow();
             var hint = hintOf(waits.get(), deadline);
-            boolean parked = claim.applyIfCurrent(() -> {
+            boolean parked = claim.runIfCurrent(bodyStart -> {
                 projection.recordHibernated(claim.segment(), workflowId, hint);
                 return park(hibernationOf(claim, workflowId, hint, CompletableFuture.completedFuture(null)),
                             hibernated -> liveWorkflows.hibernate(execution, hibernated));
@@ -623,7 +620,7 @@ final class WorkflowEngineHibernationSupport implements Hibernation {
         }
         var execution = restored.get();
         // Only while the claim is current, like a restore.
-        if (!claim.applyIfCurrent(() -> liveWorkflows.wake(hibernated, execution, wakeExecutor))) {
+        if (!claim.runIfCurrent(bodyStart -> liveWorkflows.wake(hibernated, execution, wakeExecutor))) {
             logger.debug("Not waking workflow '{}': the claim of segment {} failed or ended meanwhile.",
                          workflowId, claim.segment().getSegmentId());
             return false;
@@ -647,11 +644,18 @@ final class WorkflowEngineHibernationSupport implements Hibernation {
         try {
             allow(execution, claim);
             beforeStart.accept(execution);
-            claim.runIfCurrentWithBodyStart(bodyStart -> {
-                if (bodyStart == BodyStart.NOW && !execution.isRunning()) {
-                    starter.start(execution);
+            boolean started = claim.runIfCurrent(bodyStart -> {
+                if (bodyStart != BodyStart.NOW || execution.isRunning()) {
+                    return false;
                 }
+                starter.start(execution);
+                return true;
             });
+            if (!started) {
+                logger.debug("Woken workflow [{}] did not start here: the activation of the claim of segment {} "
+                                     + "starts it, or started it already, unless that claim failed or ended.",
+                             execution.workflowId(), claim.segment().getSegmentId());
+            }
         } catch (RuntimeException e) {
             // First, it takes no requests any more, and those that waited for it fail, so they do not wake the
             // workflow once more.
@@ -659,7 +663,7 @@ final class WorkflowEngineHibernationSupport implements Hibernation {
             liveWorkflows.failStart(execution, e);
             // Only while the claim is current: a claim that ended dropped the hibernated workflows of its segment, and
             // must not find this one hibernated again once it no longer looks.
-            if (!claim.applyIfCurrent(() -> liveWorkflows.hibernate(execution, hibernated))) {
+            if (!claim.runIfCurrent(bodyStart -> liveWorkflows.hibernate(execution, hibernated))) {
                 liveWorkflows.leave(execution);
             }
             throw e;

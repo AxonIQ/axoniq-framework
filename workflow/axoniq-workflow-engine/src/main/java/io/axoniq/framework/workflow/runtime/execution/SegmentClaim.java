@@ -14,7 +14,6 @@ import org.axonframework.messaging.eventhandling.processing.streaming.token.Trac
 import org.jspecify.annotations.Nullable;
 
 import java.util.concurrent.locks.ReentrantLock;
-import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
@@ -103,6 +102,22 @@ final class SegmentClaim {
         AT_ACTIVATION
     }
 
+    /**
+     * An action that runs under the lock of a claim while the claim is current, see {@link #runIfCurrent(Action)}, such
+     * as a transition of a workflow that must not take place under a claim that ended.
+     */
+    @FunctionalInterface
+    interface Action {
+
+        /**
+         * Runs this action, told when the bodies of workflows entering memory under the claim start.
+         *
+         * @param bodyStart when the body of a workflow entering memory under the claim starts
+         * @return whether the action took effect, such as whether the transition it attempted took place
+         */
+        boolean apply(BodyStart bodyStart);
+    }
+
     private final ReentrantLock lock = new ReentrantLock();
 
     private final Segment segment;
@@ -149,75 +164,38 @@ final class SegmentClaim {
 
     /**
      * Runs the given {@code action} under the lock of this claim, but only while this claim is current: neither ended
-     * nor failed.
-     *
-     * @param action the action to run
-     * @return {@code true} when the action ran, {@code false} when the claim ended or failed
-     */
-    boolean runIfCurrent(Runnable action) {
-        lock.lock();
-        try {
-            if (!state.isCurrent()) {
-                return false;
-            }
-            action.run();
-            return true;
-        } finally {
-            lock.unlock();
-        }
-    }
-
-    /**
-     * Applies the given {@code transition} under the lock of this claim, but only while this claim is current: neither
-     * ended nor failed.
-     *
-     * @param transition the transition to apply, which tells whether it took place
-     * @return {@code true} when the claim is current and the transition took place, {@code false} when the claim ended
-     * or failed, so the transition was not applied, or when it did not take place
-     */
-    boolean applyIfCurrent(BooleanSupplier transition) {
-        lock.lock();
-        try {
-            return state.isCurrent() && transition.getAsBoolean();
-        } finally {
-            lock.unlock();
-        }
-    }
-
-    /**
-     * Runs the given {@code action} under the lock of this claim, telling it when workflow bodies start, but only while
-     * this claim is current: neither ended nor failed. Bodies start {@link BodyStart#NOW now} once the claim activated,
-     * or right away when there is no startup head, also before the activation ran. An action that starts an execution
+     * nor failed. The action is told when workflow bodies start: {@link BodyStart#NOW now} once the claim activated, or
+     * right away when there is no startup head, also before the activation ran. An action that starts an execution
      * only when told {@link BodyStart#NOW now} thereby never races the activation of the claim, which starts every
      * execution it finds.
+     * <p>
+     * An action that only needs the claim to be current ignores the body start: a transition that must not take place
+     * under a claim that ended, such as a workflow that hibernates or wakes.
      *
-     * @param action receives when workflow bodies start
-     * @return {@code true} when the action ran, {@code false} when the claim ended or failed
+     * @param action receives when workflow bodies start, and returns whether it took effect
+     * @return {@code true} when the claim is current and the action took effect, {@code false} when the claim ended or
+     * failed, so the action did not run, or when it did not take effect
      */
-    boolean runIfCurrentWithBodyStart(Consumer<BodyStart> action) {
+    boolean runIfCurrent(Action action) {
         var head = startupHead.get();
         lock.lock();
         try {
-            if (!state.isCurrent()) {
-                return false;
-            }
-            action.accept(bodyStart(head));
-            return true;
+            return state.isCurrent() && action.apply(bodyStart(head));
         } finally {
             lock.unlock();
         }
     }
 
     /**
-     * Runs the given {@code action} under the lock of this claim, telling it when workflow bodies start, whether or not
-     * this claim is current: also when it ended or failed. Bodies start {@link BodyStart#NOW now} once the claim
+     * Runs the given {@code action} under the lock of this claim, whether or not this claim is current: also when it
+     * ended or failed. The action is told when workflow bodies start: {@link BodyStart#NOW now} once the claim
      * activated and while it is current, or whenever there is no startup head. An action that creates an execution and
      * starts it only when told {@link BodyStart#NOW now} thereby never races an activation that starts every execution
      * it finds.
      *
      * @param action receives when workflow bodies start
      */
-    void runAlwaysWithBodyStart(Consumer<BodyStart> action) {
+    void runAlways(Consumer<BodyStart> action) {
         lock.lock();
         try {
             action.accept(bodyStart(startupHead.get()));
@@ -276,10 +254,10 @@ final class SegmentClaim {
     }
 
     /**
-     * Marks this claim as failed, and runs the given {@code cleanup} under its lock, but only while the claim is current:
-     * a claim that ended or failed already runs no cleanup, so the cleanup runs at most once, and never once a next
-     * claim of the segment started. A failed claim is never activated, and runs no
-     * {@link #runIfCurrent(Runnable) action} anymore. Returns once an action or activation of the claim in progress
+     * Marks this claim as failed, and runs the given {@code cleanup} under its lock, but only while the claim is
+     * current: a claim that ended or failed already runs no cleanup, so the cleanup runs at most once, and never once a
+     * next claim of the segment started. A failed claim is never activated, and runs no
+     * {@link #runIfCurrent(Action) action} anymore. Returns once an action or activation of the claim in progress
      * has finished. A next claim of the segment only starts once the cleanup finished, so the cleanup never touches
      * what that claim restores.
      *

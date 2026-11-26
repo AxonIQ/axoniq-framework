@@ -262,21 +262,20 @@ final class SegmentClaims {
 
     /**
      * Runs the given {@code action} under the lock of the current claim of the given {@code segment}, telling it when
-     * workflow bodies start, whether or not that claim is still current, see
-     * {@link SegmentClaim#runAlwaysWithBodyStart(Consumer)}. An action that creates an execution and starts it only
-     * when told {@link BodyStart#NOW now} thereby never races an activation that starts every execution it finds. A
-     * segment without a current claim gets an implicit one.
+     * workflow bodies start, whether or not that claim is still current, see {@link SegmentClaim#runAlways(Consumer)}.
+     * An action that creates an execution and starts it only when told {@link BodyStart#NOW now} thereby never races an
+     * activation that starts every execution it finds. A segment without a current claim gets an implicit one.
      *
      * @param segment the segment handling an event, or {@code null} outside a segmented processor, where bodies always
      *                start {@link BodyStart#NOW now}
      * @param action  receives when workflow bodies start
      */
-    void runAlwaysWithBodyStart(@Nullable Segment segment, Consumer<BodyStart> action) {
+    void runAlways(@Nullable Segment segment, Consumer<BodyStart> action) {
         if (segment == null) {
             action.accept(BodyStart.NOW);
             return;
         }
-        currentOrImplicitClaim(segment).runAlwaysWithBodyStart(action);
+        currentOrImplicitClaim(segment).runAlways(action);
     }
 
     /**

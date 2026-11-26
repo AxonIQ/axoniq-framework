@@ -249,7 +249,7 @@ class SegmentClaimsTest {
     }
 
     @Nested
-    class RunIfCurrentWithBodyStart {
+    class RunIfCurrent {
 
         @Test
         void letsBodiesStartBeforeTheActivationWithoutAStartupHead() {
@@ -259,7 +259,7 @@ class SegmentClaimsTest {
             var bodyStarts = new ArrayList<BodyStart>();
 
             // when
-            boolean ran = claim.runIfCurrentWithBodyStart(bodyStarts::add);
+            boolean ran = claim.runIfCurrent(bodyStarts::add);
 
             // then - and the activation still runs, once
             assertThat(ran).isTrue();
@@ -276,10 +276,10 @@ class SegmentClaimsTest {
             var bodyStarts = new ArrayList<BodyStart>();
 
             // when
-            claim.runIfCurrentWithBodyStart(bodyStarts::add);
+            claim.runIfCurrent(bodyStarts::add);
             claim.activate(STARTUP_HEAD, () -> {
             });
-            claim.runIfCurrentWithBodyStart(bodyStarts::add);
+            claim.runIfCurrent(bodyStarts::add);
 
             // then
             assertThat(bodyStarts).containsExactly(BodyStart.AT_ACTIVATION, BodyStart.NOW);
@@ -293,11 +293,9 @@ class SegmentClaimsTest {
             });
 
             // when
-            boolean started = failed.runIfCurrentWithBodyStart(bodyStart -> fail("Started on a failed claim."));
-            boolean ran = failed.runIfCurrent(() -> fail("Ran on a failed claim."));
+            boolean ran = failed.runIfCurrent(bodyStart -> fail("Ran on a failed claim."));
 
             // then
-            assertThat(started).isFalse();
             assertThat(ran).isFalse();
         }
 
@@ -308,17 +306,25 @@ class SegmentClaimsTest {
             testSubject.release(SEGMENT);
 
             // when
-            boolean started = ended.runIfCurrentWithBodyStart(bodyStart -> fail("Started on an ended claim."));
-            boolean ran = ended.runIfCurrent(() -> fail("Ran on an ended claim."));
+            boolean ran = ended.runIfCurrent(bodyStart -> fail("Ran on an ended claim."));
 
             // then
-            assertThat(started).isFalse();
             assertThat(ran).isFalse();
+        }
+
+        @Test
+        void tellsWhetherTheActionTookPlaceWhileTheClaimIsCurrent() {
+            // given
+            var claim = testSubject.startClaim(SEGMENT, new StubProcessingContext());
+
+            // when / then
+            assertThat(claim.runIfCurrent(bodyStart -> true)).isTrue();
+            assertThat(claim.runIfCurrent(bodyStart -> false)).isFalse();
         }
     }
 
     @Nested
-    class RunAlwaysWithBodyStart {
+    class RunAlways {
 
         @Test
         void letsBodiesStartOutsideASegmentedProcessor() {
@@ -327,7 +333,7 @@ class SegmentClaimsTest {
             var bodyStarts = new ArrayList<BodyStart>();
 
             // when
-            testSubject.runAlwaysWithBodyStart(null, bodyStarts::add);
+            testSubject.runAlways(null, bodyStarts::add);
 
             // then
             assertThat(bodyStarts).containsExactly(BodyStart.NOW);
@@ -340,7 +346,7 @@ class SegmentClaimsTest {
             var bodyStarts = new ArrayList<BodyStart>();
 
             // when
-            testSubject.runAlwaysWithBodyStart(SEGMENT, bodyStarts::add);
+            testSubject.runAlways(SEGMENT, bodyStarts::add);
 
             // then
             assertThat(bodyStarts).containsExactly(BodyStart.AT_ACTIVATION);
@@ -359,7 +365,7 @@ class SegmentClaimsTest {
             var bodyStarts = new ArrayList<BodyStart>();
 
             // when
-            claim.runAlwaysWithBodyStart(bodyStarts::add);
+            claim.runAlways(bodyStarts::add);
 
             // then
             assertThat(bodyStarts).containsExactly(BodyStart.AT_ACTIVATION);
@@ -381,7 +387,7 @@ class SegmentClaimsTest {
 
             // then - and the current claim is unaffected
             assertThat(cleanups).isEmpty();
-            assertThat(current.runIfCurrent(() -> cleanups.add("current"))).isTrue();
+            assertThat(current.runIfCurrent(bodyStart -> cleanups.add("current"))).isTrue();
             assertThat(testSubject.hasFailed(SEGMENT)).isFalse();
         }
 
@@ -471,12 +477,13 @@ class SegmentClaimsTest {
             var claim = claimBehindTheStartupHead();
             var actionRuns = new CountDownLatch(1);
             var actionMayEnd = new CountDownLatch(1);
-            var action = Thread.ofVirtual().start(() -> claim.runIfCurrent(() -> {
+            var action = Thread.ofVirtual().start(() -> claim.runIfCurrent(bodyStart -> {
                 actionRuns.countDown();
                 try {
-                    actionMayEnd.await(30, TimeUnit.SECONDS);
+                    return actionMayEnd.await(30, TimeUnit.SECONDS);
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
+                    return false;
                 }
             }));
             assertThat(actionRuns.await(5, TimeUnit.SECONDS)).isTrue();
@@ -490,7 +497,7 @@ class SegmentClaimsTest {
                 actionMayEnd.countDown();
                 assertThat(release.join(Duration.ofSeconds(5))).isTrue();
                 assertThat(action.join(Duration.ofSeconds(5))).isTrue();
-                assertThat(claim.runIfCurrent(() -> fail("Ran on an ended claim."))).isFalse();
+                assertThat(claim.runIfCurrent(bodyStart -> fail("Ran on an ended claim."))).isFalse();
             } finally {
                 actionMayEnd.countDown();
             }
@@ -498,7 +505,7 @@ class SegmentClaimsTest {
     }
 
     @Nested
-    class RunIfCurrent {
+    class Lock {
 
         @Test
         void letsAnActionWaitForAVirtualThreadWhileAVirtualThreadPerCarrierRunsAnActionOfTheClaim()
@@ -509,11 +516,12 @@ class SegmentClaimsTest {
             var released = new CountDownLatch(1);
             var actions = new ArrayList<Thread>();
             for (int i = 0; i < carrierThreadCount(); i++) {
-                actions.add(Thread.ofVirtual().start(() -> claim.runIfCurrent(() -> {
+                actions.add(Thread.ofVirtual().start(() -> claim.runIfCurrent(bodyStart -> {
                     try {
-                        released.await(30, TimeUnit.SECONDS);
+                        return released.await(30, TimeUnit.SECONDS);
                     } catch (InterruptedException e) {
                         Thread.currentThread().interrupt();
+                        return false;
                     }
                 })));
             }
@@ -535,33 +543,6 @@ class SegmentClaimsTest {
                 // Frees the carrier threads, also when the virtual thread above never ran.
                 released.countDown();
             }
-        }
-    }
-
-    @Nested
-    class ApplyIfCurrent {
-
-        @Test
-        void tellsWhetherTheTransitionTookPlaceWhileTheClaimIsCurrent() {
-            // given
-            var claim = testSubject.startClaim(SEGMENT, new StubProcessingContext());
-
-            // when / then
-            assertThat(claim.applyIfCurrent(() -> true)).isTrue();
-            assertThat(claim.applyIfCurrent(() -> false)).isFalse();
-        }
-
-        @Test
-        void appliesNothingOnceTheClaimEnded() {
-            // given
-            var ended = testSubject.startClaim(SEGMENT, new StubProcessingContext());
-            testSubject.release(SEGMENT);
-
-            // when
-            boolean applied = ended.applyIfCurrent(() -> fail("Applied on an ended claim."));
-
-            // then
-            assertThat(applied).isFalse();
         }
     }
 

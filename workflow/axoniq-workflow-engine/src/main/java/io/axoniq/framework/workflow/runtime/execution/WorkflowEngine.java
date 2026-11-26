@@ -454,7 +454,7 @@ public class WorkflowEngine implements
 
         // Exclusive with the activation of the segment, which starts every execution it finds that does not run
         // yet: either that activation finds this execution and starts it, or this start does, never both.
-        segmentClaims.runAlwaysWithBodyStart(segment, bodyStart -> {
+        segmentClaims.runAlways(segment, bodyStart -> {
             var claim = segment == null ? null : segmentClaims.claimOf(segment).orElse(null);
             var execution = liveWorkflows.enter(workflowId, hibernation.mayHibernate(claim), () -> {
                 logger.debug("Creating a new workflow '{}' with payload '{}'", workflowId, eventMessage.payload());
@@ -800,7 +800,7 @@ public class WorkflowEngine implements
         // Only while the claim is current: an instance that finishes restoring after its claim failed or the segment
         // was released would otherwise stay behind, and run from the state it sourced back then. A restore that
         // outlives its claim also leaves a hibernation of the workflow under another claim alone.
-        boolean added = claim.runIfCurrent(() -> {
+        boolean added = claim.runIfCurrent(bodyStart -> {
             boolean mayHibernate = hibernation.mayHibernate(claim);
             // Takes the place of a hibernation of the workflow under another claim, if any; else the restore enters.
             boolean restoredOver = hibernation.restoreOverHibernation(claim, workflowId, execution, mayHibernate);
@@ -813,6 +813,7 @@ public class WorkflowEngine implements
                 );
             }
             hibernation.allow(execution, claim);
+            return true;
         });
         if (!added) {
             logger.debug("Not restoring workflow '{}': the claim of segment {} failed or ended meanwhile.",

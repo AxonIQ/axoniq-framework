@@ -121,7 +121,7 @@ class LiveWorkflowsTest {
      */
     private void adopt(Hibernated hibernated) {
         try (var ignored = liveWorkflows.lock(hibernated.workflowId())) {
-            assertThat(claim.runIfCurrent(() -> assertThat(liveWorkflows.adopt(hibernated)).isTrue())).isTrue();
+            assertThat(claim.runIfCurrent(bodyStart -> liveWorkflows.adopt(hibernated))).isTrue();
         }
     }
 
@@ -129,22 +129,18 @@ class LiveWorkflowsTest {
      * Swaps the given execution for the given hibernation, under the locks the hibernation support takes.
      */
     private boolean hibernate(WorkflowExecution execution, Hibernated hibernated) {
-        var hibernatedNow = new AtomicBoolean();
         try (var ignored = liveWorkflows.lock(hibernated.workflowId())) {
-            claim.runIfCurrent(() -> hibernatedNow.set(liveWorkflows.hibernate(execution, hibernated)));
+            return claim.runIfCurrent(bodyStart -> liveWorkflows.hibernate(execution, hibernated));
         }
-        return hibernatedNow.get();
     }
 
     /**
      * Swaps the given hibernation for the given execution, under the locks the engine takes.
      */
     private boolean wake(Hibernated hibernated, WorkflowExecution execution) {
-        var woken = new AtomicBoolean();
         try (var ignored = liveWorkflows.lock(hibernated.workflowId())) {
-            claim.runIfCurrent(() -> woken.set(liveWorkflows.wake(hibernated, execution, Runnable::run)));
+            return claim.runIfCurrent(bodyStart -> liveWorkflows.wake(hibernated, execution, Runnable::run));
         }
-        return woken.get();
     }
 
     /**
