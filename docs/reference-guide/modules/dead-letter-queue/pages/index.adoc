@@ -60,6 +60,9 @@ The JPA dead-letter queue is a suitable option for production environments.
 It persists failed events in a `dead_letter_entry` table.
 The JDBC dead-letter queue is a suitable option for production environments and allows customization of the SQL dialect via a `DeadLetterStatementFactory`.
 
+* `MongoSequencedDeadLetterQueue` - MongoDB variant of the dead-letter queue, provided by the `axoniq-mongo` module. See xref:mongo:dead-letter-queue.adoc[] for details.
+It persists failed events in a `deadletters` collection.
+
 == Idempotency
 
 Before configuring a `SequencedDeadLetterQueue` it is vital to validate whether your event handling functions are idempotent.
@@ -86,8 +89,9 @@ That transaction covers three things atomically:
 The DLQ cannot protect against database exceptions that break the active transaction, regardless of whether the exception originates in the handler or in the DLQ persistence itself.
 ====
 
-The `JpaSequencedDeadLetterQueue` and `JdbcSequencedDeadLetterQueue` obtain their database connection from the active `ProcessingContext`, so they join the same transaction as the event handler.
+The `JpaSequencedDeadLetterQueue`, `JdbcSequencedDeadLetterQueue` and `MongoSequencedDeadLetterQueue` obtain their database connection, entity manager or MongoDB session from the active `ProcessingContext`, so they join the same transaction as the event handler.
 Because all three participate in the same transaction, a failure in any one of them rolls back all the others.
+For the MongoDB queue, see xref:mongo:dead-letter-queue.adoc#_transactions[Transactions] for how the session is bound.
 
 This has two practical consequences:
 
@@ -194,8 +198,9 @@ In Spring Boot, enabling the dead-letter queue for a specific processor only req
 axon.eventhandling.processors.my-processor.dlq.enabled=true
 ----
 
-Spring Boot auto-configuration will automatically detect whether JPA or JDBC is available and create the appropriate `SequencedDeadLetterQueueFactory` bean.
-If both JPA and JDBC are available, the auto-configuration creates a JPA-based queue by default.
+Spring Boot auto-configuration detects which of JPA, JDBC and MongoDB is available and creates the matching `SequencedDeadLetterQueueFactory` bean.
+When more than one is available, the JPA factory takes precedence over the JDBC factory, which takes precedence over the MongoDB factory, which requires the `axoniq-mongo` module and a `MongoDatabaseFactory` bean.
+To opt out, declare your own `SequencedDeadLetterQueueFactory` bean.
 No additional bean definitions are needed for the default setup.
 
 [NOTE]

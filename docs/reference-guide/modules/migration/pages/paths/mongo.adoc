@@ -1,0 +1,306 @@
+[.axoniq-feature]
+= Mongo Migration
+:navtitle: Mongo Migration
+:reftext: Mongo migration
+
+Axon Framework 4 applications stored their tracking tokens and dead letters in MongoDB through the separate `axon-mongo` extension.
+Axoniq Framework ships that capability itself, as the `axoniq-mongo` module described in xref:mongo:index.adoc[].
+It provides the `MongoTokenStore` and the `MongoSequencedDeadLetterQueue`.
+
+The module does not provide the other components of the extension.
+There is no MongoDB event storage engine, see the xref:migration:paths/event-store.adoc[Event Store Migration] for where Axon Framework 5 stores events.
+The `MongoSagaStore` is part of the `axoniq-legacy` module, see xref:migration:paths/sagas.adoc[Saga Migration].
+
+The tracking tokens that your application stored need a small change.
+The dead letters are not read as they are, which the xref:migration:paths/dlq.adoc[Dead-Letter Queue Migration] covers for the `MongoSequencedDeadLetterQueue`.
+
+[#before-you-start]
+== Before you start
+
+Four changes affect how you plan the migration.
+
+* *The token documents gain a field.*
+Axon Framework 5 stores a `mask` next to the `segment` of every token.
+The documents of Axon Framework 4 lack it, and the processors do not start without it, see <<step-masks>>.
+* *The serialization format of the tokens decides the effort.*
+Axon Framework 5 reads tokens that are stored as JSON, and maps the class names of Axon Framework 4 itself.
+Tokens that Axon Framework 4 stored with XStream, its default, need to be converted or reset, see <<step-serialization>>.
+* *Dead letters are not read.*
+The documents of the `MongoSequencedDeadLetterQueue` differ and its queues are named differently, so process or remove the dead letters of Axon Framework 4 first, see <<step-dead-letters>>.
+* *Processor names must not change.*
+A token is found by the name of its processor, which was the processing group in Axon Framework 4.
+Keep those names when you assign handlers to processors in Axon Framework 5, see <<step-processors>>.
+
+The indexes of both collections are the same as before, so there is nothing to do for them.
+
+[#step-dependencies]
+== Replace the dependencies
+
+Replace the dependencies of the extension, `org.axonframework.extensions.mongo:axon-mongo` and `org.axonframework.extensions.mongo:axon-mongo-spring-boot-starter`, by the Axoniq Framework modules:
+
+[source,xml]
+----
+<dependency>
+    <groupId>io.axoniq.framework</groupId>
+    <artifactId>axoniq-mongo</artifactId>
+</dependency>
+<dependency>
+    <groupId>io.axoniq.framework</groupId>
+    <artifactId>axoniq-dead-letter</artifactId>
+</dependency>
+----
+
+The `axoniq-dead-letter` module is only needed to use the dead-letter queue, and both go next to the Axoniq Framework Spring Boot starter.
+The Spring Boot auto-configuration is part of the Axoniq Framework Spring Boot starter, and activates when `axoniq-mongo` is on the classpath and a `MongoDatabaseFactory` bean exists.
+
+The classes moved to the `io.axoniq.framework` packages, and the builders of the token store and the queue became constructors.
+
+[cols="1,1"]
+|===
+|Axon Framework 4 extension |Axoniq Framework
+
+|`MongoTemplate`, `DefaultMongoTemplate` (`org.axonframework.extensions.mongo`)
+|`MongoTemplate`, `DefaultMongoTemplate` (`io.axoniq.framework.mongo`)
+
+|`MongoTokenStore` and its builder (`org.axonframework.extensions.mongo.eventsourcing.tokenstore`)
+|`MongoTokenStore` with a `MongoTokenStoreConfiguration` (`io.axoniq.framework.mongo.token`)
+
+|`MongoSequencedDeadLetterQueue` and its builder (`org.axonframework.extensions.mongo.eventhandling.deadletter`)
+|`MongoSequencedDeadLetterQueue` with a `MongoSequencedDeadLetterQueueConfiguration`, created by the `MongoSequencedDeadLetterQueueFactory` (`io.axoniq.framework.mongo.deadletter`)
+
+|`SpringMongoTemplate`, `SpringMongoTransactionManager` (`org.axonframework.extensions.mongo.spring`)
+|`SpringMongoTemplate`, `SpringMongoTransactionManager` (`io.axoniq.framework.springboot.mongo`)
+
+|The `TransactionManager` of the application
+|The `MongoTransactionalExecutorProvider` and, outside Spring, the `ClientSessionTransactionManager`
+|===
+
+[#step-properties]
+== Translate the properties
+
+[cols="1,1"]
+|===
+|Axon Framework 4 extension |Axoniq Framework
+
+|`axon.mongo.database-name`
+|Unchanged
+
+|`axon.eventhandling.tokenstore.claim-timeout`
+|Unchanged
+
+|`axon.mongo.token-store.enabled`
+|Removed.
+To use another token store, declare a `TokenStore` bean, or rely on the JPA or JDBC token store, which take precedence.
+
+|`axon.mongo.event-store.enabled`, `axon.mongo.saga-store.enabled`
+|No equivalent in the module, see the introduction
+|===
+
+The token store settings that you could only change in code in Axon Framework 4 are properties now:
+
+[cols="1,1"]
+|===
+|Setting |Property
+
+|The node identifier of the token store
+|`axon.mongo.token-store.node-id`
+
+|Creating the token store index
+|`axon.mongo.token-store.ensure-indexes`
+|===
+
+The properties of the dead-letter queue are part of the xref:migration:paths/dlq.adoc#_configuration[Dead-Letter Queue Migration].
+See xref:mongo:token-store.adoc[Token Store] for the complete list of the token store properties.
+
+[#step-configuration]
+== Move the configuration
+
+In Spring Boot, the auto-configuration registers what the extension registered: a `SpringMongoTemplate`, Spring's `MongoTransactionManager` wrapped in a `SpringMongoTransactionManager`, the `MongoTokenStore` and, for the processors that enable it, the dead-letter queue.
+The JPA token store takes precedence over the JDBC token store, which takes precedence over the MongoDB token store, as it did in Axon Framework 4.
+The same order applies to the dead-letter queues.
+Mixing MongoDB with relational components needs your attention, see xref:mongo:mongo-template.adoc#_mixing_mongodb_with_relational_components[Mixing MongoDB with relational components].
+
+Without Spring Boot, register the components yourself.
+The token store is registered for you once a `MongoTemplate` and a `MongoTransactionalExecutorProvider` are present, and the `TransactionManager` binds the MongoDB session that the token store and the queue write with.
+
+=== Token store
+
+[tabs]
+====
+Axon Framework 4::
++
+[source,java,role=axon4]
+----
+public class AxonConfig {
+
+    public void configureTokenStore(Configurer configurer, MongoClient mongoClient) {
+        MongoTemplate mongoTemplate = DefaultMongoTemplate.builder()
+                                                          .mongoDatabase(mongoClient)
+                                                          .build();
+
+        configurer.eventProcessing()
+                  .registerTokenStore(config -> MongoTokenStore.builder()
+                                                               .mongoTemplate(mongoTemplate)
+                                                               .serializer(config.serializer())
+                                                               .claimTimeout(Duration.ofSeconds(30))
+                                                               .nodeId("node-1")
+                                                               .build());
+    }
+}
+----
+
+Axon Framework 5::
++
+[source,java]
+----
+include::mongo:example$mongo/tokenstore/PlainTokenStoreConfig.java[tag=plain-token-store,indent=0]
+----
++
+Key changes:
++
+* The `MongoTemplate`, the `MongoTransactionalExecutorProvider` and a `TransactionManager` are registered as components, and the module builds the token store from them.
+* The claim timeout, the node identifier and the index creation are set on a `MongoTokenStoreConfiguration` component.
+* No `Serializer` is needed.
+The token store converts tokens with the `GeneralConverter` of the application.
+====
+
+[#step-processors]
+=== Keep the processor names
+
+A token is stored under the name of its processor.
+In Axon Framework 4, that was the processing group, which defaulted to the package of the event handler and which `@ProcessingGroup` or a property changed.
+Axon Framework 5 assigns event handlers to processors with an `EventProcessorDefinition` or by default per package.
+Name the processors in Axon Framework 5 as they were named in Axon Framework 4, and a processor finds its token again.
+
+All processors of Axon Framework 5 are pooled streaming processors.
+A tracking processor of Axon Framework 4 continues from the same token, and keeps the number of segments it had.
+Only the segments of tokens that are created for the first time follow the default of the new processor.
+
+[#step-masks]
+== Add the mask to the tokens
+
+Axon Framework 5 stores the `mask` of a segment next to its `segment` identifier.
+The two together tell which events the segment handles.
+A token document of Axon Framework 4 looks like this, with the `token` stored as bytes:
+
+[source,json]
+----
+{
+  "processorName": "shipping",
+  "segment": 0,
+  "owner": null,
+  "timestamp": 1795789458546,
+  "token": "{\"globalIndex\":5}",
+  "tokenType": "org.axonframework.eventhandling.GlobalSequenceTrackingToken"
+}
+----
+
+Without a `mask`, the processors do not start.
+The processors log `Error while initializing the Token Store` while they start, caused by a `NullPointerException` on the missing field.
+
+The mask follows from the complete set of segments of a processor, and not from a single segment.
+A processor with four equal segments has mask `3` for every segment, whereas a processor that started with two segments and had one of them split has the masks `3`, `1` and `3` for the segments `0`, `1` and `2`.
+See xref:migration:paths/token-store.adoc#_understanding_the_mask_column[Understanding the mask column] for the background.
+
+Pick one of the strategies of the xref:migration:paths/token-store.adoc#_choosing_a_migration_strategy[Token Store Migration]:
+
+* Scale every processor down to one segment before you migrate.
+The mask of the root segment is `0`, which you set with one update:
++
+[source,javascript]
+----
+db.trackingtokens.updateMany({mask: {$exists: false}}, {$set: {mask: 0}})
+----
+* Compute the masks of all segments.
+The following program does so for every token without a mask, with the same algorithm as the migration for relational token stores:
++
+[source,java]
+----
+include::example$migration/paths/mongo/PopulateTokenMasks.java[tag=populate-token-masks,indent=0]
+----
+* Reset the processors, see <<step-reset>>.
+
+Run it once, while no application node runs.
+It skips the tokens that have a mask, so running it again changes nothing.
+
+[#step-serialization]
+== Check how the tokens were serialized
+
+The `token` field holds the token as bytes.
+How Axon Framework 4 wrote them depends on the serializer of your application.
+
+=== Jackson (JSON)
+
+No action is required.
+Axon Framework 5 reads the tokens with its Jackson-based converter, and maps the class names of Axon Framework 4 to the new classes: `org.axonframework.eventhandling.GlobalSequenceTrackingToken` and its siblings.
+Once a processor updates a token, it stores it under the new class name, so the collection migrates itself while the processors run.
+
+=== XStream
+
+Axon Framework 5 does not include XStream, and fails to read the XML of these tokens.
+The processors log a `ConversionException`, caused by `Unexpected character '<'`, while they start.
+A token only records how far a processor has come, so there are two ways forward.
+
+Convert the tokens to JSON while your application still runs Axon Framework 4, and upgrade afterwards.
+Read each token with the serializer that your application uses, and write it back as JSON.
+Only the `token` field changes, and the `tokenType` keeps the old class name, which Axon Framework 5 maps when it reads it:
+
+[source,java,role=axon4]
+----
+public class ConvertTokensToJson {
+
+    public static void main(String[] args) {
+        // Run this with Axon Framework 4 on the classpath, before upgrading.
+        // args[0] is the connection string, args[1] the database name
+        Serializer xStream = XStreamSerializer.defaultSerializer(); // or the serializer of your application
+        Serializer jackson = JacksonSerializer.defaultSerializer();
+
+        try (MongoClient client = MongoClients.create(args[0])) {
+            MongoCollection<Document> tokens = client.getDatabase(args[1]).getCollection("trackingtokens");
+            for (Document entry : tokens.find(Filters.ne("token", null))) {
+                byte[] xml = entry.get("token", Binary.class).getData();
+                SerializedObject<byte[]> stored = new SimpleSerializedObject<>(
+                        xml, byte[].class, new SimpleSerializedType(entry.getString("tokenType"), null)
+                );
+                TrackingToken token = xStream.deserialize(stored);
+                byte[] json = jackson.serialize(token, byte[].class).getData();
+                tokens.updateOne(Filters.eq("_id", entry.get("_id")), Updates.set("token", json));
+            }
+        }
+    }
+}
+----
+
+Or reset the processors, see <<step-reset>>, and accept that they handle the events again.
+
+[#step-reset]
+== Reset the processors
+
+Delete the token documents, and Axon Framework 5 creates them again when the processors start:
+
+[source,javascript]
+----
+db.trackingtokens.deleteMany({})
+----
+
+The processors then start from the initial position that they are configured with, which is the start of the event stream by default, so they handle every event again.
+When they must continue from the latest event instead, make sure that they have caught up on Axon Framework 4 before you stop it, and configure that initial position.
+The new tokens get the default number of segments of a pooled streaming processor.
+
+[#step-dead-letters]
+== Migrate the dead-letter queue
+
+The `MongoSequencedDeadLetterQueue` moves along with the token store.
+The documents of its dead letters and the names of its queues changed, so Axon Framework 5 does not read the dead letters of Axon Framework 4.
+Process them on Axon Framework 4 before you migrate, or remove them.
+See the xref:migration:paths/dlq.adoc[Dead-Letter Queue Migration] for the details, in particular the xref:migration:paths/dlq.adoc#_mongodb_document_changes[MongoDB document changes], the xref:migration:paths/dlq.adoc#_queue_scoping_changes[queue scoping] and the xref:migration:paths/dlq.adoc#_configuration[configuration].
+
+[#step-verify]
+== Verify the migration
+
+Start the application, and check the collections:
+
+* The `trackingtokens` documents of your processors have a `mask`, and the `tokenType` of a token changes to `org.axonframework.messaging.eventhandling.processing.streaming.token.GlobalSequenceTrackingToken` once its processor handles an event.
+* A new failure ends up in `deadletters`, see the xref:migration:paths/dlq.adoc[Dead-Letter Queue Migration] for the name of its queue.
+* There is one extra token document, named `__config`.
+Axon Framework 5 keeps the storage identifier of the token store in it, and the processors do not claim it.
