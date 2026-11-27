@@ -343,6 +343,14 @@ final class WorkflowEngineHibernationSupport {
      * @return the claim, which the claim passes to {@link #claimed(Segment, SegmentClaim)}
      */
     SegmentClaim claiming(Segment segment) {
+        segmentLock.lock();
+        try {
+            // A split or a merge replaced the claimed segments this one overlaps, so none of them owns a workflow now.
+            claimedSegments.values().removeIf(claimed -> claimed.matches(segment.getSegmentId())
+                    || segment.matches(claimed.getSegmentId()));
+        } finally {
+            segmentLock.unlock();
+        }
         var leftovers = new HashMap<String, Hibernation>();
         hibernations.forEach((workflowId, hibernation) -> {
             if (WorkflowSegmentOwnership.ownedBy(segment, workflowId)) {
@@ -407,6 +415,18 @@ final class WorkflowEngineHibernationSupport {
     }
 
     /**
+     * Returns the claimed segment that owns the given workflow, or {@code null} when none does. The caller holds the
+     * segment lock.
+     */
+    private @Nullable Segment claimedSegmentOwning(String workflowId) {
+        return claimedSegments.values()
+                              .stream()
+                              .filter(claimed -> WorkflowSegmentOwnership.ownedBy(claimed, workflowId))
+                              .findFirst()
+                              .orElse(null);
+    }
+
+    /**
      * Records the given execution as hibernated and removes it from memory, when it is at a safe point. Runs on the
      * workflow thread, under the lock of the workflow, so no event or cancellation can reach the execution between the
      * safe point check and its removal.
@@ -430,11 +450,15 @@ final class WorkflowEngineHibernationSupport {
                              workflowId, openWaits.get());
                 return false;
             }
-            var segment = Segment.fromContext(execution.processingContext()).orElse(null);
+            var segmented = Segment.fromContext(execution.processingContext()).isPresent();
             segmentLock.lock();
             try {
-                if (segment != null && !claimedSegments.containsKey(segment.getSegmentId())) {
-                    // Its segment is being released, and the release stops the execution instead.
+                // The segment in its context may be one that a split or a merge replaced since, so the workflow is
+                // parked under the claimed segment that owns it now.
+                var segment = segmented ? claimedSegmentOwning(workflowId) : null;
+                if (segmented && segment == null) {
+                    // Its segment is being released, and the release stops the execution instead, or it is still
+                    // being claimed, and a later pass hibernates it.
                     return false;
                 }
                 park(workflowId, segment, deadline.get());

@@ -435,6 +435,50 @@ class WorkflowConfigurerHibernationTest {
             awaitCompletedAndNotHibernated(configuration, workflowIds);
         }
 
+        @Test
+        void isCompletedByItsEventWhenItHibernatesAfterTheSplitAndTheOtherHalfIsReleased() {
+            // given: a workflow of segment 2 stays in memory while segment 0 splits into segments 0 and 2, which this
+            // node both claims, and hibernates afterwards
+            var configuration = start(true, true);
+            var workflowId = "order-1";
+            publish(configuration, "start", workflowId, "wait");
+            awaitStepStarted(configuration, workflowId, WAIT_STEP);
+            var processor = engineProcessor(configuration);
+            assertThat(processor.splitSegment(0).orTimeout(5, TimeUnit.SECONDS).join()).isTrue();
+            awaitSegments(processor, Set.of(0, 1, 2));
+            awaitHibernated(configuration, workflowId);
+            var engine = engine(configuration);
+
+            // when
+            WorkflowEngineHibernationPasses.startReleaseOf(engine, new Segment(0, 3));
+
+            // then: it stays hibernated, and its event, which segment 2 delivers, completes it
+            assertThat(WorkflowEngineHibernationPasses.isHibernated(engine, workflowId)).isTrue();
+            publish(configuration, "paid", workflowId, "");
+            awaitWorkflowStatus(configuration, workflowId, WorkflowStatus.COMPLETED);
+        }
+
+        @Test
+        void isForgottenWithTheMergedSegmentWhenItHibernatesAfterTheMerge() {
+            // given: a workflow of segment 1 stays in memory while segments 0 and 1 merge into segment 0, and
+            // hibernates afterwards
+            var configuration = start(true, true);
+            var workflowId = "order-2";
+            publish(configuration, "start", workflowId, "wait");
+            awaitStepStarted(configuration, workflowId, WAIT_STEP);
+            var processor = engineProcessor(configuration);
+            assertThat(processor.mergeSegment(0).orTimeout(5, TimeUnit.SECONDS).join()).isTrue();
+            awaitSegments(processor, Set.of(0));
+            awaitHibernated(configuration, workflowId);
+            var engine = engine(configuration);
+
+            // when
+            WorkflowEngineHibernationPasses.startReleaseOf(engine, Segment.ROOT_SEGMENT);
+
+            // then: it does not stay hibernated on a node that no longer holds its segment
+            assertThat(WorkflowEngineHibernationPasses.isHibernated(engine, workflowId)).isFalse();
+        }
+
         /**
          * Starts 8 workflows whose id is their order id, so they spread over the segments the same way in every run,
          * and waits until each one hibernated.
