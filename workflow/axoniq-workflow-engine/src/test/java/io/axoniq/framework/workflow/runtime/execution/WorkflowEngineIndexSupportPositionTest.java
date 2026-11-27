@@ -48,7 +48,7 @@ class WorkflowEngineIndexSupportPositionTest {
     private final UnitOfWorkFactory unitOfWorkFactory = new SimpleUnitOfWorkFactory(EmptyApplicationContext.INSTANCE);
     private final RecordingWorkflowIndex index = new RecordingWorkflowIndex();
     private final WorkflowEngineIndexSupport testSubject =
-            new WorkflowEngineIndexSupport(index, MODULE, unitOfWorkFactory);
+            new WorkflowEngineIndexSupport(index, MODULE, unitOfWorkFactory, workflowId -> true);
 
     @Test
     void isThePositionOfTheTokenStoredWithTheChanges() {

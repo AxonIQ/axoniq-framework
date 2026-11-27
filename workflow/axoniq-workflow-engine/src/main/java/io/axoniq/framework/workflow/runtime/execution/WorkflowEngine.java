@@ -204,7 +204,7 @@ public class WorkflowEngine implements
      */
     @Internal
     public void enableIndex(WorkflowIndex workflowIndex, String name) {
-        this.index = new WorkflowEngineIndexSupport(workflowIndex, name, unitOfWorkFactory);
+        this.index = new WorkflowEngineIndexSupport(workflowIndex, name, unitOfWorkFactory, this::tracksWaitsOf);
     }
 
     @Override

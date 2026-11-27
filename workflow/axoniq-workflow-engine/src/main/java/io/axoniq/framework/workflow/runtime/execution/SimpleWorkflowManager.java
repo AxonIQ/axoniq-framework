@@ -92,7 +92,8 @@ public class SimpleWorkflowManager implements WorkflowManager {
      */
     @Internal
     public void enableIndex(WorkflowIndex workflowIndex, String name) {
-        this.index = new WorkflowEngineIndexSupport(workflowIndex, name, unitOfWorkFactory);
+        // Only reads, so it runs no workflow and notes no wake time.
+        this.index = new WorkflowEngineIndexSupport(workflowIndex, name, unitOfWorkFactory, workflowId -> false);
     }
 
     private static Stream<String> explicitWorkflowIds(WorkflowStateQuery query) {

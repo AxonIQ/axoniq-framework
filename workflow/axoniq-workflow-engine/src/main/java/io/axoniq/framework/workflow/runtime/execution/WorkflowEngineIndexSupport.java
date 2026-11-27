@@ -51,6 +51,7 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Predicate;
 
 /**
  * Keeps the {@link WorkflowIndex} of a {@link WorkflowEngine} current, and answers a segment claim and a query of the
@@ -76,6 +77,7 @@ final class WorkflowEngineIndexSupport {
     private final WorkflowIndex index;
     private final String module;
     private final UnitOfWorkFactory unitOfWorkFactory;
+    private final Predicate<String> runsHere;
     private final Map<Integer, PendingChanges> pending = new ConcurrentHashMap<>();
 
     /**
@@ -84,11 +86,17 @@ final class WorkflowEngineIndexSupport {
      * @param index             the index to keep current and to claim from
      * @param module            the name of the workflow module, which keeps its rows apart from those of other modules
      * @param unitOfWorkFactory creates the unit of work the tail of a claim is read in
+     * @param runsHere          whether the engine holds a workflow that may still hibernate: in memory and not
+     *                          terminal, or hibernated
      */
-    WorkflowEngineIndexSupport(WorkflowIndex index, String module, UnitOfWorkFactory unitOfWorkFactory) {
+    WorkflowEngineIndexSupport(WorkflowIndex index,
+                               String module,
+                               UnitOfWorkFactory unitOfWorkFactory,
+                               Predicate<String> runsHere) {
         this.index = Objects.requireNonNull(index, "The WorkflowIndex must not be null.");
         this.module = Objects.requireNonNull(module, "The module name must not be null.");
         this.unitOfWorkFactory = Objects.requireNonNull(unitOfWorkFactory, "The UnitOfWorkFactory must not be null.");
+        this.runsHere = Objects.requireNonNull(runsHere, "The runs here predicate must not be null.");
     }
 
     /**
@@ -145,7 +153,9 @@ final class WorkflowEngineIndexSupport {
     }
 
     /**
-     * Notes that the given workflow hibernated, unless the index does not {@link #keepsWakeTimes() keep wake times}.
+     * Notes that the given workflow hibernated, unless the index does not {@link #keepsWakeTimes() keep wake times} or
+     * the end of the workflow was noted. A copy that missed its end, as another node ended it, hibernates as if it
+     * still ran, and its wake time would add the removed row again.
      *
      * @param segment    the segment that owns the workflow, or {@code null} outside a segmented processor
      * @param workflowId the identifier of the workflow
@@ -437,7 +447,7 @@ final class WorkflowEngineIndexSupport {
     }
 
     private PendingChanges pendingOf(Segment segment) {
-        return pending.computeIfAbsent(segment.getSegmentId(), segmentId -> new PendingChanges());
+        return pending.computeIfAbsent(segment.getSegmentId(), segmentId -> new PendingChanges(runsHere));
     }
 
     /**
@@ -459,21 +469,37 @@ final class WorkflowEngineIndexSupport {
     private static final class PendingChanges {
 
         private final ReentrantLock lock = new ReentrantLock();
+        private final Predicate<String> runsHere;
         private final List<PendingChange> changes = new ArrayList<>();
         // The wake time per workflow, or empty when it woke.
         private final Map<String, Optional<Instant>> wakesAt = new HashMap<>();
         // The workflows whose row carried a wake time when the segment was claimed.
         private final Set<String> hinted = new HashSet<>();
+        // The ended workflows the engine may still hold a copy of, which takes no wake time.
+        private final Set<String> ended = new HashSet<>();
         private boolean sourced;
         private boolean initializes;
         private Set<String> rowsAtClaim = Set.of();
         private boolean positionStored;
         private long positionStoredAt;
 
+        private PendingChanges(Predicate<String> runsHere) {
+            this.runsHere = runsHere;
+        }
+
         private void note(@Nullable TrackingToken token, List<WorkflowIndexChange> noted) {
             lock.lock();
             try {
-                noted.forEach(change -> changes.add(new PendingChange(token, change)));
+                noted.forEach(change -> {
+                    changes.add(new PendingChange(token, change));
+                    if (change instanceof WorkflowEnded workflowEnded) {
+                        ended.add(workflowEnded.workflowId());
+                        wakesAt.remove(workflowEnded.workflowId());
+                    } else if (change instanceof WorkflowStarted started) {
+                        // A sourced claim replaces a row by an end and a start.
+                        ended.remove(started.workflowId());
+                    }
+                });
             } finally {
                 lock.unlock();
             }
@@ -482,7 +508,9 @@ final class WorkflowEngineIndexSupport {
         private void noteWakesAt(String workflowId, Optional<Instant> wakes) {
             lock.lock();
             try {
-                wakesAt.put(workflowId, wakes);
+                if (!ended.contains(workflowId)) {
+                    wakesAt.put(workflowId, wakes);
+                }
             } finally {
                 lock.unlock();
             }
@@ -580,6 +608,8 @@ final class WorkflowEngineIndexSupport {
                 changes.removeIf(storedChanges::contains);
                 // Removes only the stored value, so a wake time noted since the store stays.
                 storedWakesAt.forEach(wakesAt::remove);
+                // A workflow the engine no longer runs notes no wake time.
+                ended.removeIf(runsHere.negate());
                 if (positionStored) {
                     this.positionStored = true;
                     positionStoredAt = System.nanoTime();
