@@ -8,17 +8,24 @@
 
 package io.axoniq.framework.springboot.autoconfig;
 
+import io.axoniq.framework.messaging.eventhandling.deadletter.SequencedDeadLetterQueueFactory;
 import io.axoniq.framework.mongo.MongoTemplate;
+import io.axoniq.framework.mongo.deadletter.MongoSequencedDeadLetterQueueConfiguration;
+import io.axoniq.framework.mongo.deadletter.MongoSequencedDeadLetterQueueFactory;
 import io.axoniq.framework.mongo.token.MongoTokenStore;
 import io.axoniq.framework.mongo.token.MongoTokenStoreConfiguration;
 import io.axoniq.framework.mongo.transaction.MongoTransactionalExecutorProvider;
 import io.axoniq.framework.springboot.mongo.MockMongoDatabaseFactory;
 import io.axoniq.framework.springboot.mongo.SpringMongoTemplate;
 import io.axoniq.framework.springboot.mongo.SpringMongoTransactionManager;
+import org.axonframework.extension.springboot.autoconfig.ConverterAutoConfiguration;
+import org.axonframework.extension.springboot.autoconfig.Jackson2ConverterAutoConfiguration;
+import org.axonframework.extension.springboot.autoconfig.Jackson2MapperAutoConfiguration;
 import org.axonframework.messaging.core.unitofwork.transaction.NoTransactionManager;
 import org.axonframework.messaging.core.unitofwork.transaction.TransactionManager;
 import org.junit.jupiter.api.*;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
+import org.springframework.boot.autoconfigure.jackson.JacksonAutoConfiguration;
 import org.springframework.boot.test.context.FilteredClassLoader;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.data.mongodb.MongoDatabaseFactory;
@@ -45,8 +52,16 @@ class MongoAutoConfigurationTest {
     @BeforeEach
     void setUp() {
         testContext = new ApplicationContextRunner()
-                .withConfiguration(AutoConfigurations.of(MongoAutoConfiguration.class))
-                .withPropertyValues("axon.axonserver.enabled=false");
+                .withConfiguration(AutoConfigurations.of(JacksonAutoConfiguration.class,
+                                                         Jackson2MapperAutoConfiguration.class,
+                                                         Jackson2ConverterAutoConfiguration.class,
+                                                         ConverterAutoConfiguration.class,
+                                                         MongoAutoConfiguration.class,
+                                                         MongoDeadLetterQueueAutoConfiguration.class))
+                .withPropertyValues("axon.axonserver.enabled=false",
+                                    "axon.converter.general=jackson2",
+                                    "axon.converter.messages=jackson2",
+                                    "axon.converter.events=jackson2");
     }
 
     private ApplicationContextRunner withDatabaseFactory() {
@@ -182,6 +197,79 @@ class MongoAutoConfigurationTest {
     }
 
     @Nested
+    class DeadLetterQueueConfiguration {
+
+        @Test
+        void defaultsToTheDefaultConfigurationOfTheQueue() {
+            withDatabaseFactory().run(context -> assertThat(
+                    context.getBean(MongoSequencedDeadLetterQueueConfiguration.class)
+            ).isEqualTo(MongoSequencedDeadLetterQueueConfiguration.DEFAULT));
+        }
+
+        @Test
+        void bindsTheDeadLetterQueueProperties() {
+            withDatabaseFactory().withPropertyValues("axon.mongo.dead-letter-queue.max-sequences=5",
+                                                     "axon.mongo.dead-letter-queue.claim-duration=2m",
+                                                     "axon.mongo.dead-letter-queue.allow-disk-use=false")
+                                 .run(context -> {
+                                     MongoSequencedDeadLetterQueueConfiguration result =
+                                             context.getBean(MongoSequencedDeadLetterQueueConfiguration.class);
+
+                                     assertThat(result.maxSequences()).isEqualTo(5);
+                                     assertThat(result.claimDuration()).isEqualTo(Duration.ofMinutes(2));
+                                     assertThat(result.allowDiskUse()).isFalse();
+                                 });
+        }
+
+        @Test
+        void userDeclaredConfigurationWins() {
+            MongoSequencedDeadLetterQueueConfiguration custom =
+                    MongoSequencedDeadLetterQueueConfiguration.DEFAULT.maxSequences(3);
+            withDatabaseFactory().withBean(MongoSequencedDeadLetterQueueConfiguration.class, () -> custom)
+                                 .withPropertyValues("axon.mongo.dead-letter-queue.max-sequences=5")
+                                 .run(context -> assertThat(
+                                         context.getBean(MongoSequencedDeadLetterQueueConfiguration.class)
+                                 ).isSameAs(custom));
+        }
+
+        @Test
+        void isNotRegisteredWhenTheDeadLetterQueueIsNotOnTheClasspath() {
+            withDatabaseFactory().withClassLoader(new FilteredClassLoader(SequencedDeadLetterQueueFactory.class))
+                                 .run(context -> assertThat(context)
+                                         .doesNotHaveBean(MongoSequencedDeadLetterQueueConfiguration.class));
+        }
+    }
+
+    @Nested
+    class DeadLetterQueueFactory {
+
+        @Test
+        void registersTheMongoFactoryAsABeanAsTheDeadLetterQueueSupportOnlyActsOnAFactoryBean() {
+            withDatabaseFactory().run(context -> {
+                assertThat(context).hasSingleBean(SequencedDeadLetterQueueFactory.class);
+                assertThat(context.getBean(SequencedDeadLetterQueueFactory.class))
+                        .isInstanceOf(MongoSequencedDeadLetterQueueFactory.class);
+            });
+        }
+
+        @Test
+        void userDeclaredFactoryWins() {
+            SequencedDeadLetterQueueFactory custom = (processingGroup, configuration) -> {
+                throw new UnsupportedOperationException();
+            };
+            withDatabaseFactory().withBean(SequencedDeadLetterQueueFactory.class, () -> custom).run(context -> {
+                assertThat(context).hasSingleBean(SequencedDeadLetterQueueFactory.class);
+                assertThat(context.getBean(SequencedDeadLetterQueueFactory.class)).isSameAs(custom);
+            });
+        }
+
+        @Test
+        void isNotRegisteredWithoutAMongoDatabaseFactory() {
+            testContext.run(context -> assertThat(context).doesNotHaveBean(SequencedDeadLetterQueueFactory.class));
+        }
+    }
+
+    @Nested
     class WithoutMongoDatabaseFactory {
 
         @Test
@@ -189,6 +277,7 @@ class MongoAutoConfigurationTest {
             testContext.run(context -> {
                 assertThat(context).doesNotHaveBean(MongoTemplate.class);
                 assertThat(context).doesNotHaveBean(MongoTokenStoreConfiguration.class);
+                assertThat(context).doesNotHaveBean(MongoSequencedDeadLetterQueueConfiguration.class);
                 assertThat(context).doesNotHaveBean(MongoTransactionalExecutorProvider.class);
             });
         }

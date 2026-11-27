@@ -44,6 +44,17 @@ import org.axonframework.messaging.eventhandling.processing.streaming.token.stor
  * as a {@link MongoTokenStoreConfiguration} component, which the {@link MongoTokenStore} is constructed with. Register
  * a {@code MongoTokenStoreConfiguration} component yourself to change the settings of the token store.
  * <p>
+ * When the optional {@code axoniq-dead-letter} dependency is on the classpath, a
+ * {@link io.axoniq.framework.mongo.deadletter.MongoSequencedDeadLetterQueueFactory} is registered as the
+ * {@code SequencedDeadLetterQueueFactory} too, together with the
+ * {@link io.axoniq.framework.mongo.deadletter.MongoSequencedDeadLetterQueueConfiguration#DEFAULT default} configuration
+ * as a {@code MongoSequencedDeadLetterQueueConfiguration} component. Register a
+ * {@code MongoSequencedDeadLetterQueueConfiguration} component yourself to change the settings of the queues. The
+ * queues it creates execute every operation through the same {@code MongoTransactionalExecutorProvider}, so enqueueing
+ * a dead letter takes part in the MongoDB transaction of the event handling too. In an application that mixes MongoDB
+ * with JPA or JDBC, register the {@code TransactionalExecutorProvider} and {@code TransactionManager} that fit your
+ * setup yourself.
+ * <p>
  * Example usage:
  * <pre>{@code
  * MessagingConfigurer.create()
@@ -67,6 +78,9 @@ public class MongoConfigurationEnhancer implements ConfigurationEnhancer {
      */
     public static final int ENHANCER_ORDER = Integer.MIN_VALUE + 30;
 
+    private static final String DEAD_LETTER_QUEUE_FACTORY_CLASS =
+            "io.axoniq.framework.messaging.eventhandling.deadletter.SequencedDeadLetterQueueFactory";
+
     @Override
     public void enhance(ComponentRegistry registry) {
         if (!registry.hasComponent(MongoTemplate.class, SearchScope.ALL)) {
@@ -84,6 +98,10 @@ public class MongoConfigurationEnhancer implements ConfigurationEnhancer {
                         ? mongoTokenStore(config)
                         : delegate
         );
+
+        if (isDeadLetterQueueAvailable()) {
+            MongoDeadLetterQueueRegistrar.register(registry);
+        }
     }
 
     private static MongoTokenStore mongoTokenStore(Configuration config) {
@@ -91,6 +109,15 @@ public class MongoConfigurationEnhancer implements ConfigurationEnhancer {
                                    config.getComponent(MongoTransactionalExecutorProvider.class),
                                    config.getComponent(GeneralConverter.class),
                                    config.getComponent(MongoTokenStoreConfiguration.class));
+    }
+
+    private static boolean isDeadLetterQueueAvailable() {
+        try {
+            Class.forName(DEAD_LETTER_QUEUE_FACTORY_CLASS, false, MongoConfigurationEnhancer.class.getClassLoader());
+            return true;
+        } catch (ClassNotFoundException | LinkageError e) {
+            return false;
+        }
     }
 
     @Override

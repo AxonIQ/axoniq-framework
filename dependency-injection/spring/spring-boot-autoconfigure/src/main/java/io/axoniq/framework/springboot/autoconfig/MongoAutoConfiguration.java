@@ -12,6 +12,7 @@ import com.mongodb.ClientSessionOptions;
 import com.mongodb.TransactionOptions;
 import com.mongodb.WriteConcern;
 import io.axoniq.framework.mongo.MongoTemplate;
+import io.axoniq.framework.mongo.deadletter.MongoSequencedDeadLetterQueueConfiguration;
 import io.axoniq.framework.mongo.token.MongoTokenStore;
 import io.axoniq.framework.mongo.token.MongoTokenStoreConfiguration;
 import io.axoniq.framework.mongo.transaction.MongoTransactionalExecutorProvider;
@@ -26,6 +27,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
 import org.springframework.data.mongodb.MongoDatabaseFactory;
 import org.springframework.data.mongodb.MongoTransactionManager;
 
@@ -34,23 +36,25 @@ import org.springframework.data.mongodb.MongoTransactionManager;
  * {@link io.axoniq.framework.mongo.configuration.MongoConfigurationEnhancer} registers, when {@code axoniq-mongo} is on
  * the classpath and a {@link MongoDatabaseFactory} bean is available.
  * <p>
- * The enhancer registers the {@link MongoTokenStore} from the components that are available. This configuration
- * provides those components from Spring:
+ * The enhancer registers the {@link MongoTokenStore} and the MongoDB-backed dead-letter queue factory from the
+ * components that are available. This configuration provides those components from Spring:
  * <ul>
  *     <li>the {@link MongoTemplate}, a {@link SpringMongoTemplate} that takes part in a transaction managed by a
  *     Spring {@code MongoTransactionManager}. It uses the database named by the {@code axon.mongo.database-name}
  *     property, or the default database of the {@link MongoDatabaseFactory} when that is not set. Declare your own
  *     {@link MongoTemplate} bean to change that, for example to use other collection names;</li>
- *     <li>the {@link MongoTokenStoreConfiguration}, bound from the {@code axon.mongo.token-store} properties. Declare
- *     your own bean to replace the properties;</li>
+ *     <li>the {@link MongoTokenStoreConfiguration} and, when the dead-letter queue is on the classpath, the
+ *     {@link MongoSequencedDeadLetterQueueConfiguration}, bound from the {@code axon.mongo.token-store} and
+ *     {@code axon.mongo.dead-letter-queue} properties. Declare your own bean of either type to replace the
+ *     properties;</li>
  *     <li>the transaction components, set up in the same way as it was for Axon Framework 4.</li>
  * </ul>
  * The transaction components are Spring's {@link MongoTransactionManager}, wrapped in a
  * {@link SpringMongoTransactionManager} that becomes the {@link TransactionManager}. The processing lifecycle then runs
  * in a Spring managed MongoDB transaction, which everything that obtains its database through Spring's
  * {@code MongoDatabaseUtils} joins. That includes Spring Data's {@code MongoTemplate} and repositories. The token store
- * runs its operations with the session of that transaction, through the {@link MongoTransactionalExecutorProvider} that
- * this configuration registers too.
+ * and dead-letter queue run their operations with the session of that transaction, through the
+ * {@link MongoTransactionalExecutorProvider} that this configuration registers too.
  * <p>
  * A bean of any of these types that you declare yourself takes precedence. This configuration runs after the JPA and
  * JDBC transaction configurations, so it never replaces their {@code TransactionManager}. An application that mixes
@@ -165,5 +169,31 @@ public class MongoAutoConfiguration {
     public MongoTokenStoreConfiguration axonMongoTokenStoreConfiguration(MongoProperties properties,
                                                                          TokenStoreProperties tokenStoreProperties) {
         return properties.getTokenStore().toConfiguration(tokenStoreProperties.getClaimTimeout());
+    }
+
+    /**
+     * Provides the configuration of the MongoDB-backed dead-letter queue, when the dead-letter queue is on the
+     * classpath.
+     */
+    @Configuration(proxyBeanMethods = false)
+    @ConditionalOnClass(
+            name = "io.axoniq.framework.messaging.eventhandling.deadletter.SequencedDeadLetterQueueFactory"
+    )
+    static class DeadLetterQueueConfigurationProvider {
+
+        /**
+         * Creates the {@link MongoSequencedDeadLetterQueueConfiguration} from the {@code axon.mongo.dead-letter-queue}
+         * properties.
+         * <p>
+         * To configure the queues in code, declare your own {@link MongoSequencedDeadLetterQueueConfiguration} bean.
+         *
+         * @param properties the bound {@link MongoProperties}
+         * @return the {@link MongoSequencedDeadLetterQueueConfiguration} the properties describe
+         */
+        @Bean
+        @ConditionalOnMissingBean
+        MongoSequencedDeadLetterQueueConfiguration axonMongoDeadLetterQueueConfiguration(MongoProperties properties) {
+            return properties.getDeadLetterQueue().toConfiguration();
+        }
     }
 }

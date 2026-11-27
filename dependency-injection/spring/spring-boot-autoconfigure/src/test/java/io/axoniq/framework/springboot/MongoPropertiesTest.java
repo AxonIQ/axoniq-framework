@@ -8,6 +8,7 @@
 
 package io.axoniq.framework.springboot;
 
+import io.axoniq.framework.mongo.deadletter.MongoSequencedDeadLetterQueueConfiguration;
 import io.axoniq.framework.mongo.token.MongoTokenStoreConfiguration;
 import org.junit.jupiter.api.*;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -27,6 +28,53 @@ class MongoPropertiesTest {
 
     private final ApplicationContextRunner contextRunner =
             new ApplicationContextRunner().withUserConfiguration(PropertiesConfig.class);
+
+    @Nested
+    class DeadLetterQueue {
+
+        @Test
+        void defaultsDescribeTheDefaultConfigurationOfTheQueue() {
+            // given / when
+            MongoSequencedDeadLetterQueueConfiguration result =
+                    new MongoProperties().getDeadLetterQueue().toConfiguration();
+
+            // then
+            assertThat(result).isEqualTo(MongoSequencedDeadLetterQueueConfiguration.DEFAULT);
+        }
+
+        @Test
+        void bindsEveryProperty() {
+            contextRunner.withPropertyValues("axon.mongo.dead-letter-queue.max-sequences=5",
+                                             "axon.mongo.dead-letter-queue.max-sequence-size=6",
+                                             "axon.mongo.dead-letter-queue.query-page-size=7",
+                                             "axon.mongo.dead-letter-queue.claim-duration=2m",
+                                             "axon.mongo.dead-letter-queue.ensure-indexes=false",
+                                             "axon.mongo.dead-letter-queue.allow-disk-use=false")
+                         .run(context -> {
+                             // given / when
+                             MongoSequencedDeadLetterQueueConfiguration result =
+                                     context.getBean(MongoProperties.class).getDeadLetterQueue().toConfiguration();
+
+                             // then
+                             assertThat(result.maxSequences()).isEqualTo(5);
+                             assertThat(result.maxSequenceSize()).isEqualTo(6);
+                             assertThat(result.queryPageSize()).isEqualTo(7);
+                             assertThat(result.claimDuration()).isEqualTo(Duration.ofMinutes(2));
+                             assertThat(result.ensureIndexes()).isFalse();
+                             assertThat(result.allowDiskUse()).isFalse();
+                         });
+        }
+
+        @Test
+        void keepsTheDefaultConverter() {
+            // given / when
+            MongoSequencedDeadLetterQueueConfiguration result =
+                    new MongoProperties().getDeadLetterQueue().toConfiguration();
+
+            // then
+            assertThat(result.converter()).isSameAs(MongoSequencedDeadLetterQueueConfiguration.DEFAULT.converter());
+        }
+    }
 
     @Nested
     class TokenStore {

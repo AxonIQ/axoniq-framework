@@ -12,7 +12,10 @@ import com.mongodb.client.ClientSession;
 import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.model.IndexOptions;
+import io.axoniq.framework.messaging.eventhandling.deadletter.SequencedDeadLetterQueueFactory;
 import io.axoniq.framework.mongo.MongoTemplate;
+import io.axoniq.framework.mongo.deadletter.MongoSequencedDeadLetterQueueConfiguration;
+import io.axoniq.framework.mongo.deadletter.MongoSequencedDeadLetterQueueFactory;
 import io.axoniq.framework.mongo.token.MongoTokenStore;
 import io.axoniq.framework.mongo.token.MongoTokenStoreConfiguration;
 import io.axoniq.framework.mongo.transaction.MongoTransactionalExecutorProvider;
@@ -113,6 +116,58 @@ class MongoConfigurationEnhancerTest {
         }
 
         @Test
+        void registersMongoDeadLetterQueueFactory() {
+            // given
+            MessagingConfigurer configurer = MessagingConfigurer.create().componentRegistry(
+                    cr -> cr.registerComponent(MongoTemplate.class, c -> mongoTemplate)
+                            .registerComponent(MongoTransactionalExecutorProvider.class, c -> provider)
+            );
+
+            // when
+            AxonConfiguration configuration = configurer.build();
+
+            // then
+            assertThat(configuration.getComponent(SequencedDeadLetterQueueFactory.class))
+                    .isInstanceOf(MongoSequencedDeadLetterQueueFactory.class);
+        }
+
+        @Test
+        void registersTheDefaultDeadLetterQueueConfiguration() {
+            // given
+            MessagingConfigurer configurer = MessagingConfigurer.create().componentRegistry(
+                    cr -> cr.registerComponent(MongoTemplate.class, c -> mongoTemplate)
+                            .registerComponent(MongoTransactionalExecutorProvider.class, c -> provider)
+            );
+
+            // when
+            AxonConfiguration configuration = configurer.build();
+
+            // then
+            assertThat(configuration.getComponent(MongoSequencedDeadLetterQueueConfiguration.class))
+                    .isSameAs(MongoSequencedDeadLetterQueueConfiguration.DEFAULT);
+        }
+
+        @Test
+        void keepsAnExplicitlyRegisteredDeadLetterQueueConfiguration() {
+            // given
+            MongoSequencedDeadLetterQueueConfiguration explicit =
+                    MongoSequencedDeadLetterQueueConfiguration.DEFAULT.maxSequences(7);
+            MessagingConfigurer configurer = MessagingConfigurer.create().componentRegistry(
+                    cr -> cr.registerComponent(MongoTemplate.class, c -> mongoTemplate)
+                            .registerComponent(MongoTransactionalExecutorProvider.class, c -> provider)
+                            .registerComponent(MongoSequencedDeadLetterQueueConfiguration.class, c -> explicit)
+            );
+
+            // when
+            AxonConfiguration configuration = configurer.build();
+            configuration.getComponent(SequencedDeadLetterQueueFactory.class);
+
+            // then
+            assertThat(configuration.getComponent(MongoSequencedDeadLetterQueueConfiguration.class))
+                    .isSameAs(explicit);
+        }
+
+        @Test
         void doesNotReplaceExplicitlyRegisteredTokenStore() {
             // given
             TokenStore explicitTokenStore = new InMemoryTokenStore() {
@@ -151,7 +206,7 @@ class MongoConfigurationEnhancerTest {
         }
 
         @Test
-        void keepsTheDefaultTokenStore() {
+        void keepsDefaultTokenStoreAndRegistersNoDeadLetterQueueFactory() {
             // given
             MessagingConfigurer configurer = MessagingConfigurer.create();
 
@@ -160,6 +215,7 @@ class MongoConfigurationEnhancerTest {
 
             // then
             assertThat(configuration.getComponent(TokenStore.class)).isInstanceOf(InMemoryTokenStore.class);
+            assertThat(configuration.getOptionalComponent(SequencedDeadLetterQueueFactory.class)).isEmpty();
         }
     }
 }
