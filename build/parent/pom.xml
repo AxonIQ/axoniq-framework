@@ -48,6 +48,7 @@
         <hikari.version>7.1.0</hikari.version>
         <hsqldb.version>2.7.4</hsqldb.version>
         <hibernate-core.version>7.4.15.Final</hibernate-core.version>
+        <mongo.driver.version>5.14.0</mongo.driver.version>
         <mysql-connector-java.version>26.10.0</mysql-connector-java.version>
         <postgresql.version>42.7.14</postgresql.version>
         <ojdbc.version>23.26.3.0.0</ojdbc.version>
@@ -326,6 +327,15 @@
                 <groupId>org.postgresql</groupId>
                 <artifactId>postgresql</artifactId>
                 <version>${postgresql.version}</version>
+            </dependency>
+
+            <!-- Declared before the Spring Boot BOM, which would otherwise manage an older MongoDB driver. -->
+            <dependency>
+                <groupId>org.mongodb</groupId>
+                <artifactId>mongodb-driver-bom</artifactId>
+                <version>${mongo.driver.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
             </dependency>
 
             <!-- gRPC -->

@@ -85,6 +85,12 @@
         </dependency>
         <dependency>
             <groupId>io.axoniq.framework</groupId>
+            <artifactId>axoniq-mongo</artifactId>
+            <version>${project.version}</version>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>io.axoniq.framework</groupId>
             <artifactId>axoniq-multi-tenancy</artifactId>
             <version>${project.version}</version>
             <optional>true</optional>
@@ -214,6 +220,11 @@
             <artifactId>spring-boot-starter-data-jpa</artifactId>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <groupId>org.springframework.data</groupId>
+            <artifactId>spring-data-mongodb</artifactId>
+            <optional>true</optional>
+        </dependency>
         <!-- Spring Boot Actuator -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -245,15 +256,21 @@
         </dependency>
         <!-- Test -->
         <dependency>
+            <groupId>io.axoniq.framework</groupId>
+            <artifactId>axoniq-workflow-test</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
             <groupId>org.testcontainers</groupId>
             <artifactId>testcontainers-junit-jupiter</artifactId>
             <version>${testcontainers.version}</version>
             <scope>test</scope>
         </dependency>
         <dependency>
-            <groupId>io.axoniq.framework</groupId>
-            <artifactId>axoniq-workflow-test</artifactId>
-            <version>${project.version}</version>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>testcontainers-mongodb</artifactId>
+            <version>${testcontainers.version}</version>
             <scope>test</scope>
         </dependency>
     </dependencies>
@@ -262,11 +279,34 @@
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <excludes>
+                        <exclude>org/axonframework/extensions/mongo/springboot/autoconfig/MongoDeadLetterProviderAutoConfiguration.java</exclude>
+                    </excludes>
+                    <testExcludes>
+                        <testExclude>org/axonframework/extensions/mongo/spring/MongoDeadLetteringWithTransActionsIntegrationTest.java</testExclude>
+                    </testExcludes>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-checkstyle-plugin</artifactId>
+                <configuration>
+                    <excludes>org/axonframework/extensions/mongo/**</excludes>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <configuration>
                     <systemPropertyVariables>
                         <!-- Spring Cloud is on this module's test classpath; unrelated test contexts do not use it. -->
                         <axon.springcloud.enabled>false</axon.springcloud.enabled>
+                        <!-- Spring Data MongoDB is on this module's test classpath, so Spring Boot provides a
+                             MongoDatabaseFactory to every full auto-configuration context, which activates the
+                             MongoDB components. The Mongo tests include these auto-configurations again themselves. -->
+                        <spring.autoconfigure.exclude>org.springframework.boot.autoconfigure.mongo.MongoAutoConfiguration,org.springframework.boot.autoconfigure.data.mongo.MongoDataAutoConfiguration,org.springframework.boot.mongodb.autoconfigure.MongoAutoConfiguration,org.springframework.boot.data.mongodb.autoconfigure.DataMongoAutoConfiguration</spring.autoconfigure.exclude>
                     </systemPropertyVariables>
                 </configuration>
             </plugin>
@@ -277,6 +317,7 @@
                     <systemPropertyVariables>
                         <!-- Integration tests in this module exercise Axon Server, not Spring Cloud discovery. -->
                         <axon.springcloud.enabled>false</axon.springcloud.enabled>
+                        <spring.autoconfigure.exclude>org.springframework.boot.autoconfigure.mongo.MongoAutoConfiguration,org.springframework.boot.autoconfigure.data.mongo.MongoDataAutoConfiguration,org.springframework.boot.mongodb.autoconfigure.MongoAutoConfiguration,org.springframework.boot.data.mongodb.autoconfigure.DataMongoAutoConfiguration</spring.autoconfigure.exclude>
                     </systemPropertyVariables>
                 </configuration>
             </plugin>
