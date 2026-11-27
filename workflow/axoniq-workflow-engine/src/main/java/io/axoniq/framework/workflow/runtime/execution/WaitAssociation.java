@@ -22,13 +22,13 @@ import java.util.Set;
 /**
  * One open wait of a workflow instance: the event the wait expects, and the associations that event must satisfy.
  * <p>
- * A row is built from the wait-step STARTED event of a {@code waitForEvent} step, whose payload names the awaited event
- * and its associations. The {@link WorkflowEngine} uses rows to route an incoming event to the workflows waiting for it
- * only, instead of to every workflow. A row is a routing hint and never decides a wake on its own: the waiting
- * execution evaluates its full wait condition, including any predicate, when the event arrives. A row may therefore
- * match more events than the wait accepts, but never fewer.
+ * A wait association is built from the wait-step STARTED event of a {@code waitForEvent} step, whose payload names the
+ * awaited event and its associations. The {@link WorkflowEngine} uses wait associations to route an incoming event to
+ * the workflows waiting for it only, instead of to every workflow. A wait association is a routing hint and never
+ * decides a wake on its own: the waiting execution evaluates its full wait condition, including any predicate, when the
+ * event arrives. A wait association may therefore match more events than the wait accepts, but never fewer.
  * <p>
- * A row whose STARTED payload cannot be read has no {@link #eventName()} and matches every routed event.
+ * A wait association whose STARTED payload cannot be read has no {@link #eventName()} and matches every routed event.
  *
  * @param workflowId   the identifier of the waiting workflow
  * @param stepName     the name of the waiting step, unique within the workflow
@@ -46,7 +46,7 @@ public record WaitAssociation(String workflowId,
     private static final Logger logger = LoggerFactory.getLogger(WaitAssociation.class);
 
     /**
-     * Creates a row, copying the given associations.
+     * Creates a wait association, copying the given associations.
      *
      * @param workflowId   the identifier of the waiting workflow
      * @param stepName     the name of the waiting step, unique within the workflow
@@ -61,13 +61,13 @@ public record WaitAssociation(String workflowId,
     }
 
     /**
-     * Builds the row of the wait started by the given wait-step STARTED event.
+     * Builds the wait association of the wait started by the given wait-step STARTED event.
      * <p>
      * Reads the payload as the {@link StepWaitInfo} the wait step publishes. Never throws on the payload: a payload
-     * that cannot be read yields a row without an {@link #eventName()}, which matches every routed event.
+     * that cannot be read yields a wait association without an {@link #eventName()}, which matches every routed event.
      *
      * @param startedWaitEvent a wait-step STARTED event, carrying {@code workflowId} and {@code stepName} metadata
-     * @return the row of the started wait
+     * @return the wait association of the started wait
      */
     public static WaitAssociation fromStartedEvent(EventMessage startedWaitEvent) {
         var metadata = startedWaitEvent.metadata();
@@ -85,6 +85,8 @@ public record WaitAssociation(String workflowId,
             logger.debug("Wait [{}] of workflow [{}] names no awaited event; it matches every routed event.",
                          stepName, workflowId);
         } catch (RuntimeException e) {
+            // An old or broken payload ends here, whether the handler or the sourcing of the open waits reads it. A
+            // wildcard is correct for both.
             logger.debug("Could not read the payload of wait [{}] of workflow [{}]; it matches every routed event.",
                          stepName, workflowId, e);
         }
@@ -92,12 +94,11 @@ public record WaitAssociation(String workflowId,
     }
 
     /**
-     * Returns whether this row matches every routed event, because its STARTED payload could not be read.
+     * Returns whether this wait association matches every routed event, because its STARTED payload could not be read.
      * <p>
-     * Routing reads that payload before the event reaches a handler, when it cannot always be converted yet. Matching
-     * every event keeps such a wait from missing the event it waits for.
+     * Matching every event keeps such a wait from missing the event it waits for.
      *
-     * @return {@code true} when this row has no {@link #eventName()}
+     * @return {@code true} when this wait association has no {@link #eventName()}
      */
     public boolean isWildcard() {
         return eventName == null;
