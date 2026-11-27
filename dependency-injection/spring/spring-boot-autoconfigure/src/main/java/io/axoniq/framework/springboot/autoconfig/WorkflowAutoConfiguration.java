@@ -44,18 +44,6 @@ public class WorkflowAutoConfiguration {
     }
 
     /**
-     * Provides the {@link SnapshotPolicy} of the running-workflow list when snapshots are enabled.
-     *
-     * @param workflowProperties the {@link WorkflowProperties} holding the snapshot settings
-     * @return the {@link SnapshotPolicy} of the running-workflow list
-     */
-    @Bean(WorkflowConfigurationDefaults.RUNNING_WORKFLOWS_SNAPSHOT_POLICY)
-    @ConditionalOnProperty(prefix = "axon.workflow.snapshots", name = "enabled", havingValue = "true")
-    public SnapshotPolicy runningWorkflowsSnapshotPolicy(WorkflowProperties workflowProperties) {
-        return SnapshotPolicy.afterEvents(workflowProperties.getSnapshots().getRunningWorkflows().getAfterEvents());
-    }
-
-    /**
      * Provides the {@link SnapshotPolicy} of the state of each workflow instance when snapshots are enabled.
      *
      * @param workflowProperties the {@link WorkflowProperties} holding the snapshot settings
@@ -65,17 +53,5 @@ public class WorkflowAutoConfiguration {
     @ConditionalOnProperty(prefix = "axon.workflow.snapshots", name = "enabled", havingValue = "true")
     public SnapshotPolicy workflowStateSnapshotPolicy(WorkflowProperties workflowProperties) {
         return SnapshotPolicy.afterEvents(workflowProperties.getSnapshots().getWorkflowState().getAfterEvents());
-    }
-
-    /**
-     * Provides the {@link SnapshotPolicy} of the open-wait list when snapshots are enabled.
-     *
-     * @param workflowProperties the {@link WorkflowProperties} holding the snapshot settings
-     * @return the {@link SnapshotPolicy} of the open-wait list
-     */
-    @Bean(WorkflowConfigurationDefaults.WAIT_ASSOCIATIONS_SNAPSHOT_POLICY)
-    @ConditionalOnProperty(prefix = "axon.workflow.snapshots", name = "enabled", havingValue = "true")
-    public SnapshotPolicy waitAssociationsSnapshotPolicy(WorkflowProperties workflowProperties) {
-        return SnapshotPolicy.afterEvents(workflowProperties.getSnapshots().getWaitAssociations().getAfterEvents());
     }
 }

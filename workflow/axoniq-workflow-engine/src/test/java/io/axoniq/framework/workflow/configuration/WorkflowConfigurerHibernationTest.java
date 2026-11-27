@@ -88,10 +88,10 @@ import static org.awaitility.Awaitility.await;
  */
 class WorkflowConfigurerHibernationTest {
 
-    private static final String MODULE = "hibernation";
-    private static final int SEGMENT_COUNT = 2;
-    private static final String WAIT_STEP = "awaitPaid";
-    private static final String SLEEP_STEP = "cooldown";
+    static final String MODULE = "hibernation";
+    static final int SEGMENT_COUNT = 2;
+    static final String WAIT_STEP = "awaitPaid";
+    static final String SLEEP_STEP = "cooldown";
     private static final String EXECUTE_STEP = "charge";
     private static final String SHIP_STEP = "awaitShipped";
 
@@ -335,7 +335,7 @@ class WorkflowConfigurerHibernationTest {
     class HibernatedWorkflowOfAClaimedSegment {
 
         @Test
-        void isRestoredByTheNextNodeAfterARestartAndHibernatesAgain() {
+        void isHibernatedOnTheNextNodeAfterARestart() {
             // given: a hibernated workflow on a node that stops, which releases its segments
             var stopped = start(true);
             var workflowId = startWorkflow(stopped, "wait", "order-1", WAIT_STEP);
@@ -345,18 +345,18 @@ class WorkflowConfigurerHibernationTest {
             // when: a new node starts on the same stores
             var restarted = start(true);
 
-            // then: its claim loads the workflow into memory, and a pass sends it out again
-            awaitRestoredAndHibernated(restarted, workflowId);
+            // then: the workflow is out of memory on the new node
+            awaitHibernatedAfterTheClaim(restarted, workflowId);
         }
 
         @Test
         void isWokenByTheAwaitedEventAfterTheClaim() {
-            // given: the claim restored it, and it hibernated again
+            // given: the workflow is out of memory again after the claim of its segment
             var configuration = start(true);
             var workflowId = startWorkflow(configuration, "wait", "order-1", WAIT_STEP);
             awaitHibernated(configuration, workflowId);
             releaseAllSegments(configuration);
-            awaitRestoredAndHibernated(configuration, workflowId);
+            awaitHibernatedAfterTheClaim(configuration, workflowId);
 
             // when
             publish(configuration, "paid", "order-1", "");
@@ -372,7 +372,7 @@ class WorkflowConfigurerHibernationTest {
             var workflowId = startWorkflow(configuration, "wait", "order-1", WAIT_STEP);
             awaitHibernated(configuration, workflowId);
             releaseAllSegments(configuration);
-            awaitRestoredAndHibernated(configuration, workflowId);
+            awaitHibernatedAfterTheClaim(configuration, workflowId);
 
             // when
             cancellationService(configuration).requestWorkflowCancellation(workflowId, null)
@@ -569,6 +569,10 @@ class WorkflowConfigurerHibernationTest {
                                                         ctx.waitForEvent(paidOrder(orderId)),
                                                         ctx.waitForEvent(sleep(Duration.ofMinutes(5))))
                                               .await();
+            case "allMatchWaitAndShortSleep" -> ctx.allMatch(result -> true,
+                                                             ctx.waitForEvent(paidOrder(orderId)),
+                                                             ctx.waitForEvent(sleep(Duration.ofMinutes(2))))
+                                                   .await();
             case "waitThenWait" -> {
                 var paid = ctx.waitForEvent(paidOrder(orderId));
                 var shipped = ctx.waitForEvent(waitFor(SHIP_STEP,
@@ -648,7 +652,7 @@ class WorkflowConfigurerHibernationTest {
         );
     }
 
-    private AxonConfiguration start(boolean hibernation) {
+    AxonConfiguration start(boolean hibernation) {
         return start(hibernation, false);
     }
 
@@ -681,6 +685,7 @@ class WorkflowConfigurerHibernationTest {
             module.hibernationInterval(hibernationInterval);
         }
         var configurer = WorkflowConfigurer.create();
+        configure(configurer);
         configurer.componentRegistry(cr -> cr
                 .registerComponent(EventStorageEngine.class, cfg -> storageEngine)
                 .registerComponent(TokenStore.class, cfg -> tokenStore)
@@ -692,9 +697,17 @@ class WorkflowConfigurerHibernationTest {
     }
 
     /**
+     * Applies the settings a subclass runs these tests with. Does nothing here.
+     *
+     * @param configurer the configurer of the configuration that is about to be built
+     */
+    void configure(WorkflowConfigurer configurer) {
+    }
+
+    /**
      * Starts a workflow of the given kind and returns its id once the given step is durably started.
      */
-    private String startWorkflow(AxonConfiguration configuration, String kind, String orderId, String stepName) {
+    String startWorkflow(AxonConfiguration configuration, String kind, String orderId, String stepName) {
         // The default workflow id is the identifier of the start event.
         var workflowId = publish(configuration, "start", orderId, kind);
         awaitStepStarted(configuration, workflowId, stepName);
@@ -711,7 +724,7 @@ class WorkflowConfigurerHibernationTest {
      * Runs hibernation passes until the workflow left memory. A pass that finds the workflow before it is safe, for
      * example before it received its own STARTED event, is dropped, so a later pass hibernates it.
      */
-    private void awaitHibernated(AxonConfiguration configuration, String workflowId) {
+    void awaitHibernated(AxonConfiguration configuration, String workflowId) {
         var engine = engine(configuration);
         await().atMost(5, TimeUnit.SECONDS).pollInterval(Duration.ofMillis(50)).until(() -> {
             WorkflowEngineHibernationPasses.runPass(engine);
@@ -733,7 +746,7 @@ class WorkflowConfigurerHibernationTest {
     /**
      * Releases every segment of the engine's processor, which claims them again after half a second.
      */
-    private static void releaseAllSegments(AxonConfiguration configuration) {
+    static void releaseAllSegments(AxonConfiguration configuration) {
         var processor = engineProcessor(configuration);
         IntStream.range(0, SEGMENT_COUNT)
                  .mapToObj(segment -> processor.releaseSegment(segment, 500, TimeUnit.MILLISECONDS))
@@ -742,9 +755,9 @@ class WorkflowConfigurerHibernationTest {
 
     /**
      * Waits until the claim of the workflow's segment loaded it into memory, then runs hibernation passes until it
-     * hibernated again.
+     * hibernated again. A subclass whose claim keeps the workflow out of memory overrides it.
      */
-    private void awaitRestoredAndHibernated(AxonConfiguration configuration, String workflowId) {
+    void awaitHibernatedAfterTheClaim(AxonConfiguration configuration, String workflowId) {
         await().atMost(5, TimeUnit.SECONDS)
                .pollInterval(Duration.ofMillis(10))
                .until(() -> inMemory(configuration, workflowId));
@@ -752,20 +765,20 @@ class WorkflowConfigurerHibernationTest {
         assertThat(WorkflowEngineHibernationPasses.isHibernated(engine(configuration), workflowId)).isTrue();
     }
 
-    private void awaitWorkflowStatus(AxonConfiguration configuration, String workflowId, WorkflowStatus status) {
+    void awaitWorkflowStatus(AxonConfiguration configuration, String workflowId, WorkflowStatus status) {
         await().atMost(10, TimeUnit.SECONDS)
                .ignoreExceptions()
                .until(() -> durableState(configuration, workflowId).workflowStatus() == status);
     }
 
-    private static boolean inMemory(Configuration configuration, String workflowId) {
+    static boolean inMemory(Configuration configuration, String workflowId) {
         return engine(configuration).workflowExecutions()
                                     .stream()
                                     .map(WorkflowExecution::workflowId)
                                     .anyMatch(workflowId::equals);
     }
 
-    private static String publish(AxonConfiguration configuration, String eventName, String orderId, String kind) {
+    static String publish(AxonConfiguration configuration, String eventName, String orderId, String kind) {
         var event = new GenericEventMessage(new MessageType(eventName), Map.of("orderId", orderId, "kind", kind));
         configuration.getComponent(UnitOfWorkFactory.class)
                      .create("publish-" + eventName)
@@ -777,11 +790,11 @@ class WorkflowConfigurerHibernationTest {
         return event.identifier();
     }
 
-    private static WorkflowEngine engine(Configuration configuration) {
+    static WorkflowEngine engine(Configuration configuration) {
         return find(configuration, WorkflowEngine.class).orElseThrow();
     }
 
-    private static WorkflowCancellationService cancellationService(Configuration configuration) {
+    static WorkflowCancellationService cancellationService(Configuration configuration) {
         return find(configuration, WorkflowCancellationService.class).orElseThrow();
     }
 
@@ -809,7 +822,7 @@ class WorkflowConfigurerHibernationTest {
     }
 
     @SuppressWarnings("unchecked")
-    private static EventSourcedWorkflowState durableState(AxonConfiguration configuration, String workflowId) {
+    static EventSourcedWorkflowState durableState(AxonConfiguration configuration, String workflowId) {
         var repository = (Repository<String, EventSourcedWorkflowState>) configuration
                 .getComponents(Repository.class)
                 .values()

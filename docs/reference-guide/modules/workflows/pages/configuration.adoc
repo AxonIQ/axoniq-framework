@@ -197,6 +197,7 @@ The processor claims its segments in the unnamed `TokenStore` component of your 
 Register a durable store, for example `JpaTokenStore`, as an unnamed component.
 Without one, the engine falls back to an in-memory token store and logs a warning.
 Claims then stay inside the process, so run a single node only.
+A <<workflow-index,workflow index>> belongs in the database of this token store.
 
 === Processor settings
 
@@ -215,12 +216,15 @@ When a node stops, another node claims its segments and resumes the unfinished w
 Every event an instance appends carries an append condition on its workflow id.
 A node that lost its claim without noticing has its append rejected, logs a warning, and stops that instance.
 
+On every segment claim, the node learns which workflow instances of the segment are running and which waits are open.
+Without a workflow index, it sources both from the event store, for all segments.
+With a <<workflow-index,workflow index>>, it reads only the rows of the claimed segment.
+
 [[snapshots]]
 === Snapshots
 
-The engine sources three event-sourced entities: the list of running workflows, the state of each workflow instance, and the list of open waits.
-Without snapshots, a node that takes over replays the full event history of each.
-A node loads both lists on every segment claim, so a node that claims many segments replays that history once per segment.
+The engine sources the state of each workflow instance from its events.
+Without snapshots, a node that takes over replays the full event history of each instance it restores.
 Snapshots are off by default.
 Enable them on the `WorkflowConfigurer`:
 
@@ -228,12 +232,13 @@ Enable them on the `WorkflowConfigurer`:
 ----
 include::example$workflows/configuration/ConfigurationExamples.java[tag=snapshots,indent=0]
 ----
-<.> The policy for the list of running workflows. There is one list, so there is one snapshot of it.
 <.> The policy for the workflow state. Each workflow instance has a snapshot of its own, stored under its workflow id.
-<.> The policy for the list of open waits, see xref:workflow-internals.adoc#event-routing[Event routing]. There is one list, so there is one snapshot of it.
 
-All three policies default to a snapshot after 50 sourced events.
-The setting applies to every `WorkflowModule` of the application, because all modules share these entities.
+The policy defaults to a snapshot after 50 sourced events.
+The setting applies to every `WorkflowModule` of the application.
+
+The list of running workflows and the list of open waits are never snapshotted.
+A segment claim reads them from the <<workflow-index,workflow index>> instead; without a workflow index, it sources them from the events.
 The history projector does not source these entities, so snapshots do not affect it.
 
 Snapshots need a `SnapshotStore` component.
@@ -268,12 +273,180 @@ A wake that failed, for example because the event store was unreachable, is trie
 Hibernation trades memory for load time, because every wake replays the history of the workflow.
 Enable it for workflows that wait for days or months.
 Keep it disabled for many short-lived workflows, or for workflows with short timeouts, because they would load again and again.
-After a restart, or when a node claims a segment, the engine replays every unfinished workflow of that segment, which then hibernates again at the same wait.
+
+A restart or a segment claim keeps hibernated workflows out of memory, instead of replaying them, with a <<workflow-index,workflow index>> in the database of the token store.
+This also holds after a crash.
+In every other setup, a segment claim replays every unfinished workflow of the segment, which then hibernates again.
 
 Hibernation relies on the workflow body being deterministic, like every replay does.
 The engine stops a hibernating body the way it stops the workflows of a released segment, so a body that catches exceptions around a step result must rethrow the `StepInterruptedException`.
 
-See xref:workflow-internals.adoc#hibernation[Hibernation internals] for how the engine decides when a workflow hibernates, and how it wakes and restores hibernated workflows.
+See xref:workflow-internals.adoc#hibernation[Hibernation internals] for how the engine decides when a workflow hibernates, and how it keeps and wakes hibernated workflows.
+
+[[workflow-index]]
+== Workflow index
+
+When a node claims a segment, the engine must learn three things: which workflow instances of that segment are running, which waits are open, and which workflows are hibernated.
+Without a workflow index, a segment claim sources the list of running workflows and the list of open waits from the event store.
+Both lists hold all segments, so the cost of a segment claim grows with the whole application, not with the claimed segment.
+
+The workflow index is an optional store of rows: one row per running workflow and one row per open wait.
+A segment claim reads only the rows of its own segment, and then the few wait and lifecycle events published after its stored token.
+The engine writes the rows that changed each time the processor stores its token.
+The events stay the source of truth.
+
+In a Spring Boot application with JPA or JDBC, the workflow index is on by default, see <<spring-boot,Spring Boot>>.
+Without Spring Boot, register it on the `WorkflowConfigurer`, as shown below.
+It pays off most with many running workflows, with many segments, and with <<hibernation,hibernated workflows>> that must stay out of memory after a crash.
+
+=== Enabling the workflow index
+
+Register the workflow index on the `WorkflowConfigurer`.
+One workflow index serves every `WorkflowModule` of the application.
+There are three workflow indexes, with the same behavior:
+
+[cols="1,2,2"]
+|===
+|Workflow index |Keeps its rows |Use it with
+
+|`JpaWorkflowIndex`
+|In a database, through JPA
+|A `JpaTokenStore`
+
+|`JdbcWorkflowIndex`
+|In a database, through JDBC
+|A `JdbcTokenStore`
+
+|`InMemoryWorkflowIndex`
+|In memory, on one node
+|Tests, and a single node with an `InMemoryTokenStore`
+|===
+
+Choose the JPA or the JDBC workflow index for production.
+Both keep their rows in the same tables, so an application can switch between them.
+The in-memory workflow index loses its rows when the application stops, so every start builds them again.
+
+`JpaWorkflowIndex` keeps the rows in a database through JPA:
+
+[source,java]
+----
+include::example$workflows/configuration/ConfigurationExamples.java[tag=workflow-index-jpa,indent=0]
+----
+<.> The `JpaWorkflowIndex` uses the `TransactionalExecutorProvider` of the token store, so a write of rows joins the transaction that stores the token.
+<.> The default configuration, for a workflow index in the database of the token store.
+
+`JdbcWorkflowIndex` keeps the rows in a database through JDBC:
+
+[source,java]
+----
+include::example$workflows/configuration/ConfigurationExamples.java[tag=workflow-index-jdbc,indent=0]
+----
+<.> The `JdbcWorkflowIndex` uses the `TransactionalExecutorProvider` of the token store, so a write of rows joins the transaction that stores the token.
+<.> The default configuration, for a workflow index in the database of the token store, with the default table and column names.
+
+A write of rows joins the transaction of the token only when the unit of work of the processor binds a JDBC connection to its processing context, as the Spring transaction manager does.
+
+`InMemoryWorkflowIndex` keeps the rows in memory.
+Use it in tests, and in an application that runs on a single node with an in-memory token store.
+Its rows are lost when the application stops, and nodes do not share them.
+
+[source,java]
+----
+include::example$workflows/configuration/ConfigurationExamples.java[tag=workflow-index-in-memory,indent=0]
+----
+
+[[workflow-index-tables]]
+=== Tables
+
+`JpaWorkflowIndex` keeps its rows in the tables of four entities from the package `io.axoniq.framework.workflow.index.jpa`.
+Add the four entities to the persistence unit that the `JpaWorkflowIndex` uses.
+`JdbcWorkflowIndex` uses the same tables and columns, named by a `WorkflowIndexSchema`.
+
+[cols="2,1,3"]
+|===
+|Entity |One row per |Content
+
+|`WorkflowIndexEntry`
+|Running workflow
+|The name of the workflow module, the workflow id, the segment key, and the time a hibernated workflow wakes at.
+
+|`WorkflowIndexWaitEntry`
+|Open wait
+|The name of the workflow module, the workflow id, the step name, the segment key, the event name, and the associations of the wait.
+
+|`WorkflowIndexInitialization`
+|Initialized workflow module
+|The name of the workflow module. Without this row, the segment claims of the module source both lists, see <<workflow-index-initialization,Initialization>>.
+
+|`WorkflowIndexSegmentEntry`
+|Segment of the workflow processor
+|The name of the workflow module, the range of segment keys of the segment, and the position of its last stored token. Only the workflow manager reads it, see xref:workflow-internals.adoc#workflow-manager-index[Workflow manager].
+|===
+
+A row holds a module name and a workflow id of at most 255 characters, a step name of at most 1024 characters, and at most 10,000 bytes of associations per wait.
+
+The `JdbcWorkflowIndex` does not create its tables.
+Create them with your migration tool, or once with `createSchema` and a `WorkflowIndexTableFactory`, such as the `GenericWorkflowIndexTableFactory` or the `PostgresWorkflowIndexTableFactory`:
+
+[source,java]
+----
+include::example$workflows/configuration/ConfigurationExamples.java[tag=workflow-index-jdbc-tables,indent=0]
+----
+
+The default names of `WorkflowIndexSchema` are those the JPA entities get without a naming strategy.
+Under a naming strategy that renames them, such as the default one of Spring Boot, the JPA tables get other names, for example `workflow_index_entry`.
+To share the tables then, give the `WorkflowIndexSchema` the names that naming strategy produces.
+A database that enforces these lengths rejects a longer value, and the segment then fails to store its token.
+
+=== Database of the token store
+
+Keep the workflow index in the database of the token store.
+The engine then writes the rows in the transaction of the token, so the rows and the token are committed together.
+For this, the processor must run its unit of work in a JPA transaction of that database.
+Storing the token checks that the node still owns the segment, so a node that lost its segment claim writes nothing.
+
+The time a hibernated workflow wakes at is a fact of one node, not of an event.
+The engine stores it only under that check.
+When the workflow index is in another database than the token store, configure `storesWithToken(false)`:
+
+[source,java]
+----
+include::example$workflows/configuration/ConfigurationExamples.java[tag=workflow-index-other-database,indent=0]
+----
+
+The engine then writes the rows in a transaction of their own, before the processor stores the token.
+A segment claim still reads its running workflows and open waits from the rows.
+The rows hold no wake time, so a segment claim replays the hibernated workflows of the segment, as it does without a workflow index.
+
+[[workflow-index-initialization]]
+=== Initialization
+
+A workflow index starts empty, while workflows may be running already.
+Until a workflow module is initialized, the workflow index loads nothing for it, and a segment claim sources both lists as without a workflow index.
+That segment claim then initializes the workflow index for the whole module: it adds the rows of every running workflow and open wait, and marks the module initialized.
+From then on, a segment claim reads the rows of its segment, and the events after the token of the segment.
+
+The rows of that first segment claim hold no wake times.
+So the segment claims of that first start load every running workflow into memory, including the hibernated ones.
+Those workflows hibernate again, and the engine then stores their wake times.
+
+[[workflow-index-upgrades]]
+=== Upgrades and token resets
+
+The token of a segment is the position of its rows: the engine writes the rows an event changes before the processor stores a token past that event.
+A node without the workflow index would move the token past events whose changes the rows do not hold.
+So every node that runs a workflow module must use the same workflow index:
+
+* A rolling upgrade from a version without the workflow index is not supported.
+Stop every node of the old version first, then start the nodes with the workflow index.
+Their first segment claims initialize it.
+* To turn the workflow index off and on again, empty its tables before you turn it on.
+* An application that resets the tokens of the workflow processor must empty the tables of the workflow index too, its initialization included.
+
+A workflow module with a workflow index refuses to start when its processor could store a token past changes the rows do not hold.
+That is the case when the processor has event handling components of its own, uses another progress strategy, or keeps its tokens in an `InMemoryTokenStore` while the workflow index survives a restart.
+
+See xref:workflow-internals.adoc#segment-claims[Segment claims] for how a segment claim reads the rows, and how the engine writes them.
 
 [[spring-boot]]
 == Spring Boot
@@ -331,18 +504,46 @@ The history processor uses the same properties under `axon.workflow.history.*`.
 |`false`
 |Whether snapshots are taken.
 
-|`running-workflows.after-events`
-|`50`
-|Number of sourced events after which the list of running workflows is snapshotted.
-
 |`workflow-state.after-events`
 |`50`
 |Number of sourced events after which the state of a workflow instance is snapshotted.
 
+|`running-workflows.after-events`
+|`50`
+|Deprecated, has no effect: the list of running workflows is not snapshotted.
+
 |`wait-associations.after-events`
 |`50`
-|Number of sourced events after which the list of open waits is snapshotted.
+|Deprecated, has no effect: the list of open waits is not snapshotted.
 |===
+
+The <<workflow-index,workflow index>> is configured with `axon.workflow.index.*` properties.
+
+[cols="2,1,3"]
+|===
+|Property |Default |Description
+
+|`enabled`
+|`true`
+|Registers a workflow index bean, when the application has a `GeneralConverter` bean and an `EntityManagerFactory` or `DataSource` bean. `false` turns the workflow index off.
+
+|`stores-with-token`
+|not set
+|Whether the workflow index is in the database of the token store. Not set, it is `true` when the token store has the type of the workflow index: a `JpaTokenStore` for the JPA one, a `JdbcTokenStore` for the JDBC one. Set it to `false` when the token store uses another database.
+|===
+
+The workflow index follows the type of the token store:
+
+. A `JdbcTokenStore` bean gets a `JdbcWorkflowIndex` on the `DataSource` of the application.
+. Otherwise, an application with an `EntityManagerFactory` gets a `JpaWorkflowIndex`, with its four entities in the persistence unit.
+. Otherwise, an application with a `DataSource` gets a `JdbcWorkflowIndex`.
+
+Declare a `JdbcTokenStore` bean with its own type, not as a `TokenStore`, so the first rule finds it.
+Spring Boot does not create the tables of a `JdbcWorkflowIndex`, see <<workflow-index-tables,Tables>>.
+A `WorkflowIndexSchema` bean of the application renames its tables and columns.
+An application that defines its own `WorkflowIndex` bean replaces the default.
+The `InMemoryWorkflowIndex` is never registered by default.
+Turning the <<workflow-index,workflow index>> on through these properties follows the rules of <<workflow-index-upgrades,Upgrades and token resets>>.
 
 See <<running-on-several-nodes,Running on several nodes>> for the token store, failover and snapshots, and <<performance-tuning,Performance tuning>> for choosing the processor values.
 
@@ -383,6 +584,19 @@ The engine requests a checkpoint after every event it handles.
 A positive checkpoint interval forwards at most one request per segment within that interval, so the processor waits less often under load.
 The stored position then lags by at most the events of one interval, and those events are processed again after a crash.
 The interval is in milliseconds. It defaults to `0`, which forwards every request.
+
+=== Segment claims
+
+Without a workflow index, every segment claim loads the list of running workflows and the list of open waits, which hold all segments.
+The time and memory of a restart or a failover then grow with the number of segments and with the number of workflows of the whole application.
+With a <<workflow-index,workflow index>>, a segment claim reads only the rows of its own segment.
+Turn the workflow index on when restarts or failovers take long.
+
+Enable <<snapshots,snapshots>> as well.
+A snapshot shortens the load of a single workflow instance, which the workflow index does not do.
+
+With a workflow index, each stored token also writes the rows that changed since the token before it.
+A larger batch size or a checkpoint interval groups more changes into one write.
 
 === Java version
 

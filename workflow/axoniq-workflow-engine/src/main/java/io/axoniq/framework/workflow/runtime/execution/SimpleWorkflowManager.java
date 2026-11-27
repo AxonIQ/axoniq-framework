@@ -29,10 +29,12 @@ import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Flow;
 import java.util.concurrent.SubmissionPublisher;
+import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Stream;
 
@@ -51,6 +53,7 @@ public class SimpleWorkflowManager implements WorkflowManager {
     private final WorkflowStore workflowStore;
     private final UnitOfWorkFactory unitOfWorkFactory;
     private final Executor executor;
+    private @Nullable WorkflowEngineIndexSupport index;
 
     /**
      * Creates a Workflow Manager using a history projection and live cancellation delivery.
@@ -78,6 +81,19 @@ public class SimpleWorkflowManager implements WorkflowManager {
         this.unitOfWorkFactory = Objects.requireNonNull(unitOfWorkFactory,
                                                         "The UnitOfWorkFactory must not be null.");
         this.executor = Objects.requireNonNull(executor, "The executor must not be null.");
+    }
+
+    /**
+     * Lets a query for live workflows find which candidates run in the given {@link WorkflowIndex}, instead of sourcing
+     * every running workflow. Internal, because the workflow module calls it when an index is configured.
+     *
+     * @param workflowIndex the index to read
+     * @param name          the name of the workflow module, which keeps its rows apart from those of other modules
+     */
+    @Internal
+    public void enableIndex(WorkflowIndex workflowIndex, String name) {
+        // Only reads, so it runs no workflow and notes no wake time.
+        this.index = new WorkflowEngineIndexSupport(workflowIndex, name, unitOfWorkFactory, workflowId -> false);
     }
 
     private static Stream<String> explicitWorkflowIds(WorkflowStateQuery query) {
@@ -118,14 +134,17 @@ public class SimpleWorkflowManager implements WorkflowManager {
      * it exists and still matches the query.
      */
     private CompletableFuture<List<WorkflowState>> matching(WorkflowStateQuery query) {
-        return matching(query, workflowId -> true);
+        return matching(query, candidates -> CompletableFuture.completedFuture(workflowId -> true));
     }
 
     /**
      * Resolves the states matching a query, like {@link #matching(WorkflowStateQuery)}, sourcing only the candidates
-     * the given filter accepts.
+     * the filter accepts that the given function returns for them.
      */
-    private CompletableFuture<List<WorkflowState>> matching(WorkflowStateQuery query, Predicate<String> sourceable) {
+    private CompletableFuture<List<WorkflowState>> matching(
+            WorkflowStateQuery query,
+            Function<List<String>, CompletableFuture<Predicate<String>>> sourceable
+    ) {
         return executionRepository.findAll(query)
                                   .thenCombine(historyRepository.findAll(query), (liveExecutions, history) -> {
                                       var byId = new LinkedHashMap<String, WorkflowState>();
@@ -134,10 +153,11 @@ public class SimpleWorkflowManager implements WorkflowManager {
                                       history.stream().map(WorkflowHistory::workflowId).forEach(candidates::add);
                                       explicitWorkflowIds(query).forEach(candidates::add);
                                       candidates.removeAll(byId.keySet());
-                                      candidates.removeIf(sourceable.negate());
                                       return new Merge(byId, List.copyOf(candidates));
                                   })
-                                  .thenCompose(merge -> sourceAll(merge.candidates()).thenApply(sourced -> {
+                                  .thenCompose(merge -> sourceable.apply(merge.candidates()).thenCompose(
+                                          filter -> sourceAll(merge.candidates().stream().filter(filter).toList())
+                                  ).thenApply(sourced -> {
                                       for (WorkflowState state : sourced) {
                                           if (WorkflowStateQueryMatcher.matches(query, state)) {
                                               merge.byId().putIfAbsent(state.workflowId(), state);
@@ -170,9 +190,30 @@ public class SimpleWorkflowManager implements WorkflowManager {
      * {@link RunningWorkflows running workflows}, sourced from the {@link WorkflowStore}.
      */
     private CompletableFuture<List<WorkflowState>> matchingLive(WorkflowStateQuery query) {
-        return unitOfWorkFactory.create("workflow-manager-running-workflows")
-                                .executeWithResult(workflowStore::loadRunningWorkflows)
-                                .thenCompose(running -> matching(query, running::contains));
+        return matching(query, this::running);
+    }
+
+    /**
+     * Returns a filter for the running workflows among the given candidates, read from the index when it can tell, and
+     * from the sourced {@link RunningWorkflows} otherwise.
+     */
+    private CompletableFuture<Predicate<String>> running(List<String> candidates) {
+        if (candidates.isEmpty()) {
+            return CompletableFuture.completedFuture(workflowId -> false);
+        }
+        return unitOfWorkFactory.create("workflow-manager-running-workflows").executeWithResult(context -> {
+            var fromIndex = index == null
+                    ? CompletableFuture.completedFuture(Optional.<Set<String>>empty())
+                    : index.running(candidates, context);
+            return fromIndex.thenCompose(running -> {
+                if (running.isPresent()) {
+                    Predicate<String> filter = running.get()::contains;
+                    return CompletableFuture.completedFuture(filter);
+                }
+                return workflowStore.loadRunningWorkflows(context)
+                                    .thenApply(sourced -> (Predicate<String>) sourced::contains);
+            });
+        });
     }
 
     private CompletableFuture<Optional<WorkflowState>> singleMatch(WorkflowStateQuery query) {

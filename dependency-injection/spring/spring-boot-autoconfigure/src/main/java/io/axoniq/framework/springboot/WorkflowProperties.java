@@ -7,7 +7,9 @@
  */
 package io.axoniq.framework.springboot;
 
+import org.jspecify.annotations.Nullable;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.boot.context.properties.DeprecatedConfigurationProperty;
 
 /**
  * The workflow properties exposed to Spring Boot applications under the {@code axon.workflow} prefix.
@@ -89,6 +91,7 @@ public class WorkflowProperties {
     private long checkpointInterval = 0L;
     private final HistoryProcessorProperties history = new HistoryProcessorProperties();
     private final SnapshotProperties snapshots = new SnapshotProperties();
+    private final IndexProperties index = new IndexProperties();
 
     /**
      * Returns the number of segments to initialize the workflow event processor with.
@@ -249,6 +252,62 @@ public class WorkflowProperties {
     }
 
     /**
+     * The workflow index properties of the workflow engine, under the {@code axon.workflow.index} prefix.
+     *
+     * @return the workflow index properties of the workflow engine
+     */
+    public IndexProperties getIndex() {
+        return index;
+    }
+
+    /**
+     * The properties of the workflow index, the store a segment claim reads its running workflows and open waits from.
+     */
+    public static class IndexProperties {
+
+        private boolean enabled = true;
+        private @Nullable Boolean storesWithToken;
+
+        /**
+         * Returns whether a JPA workflow index is registered.
+         *
+         * @return whether a JPA workflow index is registered
+         */
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        /**
+         * Sets whether a JPA workflow index is registered.
+         *
+         * @param enabled whether a JPA workflow index is registered
+         */
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        /**
+         * Returns whether the rows of the workflow index are written in the transaction of the token.
+         *
+         * @return whether the rows are written with the token, or {@code null} to follow the token store
+         */
+        public @Nullable Boolean getStoresWithToken() {
+            return storesWithToken;
+        }
+
+        /**
+         * Sets whether the rows of the workflow index are written in the transaction of the token. When unset, it is
+         * {@code true} when the token store has the type of the index: a {@code JpaTokenStore} for the JPA index, a
+         * {@code JdbcTokenStore} for the JDBC index. Set {@code false} when the token store uses another database.
+         *
+         * @param storesWithToken whether the rows are written with the token, or {@code null} to follow the token store
+         */
+        public void setStoresWithToken(@Nullable Boolean storesWithToken) {
+            this.storesWithToken = storesWithToken;
+        }
+    }
+
+    /**
      * The snapshot properties of the workflow engine.
      * <p>
      * Snapshots are disabled by default. Enabling them requires a {@code SnapshotStore} bean.
@@ -280,10 +339,14 @@ public class WorkflowProperties {
 
         /**
          * The snapshot properties of the running-workflow list, under the
-         * {@code axon.workflow.snapshots.running-workflows} prefix.
+         * {@code axon.workflow.snapshots.running-workflows} prefix. They have no effect.
          *
          * @return the snapshot properties of the running-workflow list
+         * @deprecated the running-workflow list is no longer snapshotted; the workflow index replaces it
          */
+        @Deprecated(forRemoval = true, since = "5.5.0")
+        @DeprecatedConfigurationProperty(reason = "The running-workflow list is no longer snapshotted.",
+                since = "5.5.0")
         public SnapshotPolicyProperties getRunningWorkflows() {
             return runningWorkflows;
         }
@@ -300,10 +363,13 @@ public class WorkflowProperties {
 
         /**
          * The snapshot properties of the open-wait list, under the
-         * {@code axon.workflow.snapshots.wait-associations} prefix.
+         * {@code axon.workflow.snapshots.wait-associations} prefix. They have no effect.
          *
          * @return the snapshot properties of the open-wait list
+         * @deprecated the open-wait list is no longer snapshotted; the workflow index replaces it
          */
+        @Deprecated(forRemoval = true, since = "5.5.0")
+        @DeprecatedConfigurationProperty(reason = "The open-wait list is no longer snapshotted.", since = "5.5.0")
         public SnapshotPolicyProperties getWaitAssociations() {
             return waitAssociations;
         }

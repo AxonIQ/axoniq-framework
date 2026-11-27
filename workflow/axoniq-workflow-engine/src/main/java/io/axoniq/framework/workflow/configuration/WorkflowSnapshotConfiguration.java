@@ -14,24 +14,15 @@ import static java.util.Objects.requireNonNull;
 /**
  * The snapshot settings of the workflow engine, customized through {@link WorkflowConfigurer#snapshots}.
  * <p>
- * Snapshots are disabled by default. Once {@link #enabled(boolean) enabled}, the engine snapshots:
- * <ul>
- *     <li>The running-workflow list, as its {@link #runningWorkflows(SnapshotPolicy) snapshot policy} dictates. There
- *     is one list, so there is one snapshot of it.</li>
- *     <li>The state of each workflow instance, as its {@link #workflowState(SnapshotPolicy) snapshot policy} dictates.
- *     Every workflow instance has a snapshot of its own.</li>
- *     <li>The open-wait list, as its {@link #waitAssociations(SnapshotPolicy) snapshot policy} dictates. There is one
- *     list, so there is one snapshot of it. Every segment claim loads this list.</li>
- * </ul>
- * A restarting node then sources each from its latest snapshot instead of from every event ever published.
+ * Snapshots are disabled by default. Once {@link #enabled(boolean) enabled}, the engine snapshots the state of each
+ * workflow instance, as its {@link #workflowState(SnapshotPolicy) snapshot policy} dictates. A restarting node then
+ * sources that state from its latest snapshot instead of from every event of the instance.
  * <p>
  * Example usage:
  * <pre>{@code
  * WorkflowConfigurer.create()
  *                   .snapshots(snapshots -> snapshots.enabled(true)
- *                                                    .runningWorkflows(SnapshotPolicy.afterEvents(500))
- *                                                    .workflowState(SnapshotPolicy.afterEvents(200))
- *                                                    .waitAssociations(SnapshotPolicy.afterEvents(500)));
+ *                                                    .workflowState(SnapshotPolicy.afterEvents(200)));
  * }</pre>
  *
  * @author Stefan Dragisic
@@ -56,12 +47,13 @@ public class WorkflowSnapshotConfiguration {
     }
 
     /**
-     * Sets the {@link SnapshotPolicy} of the running-workflow list. Defaults to
-     * {@link SnapshotPolicy#afterEvents(int) after 50 events}.
+     * Sets the {@link SnapshotPolicy} of the running-workflow list, which has no effect.
      *
      * @param runningWorkflows the {@link SnapshotPolicy} of the running-workflow list
      * @return this configuration, for a fluent API
+     * @deprecated the running-workflow list is no longer snapshotted; the workflow index replaces it
      */
+    @Deprecated(forRemoval = true, since = "5.5.0")
     public WorkflowSnapshotConfiguration runningWorkflows(SnapshotPolicy runningWorkflows) {
         this.runningWorkflows = requireNonNull(runningWorkflows, "The SnapshotPolicy must not be null.");
         return this;
@@ -80,13 +72,14 @@ public class WorkflowSnapshotConfiguration {
     }
 
     /**
-     * Sets the {@link SnapshotPolicy} of the open-wait list. Defaults to
-     * {@link SnapshotPolicy#afterEvents(int) after 50 events}.
+     * Sets the {@link SnapshotPolicy} of the open-wait list, which has no effect.
      *
      * @param waitAssociations the {@link SnapshotPolicy} of the open-wait list
      * @return this configuration, for a fluent API
      * @since 5.5.0
+     * @deprecated the open-wait list is no longer snapshotted; the workflow index replaces it
      */
+    @Deprecated(forRemoval = true, since = "5.5.0")
     public WorkflowSnapshotConfiguration waitAssociations(SnapshotPolicy waitAssociations) {
         this.waitAssociations = requireNonNull(waitAssociations, "The SnapshotPolicy must not be null.");
         return this;
@@ -102,10 +95,12 @@ public class WorkflowSnapshotConfiguration {
     }
 
     /**
-     * Returns the {@link SnapshotPolicy} of the running-workflow list.
+     * Returns the {@link SnapshotPolicy} of the running-workflow list, which the engine does not use.
      *
      * @return the {@link SnapshotPolicy} of the running-workflow list
+     * @deprecated the running-workflow list is no longer snapshotted; the workflow index replaces it
      */
+    @Deprecated(forRemoval = true, since = "5.5.0")
     public SnapshotPolicy runningWorkflows() {
         return runningWorkflows;
     }
@@ -120,11 +115,13 @@ public class WorkflowSnapshotConfiguration {
     }
 
     /**
-     * Returns the {@link SnapshotPolicy} of the open-wait list.
+     * Returns the {@link SnapshotPolicy} of the open-wait list, which the engine does not use.
      *
      * @return the {@link SnapshotPolicy} of the open-wait list
      * @since 5.5.0
+     * @deprecated the open-wait list is no longer snapshotted; the workflow index replaces it
      */
+    @Deprecated(forRemoval = true, since = "5.5.0")
     public SnapshotPolicy waitAssociations() {
         return waitAssociations;
     }

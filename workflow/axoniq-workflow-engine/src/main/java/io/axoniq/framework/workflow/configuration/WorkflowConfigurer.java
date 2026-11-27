@@ -7,8 +7,10 @@
  */
 package io.axoniq.framework.workflow.configuration;
 
+import io.axoniq.framework.workflow.runtime.execution.WorkflowIndex;
 import org.axonframework.common.configuration.ApplicationConfigurer;
 import org.axonframework.common.configuration.AxonConfiguration;
+import org.axonframework.common.configuration.ComponentBuilder;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.LifecycleRegistry;
 import org.axonframework.eventsourcing.configuration.EventSourcingConfigurer;
@@ -127,23 +129,31 @@ public class WorkflowConfigurer implements ApplicationConfigurer {
         var snapshots = requireNonNull(snapshotConfiguration, "The snapshot configuration function must not be null.")
                 .apply(new WorkflowSnapshotConfiguration());
         if (snapshots.enabled()) {
-            delegate.componentRegistry(cr -> cr
-                    .registerComponent(
-                            SnapshotPolicy.class,
-                            WorkflowConfigurationDefaults.RUNNING_WORKFLOWS_SNAPSHOT_POLICY,
-                            c -> snapshots.runningWorkflows()
-                    )
-                    .registerComponent(
-                            SnapshotPolicy.class,
-                            WorkflowConfigurationDefaults.WORKFLOW_STATE_SNAPSHOT_POLICY,
-                            c -> snapshots.workflowState()
-                    )
-                    .registerComponent(
-                            SnapshotPolicy.class,
-                            WorkflowConfigurationDefaults.WAIT_ASSOCIATIONS_SNAPSHOT_POLICY,
-                            c -> snapshots.waitAssociations()
-                    ));
+            delegate.componentRegistry(cr -> cr.registerComponent(
+                    SnapshotPolicy.class,
+                    WorkflowConfigurationDefaults.WORKFLOW_STATE_SNAPSHOT_POLICY,
+                    c -> snapshots.workflowState()
+            ));
         }
+        return this;
+    }
+
+    /**
+     * Registers the {@link WorkflowIndex} all workflow modules share, so a segment claim reads only its own rows.
+     * Without an index, which is the default, a claim sources all running workflows from the event store.
+     * <p>
+     * Example usage:
+     * <pre>{@code
+     * WorkflowConfigurer.create().registerWorkflowIndex(config -> new InMemoryWorkflowIndex());
+     * }</pre>
+     *
+     * @param indexBuilder builds the {@link WorkflowIndex} from the configuration
+     * @return this configurer, for a fluent API
+     * @since 5.5.0
+     */
+    public WorkflowConfigurer registerWorkflowIndex(ComponentBuilder<WorkflowIndex> indexBuilder) {
+        requireNonNull(indexBuilder, "The WorkflowIndex builder must not be null.");
+        delegate.componentRegistry(cr -> cr.registerComponent(WorkflowIndex.class, indexBuilder));
         return this;
     }
 

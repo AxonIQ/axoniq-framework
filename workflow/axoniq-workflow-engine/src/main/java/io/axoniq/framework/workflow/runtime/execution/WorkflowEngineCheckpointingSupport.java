@@ -136,6 +136,13 @@ public class WorkflowEngineCheckpointingSupport implements Checkpointing {
     }
 
     @Override
+    public CompletableFuture<Void> onCheckpointStore(Segment segment,
+                                                     TrackingToken token,
+                                                     ProcessingContext processingContext) {
+        return checkpointLatchCoordinator.onCheckpointStore(segment, token, processingContext);
+    }
+
+    @Override
     public CompletableFuture<TrackingToken> onSegmentReleased(Segment segment,
                                                               TrackingToken requested) {
         var released = checkpointLatchCoordinator.holdsCheckpoint(segment)
@@ -234,5 +241,20 @@ public class WorkflowEngineCheckpointingSupport implements Checkpointing {
          *                it
          */
         void addCheckpointLatch(Segment segment, Runnable latch);
+
+        /**
+         * Invoked right before the processor stores the given {@code token}, in the transaction that stores it, so the
+         * coordinator writes what belongs with that token in the same transaction. Defaults to doing nothing.
+         *
+         * @param segment           the segment the token is stored for
+         * @param token             the position about to be stored
+         * @param processingContext the context of the transaction that stores the token
+         * @return a future completing once what belongs with {@code token} is written
+         */
+        default CompletableFuture<Void> onCheckpointStore(Segment segment,
+                                                          TrackingToken token,
+                                                          ProcessingContext processingContext) {
+            return CompletableFuture.completedFuture(null);
+        }
     }
 }

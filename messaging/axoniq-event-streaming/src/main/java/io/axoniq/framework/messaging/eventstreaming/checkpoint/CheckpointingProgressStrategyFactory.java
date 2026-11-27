@@ -14,6 +14,8 @@ import org.axonframework.messaging.eventhandling.EventHandlingComponent;
 import org.axonframework.messaging.eventhandling.processing.streaming.progress.SegmentProgressContext;
 import org.axonframework.messaging.eventhandling.processing.streaming.progress.SegmentProgressStrategy;
 import org.axonframework.messaging.eventhandling.processing.streaming.progress.SegmentProgressStrategyFactory;
+import org.axonframework.messaging.eventhandling.processing.streaming.token.store.TokenStore;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -22,6 +24,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
 /**
  * {@link SegmentProgressStrategyFactory} that produces a {@link CheckpointingProgressStrategy} for every segment of a
@@ -47,6 +50,8 @@ public final class CheckpointingProgressStrategyFactory implements SegmentProgre
 
     private final List<Checkpointing> participants;
     private final boolean autoCheckpointing;
+    private final @Nullable TokenStore tokenStore;
+    private final @Nullable String processorName;
 
     /**
      * Constructs a {@code CheckpointingProgressStrategyFactory} for the given {@code participants}.
@@ -56,11 +61,28 @@ public final class CheckpointingProgressStrategyFactory implements SegmentProgre
      *                          handler is self-checkpointing (fully-deferred)
      */
     public CheckpointingProgressStrategyFactory(List<Checkpointing> participants, boolean autoCheckpointing) {
+        this(participants, autoCheckpointing, null, null);
+    }
+
+    /**
+     * Creates a factory whose strategies also check the claim of their segment.
+     *
+     * @param participants      the self-checkpointing components of the processor
+     * @param autoCheckpointing {@code true} when an ordinary handler shares the processor
+     * @param tokenStore        the token store holding the claims of the segments, or {@code null} to not check them
+     * @param processorName     the name of the processor the claims are held under, or {@code null} to not check them
+     */
+    public CheckpointingProgressStrategyFactory(List<Checkpointing> participants,
+                                                boolean autoCheckpointing,
+                                                @Nullable TokenStore tokenStore,
+                                                @Nullable String processorName) {
         this.participants = List.copyOf(Objects.requireNonNull(participants, "The participants may not be null."));
         if (this.participants.isEmpty()) {
             throw new IllegalArgumentException("The participants may not be empty.");
         }
         this.autoCheckpointing = autoCheckpointing;
+        this.tokenStore = tokenStore;
+        this.processorName = processorName;
         EntitlementManager.INSTANCE.registerAddon(CheckpointingAxoniqAddon.class);
     }
 
@@ -77,6 +99,20 @@ public final class CheckpointingProgressStrategyFactory implements SegmentProgre
      * @return a function mapping a processor's components to the appropriate progress-strategy factory
      */
     public static Function<List<EventHandlingComponent>, SegmentProgressStrategyFactory> detecting() {
+        return detecting(null, null);
+    }
+
+    /**
+     * Like {@link #detecting()}, but the strategies also check the claim of their segment.
+     *
+     * @param processorName the name of the processor the claims are held under, or {@code null} to not check them
+     * @param tokenStore    supplies the token store once the processor exists, or {@code null} to not check claims
+     * @return the builder of the progress strategy factory of a processor
+     */
+    public static Function<List<EventHandlingComponent>, SegmentProgressStrategyFactory> detecting(
+            @Nullable String processorName,
+            @Nullable Supplier<TokenStore> tokenStore
+    ) {
         return components -> {
             List<Checkpointing> participants = components.stream()
                                                          .map(c -> c.unwrap(Checkpointing.class))
@@ -98,12 +134,24 @@ public final class CheckpointingProgressStrategyFactory implements SegmentProgre
                                     + "to let them control when their segment's token advances.",
                             participants.size());
             }
-            return new CheckpointingProgressStrategyFactory(participants, autoCheckpointing);
+            return new CheckpointingProgressStrategyFactory(
+                    participants, autoCheckpointing, tokenStore == null ? null : tokenStore.get(), processorName
+            );
         };
+    }
+
+    /**
+     * Returns whether the processor runs fully-deferred: every component is self-checkpointing, so the stored token
+     * only advances on their requests, never at the end of a batch on its own.
+     *
+     * @return {@code true} when the processor runs fully-deferred, {@code false} when it runs in auto mode
+     */
+    public boolean isFullyDeferred() {
+        return !autoCheckpointing;
     }
 
     @Override
     public SegmentProgressStrategy create(SegmentProgressContext context) {
-        return new CheckpointingProgressStrategy(context, participants, autoCheckpointing);
+        return new CheckpointingProgressStrategy(context, participants, autoCheckpointing, tokenStore, processorName);
     }
 }

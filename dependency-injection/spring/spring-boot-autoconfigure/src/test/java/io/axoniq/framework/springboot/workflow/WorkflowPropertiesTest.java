@@ -112,6 +112,7 @@ class WorkflowPropertiesTest {
         private final ApplicationContextRunner autoConfigurationRunner = new ApplicationContextRunner()
                 .withConfiguration(AutoConfigurations.of(WorkflowAutoConfiguration.class));
 
+        @SuppressWarnings("removal")
         @Test
         void snapshotsAreDisabledWithFiftyEventsPerSnapshotByDefault() {
             contextRunner.run(context -> {
@@ -126,6 +127,7 @@ class WorkflowPropertiesTest {
             });
         }
 
+        @SuppressWarnings("removal")
         @Test
         void snapshotPropertiesBindFromTheApplicationProperties() {
             contextRunner.withPropertyValues(
@@ -146,14 +148,13 @@ class WorkflowPropertiesTest {
         }
 
         @Test
-        void snapshotPoliciesAreRegisteredOnlyWhenSnapshotsAreEnabled() {
+        void onlyTheSnapshotPolicyOfTheWorkflowStateIsRegisteredWhenSnapshotsAreEnabled() {
             autoConfigurationRunner.run(context -> assertThat(context).doesNotHaveBean(SnapshotPolicy.class));
 
             autoConfigurationRunner.withPropertyValues("axon.workflow.snapshots.enabled=true")
                                    .run(context -> assertThat(context)
-                                           .hasBean(WorkflowConfigurationDefaults.RUNNING_WORKFLOWS_SNAPSHOT_POLICY)
                                            .hasBean(WorkflowConfigurationDefaults.WORKFLOW_STATE_SNAPSHOT_POLICY)
-                                           .hasBean(WorkflowConfigurationDefaults.WAIT_ASSOCIATIONS_SNAPSHOT_POLICY));
+                                           .getBeans(SnapshotPolicy.class).hasSize(1));
         }
     }
 

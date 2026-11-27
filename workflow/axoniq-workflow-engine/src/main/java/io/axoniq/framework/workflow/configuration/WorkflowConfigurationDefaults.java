@@ -70,10 +70,10 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
     public static final String WORKFLOW_ENGINE_EXECUTOR = "WorkflowEngineExecutor";
     /**
      * Name of the {@link SnapshotPolicy} component of the running-workflow list.
-     * <p>
-     * The list is snapshotted only when a component is registered under this name. Snapshotting then requires a
-     * {@link org.axonframework.eventsourcing.snapshot.store.SnapshotStore} component.
+     *
+     * @deprecated the running-workflow list is no longer snapshotted, so a component under this name is ignored
      */
+    @Deprecated(forRemoval = true, since = "5.5.0")
     public static final String RUNNING_WORKFLOWS_SNAPSHOT_POLICY = "RunningWorkflowsSnapshotPolicy";
     /**
      * Name of the {@link SnapshotPolicy} component of the workflow state.
@@ -84,10 +84,10 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
     public static final String WORKFLOW_STATE_SNAPSHOT_POLICY = "WorkflowStateSnapshotPolicy";
     /**
      * Name of the {@link SnapshotPolicy} component of the open-wait list.
-     * <p>
-     * The list is snapshotted only when a component is registered under this name. Snapshotting then requires a
-     * {@link org.axonframework.eventsourcing.snapshot.store.SnapshotStore} component.
+     *
+     * @deprecated the open-wait list is no longer snapshotted, so a component under this name is ignored
      */
+    @Deprecated(forRemoval = true, since = "5.5.0")
     public static final String WAIT_ASSOCIATIONS_SNAPSHOT_POLICY = "WaitAssociationsSnapshotPolicy";
     /**
      * Order for this enhancer.
@@ -199,11 +199,7 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
                 }).build())
                 .entityFactory(c -> (identifier, firstEvent, context) -> new EventSourcedRunningWorkflows())
                 .criteriaResolver(c -> (identifier, context) -> EventSourcedRunningWorkflows.criteriaBuilder());
-        if (componentRegistry.hasComponent(SnapshotPolicy.class, RUNNING_WORKFLOWS_SNAPSHOT_POLICY)) {
-            module.snapshotPolicy((ComponentBuilder<SnapshotPolicy>) c -> c.getComponent(
-                    SnapshotPolicy.class, RUNNING_WORKFLOWS_SNAPSHOT_POLICY
-            ));
-        }
+        // Not snapshotted: one snapshot of every running workflow does not scale, and the workflow index replaces it.
         componentRegistry.registerModule(module.build());
         componentRegistry.registerIfNotPresent(Clock.class, cfg -> ClockUtils.get());
     }
@@ -216,11 +212,7 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
                 }).build())
                 .entityFactory(c -> (identifier, firstEvent, context) -> new EventSourcedWaitAssociations())
                 .criteriaResolver(c -> (identifier, context) -> EventSourcedWaitAssociations.criteriaBuilder());
-        if (componentRegistry.hasComponent(SnapshotPolicy.class, WAIT_ASSOCIATIONS_SNAPSHOT_POLICY)) {
-            module.snapshotPolicy((ComponentBuilder<SnapshotPolicy>) c -> c.getComponent(
-                    SnapshotPolicy.class, WAIT_ASSOCIATIONS_SNAPSHOT_POLICY
-            ));
-        }
+        // Not snapshotted: one snapshot of every open wait does not scale, and the workflow index replaces it.
         componentRegistry.registerModule(module.build());
     }
 

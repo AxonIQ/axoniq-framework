@@ -3,6 +3,29 @@
 
 All the enhancements and features which have been introduced to our major releases of the Axoniq Framework are noted here.
 
+[#release_5_5]
+== Release 5.5
+
+=== Features
+
+- Workflow index: an optional store of rows per segment for the workflow engine. A segment claim reads only the running workflows, the open waits and the hibernated workflows of its own segment, instead of sourcing them for all segments. A query of the workflow manager for live workflows, such as a cancellation, reads the rows of its candidates instead of sourcing every running workflow. With the workflow index in the database of the token store, a hibernated workflow stays out of memory across a segment claim, also after a crash. It comes as a JPA, a JDBC and an in-memory workflow index; the JPA and the JDBC one share their tables. In a Spring Boot application with JPA or JDBC, the workflow index is on by default. See xref:workflows:configuration.adoc#workflow-index[Workflow index].
+
+=== Upgrade notes
+
+A Spring Boot application with JPA or JDBC gets the workflow index after the upgrade, without any setting.
+With JPA, the persistence provider creates its four tables, like the token table; with JDBC, or with Flyway or Liquibase, create them yourself.
+To keep it off, set `axon.workflow.index.enabled=false`.
+
+The workflow index is built once, by the first segment claim after the upgrade, from the events.
+Every node that runs a workflow module must run with the workflow index, so a rolling upgrade from a version without it is not supported: stop every node of the old version first.
+Resetting the tokens of the workflow processor means emptying the tables of the workflow index too, its initialization included.
+Use the JPA or the JDBC workflow index in production: the in-memory one builds its rows again on every start.
+
+The workflow engine no longer snapshots the list of running workflows and the list of open waits, as the workflow index replaces them.
+It neither takes nor reads such snapshots, and ignores the ones that exist.
+`WorkflowSnapshotConfiguration.runningWorkflows`, `WorkflowSnapshotConfiguration.waitAssociations`, their policy constants in `WorkflowConfigurationDefaults`, and the Spring Boot properties `axon.workflow.snapshots.running-workflows.*` and `axon.workflow.snapshots.wait-associations.*` are deprecated and have no effect.
+The snapshot of the state of each workflow instance stays.
+
 [#release_5_4]
 == Release 5.4
 

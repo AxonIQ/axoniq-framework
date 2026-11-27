@@ -9,6 +9,7 @@
 package io.axoniq.framework.messaging.eventstreaming.checkpoint;
 
 import org.axonframework.common.annotation.Internal;
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventHandlingComponent;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
@@ -166,6 +167,26 @@ public interface Checkpointing {
      * last persisted checkpoint
      */
     CompletableFuture<TrackingToken> onCheckpointAdvanced(Segment segment, TrackingToken requested);
+
+    /**
+     * Invoked right before the processor stores {@code token} for {@code segment}, for every stored position, release
+     * included. A unit writes its own projection here through {@code processingContext}, so the projection and the
+     * token commit together or not at all.
+     * <p>
+     * A future completed exceptionally fails the store, though a release still releases the claim. A strategy from
+     * {@link CheckpointingProgressStrategyFactory#detecting(String, java.util.function.Supplier)} also checks the
+     * claim, so only the node that owns the segment commits what is written here. Defaults to doing nothing.
+     *
+     * @param segment           the segment the token is stored for
+     * @param token             the position about to be stored
+     * @param processingContext the context of the transaction that stores the token
+     * @return a future completing once this unit has written what belongs with {@code token}
+     */
+    default CompletableFuture<Void> onCheckpointStore(Segment segment,
+                                                      TrackingToken token,
+                                                      ProcessingContext processingContext) {
+        return CompletableFuture.completedFuture(null);
+    }
 
     /**
      * Invoked when {@code segment} is being released. Flush everything handled so far, discard the segment's local

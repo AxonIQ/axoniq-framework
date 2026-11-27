@@ -130,23 +130,13 @@ class WorkflowSnapshotRestartTest {
                             .isNotNull()
             );
             stop(first);
-            // The running-workflow list and the open waits are sourced on a segment claim only, so the first restart is
-            // the one snapshotting them.
-            var second = start(workflowWithSteps(STEPS), true);
-            await().atMost(30, TimeUnit.SECONDS)
-                   .until(() -> engine(second).workflowExecutions().size() == WORKFLOWS);
-            assertThat(snapshotOf(second, EventSourcedRunningWorkflows.class, EventSourcedRunningWorkflows.ENTITY_ID))
-                    .isNotNull();
-            awaitOpenWaitsSnapshot(second);
-            stop(second);
 
-            // when - the lists and every workflow state continue from their snapshot
+            // when - every workflow state continues from its snapshot
             var restarted = start(workflowWithSteps(STEPS), true);
             await().atMost(30, TimeUnit.SECONDS)
                    .until(() -> engine(restarted).workflowExecutions().size() == WORKFLOWS);
             // Every segment loaded its open waits, so the awaited event reaches the workflows through them.
             await().atMost(30, TimeUnit.SECONDS).until(() -> waitSourcings(restarted).size() >= SEGMENTS);
-            var waitEventsReadPerClaim = List.copyOf(waitSourcings(restarted));
             publish(restarted, "paid");
 
             // then - every workflow completes, and no step ran a second time
@@ -159,9 +149,11 @@ class WorkflowSnapshotRestartTest {
             );
             assertThat(stepExecutions).hasSize(WORKFLOWS * (STEPS + 1));
             assertThat(stepExecutions.values()).allSatisfy(executions -> assertThat(executions).hasValue(1));
-            // and - each claim read the snapshot of the open waits plus the events after it, not the history of every
-            // wait
-            assertThat(waitEventsReadPerClaim).allSatisfy(read -> assertThat(read).isLessThan(WORKFLOWS));
+            // and - the running-workflow list and the open waits have no snapshot
+            assertThat(snapshotOf(restarted, EventSourcedRunningWorkflows.class,
+                                  EventSourcedRunningWorkflows.ENTITY_ID)).isNull();
+            assertThat(snapshotOf(restarted, EventSourcedWaitAssociations.class,
+                                  EventSourcedWaitAssociations.ENTITY_ID)).isNull();
         }
 
         @Test
@@ -174,7 +166,7 @@ class WorkflowSnapshotRestartTest {
             var restarted = start(workflowWithSteps(STEPS), true);
             await().atMost(30, TimeUnit.SECONDS)
                    .until(() -> engine(restarted).workflowExecutions().size() == WORKFLOWS);
-            awaitOpenWaitsSnapshot(restarted);
+            await().atMost(30, TimeUnit.SECONDS).until(() -> waitSourcings(restarted).size() >= SEGMENTS);
             // A configuration without snapshots that is never started only reads: it replays every event.
             var replaying = build(workflowWithSteps(STEPS), false);
 
@@ -394,9 +386,7 @@ class WorkflowSnapshotRestartTest {
                 .registerModule(module));
         if (snapshots) {
             configurer.componentRegistry(cr -> cr.registerComponent(SnapshotStore.class, cfg -> snapshotStore))
-                      .snapshots(s -> s.enabled(true)
-                                       .runningWorkflows(SnapshotPolicy.afterEvents(10))
-                                       .workflowState(SnapshotPolicy.afterEvents(2)));
+                      .snapshots(s -> s.enabled(true).workflowState(SnapshotPolicy.afterEvents(2)));
         }
         var configuration = configurer.build();
         configurations.put(configuration, nodeStorageEngine);
@@ -450,16 +440,6 @@ class WorkflowSnapshotRestartTest {
     private static Collection<WaitAssociation> openWaits(AxonConfiguration configuration) {
         return load(configuration, EventSourcedWaitAssociations.class, EventSourcedWaitAssociations.ENTITY_ID)
                 .waitAssociations();
-    }
-
-    /**
-     * Waits for the snapshot of the open waits, which a segment claim stores after it loaded them.
-     */
-    private void awaitOpenWaitsSnapshot(AxonConfiguration configuration) {
-        await().atMost(30, TimeUnit.SECONDS)
-               .until(() -> snapshotOf(configuration,
-                                       EventSourcedWaitAssociations.class,
-                                       EventSourcedWaitAssociations.ENTITY_ID) != null);
     }
 
     /**
