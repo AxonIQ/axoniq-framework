@@ -12,10 +12,13 @@ import com.mongodb.ClientSessionOptions;
 import com.mongodb.TransactionOptions;
 import com.mongodb.WriteConcern;
 import io.axoniq.framework.mongo.MongoTemplate;
+import io.axoniq.framework.mongo.token.MongoTokenStore;
+import io.axoniq.framework.mongo.token.MongoTokenStoreConfiguration;
 import io.axoniq.framework.mongo.transaction.MongoTransactionalExecutorProvider;
 import io.axoniq.framework.springboot.MongoProperties;
 import io.axoniq.framework.springboot.mongo.SpringMongoTemplate;
 import io.axoniq.framework.springboot.mongo.SpringMongoTransactionManager;
+import org.axonframework.extension.springboot.TokenStoreProperties;
 import org.axonframework.messaging.core.unitofwork.transaction.TransactionManager;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
@@ -27,21 +30,27 @@ import org.springframework.data.mongodb.MongoDatabaseFactory;
 import org.springframework.data.mongodb.MongoTransactionManager;
 
 /**
- * Spring Boot autoconfiguration that registers the Spring-specific components of the MongoDB module, when
- * {@code axoniq-mongo} is on the classpath and a {@link MongoDatabaseFactory} bean is available.
+ * Spring Boot autoconfiguration that adds the Spring-specific pieces to what the
+ * {@link io.axoniq.framework.mongo.configuration.MongoConfigurationEnhancer} registers, when {@code axoniq-mongo} is on
+ * the classpath and a {@link MongoDatabaseFactory} bean is available.
+ * <p>
+ * The enhancer registers the {@link MongoTokenStore} from the components that are available. This configuration
+ * provides those components from Spring:
  * <ul>
  *     <li>the {@link MongoTemplate}, a {@link SpringMongoTemplate} that takes part in a transaction managed by a
  *     Spring {@code MongoTransactionManager}. It uses the database named by the {@code axon.mongo.database-name}
  *     property, or the default database of the {@link MongoDatabaseFactory} when that is not set. Declare your own
  *     {@link MongoTemplate} bean to change that, for example to use other collection names;</li>
+ *     <li>the {@link MongoTokenStoreConfiguration}, bound from the {@code axon.mongo.token-store} properties. Declare
+ *     your own bean to replace the properties;</li>
  *     <li>the transaction components, set up in the same way as it was for Axon Framework 4.</li>
  * </ul>
  * The transaction components are Spring's {@link MongoTransactionManager}, wrapped in a
  * {@link SpringMongoTransactionManager} that becomes the {@link TransactionManager}. The processing lifecycle then runs
  * in a Spring managed MongoDB transaction, which everything that obtains its database through Spring's
- * {@code MongoDatabaseUtils} joins. That includes Spring Data's {@code MongoTemplate} and repositories. Components that
- * run MongoDB operations do so with the session of that transaction, through the
- * {@link MongoTransactionalExecutorProvider} that this configuration registers too.
+ * {@code MongoDatabaseUtils} joins. That includes Spring Data's {@code MongoTemplate} and repositories. The token store
+ * runs its operations with the session of that transaction, through the {@link MongoTransactionalExecutorProvider} that
+ * this configuration registers too.
  * <p>
  * A bean of any of these types that you declare yourself takes precedence. This configuration runs after the JPA and
  * JDBC transaction configurations, so it never replaces their {@code TransactionManager}. An application that mixes
@@ -64,9 +73,9 @@ import org.springframework.data.mongodb.MongoTransactionManager;
                 "org.springframework.boot.data.mongodb.autoconfigure.DataMongoAutoConfiguration"
         }
 )
-@ConditionalOnClass({MongoTransactionalExecutorProvider.class, MongoDatabaseFactory.class})
+@ConditionalOnClass({MongoTokenStore.class, MongoTransactionalExecutorProvider.class, MongoDatabaseFactory.class})
 @ConditionalOnBean(MongoDatabaseFactory.class)
-@EnableConfigurationProperties(MongoProperties.class)
+@EnableConfigurationProperties({MongoProperties.class, TokenStoreProperties.class})
 public class MongoAutoConfiguration {
 
     /**
@@ -138,5 +147,23 @@ public class MongoAutoConfiguration {
     @ConditionalOnMissingBean(TransactionManager.class)
     public TransactionManager axonMongoTransactionManager(MongoTransactionManager manager) {
         return new SpringMongoTransactionManager(manager);
+    }
+
+    /**
+     * Creates the {@link MongoTokenStoreConfiguration} from the {@code axon.mongo.token-store} properties. The claim
+     * timeout is the one of the shared {@code axon.eventhandling.tokenstore.claim-timeout} property, as for the other
+     * token stores.
+     * <p>
+     * To configure the token store in code, declare your own {@link MongoTokenStoreConfiguration} bean.
+     *
+     * @param properties           the bound {@link MongoProperties}
+     * @param tokenStoreProperties the bound {@link TokenStoreProperties}, providing the claim timeout
+     * @return the {@link MongoTokenStoreConfiguration} the properties describe
+     */
+    @Bean
+    @ConditionalOnMissingBean
+    public MongoTokenStoreConfiguration axonMongoTokenStoreConfiguration(MongoProperties properties,
+                                                                         TokenStoreProperties tokenStoreProperties) {
+        return properties.getTokenStore().toConfiguration(tokenStoreProperties.getClaimTimeout());
     }
 }
