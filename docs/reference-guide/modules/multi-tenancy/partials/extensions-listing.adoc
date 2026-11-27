@@ -1,0 +1,3 @@
+|xref:multi-tenancy:index.adoc[Multi-Tenancy]
+|Serves multiple tenants from one application instance, each with its own Axon Server context, event store and tenant-aware components.
+

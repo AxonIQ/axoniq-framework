@@ -1,0 +1,6 @@
+[NOTE]
+====
+The `MongoTokenStore` of the Axoniq Framework `axoniq-mongo` module stores a token as a document, with a `mask` field next to the `segment` field.
+The token class names and serialization formats below apply to it as well.
+See the xref:migration:paths/mongo.adoc[Mongo Migration] for how to add the field and migrate the documents.
+====

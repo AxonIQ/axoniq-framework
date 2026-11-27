@@ -1,0 +1,3 @@
+* `MongoTokenStore` - A `TokenStore` implementation using MongoDB to store the tokens with, provided by the `axoniq-mongo` module.
+It takes part in the MongoDB transaction of the event handling, and is auto-configurable with Spring Boot.
+See xref:mongo:token-store.adoc[] for how to set it up.

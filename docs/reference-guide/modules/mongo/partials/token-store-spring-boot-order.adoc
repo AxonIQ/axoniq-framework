@@ -1,0 +1,1 @@
+. Otherwise, if the `axoniq-mongo` module is on the classpath and a `MongoDatabaseFactory` bean is available, the `MongoTokenStore` is defined.

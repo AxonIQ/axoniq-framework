@@ -1,0 +1,172 @@
+[.axoniq-feature]
+= MongoDB setup
+:navtitle: MongoDB setup
+
+The Axoniq MongoDB module needs two things: the collections that hold its documents, and the MongoDB transactions its operations run in.
+This page covers the `MongoTemplate` that provides the collections and its configuration, the transaction components that the module provides for MongoDB, how those interact, and what to keep in mind when you mix MongoDB with relational components.
+
+== The MongoTemplate
+
+The `MongoTemplate` is the single point through which the xref:mongo:token-store.adoc[`MongoTokenStore`] and the xref:mongo:dead-letter-queue.adoc[`MongoSequencedDeadLetterQueue`] reach MongoDB.
+It does not execute any operations itself.
+Instead, it hands out the two collections the components use.
+The `MongoTokenStore` and the `MongoSequencedDeadLetterQueue` take their collection as a constructor argument, and the module and the Spring Boot auto-configuration read it from the template:
+
+[cols="<,<,<"]
+|===
+|Method |Default collection |Used by
+
+|`trackingTokensCollection()`
+|`trackingtokens`
+|`MongoTokenStore`
+
+|`deadLetterCollection()`
+|`deadletters`
+|`MongoSequencedDeadLetterQueue`
+|===
+
+Because both components share the template, the database and the collection names are configured in one place.
+The module ships a `DefaultMongoTemplate` for plain Java applications, and the Spring Boot module provides a `SpringMongoTemplate`.
+You can also implement `MongoTemplate` yourself, for example to route the collections to a differently configured `MongoClient`.
+
+=== Configuring the template
+
+[tabs]
+====
+Configuration API::
++
+--
+The `DefaultMongoTemplate` builder takes a `MongoClient` with an optional database name.
+Without a database name, it uses the default database of the client.
+A `MongoTemplate` is always required: without one, the module does not register the `MongoTokenStore` or the dead-letter queue factory.
+Spring Boot registers a `SpringMongoTemplate` for you, whereas a declarative setup registers its own, as shown below.
+The `MongoConfigurationEnhancer` of the module picks it up, and replaces the default in-memory `TokenStore` with a `MongoTokenStore`.
+
+[source,java]
+----
+include::example$mongo/template/PlainTemplateConfig.java[tag=plain-template,indent=0]
+----
+--
+
+Spring Boot::
++
+--
+Spring Boot applications that have a `MongoDatabaseFactory` bean, for instance through `spring-boot-starter-data-mongodb`, get a `SpringMongoTemplate` through auto-configuration.
+It uses the database named by the following property, or the default database of the `MongoDatabaseFactory` when the property is not set:
+
+[source,properties]
+----
+axon.mongo.database-name=axonframework
+----
+--
+====
+
+==== Customizing the collection names
+
+To store the tracking tokens and the dead letters in collections with different names, build the template yourself.
+In Spring Boot, declare your own `MongoTemplate` bean, which makes the auto-configured template back off.
+
+[tabs]
+====
+Configuration API::
++
+--
+[source,java]
+----
+include::example$mongo/template/CustomCollectionNamesConfig.java[tag=custom-collection-names,indent=0]
+----
+--
+
+Spring Boot::
++
+--
+[source,java]
+----
+include::example$mongo/template/SpringTemplateConfig.java[tag=spring-template,indent=0]
+----
+--
+====
+
+The `SpringMongoTemplate` resolves the database through Spring's `MongoDatabaseUtils`, so operations that do not pass a session themselves take part in a transaction that a Spring `MongoTransactionManager` started on the current thread.
+The `SpringMongoTransactionManager` starts such a transaction for every processing context, as it did in Axon Framework 4.
+
+== Transaction components
+
+The `MongoTemplate` only hands out collections.
+It does not decide which transaction an operation runs in.
+The module provides separate components for that, which work together as follows:
+
+. A `TransactionManager` binds a MongoDB `ClientSession`, and a MongoDB transaction, to the `ProcessingContext` of an event handling operation.
+. The `MongoTransactionalExecutorProvider` hands the session of a `ProcessingContext` to everything that runs MongoDB operations for it: the `MongoTokenStore`, the `MongoSequencedDeadLetterQueue` and your own event handlers.
+. An operation takes part in the transaction by using that session.
+When the processing context commits, the transaction commits, and when it fails, the transaction aborts.
+
+[cols="<,<,<"]
+|===
+|Component |Used in |Task
+
+|`ClientSessionTransactionManager`
+|Plain Java
+|The `TransactionManager` that starts the session, and the transaction, when the first operation uses it, commits when the processing context commits, and aborts when it fails.
+Operations take part by passing the session explicitly.
+
+|`SpringMongoTransactionManager`
+|Spring Boot
+|The `TransactionManager` that wraps Spring's `MongoTransactionManager`, as it did in Axon Framework 4.
+The processing context runs in a Spring managed MongoDB transaction, and the session of that transaction is bound to it.
+Everything that obtains its database through Spring's `MongoDatabaseUtils` joins the transaction without passing a session: the `SpringMongoTemplate`, Spring Data's `MongoTemplate` and its repositories.
+
+|`MongoTransactionalExecutorProvider`
+|Both
+|Provides the `TransactionalExecutor` with the session of a `ProcessingContext`.
+Outside a processing context, it provides a session that is started for the operation alone, without a transaction.
+|===
+
+Keep in mind that:
+
+* A MongoDB operation fails when no session is bound to its `ProcessingContext`, which is the case without one of the transaction managers above.
+* MongoDB only supports multi-document transactions on a replica set or sharded cluster.
+* The session is not thread-safe, so the transaction managers require that a processing context is invoked on a single thread.
+* The session and the collections must come from the same `MongoClient`, as a session only works with the client that started it.
+* Outside a processing context, `ClientSessionTransactionManager#startTransaction()` starts a transaction and returns a `ClientSessionTransaction`.
+It exposes the `session()` that every operation of that transaction must be passed, and committing or rolling back concludes it and closes the session.
+
+See xref:mongo:token-store.adoc#_transactions[Transactions] of the token store for how to write a projection in the same transaction as the token, and xref:mongo:dead-letter-queue.adoc#_transactions[Transactions] of the dead-letter queue for how a dead letter takes part in it.
+
+=== Configuring the transaction components
+
+[tabs]
+====
+Configuration API::
++
+--
+Register the `TransactionManager` and the `MongoTransactionalExecutorProvider` as components, with the `MongoClient` that your `MongoTemplate` uses:
+
+[source,java]
+----
+include::example$mongo/template/PlainTransactionConfig.java[tag=plain-transaction,indent=0]
+----
+--
+
+Spring Boot::
++
+--
+The auto-configuration registers the transaction components, as Axon Framework 4 did, when a `MongoDatabaseFactory` bean exists.
+It registers Spring's `MongoTransactionManager` with a majority write concern, wrapped in a `SpringMongoTransactionManager` as the `TransactionManager`, and the `MongoTransactionalExecutorProvider`.
+Declare your own bean of any of these types to replace it, for instance a `MongoTransactionManager` with other transaction options.
+The auto-configuration never replaces the `TransactionManager` of a JPA or JDBC setup, see <<Mixing MongoDB with relational components>>.
+--
+====
+
+== Mixing MongoDB with relational components
+
+Only one `TransactionManager` serves an application, and every component set brings the transaction components that suit its technology.
+The MongoDB components need a `TransactionManager` that binds a MongoDB session to the `ProcessingContext`.
+A `TransactionManager` of a relational technology, such as JPA or JDBC, does not bind one, so a MongoDB token store or dead-letter queue fails on its first operation in an application that uses it.
+The auto-configuration never replaces the `TransactionManager` of such a setup.
+Where the relational token stores and dead-letter queues are available too, they take precedence over the MongoDB ones.
+
+Be aware of this when you combine components, for instance relational projections with a MongoDB dead-letter queue:
+
+* Prefer one technology for the token store, the dead-letter queue and the projections that share a processor.
+* Otherwise, register the `TransactionalExecutorProvider` and the `TransactionManager` that fit your setup yourself.

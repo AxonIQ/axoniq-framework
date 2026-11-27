@@ -16,6 +16,7 @@ include::partial$advanced-modules.excalidraw[]
 |Module |Artifact Id |Group Id |Maven Central
 
 |<<Axoniq PostgreSQL>>            |`axoniq-postgresql`                    |`io.axoniq.framework` |https://central.sonatype.com/search?q=io.axoniq.framework%3Aaxoniq-postgresql[available]
+|<<Axoniq MongoDB>>               |`axoniq-mongo`                         |`io.axoniq.framework` |https://central.sonatype.com/search?q=io.axoniq.framework%3Aaxoniq-mongo[available]
 |<<Axoniq Axon Server connector>> |`axon-server-connector`         |`io.axoniq.framework` |https://central.sonatype.com/search?q=io.axoniq.framework%3Aaxon-server-connector[available]
 |<<Axoniq distributed messaging>> |`axoniq-distributed-messaging`  |`io.axoniq.framework` |https://central.sonatype.com/search?q=a:axoniq-distributed-messaging[available]
 |<<Axoniq dead letter queue>>     |`axoniq-dead-letter-queue`      |`io.axoniq.framework` |https://central.sonatype.com/search?q=axoniq-dead-letter-queue[available]
@@ -33,6 +34,11 @@ endif::[]
 
 This module provides a storage solution optimized for use with link:https://www.postgresql.org/[PostgreSQL] by taking advantage of PostgreSQL-specifics.
 It supports the Dynamic-Consistency Boundary, just as Axon Server does
+
+=== Axoniq MongoDB
+
+This module provides storage components backed by link:https://www.mongodb.com/[MongoDB]: the `MongoTokenStore`, which keeps the progress of streaming event processors, and the `MongoSequencedDeadLetterQueue`, which persists the events of the xref:dead-letter-queue:index.adoc[dead-letter queue].
+See xref:mongo:index.adoc[] for the setup, and the dedicated pages for the xref:mongo:mongo-template.adoc[MongoDB template], the xref:mongo:token-store.adoc[token store] and the xref:mongo:dead-letter-queue.adoc[dead-letter queue].
 
 === Axoniq Axon Server connector
 

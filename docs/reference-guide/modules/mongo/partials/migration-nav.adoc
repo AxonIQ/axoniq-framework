@@ -1,0 +1,1 @@
+*** xref:migration:paths/mongo.adoc[[.advanced-framework]#Mongo Migration#]

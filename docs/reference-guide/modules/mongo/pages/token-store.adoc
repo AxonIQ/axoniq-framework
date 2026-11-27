@@ -1,0 +1,160 @@
+[.axoniq-feature]
+= MongoDB Token Store
+:navtitle: Token Store
+
+The `MongoTokenStore` is a `TokenStore` that keeps the progress of streaming event processors in MongoDB.
+A streaming event processor, such as the pooled streaming event processor, stores a `TrackingToken` per segment, so it can continue where it left off after a restart.
+Next to that, the token store lets several nodes of the same processor share the segments without handling an event twice.
+For what a token store does in general, and how streaming processors claim tokens, see the xref:events:event-processors/streaming.adoc#token_store[Token store] section of the event processor documentation.
+This page describes what is specific to the `MongoTokenStore`.
+
+If your application stores its projections in MongoDB, we strongly recommend using the `MongoTokenStore`.
+It stores a token in the same MongoDB transaction as the projection update of the events that token covers, so both are applied or discarded in one go, which gives you exactly-once processing semantics for your projections.
+It also keeps the tokens next to the projections they track, so you neither need a separate relational database just for tokens, nor a second storage system to operate, secure and back up.
+See <<Transactions>> for how to write your projections in that transaction.
+
+Note that the `MongoTokenStore` is part of Axoniq Framework and requires a xref:axoniq-platform-reference:ROOT:licensing/index.adoc[license] for production use.
+
+== Stored documents
+
+Every segment of every processor is one document in the collection the store is constructed with, which is `trackingtokens` when the xref:mongo:mongo-template.adoc[`MongoTemplate`] provides it.
+The document holds:
+
+* the `processorName`, `segment` and `mask` that identify the segment,
+* the `owner` node and the `timestamp` (in epoch milliseconds) of its latest claim,
+* the `token` itself, as binary data, and the class name of the token as `tokenType`.
+
+The token is converted to and from bytes by the `Converter` that you give the store.
+The store keeps its storage identifier in a document named `__config`.
+
+== Transactions
+
+Every operation of the `MongoTokenStore` runs with the MongoDB `ClientSession` that is bound to the `ProcessingContext` it is invoked with.
+The same is true for the transaction the processor uses to handle a batch of events: it stores the token in the `PREPARE_COMMIT` phase of that processing context, and commits afterwards.
+The `ClientSessionTransactionManager` binds a session and a MongoDB transaction to every processing context, in the same way that the `SpringTransactionManager` does for JPA entity managers and JDBC connections.
+It starts the session, and the transaction, when the first operation uses it, commits when the processing context commits, and aborts when it fails.
+
+In Spring, the `SpringMongoTransactionManager` works as it did in Axon Framework 4.
+It wraps Spring's `MongoTransactionManager`, so the processing context runs in a Spring managed MongoDB transaction, and it binds the session of that transaction to the processing context.
+Everything that obtains its database through Spring's `MongoDatabaseUtils` joins the transaction without passing a session: the `SpringMongoTemplate`, Spring Data's `MongoTemplate` and its repositories.
+
+Your event handlers take part in the same transaction by writing through that session.
+Obtain it from the `MongoTransactionalExecutorProvider` with the `ProcessingContext` the handler receives:
+
+[source,java]
+----
+include::example$mongo/tokenstore/OrderProjection.java[tag=projection-handler,indent=0]
+----
+
+If the handler fails after it wrote to the projection, or the token update fails after the handler succeeded, the transaction is aborted, and neither the projection nor the token changes.
+The processor then handles the events again, from the token it last committed.
+Until the transaction commits, the projection update is not visible to other readers either.
+
+Keep in mind that:
+
+* Only operations that use the session of the `ProcessingContext` take part in the transaction.
+With the `ClientSessionTransactionManager` that means passing the session explicitly, and a write that does not is applied immediately and is not rolled back.
+With the `SpringMongoTransactionManager`, operations that obtain their database through Spring's `MongoDatabaseUtils` take part as well.
+* MongoDB only supports multi-document transactions on a replica set or sharded cluster.
+The `MongoTokenStore` therefore requires one for event processing.
+* A `TokenStore` operation fails when no session is bound to the `ProcessingContext`, which is the case without a `ClientSessionTransactionManager`.
+* The session is not thread-safe, so the transaction managers require that a processing context is invoked on a single thread.
+* Outside a processing context, `ClientSessionTransactionManager#startTransaction()` starts a transaction and returns a `ClientSessionTransaction`.
+It exposes the `session()` that every operation of that transaction must be passed, and committing or rolling back concludes it and closes the session.
+* Only one `TransactionManager` serves an application.
+When your projections are not in MongoDB but, for instance, in a relational database, the Mongo transaction manager does not bind their connection.
+Use another token store for those.
+
+The xref:mongo:dead-letter-queue.adoc[`MongoSequencedDeadLetterQueue`] uses the same session, so a dead letter is enqueued in that transaction too.
+
+The `MongoTokenStore` does not depend on the transaction for the correct claiming of segments, as claims are atomic single-document updates.
+The storage identifier is established with a session of its own, as it is not part of the progress of a processor.
+
+== Configuration
+
+A `MongoTemplate` is always required: when a `MongoTemplate` and a `MongoTransactionalExecutorProvider` are registered as components, the module registers the `MongoTokenStore` as the `TokenStore` for you, using the `GeneralConverter` and a `MongoTokenStoreConfiguration` component.
+That registration yields to a `TokenStore` that you register explicitly.
+To change the settings of the store, register your own `MongoTokenStoreConfiguration` component instead, and the module constructs the store with it.
+
+The claim timeout and the node identifier relate to the xref:events:event-processors/streaming.adoc#token_claim_config[token claims] of the streaming processors.
+The `MongoTokenStoreConfiguration` holds the following settings, which you change with its `claimTimeout`, `nodeId` and `ensureIndexes` methods:
+
+[cols="<,<,<"]
+|===
+|Setting |Default |Description
+
+|`claimTimeout`
+|10 seconds
+|The time after which a claim that has not been extended may be taken over by another node.
+
+|`nodeId`
+|the name of the JVM runtime
+|The identifier of the node, which expresses the ownership of tokens.
+Use a value that is unique per node and stable across restarts, so a restarted node recognizes its own claims.
+
+|`ensureIndexes`
+|`true`
+|Whether the store creates the unique index on `processorName` and `segment` when it is constructed.
+|===
+
+[tabs]
+====
+Configuration API::
++
+--
+Register the `MongoTransactionalExecutorProvider`, and the `ClientSessionTransactionManager` as the `TransactionManager`, next to the `MongoTemplate`.
+Optionally, register a `MongoTokenStoreConfiguration` to change the settings of the store:
+
+[source,java]
+----
+include::example$mongo/tokenstore/PlainTokenStoreConfig.java[tag=plain-token-store,indent=0]
+----
+--
+
+Spring Boot::
++
+--
+In Spring Boot, the module registers the `MongoTokenStore` as described above, from the beans that the auto-configuration provides when a `MongoDatabaseFactory` bean exists.
+These are a `SpringMongoTemplate` as the `MongoTemplate`, and a `MongoTokenStoreConfiguration` that is bound from the properties below.
+Next to them, the auto-configuration registers the transaction components, as Axon Framework 4 did: Spring's `MongoTransactionManager`, with a majority write concern, wrapped in a `SpringMongoTransactionManager` as the `TransactionManager`, and the `MongoTransactionalExecutorProvider`.
+Declare your own bean of any of these types to replace it.
+As in Axon Framework 4, the JPA token store takes precedence over the JDBC token store, which takes precedence over the MongoDB token store.
+The transaction components never replace the `TransactionManager` of a JPA or JDBC setup either, so keep the xref:mongo:mongo-template.adoc#_mixing_mongodb_with_relational_components[mixing of components] in mind.
+The following properties are available:
+
+[cols="<,<,<"]
+|===
+|Property |Default |Description
+
+|`axon.mongo.token-store.node-id`
+|The JVM runtime name
+|The identifier of this node, used to express ownership of tokens.
+
+|`axon.mongo.token-store.ensure-indexes`
+|`true`
+|Whether the store creates its unique index when it is constructed.
+
+|`axon.eventhandling.tokenstore.claim-timeout`
+|`10s`
+|The claim timeout of the store, shared with the other token stores.
+|===
+
+To configure the store in code, declare a `MongoTokenStoreConfiguration` bean, which the auto-configured store picks up and which replaces these properties.
+To replace the store itself, declare a `TokenStore` bean, which replaces the auto-configured one:
+
+[source,java]
+----
+include::example$mongo/tokenstore/SpringTokenStoreConfig.java[tag=spring-token-store,indent=0]
+----
+--
+====
+
+=== Managing the index
+
+The store creates its unique index on construction, which is a no-op when the index exists.
+If your deployment does not allow the application to create indexes, create the index in advance on `processorName` and `segment`, and disable `ensureIndexes`:
+
+[source,java]
+----
+include::example$mongo/tokenstore/PreCreatedIndexConfig.java[tag=skip-index-creation,indent=0]
+----

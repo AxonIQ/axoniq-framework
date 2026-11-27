@@ -1,0 +1,3 @@
+| MongoDB (`axoniq-mongo`)
+| `trackingtokens` (a collection)
+| `processorName`, `segment`, `mask`

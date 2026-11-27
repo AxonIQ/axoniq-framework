@@ -1,0 +1,54 @@
+[.axoniq-feature]
+= Mongo support module
+:navtitle: Mongo support module
+
+The Axoniq MongoDB module stores the state of Axoniq Framework components in link:https://www.mongodb.com/[MongoDB].
+It provides two components:
+
+* The xref:mongo:token-store.adoc[`MongoTokenStore`], which keeps the progress of streaming event processors.
+* The xref:mongo:dead-letter-queue.adoc[`MongoSequencedDeadLetterQueue`], which persists the events that an event processor failed to handle, for the xref:dead-letter-queue:index.adoc[dead-letter queue].
+
+Both components read and write through a xref:mongo:mongo-template.adoc[`MongoTemplate`], which names the collections they use.
+
+Note that the MongoDB module is part of Axoniq Framework and requires a xref:axoniq-platform-reference:ROOT:licensing/index.adoc[license] for production use.
+
+[NOTE]
+====
+The module stores the documents of the Axoniq Framework.
+The tracking tokens that Axon Framework 4 stored can be migrated, whereas its dead letters are not read.
+See the xref:migration:paths/mongo.adoc[Mongo Migration] for how to move an application over.
+====
+
+== Dependencies
+
+Add the module next to your other Axoniq Framework dependencies:
+
+[source,xml]
+----
+<dependency>
+    <groupId>io.axoniq.framework</groupId>
+    <artifactId>axoniq-mongo</artifactId>
+</dependency>
+----
+
+The dead-letter queue is optional.
+Applications that only need the token store do not need the `axoniq-dead-letter` module.
+Add it next to `axoniq-mongo` to use the `MongoSequencedDeadLetterQueue`.
+
+The module is verified against MongoDB 7.0, 8.0 and 9.0, using version 5.14 of the MongoDB Java driver.
+
+== Contents
+
+[cols="<,<"]
+|===
+|Page |Contents
+
+|xref:mongo:mongo-template.adoc[MongoDB setup]
+|The `MongoTemplate` that provides the collections both components use, including the database and collection names, the transaction components and how they interact, and what to keep in mind when mixing MongoDB with relational components.
+
+|xref:mongo:token-store.adoc[Token Store]
+|The `MongoTokenStore`, which stores the progress of streaming event processors, including how it stores tokens in the same transaction as your projections, and the claim timeout and node identifier settings.
+
+|xref:mongo:dead-letter-queue.adoc[Dead-Letter Queue]
+|The `MongoSequencedDeadLetterQueue`, which stores the events an event processor failed to handle, including how to enable it, and its capacity and claim settings.
+|===

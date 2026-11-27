@@ -74,6 +74,10 @@
         </dependency>
         <dependency>
             <groupId>io.axoniq.framework</groupId>
+            <artifactId>axoniq-mongo</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.axoniq.framework</groupId>
             <artifactId>axoniq-distributed-messaging</artifactId>
         </dependency>
         <dependency>
@@ -148,6 +152,11 @@
             <groupId>tools.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
         </dependency>
+        <!-- Spring Data MongoDB types (MongoDatabaseFactory, MongoTransactionManager) used by the MongoDB Spring samples -->
+        <dependency>
+            <groupId>org.springframework.data</groupId>
+            <artifactId>spring-data-mongodb</artifactId>
+        </dependency>
         <!-- JPA, for the JpaSequencedDeadLetterQueue factory sample -->
         <dependency>
             <groupId>jakarta.persistence</groupId>
@@ -211,6 +220,7 @@
                                 <source>${project.basedir}/../reference-guide/modules/workflows/examples</source>
                                 <source>${project.basedir}/../workflow-getting-started/modules/ROOT/examples</source>
                                 <source>${project.basedir}/../reference-guide/modules/tracing/examples</source>
+                                <source>${project.basedir}/../reference-guide/modules/mongo/examples</source>
                             </sources>
                         </configuration>
                     </execution>
