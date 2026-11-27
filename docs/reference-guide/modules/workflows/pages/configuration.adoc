@@ -125,7 +125,8 @@ include::example$workflows/configuration/ConfigurationExamples.java[tag=start-co
 
 A start condition must give the same answer for the same event, every time.
 The engine evaluates it twice per event: once to pick the segment the event goes to, and once when that segment handles the event.
-If the first evaluation rejects the event, the event can skip the segment that owns the new workflow, and the workflow never starts.
+If the first evaluation accepts the event, only the segment that owns the new workflow gets the event.
+If the second evaluation then rejects it, no workflow starts from the event.
 So a start condition must not read the clock, a database or an external service.
 
 == Workflow ID provider

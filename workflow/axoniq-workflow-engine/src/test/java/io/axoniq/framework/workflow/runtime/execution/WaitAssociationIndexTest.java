@@ -231,7 +231,7 @@ class WaitAssociationIndexTest {
 
             // then
             assertThat(index.match(paymentReceived(Map.of("orderId", "42")), CONTEXT)).containsExactly("order-42");
-            assertThat(index.allClaimedSegmentsLoaded()).isTrue();
+            assertThat(index.isLoaded(FIRST_HALF)).isTrue();
         }
     }
 
@@ -372,13 +372,26 @@ class WaitAssociationIndexTest {
             index.segmentClaimed(FIRST_HALF);
 
             // then
-            assertThat(index.allClaimedSegmentsLoaded()).isFalse();
+            assertThat(index.isLoaded(FIRST_HALF)).isFalse();
 
             // when
             index.segmentLoaded(FIRST_HALF, List.of());
 
             // then
-            assertThat(index.allClaimedSegmentsLoaded()).isTrue();
+            assertThat(index.isLoaded(FIRST_HALF)).isTrue();
+            assertThat(index.isLoaded(SECOND_HALF)).isFalse();
+        }
+
+        @Test
+        void withoutASegmentNothingIsLoaded() {
+            // given
+            index.segmentLoaded(FIRST_HALF, List.of());
+
+            // when
+            var loaded = index.isLoaded(null);
+
+            // then
+            assertThat(loaded).as("outside a segmented processor no segment loads its open waits").isFalse();
         }
 
         @Test
@@ -394,7 +407,8 @@ class WaitAssociationIndexTest {
 
             // then
             assertThat(index.match(paymentReceived(Map.of()), CONTEXT)).containsExactly(ownedBySecond);
-            assertThat(index.allClaimedSegmentsMatch(segment -> segment.equals(SECOND_HALF))).isTrue();
+            assertThat(index.isLoaded(FIRST_HALF)).isFalse();
+            assertThat(index.isLoaded(SECOND_HALF)).isTrue();
         }
 
         @Test
@@ -406,7 +420,7 @@ class WaitAssociationIndexTest {
             index.clear();
 
             // then
-            assertThat(index.allClaimedSegmentsMatch(segment -> false)).isTrue();
+            assertThat(index.isLoaded(FIRST_HALF)).isFalse();
             assertThat(index.match(paymentReceived(Map.of()), CONTEXT)).isEmpty();
         }
     }

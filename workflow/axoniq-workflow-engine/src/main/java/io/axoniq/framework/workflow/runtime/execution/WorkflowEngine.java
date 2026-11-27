@@ -123,9 +123,7 @@ public class WorkflowEngine implements
         this.workflowStore = requireNonNull(workflowStore, "The WorkflowStore must not be null.");
         this.unitOfWorkFactory = requireNonNull(unitOfWorkFactory, "The UnitOfWorkFactory must not be null.");
         this.waitIndex = new WaitAssociationIndex(this::tracksWaitsOf);
-        this.segmentedRouting = new WorkflowEngineSequencingPolicy(
-                workflowConfigurationRegistry, waitIndex, catchUpSupport::isCaughtUp
-        );
+        this.segmentedRouting = new WorkflowEngineSequencingPolicy(workflowConfigurationRegistry);
         EntitlementManager.INSTANCE.registerAddon(WorkflowAxoniqAddon.class);
     }
 
@@ -212,6 +210,9 @@ public class WorkflowEngine implements
                 checkpointingSupport.requestCheckpoint(segment, currentToken);
                 return MessageStream.empty();
             }
+            // The owning segment opens and closes the workflow's waits in its own event order, so its later events
+            // always find them.
+            waitIndex.evolve(event);
             // Skip events whose workflowId isn't owned by this engine (expected in multi-module setups).
             if (!deliver(workflowId, event, context)) {
                 logger.debug("Ignoring event [{}] for workflowId [{}] - no matching execution in this engine.",
@@ -247,6 +248,12 @@ public class WorkflowEngine implements
         workflowIds.addAll(created);
         if (workflowPublishedEvent) {
             workflowIds.add(MetadataUtils.getWorkflowId(event.metadata()));
+        }
+        if (!waitIndex.isLoaded(segment) || !isSegmentCaughtUp(segment)) {
+            // Until the segment has loaded its open waits, and while it works through its startup backlog, the index
+            // may miss a wait, so every workflow the segment owns gets the event.
+            workflowExecutionRepository.findAll(ownedBy(segment))
+                                       .forEach(execution -> workflowIds.add(execution.workflowId()));
         }
         for (var workflowId : workflowIds) {
             if (WorkflowSegmentOwnership.ownedBy(segment, workflowId)) {
@@ -446,7 +453,7 @@ public class WorkflowEngine implements
         }
         // A split or a merge replaces segments without releasing them, so a reused segment id catches up anew.
         catchUpSupport.release(segment);
-        // The segment's events are broadcast until its waits are loaded.
+        // Until its waits are loaded, the segment hands each event to every workflow it owns.
         waitIndex.segmentClaimed(segment);
         var claim = hibernation == null ? null : hibernation.claiming(segment);
         return loadRunningWorkflows(segment, sourcingContext, executionContext)
