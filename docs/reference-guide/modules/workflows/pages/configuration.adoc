@@ -242,6 +242,39 @@ An application that enables snapshots without a `SnapshotStore` fails to start.
 A snapshot is taken while an entity is sourced, so the first restore after enabling snapshots still replays the full history.
 See xref:snapshotting:index.adoc[Snapshotting] for snapshot policies and snapshot stores.
 
+[[hibernation]]
+== Hibernation
+
+A workflow that waits for days or months holds memory the whole time it waits.
+With hibernation enabled, the engine removes such a workflow from memory while it waits, and restores it from the event store when it is needed again.
+
+[source,java]
+----
+include::example$workflows/configuration/ConfigurationExamples.java[tag=hibernation,indent=0]
+----
+
+Hibernation is a setting of the workflow module, and it's disabled by default.
+It applies to every workflow of the module.
+Workflows that need different settings go into separate workflow modules.
+
+A workflow hibernates only while it waits for events or deadlines, never while an `execute` step runs.
+It wakes up when an event it waits for arrives, when the nearest timeout of its waits expires, or when a cancellation is requested for it.
+Hibernating writes no events.
+
+Every 30 seconds, the engine asks the workflows in memory to hibernate.
+Set `hibernationInterval` on the module, in milliseconds, to change that.
+A wake that failed, for example because the event store was unreachable, is tried again after the same interval.
+
+Hibernation trades memory for load time, because every wake replays the history of the workflow.
+Enable it for workflows that wait for days or months.
+Keep it disabled for many short-lived workflows, or for workflows with short timeouts, because they would load again and again.
+After a restart, or when a node claims a segment, the engine replays every unfinished workflow of that segment, which then hibernates again at the same wait.
+
+Hibernation relies on the workflow body being deterministic, like every replay does.
+The engine stops a hibernating body the way it stops the workflows of a released segment, so a body that catches exceptions around a step result must rethrow the `StepInterruptedException`.
+
+See xref:workflow-internals.adoc#hibernation[Hibernation internals] for how the engine decides when a workflow hibernates, and how it wakes and restores hibernated workflows.
+
 [[spring-boot]]
 == Spring Boot
 

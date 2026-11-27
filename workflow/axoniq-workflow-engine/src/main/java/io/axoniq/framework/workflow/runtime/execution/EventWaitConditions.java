@@ -18,6 +18,7 @@ import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.jspecify.annotations.Nullable;
 
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 
@@ -93,6 +94,15 @@ final class EventWaitConditions implements DescribableComponent {
                 );
             }
         }
+    }
+
+    /**
+     * Returns the names of the steps with an open wait condition.
+     *
+     * @return a snapshot of the waiting step names
+     */
+    Set<String> stepNames() {
+        return Set.copyOf(waitConditions.keySet());
     }
 
     /**

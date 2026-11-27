@@ -205,6 +205,14 @@ public class ConfigurationExamples {
         // end::performance-tuning[]
     }
 
+    public void hibernation() {
+        // tag::hibernation[]
+        WorkflowModule.configure("order-workflows", SimpleWorkflowContext.class)
+                      .definition(d -> d.autodetected(c -> new OrderFulfillmentWorkflow()))
+                      .withHibernation();
+        // end::hibernation[]
+    }
+
     public void correlationBuiltIn(WorkflowConfigurer configurer) {
         // tag::correlation-built-in[]
         configurer.eventSourcing(es -> es.messaging(

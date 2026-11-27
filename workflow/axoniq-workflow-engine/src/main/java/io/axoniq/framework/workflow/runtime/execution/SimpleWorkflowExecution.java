@@ -60,7 +60,8 @@ import static java.lang.Thread.currentThread;
  * @author Steven van Beelen
  * @since 5.4.0
  */
-public final class SimpleWorkflowExecution implements WorkflowExecution, WorkflowCancellationProvider {
+public final class SimpleWorkflowExecution
+        implements WorkflowExecution, WorkflowCancellationProvider, WorkflowHibernationProvider {
 
     private static final Logger logger = LoggerFactory.getLogger(SimpleWorkflowExecution.class);
     // Attributes
@@ -107,6 +108,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
     private boolean running = false;
     private boolean stoppedForRecovery = false;
     private volatile Thread workflowThread;
+    private final WorkflowExecutionHibernationSupport hibernationSupport;
     // State variables
     private volatile EventSourcedWorkflowState workflowState;
 
@@ -176,6 +178,14 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
                 contextDelegate.executorService()
         );
         this.workflowCancellationRequest = new DefaultWorkflowCancellation(this, contextDelegate, runningSteps);
+        this.hibernationSupport = new WorkflowExecutionHibernationSupport(
+                this,
+                () -> !contextDelegate.isStepInProgress()
+                        && taskQueue.isEmpty()
+                        && !workflowCancellationRequest.hasPendingWorkflowCancellation(),
+                eventWaitConditions,
+                runningSteps
+        );
 
         initializeState(
                 new EventSourcedWorkflowState(
@@ -510,6 +520,11 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
             var taken = taskQueue.take();
             checkpointingSupport.runTask(taken, this);
         } while (!predicate.test(this.state()));
+    }
+
+    @Override
+    public WorkflowExecutionHibernationSupport workflowHibernation() {
+        return hibernationSupport;
     }
 
     @Override
