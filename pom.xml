@@ -67,8 +67,9 @@
         <module>build/parent</module>
         <module>axoniq-framework-bom</module>
 
-        <module>connector/axoniq-postgresql</module>
         <module>connector/axon-server-connector</module>
+        <module>connector/axoniq-mongo</module>
+        <module>connector/axoniq-postgresql</module>
         <module>connector/axoniq-springcloud</module>
 
         <module>dependency-injection/spring</module>
