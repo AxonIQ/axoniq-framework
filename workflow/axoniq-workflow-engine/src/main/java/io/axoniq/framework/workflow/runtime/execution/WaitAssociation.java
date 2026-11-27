@@ -85,8 +85,8 @@ public record WaitAssociation(String workflowId,
             logger.debug("Wait [{}] of workflow [{}] names no awaited event; it matches every routed event.",
                          stepName, workflowId);
         } catch (RuntimeException e) {
-            // Two cases end here: routing reads the payload before the event reaches a handler, when the converter
-            // cannot always convert it yet, or sourcing meets an old or broken payload. A wildcard is correct for both.
+            // An old or broken payload ends here, whether the handler or the sourcing of the open waits reads it. A
+            // wildcard is correct for both.
             logger.debug("Could not read the payload of wait [{}] of workflow [{}]; it matches every routed event.",
                          stepName, workflowId, e);
         }
@@ -96,8 +96,7 @@ public record WaitAssociation(String workflowId,
     /**
      * Returns whether this wait association matches every routed event, because its STARTED payload could not be read.
      * <p>
-     * Routing reads that payload before the event reaches a handler, when it cannot always be converted yet. Matching
-     * every event keeps such a wait from missing the event it waits for.
+     * Matching every event keeps such a wait from missing the event it waits for.
      *
      * @return {@code true} when this wait association has no {@link #eventName()}
      */

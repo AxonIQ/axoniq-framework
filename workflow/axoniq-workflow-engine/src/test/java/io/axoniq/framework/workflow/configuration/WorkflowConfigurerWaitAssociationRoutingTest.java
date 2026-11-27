@@ -22,16 +22,19 @@ import io.axoniq.framework.workflow.runtime.execution.WaitAssociation;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowStore;
 import io.axoniq.framework.workflow.runtime.execution.payload.GlobalOnlyPayloadReducer;
 import io.axoniq.framework.workflow.runtime.execution.payload.LocalOnlyPayloadReducer;
+import io.axoniq.framework.workflow.runtime.util.MetadataUtils;
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
 import org.axonframework.eventsourcing.eventstore.EventStore;
 import org.axonframework.eventsourcing.eventstore.inmemory.InMemoryEventStorageEngine;
 import org.axonframework.messaging.core.EmptyApplicationContext;
+import org.axonframework.messaging.core.MessageHandlerInterceptor;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.SimpleUnitOfWorkFactory;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
+import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
 import org.axonframework.messaging.eventhandling.processing.EventProcessor;
 import org.axonframework.messaging.eventhandling.processing.streaming.pooled.PooledStreamingEventProcessor;
@@ -48,6 +51,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.IntStream;
 
@@ -130,6 +134,42 @@ class WorkflowConfigurerWaitAssociationRoutingTest {
     }
 
     @Test
+    void aPaidEventScheduledBeforeTheOwningSegmentHandlesTheWaitStillWakesTheWorkflow() {
+        // given: the segments hold back the wait STARTED events, as busy segments would
+        var release = new CountDownLatch(1);
+        var configuration = start(Duration.ofSeconds(5), (message, context, chain) -> {
+            if (isWaitStarted(message)) {
+                try {
+                    release.await(10, TimeUnit.SECONDS);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+            return chain.proceed(message, context);
+        });
+        var orderIds = IntStream.rangeClosed(1, 8).mapToObj(i -> "order-" + i).toList();
+        // one append, so every segment handles its start events before any wait STARTED event
+        var workflowIds = publishAll(configuration, "start", orderIds);
+        await().atMost(5, TimeUnit.SECONDS)
+               .ignoreExceptions()
+               .until(() -> workflowIds.stream()
+                                       .allMatch(id -> durableState(configuration, id).containsStep(WAIT_STEP)));
+
+        // when: the paid events arrive before the owning segments handled the wait STARTED events
+        publishAll(configuration, "paid", orderIds);
+        // gives the processor time to schedule the paid events while the waits are held back
+        await().pollDelay(Duration.ofMillis(500)).until(() -> true);
+        release.countDown();
+
+        // then
+        await().atMost(5, TimeUnit.SECONDS)
+               .ignoreExceptions()
+               .until(() -> workflowIds.stream()
+                                       .allMatch(id -> durableState(configuration, id).workflowStatus()
+                                               == WorkflowStatus.COMPLETED));
+    }
+
+    @Test
     void aWorkflowRestoredByANewClaimIsWokenThroughItsDurableWait() {
         // given
         var configuration = start(Duration.ofSeconds(5));
@@ -184,7 +224,6 @@ class WorkflowConfigurerWaitAssociationRoutingTest {
                 () -> IntStream.range(0, SEGMENT_COUNT)
                                .forEach(segment -> assertThat(storedToken(segment)).isNotNull())
         );
-        // the segments finish their claims, so routing is targeted, not broadcast
         publish(configuration, "start", ownedBySegmentZero.next());
         await().pollDelay(Duration.ofMillis(500)).until(() -> true);
 
@@ -237,6 +276,11 @@ class WorkflowConfigurerWaitAssociationRoutingTest {
     }
 
     private AxonConfiguration start(Duration claimExtensionThreshold) {
+        return start(claimExtensionThreshold, null);
+    }
+
+    private AxonConfiguration start(Duration claimExtensionThreshold,
+                                    @Nullable MessageHandlerInterceptor<EventMessage> interceptor) {
         var module = WorkflowModule.configure(MODULE, TestContext.class)
                                    .definition(d -> d
                                            .declarative(c -> WorkflowConfigurerWaitAssociationRoutingTest
@@ -245,10 +289,11 @@ class WorkflowConfigurerWaitAssociationRoutingTest {
                                            .on(c -> EventConditions.fromQualifiedName(new QualifiedName("start")))
                                            .notCustomized()
                                    )
-                                   .processorConfiguration(pc -> pc.initialSegmentCount(SEGMENT_COUNT)
-                                                                   .claimExtensionThreshold(
-                                                                           claimExtensionThreshold.toMillis()
-                                                                   ))
+                                   .processorConfiguration(pc -> {
+                                       var processor = pc.initialSegmentCount(SEGMENT_COUNT)
+                                                         .claimExtensionThreshold(claimExtensionThreshold.toMillis());
+                                       return interceptor == null ? processor : processor.withInterceptor(interceptor);
+                                   })
                                    .contextFactory(c -> TestContext::new);
         var configurer = WorkflowConfigurer.create();
         configurer.componentRegistry(cr -> cr
@@ -284,6 +329,30 @@ class WorkflowConfigurerWaitAssociationRoutingTest {
                      .orTimeout(5, TimeUnit.SECONDS)
                      .join();
         return event.identifier();
+    }
+
+    /**
+     * Publishes an event of the given name for each order in one append, and returns the event identifiers.
+     */
+    private static List<String> publishAll(AxonConfiguration configuration, String eventName, List<String> orderIds) {
+        List<EventMessage> events = orderIds.stream()
+                                            .<EventMessage>map(orderId -> new GenericEventMessage(
+                                                    new MessageType(eventName), Map.of("orderId", orderId)
+                                            ))
+                                            .toList();
+        configuration.getComponent(UnitOfWorkFactory.class)
+                     .create("publish-" + eventName)
+                     .executeWithResult(ctx -> configuration.getComponent(EventStore.class)
+                                                            .publish(ctx, events)
+                                                            .thenApply(ignored -> events))
+                     .orTimeout(5, TimeUnit.SECONDS)
+                     .join();
+        return events.stream().map(EventMessage::identifier).toList();
+    }
+
+    private static boolean isWaitStarted(EventMessage event) {
+        return WAIT_STEP.equals(event.metadata().get(MetadataUtils.METADATA_KEY_STEP_NAME))
+                && StepStatus.STARTED.name().equals(event.metadata().get(MetadataUtils.METADATA_KEY_TYPE));
     }
 
     /**

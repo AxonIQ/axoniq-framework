@@ -34,13 +34,13 @@ import java.util.function.Predicate;
 import java.util.regex.Pattern;
 
 /**
- * In-memory index of the open waits of the workflows on the segments this node claimed, so an event is routed only to
- * the workflows waiting for it.
+ * In-memory index of the open waits of the workflows on the segments this node claimed, so a segment hands an event
+ * only to the workflows waiting for it.
  * <p>
  * Open waits are loaded by {@link #segmentLoaded(Segment, Collection)} when a segment is claimed, and kept current by
- * {@link #evolve(EventMessage)} as the processor schedules events. An open wait may match more events than the wait
- * accepts, never fewer: the waiting workflow still checks its full condition. Routing narrows only while every claimed
- * segment is loaded; otherwise it broadcasts.
+ * {@link #evolve(EventMessage)} as the segment owning a workflow handles its events. An open wait may match more
+ * events than the wait accepts, never fewer: the waiting workflow still checks its full condition. Until a segment is
+ * loaded, it hands each event to every workflow it owns.
  * <p>
  * An open wait is kept under its event name and the value of one of its {@code =} associations; a lookup reads that
  * value from the event and finds the open waits by it, so its cost does not grow with the number of such waits. Open
@@ -128,29 +128,25 @@ final class WaitAssociationIndex {
     }
 
     /**
-     * Returns whether every segment this node claimed is loaded.
+     * Returns whether this node claimed the given segment and loaded its open waits. Outside a segmented processor no
+     * segment loads its open waits, so the answer is {@code false}.
      *
-     * @return {@code true} when no claimed segment is still loading
+     * @param segment the segment handling an event, or {@code null} outside a segmented processor
+     * @return {@code true} when the open waits of the segment are loaded
      */
-    boolean allClaimedSegmentsLoaded() {
-        return claimedSegments.values().stream().allMatch(ClaimedSegment::loaded);
-    }
-
-    /**
-     * Returns whether every segment this node claimed satisfies the given predicate.
-     *
-     * @param predicate the condition every claimed segment must meet
-     * @return {@code true} when no claimed segment fails the predicate
-     */
-    boolean allClaimedSegmentsMatch(Predicate<Segment> predicate) {
-        return claimedSegments.values().stream().map(ClaimedSegment::segment).allMatch(predicate);
+    boolean isLoaded(@Nullable Segment segment) {
+        if (segment == null) {
+            return false;
+        }
+        var claimed = claimedSegments.get(segment.getSegmentId());
+        return claimed != null && claimed.loaded() && claimed.segment().equals(segment);
     }
 
     /**
      * Applies the given event to the open waits, following {@link WaitAssociationChange}. Applying the same event again
      * changes nothing.
      *
-     * @param event the event the processor schedules
+     * @param event the event the segment owning its workflow handles
      */
     void evolve(EventMessage event) {
         switch (WaitAssociationChange.of(event)) {
