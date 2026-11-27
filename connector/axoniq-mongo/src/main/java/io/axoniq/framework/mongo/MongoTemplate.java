@@ -15,7 +15,7 @@ import org.bson.Document;
  * Template object providing access to the MongoDB collections used by the Axoniq Framework MongoDB components.
  * <p>
  * The {@link io.axoniq.framework.mongo.token.MongoTokenStore} uses the {@link #trackingTokensCollection()}, while the
- * dead-letter queue uses the {@link #deadLetterCollection()}.
+ * {@code MongoSequencedDeadLetterQueue} uses the {@link #deadLetterCollection()}.
  *
  * @since 0.7.0
  */

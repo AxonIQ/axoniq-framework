@@ -9,6 +9,7 @@
 package io.axoniq.framework.messaging.deadletter;
 
 import org.axonframework.common.AxonException;
+import org.jspecify.annotations.Nullable;
 
 import java.util.Objects;
 
@@ -28,6 +29,7 @@ public class ThrowableCause extends AxonException implements Cause {
     public static final int TRUNCATED_MESSAGE_SIZE = 1023;
 
     private final String type;
+    @Nullable
     private final String message;
 
     /**
@@ -48,7 +50,7 @@ public class ThrowableCause extends AxonException implements Cause {
      * @param type    The type of this cause.
      * @param message The message of this cause.
      */
-    public ThrowableCause(String type, String message) {
+    public ThrowableCause(String type, @Nullable String message) {
         super(message);
         this.type = type;
         this.message = message;
@@ -106,6 +108,7 @@ public class ThrowableCause extends AxonException implements Cause {
         return type;
     }
 
+    @Nullable
     @Override
     public String message() {
         return message;

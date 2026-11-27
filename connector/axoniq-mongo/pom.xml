@@ -118,25 +118,6 @@
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-compiler-plugin</artifactId>
-                <configuration>
-                    <excludes>
-                        <exclude>org/axonframework/extensions/mongo/eventhandling/**</exclude>
-                    </excludes>
-                    <testExcludes>
-                        <testExclude>org/axonframework/extensions/mongo/eventhandling/**</testExclude>
-                    </testExcludes>
-                </configuration>
-            </plugin>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-checkstyle-plugin</artifactId>
-                <configuration>
-                    <excludes>org/axonframework/extensions/mongo/eventhandling/**</excludes>
-                </configuration>
-            </plugin>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-jar-plugin</artifactId>
                 <configuration>
                     <archive>

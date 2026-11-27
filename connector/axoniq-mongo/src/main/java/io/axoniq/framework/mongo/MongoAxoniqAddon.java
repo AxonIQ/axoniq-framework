@@ -8,6 +8,7 @@
 
 package io.axoniq.framework.mongo;
 
+import io.axoniq.framework.mongo.deadletter.MongoSequencedDeadLetterQueue;
 import io.axoniq.framework.mongo.token.MongoTokenStore;
 import io.axoniq.license.entitlement.AxoniqAddon;
 
@@ -15,8 +16,8 @@ import io.axoniq.license.entitlement.AxoniqAddon;
  * {@link AxoniqAddon} for the Axoniq MongoDB module, making its components part of the license entitlement system and
  * detectable at startup.
  * <p>
- * The {@link MongoTokenStore} registers this addon upon construction, so using it requires the MongoDB
- * entitlement.
+ * Both the {@link MongoTokenStore} and the {@link MongoSequencedDeadLetterQueue} register this addon upon construction,
+ * so using either of them requires the MongoDB entitlement.
  *
  * @author Steven van Beelen
  * @since 5.5.0

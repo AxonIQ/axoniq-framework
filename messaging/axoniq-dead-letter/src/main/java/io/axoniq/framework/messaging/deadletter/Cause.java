@@ -9,6 +9,7 @@
 package io.axoniq.framework.messaging.deadletter;
 
 import org.axonframework.messaging.core.Message;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Contract describing the cause for {@link DeadLetter dead lettering} a {@link Message}.
@@ -34,5 +35,6 @@ public interface Cause {
      *
      * @return The message describing this cause's reason for dead lettering.
      */
+    @Nullable
     String message();
 }

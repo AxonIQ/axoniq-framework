@@ -45,6 +45,12 @@ public class ArchUnitPackageRulesTest {
             .should().dependOnClassesThat().resideInAPackage("..mongo.deadletter..")
             .as("The token store works without the dead-letter queue");
 
+    @ArchTest
+    private final ArchRule onlyDeadLetterAndConfigurationMayUseDeadLetterModule = noClasses()
+            .that().resideOutsideOfPackages("..mongo.deadletter..", "..mongo.configuration..")
+            .should().dependOnClassesThat().resideInAPackage("io.axoniq.framework.messaging..")
+            .as("The axoniq-dead-letter dependency is optional");
+
     @Test
     void shouldMatchPackageName() {
         assertThat(MethodHandles.lookup().lookupClass().getPackageName()).isEqualTo(BASE_PACKAGE_NAME);

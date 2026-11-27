@@ -34,7 +34,8 @@ import org.springframework.context.annotation.Bean;
 @AutoConfiguration(
         afterName = {
                 "io.axoniq.framework.springboot.autoconfig.JpaDeadLetterQueueAutoConfiguration",
-                "io.axoniq.framework.springboot.autoconfig.JdbcDeadLetterQueueAutoConfiguration"
+                "io.axoniq.framework.springboot.autoconfig.JdbcDeadLetterQueueAutoConfiguration",
+                "io.axoniq.framework.springboot.autoconfig.MongoDeadLetterQueueAutoConfiguration"
         },
         beforeName = "org.axonframework.extension.springboot.autoconfig.EventProcessingAutoConfiguration"
 )

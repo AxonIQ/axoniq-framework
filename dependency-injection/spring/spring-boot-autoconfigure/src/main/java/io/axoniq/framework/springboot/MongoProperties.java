@@ -8,6 +8,7 @@
 
 package io.axoniq.framework.springboot;
 
+import io.axoniq.framework.mongo.deadletter.MongoSequencedDeadLetterQueueConfiguration;
 import io.axoniq.framework.mongo.token.MongoTokenStoreConfiguration;
 import org.jspecify.annotations.Nullable;
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -39,6 +40,11 @@ public class MongoProperties {
     private final TokenStore tokenStore = new TokenStore();
 
     /**
+     * Settings for the MongoDB-backed dead-letter queue.
+     */
+    private final DeadLetterQueue deadLetterQueue = new DeadLetterQueue();
+
+    /**
      * Returns the name of the MongoDB database the Axoniq Framework components use.
      *
      * @return the database name, or {@code null} if the default database of the {@code MongoDatabaseFactory} is used
@@ -65,6 +71,15 @@ public class MongoProperties {
      */
     public TokenStore getTokenStore() {
         return tokenStore;
+    }
+
+    /**
+     * Returns the settings for the MongoDB-backed dead-letter queue.
+     *
+     * @return the dead-letter queue settings
+     */
+    public DeadLetterQueue getDeadLetterQueue() {
+        return deadLetterQueue;
     }
 
     /**
@@ -136,6 +151,169 @@ public class MongoProperties {
                     .claimTimeout(claimTimeout)
                     .ensureIndexes(ensureIndexes);
             return nodeId != null ? configuration.nodeId(nodeId) : configuration;
+        }
+    }
+
+    /**
+     * Settings for the MongoDB-backed dead-letter queue.
+     */
+    public static class DeadLetterQueue {
+
+        /**
+         * The maximum number of unique sequences a queue may contain. Defaults to {@code 1024}.
+         */
+        private int maxSequences = 1024;
+
+        /**
+         * The maximum number of dead letters per unique sequence. Defaults to {@code 1024}.
+         */
+        private int maxSequenceSize = 1024;
+
+        /**
+         * The number of dead letters retrieved per query when iterating a sequence. Defaults to {@code 100}.
+         */
+        private int queryPageSize = 100;
+
+        /**
+         * The time a dead letter stays claimed while it is being processed. Defaults to 30 seconds.
+         */
+        private Duration claimDuration = Duration.ofSeconds(30);
+
+        /**
+         * Whether a queue creates the indexes of the dead letter collection when it is constructed. Defaults to
+         * {@code true}.
+         */
+        private boolean ensureIndexes = true;
+
+        /**
+         * Whether the aggregations that select the first dead letter of every sequence may spill to disk. Defaults to
+         * {@code true}.
+         */
+        private boolean allowDiskUse = true;
+
+        /**
+         * Returns the maximum number of unique sequences a queue may contain.
+         *
+         * @return the maximum number of sequences
+         */
+        public int getMaxSequences() {
+            return maxSequences;
+        }
+
+        /**
+         * Sets the maximum number of unique sequences a queue may contain.
+         *
+         * @param maxSequences the maximum number of sequences, strictly positive
+         */
+        public void setMaxSequences(int maxSequences) {
+            this.maxSequences = maxSequences;
+        }
+
+        /**
+         * Returns the maximum number of dead letters per unique sequence.
+         *
+         * @return the maximum number of dead letters per sequence
+         */
+        public int getMaxSequenceSize() {
+            return maxSequenceSize;
+        }
+
+        /**
+         * Sets the maximum number of dead letters per unique sequence.
+         *
+         * @param maxSequenceSize the maximum number of dead letters per sequence, strictly positive
+         */
+        public void setMaxSequenceSize(int maxSequenceSize) {
+            this.maxSequenceSize = maxSequenceSize;
+        }
+
+        /**
+         * Returns the number of dead letters retrieved per query when iterating a sequence.
+         *
+         * @return the query page size
+         */
+        public int getQueryPageSize() {
+            return queryPageSize;
+        }
+
+        /**
+         * Sets the number of dead letters retrieved per query when iterating a sequence.
+         *
+         * @param queryPageSize the query page size, strictly positive
+         */
+        public void setQueryPageSize(int queryPageSize) {
+            this.queryPageSize = queryPageSize;
+        }
+
+        /**
+         * Returns the time a dead letter stays claimed while it is being processed.
+         *
+         * @return the claim duration
+         */
+        public Duration getClaimDuration() {
+            return claimDuration;
+        }
+
+        /**
+         * Sets the time a dead letter stays claimed while it is being processed.
+         *
+         * @param claimDuration the claim duration
+         */
+        public void setClaimDuration(Duration claimDuration) {
+            this.claimDuration = claimDuration;
+        }
+
+        /**
+         * Returns whether a queue creates the indexes of the dead letter collection when it is constructed.
+         *
+         * @return {@code true} if the indexes are created, {@code false} otherwise
+         */
+        public boolean isEnsureIndexes() {
+            return ensureIndexes;
+        }
+
+        /**
+         * Sets whether a queue creates the indexes of the dead letter collection when it is constructed.
+         *
+         * @param ensureIndexes {@code true} to create the indexes, {@code false} to leave that to the developer
+         */
+        public void setEnsureIndexes(boolean ensureIndexes) {
+            this.ensureIndexes = ensureIndexes;
+        }
+
+        /**
+         * Returns whether the aggregations that select the first dead letter of every sequence may spill to disk.
+         *
+         * @return {@code true} if disk use is allowed, {@code false} otherwise
+         */
+        public boolean isAllowDiskUse() {
+            return allowDiskUse;
+        }
+
+        /**
+         * Sets whether the aggregations that select the first dead letter of every sequence may spill to disk.
+         *
+         * @param allowDiskUse {@code true} to allow disk use, {@code false} otherwise
+         */
+        public void setAllowDiskUse(boolean allowDiskUse) {
+            this.allowDiskUse = allowDiskUse;
+        }
+
+        /**
+         * Creates a {@link MongoSequencedDeadLetterQueueConfiguration} from these settings, starting from its
+         * {@link MongoSequencedDeadLetterQueueConfiguration#DEFAULT default}. The converter is not a property, so it
+         * remains the default one.
+         *
+         * @return the {@link MongoSequencedDeadLetterQueueConfiguration} these settings describe
+         */
+        public MongoSequencedDeadLetterQueueConfiguration toConfiguration() {
+            return MongoSequencedDeadLetterQueueConfiguration.DEFAULT
+                    .maxSequences(maxSequences)
+                    .maxSequenceSize(maxSequenceSize)
+                    .queryPageSize(queryPageSize)
+                    .claimDuration(claimDuration)
+                    .ensureIndexes(ensureIndexes)
+                    .allowDiskUse(allowDiskUse);
         }
     }
 }

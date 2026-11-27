@@ -13,6 +13,7 @@ import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.Metadata;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.WrappedToken;
+import org.jspecify.annotations.Nullable;
 
 import java.time.Instant;
 import java.util.Optional;
@@ -105,7 +106,7 @@ public interface DeadLetter<M extends Message> {
      * @param requeueCause the new cause of the {@code DeadLetter} under construction
      * @return a copy of this {@code DeadLetter}, replacing the {@link #cause()} with the given {@code requeueCause}
      */
-    DeadLetter<M> withCause(Throwable requeueCause);
+    DeadLetter<M> withCause(@Nullable Throwable requeueCause);
 
     /**
      * Construct a copy of this {@code DeadLetter}, replacing the {@link DeadLetter#diagnostics()} with the given
