@@ -9,6 +9,8 @@
 package io.axoniq.framework.springboot.autoconfig;
 
 import io.axoniq.framework.mongo.MongoTemplate;
+import io.axoniq.framework.mongo.token.MongoTokenStore;
+import io.axoniq.framework.mongo.token.MongoTokenStoreConfiguration;
 import io.axoniq.framework.mongo.transaction.MongoTransactionalExecutorProvider;
 import io.axoniq.framework.springboot.mongo.MockMongoDatabaseFactory;
 import io.axoniq.framework.springboot.mongo.SpringMongoTemplate;
@@ -22,6 +24,7 @@ import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.data.mongodb.MongoDatabaseFactory;
 import org.springframework.data.mongodb.MongoTransactionManager;
 
+import java.time.Duration;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -139,19 +142,60 @@ class MongoAutoConfigurationTest {
     }
 
     @Nested
+    class TokenStoreConfiguration {
+
+        @Test
+        void defaultsToTheDefaultConfigurationOfTheStore() {
+            withDatabaseFactory().run(context -> assertThat(context.getBean(MongoTokenStoreConfiguration.class))
+                    .isEqualTo(MongoTokenStoreConfiguration.DEFAULT));
+        }
+
+        @Test
+        void bindsTheTokenStoreProperties() {
+            withDatabaseFactory().withPropertyValues("axon.mongo.token-store.node-id=node-1",
+                                                     "axon.mongo.token-store.ensure-indexes=false")
+                                 .run(context -> {
+                                     MongoTokenStoreConfiguration result =
+                                             context.getBean(MongoTokenStoreConfiguration.class);
+
+                                     assertThat(result.nodeId()).isEqualTo("node-1");
+                                     assertThat(result.ensureIndexes()).isFalse();
+                                 });
+        }
+
+        @Test
+        void claimTimeoutComesFromTheSharedTokenStoreProperty() {
+            withDatabaseFactory().withPropertyValues("axon.eventhandling.tokenstore.claim-timeout=42s")
+                                 .run(context -> assertThat(
+                                         context.getBean(MongoTokenStoreConfiguration.class).claimTimeout()
+                                 ).isEqualTo(Duration.ofSeconds(42)));
+        }
+
+        @Test
+        void userDeclaredConfigurationWins() {
+            MongoTokenStoreConfiguration custom = MongoTokenStoreConfiguration.DEFAULT.nodeId("declared");
+            withDatabaseFactory().withBean(MongoTokenStoreConfiguration.class, () -> custom)
+                                 .withPropertyValues("axon.mongo.token-store.node-id=from-properties")
+                                 .run(context -> assertThat(context.getBean(MongoTokenStoreConfiguration.class))
+                                         .isSameAs(custom));
+        }
+    }
+
+    @Nested
     class WithoutMongoDatabaseFactory {
 
         @Test
         void registersNothing() {
             testContext.run(context -> {
                 assertThat(context).doesNotHaveBean(MongoTemplate.class);
+                assertThat(context).doesNotHaveBean(MongoTokenStoreConfiguration.class);
                 assertThat(context).doesNotHaveBean(MongoTransactionalExecutorProvider.class);
             });
         }
 
         @Test
-        void backsOffWhenTheMongoModuleClassesAreAbsent() {
-            withDatabaseFactory().withClassLoader(new FilteredClassLoader(MongoTransactionalExecutorProvider.class))
+        void backsOffWhenMongoTokenStoreClassIsAbsent() {
+            withDatabaseFactory().withClassLoader(new FilteredClassLoader(MongoTokenStore.class))
                                  .run(context -> assertThat(context).doesNotHaveBean(MongoTemplate.class));
         }
     }

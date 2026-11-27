@@ -8,13 +8,14 @@
 
 package io.axoniq.framework.mongo;
 
+import io.axoniq.framework.mongo.token.MongoTokenStore;
 import io.axoniq.license.entitlement.AxoniqAddon;
 
 /**
  * {@link AxoniqAddon} for the Axoniq MongoDB module, making its components part of the license entitlement system and
  * detectable at startup.
  * <p>
- * The components of the module register this addon upon construction, so using them requires the MongoDB
+ * The {@link MongoTokenStore} registers this addon upon construction, so using it requires the MongoDB
  * entitlement.
  *
  * @author Steven van Beelen

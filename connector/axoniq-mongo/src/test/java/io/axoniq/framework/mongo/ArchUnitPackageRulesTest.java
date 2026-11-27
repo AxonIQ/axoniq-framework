@@ -17,6 +17,7 @@ import org.junit.jupiter.api.*;
 
 import java.lang.invoke.MethodHandles;
 
+import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 import static com.tngtech.archunit.library.dependencies.SlicesRuleDefinition.slices;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -37,6 +38,12 @@ public class ArchUnitPackageRulesTest {
     private final ArchRule noClassesShouldDependOnUpperPackages = DependencyRules
             .NO_CLASSES_SHOULD_DEPEND_UPPER_PACKAGES
             .as("Package Hierarchy Violations");
+
+    @ArchTest
+    private final ArchRule tokenStoreShouldNotDependOnDeadLetterQueue = noClasses()
+            .that().resideInAPackage("..mongo.token..")
+            .should().dependOnClassesThat().resideInAPackage("..mongo.deadletter..")
+            .as("The token store works without the dead-letter queue");
 
     @Test
     void shouldMatchPackageName() {
