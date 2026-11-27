@@ -188,7 +188,8 @@ public class ConfigurationExamples {
                           .snapshots(snapshots -> snapshots
                                   .enabled(true)
                                   .runningWorkflows(SnapshotPolicy.afterEvents(500))   // <1>
-                                  .workflowState(SnapshotPolicy.afterEvents(200)));    // <2>
+                                  .workflowState(SnapshotPolicy.afterEvents(200))      // <2>
+                                  .waitAssociations(SnapshotPolicy.afterEvents(500))); // <3>
         // end::snapshots[]
     }
 

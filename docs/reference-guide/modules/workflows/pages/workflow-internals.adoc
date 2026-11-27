@@ -1,0 +1,24 @@
+= Workflow Internals
+:navtitle: Workflow internals
+
+This page explains how the workflow engine works inside, for when you need to reason about its behavior.
+You don't need it to define or configure workflows.
+
+[[event-routing]]
+== Event routing
+
+An event a workflow writes for its own steps reaches only the segment that owns that workflow.
+An event that starts exactly one workflow reaches only the segment that owns the new workflow.
+Every other event, including an event published with `publish` / `awaitPublish`, reaches every segment.
+
+A segment hands the event only to the workflows it owns that need it:
+
+* the workflows waiting for the event, matched on event name and equality associations, see xref:waiting-for-events.adoc#_filtering_with_associations[Filtering with associations],
+* the publisher of a published event, which records its publish step on it,
+* the workflows the event starts.
+
+To match waits, each node keeps the open waits of the workflows on the segments it holds.
+It loads them from the event store when it claims a segment, from the events tagged `workflowEvent=waitForStep` and `workflowEvent=lifecycle`.
+Until a segment has loaded its open waits, when loading them fails, and while it processes the backlog stored before the node started, that segment hands each event to every workflow it owns.
+
+A segment that receives no events still stores its token, on the processor's claim-extension cycle, once its workflows have no work in progress.

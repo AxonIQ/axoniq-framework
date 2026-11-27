@@ -19,6 +19,7 @@ import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecut
 import io.axoniq.framework.workflow.runtime.util.FutureResolver;
 import io.axoniq.framework.workflow.runtime.util.WorkflowStateUtils;
 import org.axonframework.common.annotation.Internal;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -26,6 +27,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
 
 
 /**
@@ -166,6 +168,17 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
                             e.getMessage());
             }
         });
+    }
+
+    /**
+     * Records a cancelled wait with the wait marker, like the wait's started and completed events. The list of open
+     * waits sources only events with that marker, so without it a cancelled wait would stay open in that list.
+     */
+    @Override
+    protected CompletableFuture<Void> cancelled(String stepName,
+                                                @Nullable Throwable cause,
+                                                EventNameCustomizer eventNameCustomizer) {
+        return cancelledWaitForEvent(stepName, cause, eventNameCustomizer);
     }
 
     private StepWaitInfo startedPayload(EventCondition eventCondition, Instant startedAt, Duration timeout) {

@@ -31,6 +31,7 @@ import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
@@ -75,6 +76,7 @@ public class WorkflowEngine implements
     private final WorkflowEngineCatchUpSupport catchUpSupport = new WorkflowEngineCatchUpSupport();
     private final WorkflowEngineSequencingPolicy segmentedRouting;
     private final UnsafeCheckpointWorkIndex checkpointWorkIndex = new UnsafeCheckpointWorkIndex();
+    private final WaitAssociationIndex waitIndex;
     // Package-private so a test can shrink it instead of waiting out the production timeout.
     Duration restoreTimeout = DEFAULT_RESTORE_TIMEOUT;
     private WorkflowEngineCheckpointingSupport checkpointingSupport;
@@ -115,6 +117,7 @@ public class WorkflowEngine implements
         );
         this.workflowStore = requireNonNull(workflowStore, "The WorkflowStore must not be null.");
         this.unitOfWorkFactory = requireNonNull(unitOfWorkFactory, "The UnitOfWorkFactory must not be null.");
+        this.waitIndex = new WaitAssociationIndex(this::tracksWaitsOf);
         this.segmentedRouting = new WorkflowEngineSequencingPolicy(workflowConfigurationRegistry);
         EntitlementManager.INSTANCE.registerAddon(WorkflowAxoniqAddon.class);
     }
@@ -178,6 +181,9 @@ public class WorkflowEngine implements
                 checkpointingSupport.requestCheckpoint(segment, currentToken);
                 return MessageStream.empty();
             }
+            // The owning segment opens and closes the workflow's waits in its own event order, so its later events
+            // always find them.
+            waitIndex.evolve(event);
             // Skip events whose workflowId isn't owned by this engine (expected in multi-module setups).
             var executionOpt = workflowExecutionRepository.findById(workflowId);
             if (executionOpt.isEmpty()) {
@@ -190,17 +196,10 @@ public class WorkflowEngine implements
             executionOpt.get().onEvent(event, context);
         } else {
             // handle starting of new processes. Events published by a workflow through the publish primitive take
-            // this branch as well: they may start or wake other instances, and the publishing instance is one of the
-            // owned executions below, so delivering it there records the published step and unblocks the publisher.
-            checkAndCreateNewInstance(event, context);
-            // route external events to workflows waiting for them. Business events without a unique start candidate
-            // are broadcast to every segment (sequenced by SequencingPolicy.BROADCAST); the ownership filter keeps
-            // the wake exactly-once per instance - only the owning segment's delivery reaches an execution.
-            // The filter is pushed into the repository so the returned set holds this segment's instances only:
-            // the repository is node-wide, so materializing all of them once per claimed segment is wasted work.
-            for (var execution : workflowExecutionRepository.findAll(ownedBy(segment))) {
-                execution.onEvent(event, context);
-            }
+            // this branch as well: they may start or wake other instances, and the publishing instance must receive
+            // its own event, which records the published step and unblocks the publisher.
+            var created = checkAndCreateNewInstance(event, context);
+            deliverToWaitingWorkflows(event, context, segment, workflowPublishedEvent, created);
         }
 
         activateSegmentWhenCaughtUp(segment, currentToken);
@@ -209,8 +208,36 @@ public class WorkflowEngine implements
         return MessageStream.empty();
     }
 
-    private void checkAndCreateNewInstance(EventMessage eventMessage,
-                                           ProcessingContext processingContext) {
+    /**
+     * Delivers the event to the workflows of this segment waiting for it, plus the instances it just created and, for a
+     * published event, its publisher.
+     */
+    private void deliverToWaitingWorkflows(EventMessage event,
+                                           ProcessingContext context,
+                                           @Nullable Segment segment,
+                                           boolean workflowPublishedEvent,
+                                           Set<String> created) {
+        Set<String> workflowIds = new LinkedHashSet<>(waitIndex.match(event, context));
+        workflowIds.addAll(created);
+        if (workflowPublishedEvent) {
+            workflowIds.add(MetadataUtils.getWorkflowId(event.metadata()));
+        }
+        if (!waitIndex.isLoaded(segment) || !isSegmentCaughtUp(segment)) {
+            // Until the segment has loaded its open waits, and while it works through its startup backlog, the index
+            // may miss a wait, so every workflow the segment owns gets the event.
+            workflowExecutionRepository.findAll(ownedBy(segment))
+                                       .forEach(execution -> workflowIds.add(execution.workflowId()));
+        }
+        for (var workflowId : workflowIds) {
+            if (WorkflowSegmentOwnership.ownedBy(segment, workflowId)) {
+                workflowExecutionRepository.findById(workflowId)
+                                           .ifPresent(execution -> execution.onEvent(event, context));
+            }
+        }
+    }
+
+    private Set<String> checkAndCreateNewInstance(EventMessage eventMessage,
+                                                  ProcessingContext processingContext) {
         // For brand-new starts, only the highest-registered version starts instances.
         // Older registered versions stay available for replay routing (selected later in the execution path
         // based on state.workflowDefinitionId().version(), itself sourced from the workflow's started event metadata).
@@ -223,6 +250,7 @@ public class WorkflowEngine implements
         // arrive at the owning segment directly; broadcast business events arrive everywhere and the ownership
         // guard keeps the start exactly-once.
         var segment = Segment.fromContext(processingContext).orElse(null);
+        var created = new HashSet<String>();
 
         configurations.forEach(configuration -> {
             if (!configuration.predicate().test(eventMessage, processingContext)) {
@@ -261,10 +289,12 @@ public class WorkflowEngine implements
             });
             registerCancellation(execution);
             checkpointWorkIndex.register(execution.workflowId(), execution::registerCheckpointWorkStateListener);
+            created.add(execution.workflowId());
             if (isSegmentCaughtUp(segment)) {
                 execute(execution, segment);
             }
         });
+        return created;
     }
 
     @Override
@@ -372,10 +402,34 @@ public class WorkflowEngine implements
         if (claimedFrom != null) {
             executionContext.putResource(TrackingToken.RESOURCE_KEY, claimedFrom);
         }
+        // Until its waits are loaded, the segment hands each event to every workflow it owns.
+        waitIndex.segmentClaimed(segment);
         return loadRunningWorkflows(segment, claimedFrom, sourcingContext, executionContext)
+                .thenCompose(restored -> loadWaitAssociations(segment, sourcingContext))
                 .orTimeout(restoreTimeout.toMillis(), TimeUnit.MILLISECONDS)
                 .whenComplete((restored, failure) -> logFailedRestore(segment, failure))
                 .thenRun(() -> startRestoredWorkflowsWhenCaughtUp(segment, claimedFrom));
+    }
+
+    private CompletableFuture<Void> loadWaitAssociations(Segment segment, ProcessingContext sourcingContext) {
+        return workflowStore.loadWaitAssociations(sourcingContext).thenAccept(waitAssociations -> {
+            var waits = waitAssociations.waitAssociations()
+                                        .stream()
+                                        .filter(wait -> WorkflowSegmentOwnership.ownedBy(segment, wait.workflowId()))
+                                        .toList();
+            waitIndex.segmentLoaded(segment, waits);
+            logger.debug("Loaded {} open wait(s) of segment {}.", waits.size(), segment.getSegmentId());
+        });
+    }
+
+    /**
+     * Whether the waits of the given workflow belong in the {@link WaitAssociationIndex}: it runs in this engine and
+     * has not reached a terminal status.
+     */
+    private boolean tracksWaitsOf(String workflowId) {
+        return workflowExecutionRepository.findById(workflowId)
+                                          .filter(execution -> !execution.state().workflowStatus().isTerminal())
+                                          .isPresent();
     }
 
     /**
@@ -388,6 +442,7 @@ public class WorkflowEngine implements
      * @return a future completed after this engine has requested every released execution to stop
      */
     public CompletableFuture<Void> releaseWorkflowsFor(Segment segment) {
+        waitIndex.segmentReleased(segment);
         var released = workflowExecutionRepository.findAll(ownedBy(segment));
         if (released.isEmpty()) {
             return CompletableFuture.completedFuture(null);
@@ -668,6 +723,7 @@ public class WorkflowEngine implements
         }
         workflowExecutionRepository.clear();
         checkpointWorkIndex.clear();
+        waitIndex.clear();
         workflowCancellationService.clear();
     }
 

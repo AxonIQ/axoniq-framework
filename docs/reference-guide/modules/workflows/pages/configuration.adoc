@@ -123,6 +123,12 @@ Example with association filtering—only start for VIP customers:
 include::example$workflows/configuration/ConfigurationExamples.java[tag=start-conditions-vip,indent=0]
 ----
 
+A start condition must give the same answer for the same event, every time.
+The engine evaluates it twice per event: once to pick the segment the event goes to, and once when that segment handles the event.
+If the first evaluation accepts the event, only the segment that owns the new workflow gets the event.
+If the second evaluation then rejects it, no workflow starts from the event.
+So a start condition must not read the clock, a database or an external service.
+
 == Workflow ID provider
 
 The workflow ID provider determines how each workflow instance gets its unique ID from the triggering event.
@@ -212,8 +218,9 @@ A node that lost its claim without noticing has its append rejected, logs a warn
 [[snapshots]]
 === Snapshots
 
-The engine sources two event-sourced entities: the list of running workflows and the state of each workflow instance.
-Without snapshots, a node that takes over replays the full event history of both.
+The engine sources three event-sourced entities: the list of running workflows, the state of each workflow instance, and the list of open waits.
+Without snapshots, a node that takes over replays the full event history of each.
+A node loads both lists on every segment claim, so a node that claims many segments replays that history once per segment.
 Snapshots are off by default.
 Enable them on the `WorkflowConfigurer`:
 
@@ -223,9 +230,10 @@ include::example$workflows/configuration/ConfigurationExamples.java[tag=snapshot
 ----
 <.> The policy for the list of running workflows. There is one list, so there is one snapshot of it.
 <.> The policy for the workflow state. Each workflow instance has a snapshot of its own, stored under its workflow id.
+<.> The policy for the list of open waits, see xref:workflow-internals.adoc#event-routing[Event routing]. There is one list, so there is one snapshot of it.
 
-Both policies default to a snapshot after 50 sourced events.
-The setting applies to every `WorkflowModule` of the application, because all modules share both entities.
+All three policies default to a snapshot after 50 sourced events.
+The setting applies to every `WorkflowModule` of the application, because all modules share these entities.
 The history projector does not source these entities, so snapshots do not affect it.
 
 Snapshots need a `SnapshotStore` component.
@@ -297,6 +305,10 @@ The history processor uses the same properties under `axon.workflow.history.*`.
 |`workflow-state.after-events`
 |`50`
 |Number of sourced events after which the state of a workflow instance is snapshotted.
+
+|`wait-associations.after-events`
+|`50`
+|Number of sourced events after which the list of open waits is snapshotted.
 |===
 
 See <<running-on-several-nodes,Running on several nodes>> for the token store, failover and snapshots, and <<performance-tuning,Performance tuning>> for choosing the processor values.
@@ -434,11 +446,12 @@ Engine-published workflow events are also written with event-store tags.
 |Added to workflow lifecycle events.
 
 |`workflowEvent=waitForStep`
-|Added to `waitForEvent` step STARTED and terminal events.
+|Added to `waitForEvent` and `sleep` step events with status STARTED, COMPLETED, TIMED_OUT or CANCELLED.
 |===
 
 These tags are intended for event-sourced read models such as "currently running workflow executions" and "currently
 waiting steps".
+The engine reads the same tags to route events to waiting workflows, see xref:workflow-internals.adoc#event-routing[Event routing].
 
 === Correlation data propagation
 

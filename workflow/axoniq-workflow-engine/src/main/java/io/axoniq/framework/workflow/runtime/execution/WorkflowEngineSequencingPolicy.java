@@ -62,9 +62,10 @@ import java.util.stream.Collectors;
      *   <li>Business events are sequenced by the start-candidate workflow id when exactly one registered definition
      *   would start from the event, so new instances are created on the segment that owns them.</li>
      *   <li>All other events (no or multiple start candidates) may need to wake waiting instances resident in any
-     *   segment; without a durable wait-association table the only correct routing is delivery to all segments, so
-     *   they are sequenced by {@link SequencingPolicy#BROADCAST}. Each segment then evaluates the wait conditions of
-     *   the instances it owns.</li>
+     *   segment. A segment learns of a wait only when it handles the event that opens it, which can be after this
+     *   event is sequenced, so the only correct routing is delivery to all segments: they are sequenced by
+     *   {@link SequencingPolicy#BROADCAST}. Each segment then evaluates the wait conditions of the instances it
+     *   owns.</li>
      * </ul>
      *
      * @param eventMessage      the event to sequence

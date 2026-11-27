@@ -12,6 +12,7 @@ import io.axoniq.framework.workflow.dsl.api.WorkflowContext;
 import io.axoniq.framework.workflow.history.inmemory.InMemoryWorkflowHistoryRepository;
 import io.axoniq.framework.workflow.history.inmemory.MutableWorkflowHistoryRepository;
 import io.axoniq.framework.workflow.history.inmemory.WorkflowHistoryProjector;
+import io.axoniq.framework.workflow.history.inmemory.WorkflowHistorySequencingPolicy;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContextFactory;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowDefinition;
@@ -448,8 +449,7 @@ class SimpleWorkflowModule<C extends WorkflowContext>
 
     private EventHandlingComponent historyHandlingComponent(Configuration config) {
         return new SequenceOverridingEventHandlingComponent(
-                config.getComponent(WorkflowEngine.class, engineName())
-                      .segmentedRouting(),
+                new WorkflowHistorySequencingPolicy(),
                 new EventHandlingComponentHandlingAny(
                         config.getComponent(WorkflowHistoryProjector.class, historyProjectorName())
                 )
